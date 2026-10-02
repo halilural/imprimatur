@@ -2,7 +2,7 @@
   "name": "agent-review",
   "displayName": "Agent Review",
   "description": "See an AI agent's edits in the editor like tracked changes until you accept them.",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "publisher": "halilural",
   "license": "MIT",
   "engines": {
@@ -20,7 +20,8 @@
     "preview.js",
     "preview.css",
     "graph.js",
-    "graphView.js"
+    "graphView.js",
+    "preview-markers.js"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -178,6 +179,9 @@
           "description": "Where agent changes to Markdown files are marked. Other file types are always marked in the editor."
         }
       }
-    }
+    },
+    "markdown.previewScripts": [
+      "./preview-markers.js"
+    ]
   }
 }

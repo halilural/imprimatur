@@ -28,6 +28,10 @@ Setting `agentReview.showIn`: Markdown files are marked only in the preview by
 default (`preview`); `both` adds the editor marks and its ✓ Accept lenses,
 `editor` uses the editor only. Other file types are always marked in the editor.
 
+The Markdown preview also gets a marker bar on its right edge: one colored tick
+per change (green added, blue changed, red old or deleted; earlier edits dim),
+click a tick to jump there.
+
 The Markdown preview shows the same changes per block: changed blocks are
 colored, their old text struck through right above them, deleted lines struck
 through where they were.
