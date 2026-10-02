@@ -11,6 +11,8 @@ in a word processor, until you stage it.
 - **Agent Review: Accept Agent Change at Cursor** and **Accept All Agent
   Changes in File** clear the marks without touching git.
 - Stage the file (`git add`) and the marks disappear: staging is the review.
+  Unstage it and they come back. Edits the agent makes after you staged show
+  on their own, against the staged text.
 
 Colors show in the text editor only, not in the Markdown preview.
 
@@ -19,12 +21,13 @@ Colors show in the text editor only, not in the Markdown preview.
 1. A Claude Code `PreToolUse` hook ([hooks/baseline.mjs](hooks/baseline.mjs))
    copies a file to `.claude/review-baseline/<path>` before the agent first
    edits it (an empty copy for a new file). While the file has unstaged
-   changes the copy is kept; once it is staged or committed, the next edit
-   takes a fresh copy.
+   changes the copy is kept; once it is fully staged or committed, the next
+   edit takes a fresh copy, so new edits are compared with the staged text.
 2. The VS Code extension ([vscode/](vscode/)) diffs each open file against its
    copy: line LCS, then word LCS inside changed lines.
-3. The extension watches `.git/index`. When git shows no unstaged changes for a
-   file, its copy is deleted and the marks go away.
+3. The extension watches `.git/index` and sorts each copy by `git status`:
+   unstaged changes → marks shown; fully staged → copy kept, marks hidden
+   (unstaging brings them back); committed → copy deleted.
 
 The agent should not stage its own changes: if it stages or commits, the marks
 disappear before you have looked.
