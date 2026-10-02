@@ -1,21 +1,12 @@
 // @ts-check
-// Git state shared by the hook and the extension, so both decide "is this copy
-// still needed" the same way.
+// Paths and lookups shared by the hook and the extension.
 "use strict";
 const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const BASELINE_DIR = path.join(".claude", "review-baseline");
-
-/** @param {string} cwd @param {string[]} args @returns {string | undefined} raw stdout, undefined on error */
-function git(cwd, args) {
-  try {
-    return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  } catch {
-    return undefined;
-  }
-}
+const BASELINE_DIR = path.join(".claude", "agent-review", "baseline");
+const HISTORY_DIR = path.join(".claude", "agent-review", "history");
 
 /** Git top level for a path (walks up to an existing directory), resolved like fsPath. @param {string} p */
 function repoRoot(p) {
@@ -25,25 +16,27 @@ function repoRoot(p) {
     if (up === dir) return undefined;
     dir = up;
   }
-  const out = git(dir, ["rev-parse", "--show-toplevel"]);
-  return out ? path.resolve(out.trim()) : undefined;
+  try {
+    const out = execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    return path.resolve(out.trim());
+  } catch {
+    return undefined;
+  }
 }
 
 /**
- * Review state of rel from `git status` XY:
- * - "unstaged": work-tree changes (Y set), untracked or ignored, or git cannot tell
- * - "staged": everything staged but not committed (X set, Y blank)
- * - "clean": committed; the copy is done
- * @param {string} root @param {string} rel @returns {"unstaged" | "staged" | "clean"}
+ * Text before the agent's latest edit: the `before` of the last history line.
+ * ponytail: reads the whole log; fine for documents, tail-read if logs grow large.
+ * @param {string} log path of the .jsonl history @returns {string | undefined}
  */
-function reviewState(root, rel) {
-  const out = git(root, ["status", "--porcelain=v1", "-z", "--ignored=matching", "--", rel]);
-  if (out === undefined) return "unstaged";
-  if (out === "") return "clean";
-  return out[1] !== " " ? "unstaged" : "staged";
+function latestBefore(log) {
+  if (!fs.existsSync(log)) return undefined;
+  const lines = fs.readFileSync(log, "utf8").trimEnd().split("\n");
+  try {
+    return JSON.parse(lines[lines.length - 1]).before;
+  } catch {
+    return undefined;
+  }
 }
 
-/** Staged text of rel (`git show :rel`), undefined when the file is not in the index. @param {string} root @param {string} rel */
-const indexText = (root, rel) => git(root, ["show", `:${rel.split(path.sep).join("/")}`]);
-
-module.exports = { BASELINE_DIR, git, repoRoot, reviewState, indexText };
+module.exports = { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore };

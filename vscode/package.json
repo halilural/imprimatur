@@ -1,8 +1,8 @@
 {
   "name": "agent-review",
   "displayName": "Agent Review",
-  "description": "See an AI agent's edits in the editor like tracked changes until you stage them.",
-  "version": "0.2.0",
+  "description": "See an AI agent's edits in the editor like tracked changes until you accept them.",
+  "version": "0.3.0",
   "publisher": "halilural",
   "license": "MIT",
   "engines": {
@@ -56,43 +56,43 @@
         }
       },
       {
-        "id": "agentReview.stagedAddedBackground",
-        "description": "Background of an added line that is staged (reviewed, not committed).",
+        "id": "agentReview.earlierAddedBackground",
+        "description": "Background of a line added in an earlier agent edit.",
         "defaults": {
-          "dark": "#2ea04314",
-          "light": "#1a7f3710",
-          "highContrast": "#2ea04322",
-          "highContrastLight": "#1a7f3718"
+          "dark": "#2ea0431f",
+          "light": "#1a7f3714",
+          "highContrast": "#2ea0432a",
+          "highContrastLight": "#1a7f371f"
         }
       },
       {
-        "id": "agentReview.stagedChangedBackground",
-        "description": "Background of a changed line that is staged.",
+        "id": "agentReview.earlierChangedBackground",
+        "description": "Background of a line changed in an earlier agent edit.",
         "defaults": {
-          "dark": "#1f6feb0d",
-          "light": "#0969da0a",
-          "highContrast": "#1f6feb1a",
-          "highContrastLight": "#0969da14"
+          "dark": "#1f6feb14",
+          "light": "#0969da0f",
+          "highContrast": "#1f6feb22",
+          "highContrastLight": "#0969da1a"
         }
       },
       {
-        "id": "agentReview.stagedInsertedTextBackground",
-        "description": "New words in a staged changed line.",
+        "id": "agentReview.earlierInsertedTextBackground",
+        "description": "New words from an earlier agent edit.",
         "defaults": {
-          "dark": "#2ea04326",
-          "light": "#1a7f371f",
-          "highContrast": "#2ea04333",
-          "highContrastLight": "#1a7f372a"
+          "dark": "#2ea04333",
+          "light": "#1a7f3726",
+          "highContrast": "#2ea04340",
+          "highContrastLight": "#1a7f3733"
         }
       },
       {
-        "id": "agentReview.stagedDeletedForeground",
-        "description": "Deleted text in a staged change.",
+        "id": "agentReview.earlierDeletedForeground",
+        "description": "Deleted text from an earlier agent edit.",
         "defaults": {
-          "dark": "#f8514973",
-          "light": "#cf222e73",
-          "highContrast": "#ff6a6999",
-          "highContrastLight": "#a40e2699"
+          "dark": "#f8514980",
+          "light": "#cf222e80",
+          "highContrast": "#ff6a69a6",
+          "highContrastLight": "#a40e26a6"
         }
       }
     ]

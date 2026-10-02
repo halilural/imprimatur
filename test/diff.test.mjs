@@ -72,3 +72,16 @@ test("review: file not in the index is all fresh", () => {
   const { review } = createRequire(import.meta.url)("../vscode/diff.js");
   assert.ok(review("", undefined, "x\ny").every((h) => h.fresh));
 });
+
+test("one word changed: word marks; several words: whole line", () => {
+  const { lineOrWordDiff } = createRequire(import.meta.url)("../vscode/diff.js");
+  assert.deepEqual(lineOrWordDiff("Sprint cumartesi başlar.", "Sprint pazartesi başlar."), {
+    inserted: [[7, 16]],
+    deleted: [{ at: 7, text: "cumartesi" }],
+  });
+  const oldL = "7. Clinician side: what triggers an alert, and where is it stored?";
+  const newL = "7. Alerts: what does the device flag, and who sets the threshold?";
+  assert.deepEqual(lineOrWordDiff(oldL, newL), { inserted: [[0, newL.length]], deleted: [{ at: 0, text: `${oldL} ` }] });
+  // indented: old sentence goes after the indent
+  assert.deepEqual(lineOrWordDiff("  a b c", "  x y z").deleted, [{ at: 2, text: "a b c " }]);
+});

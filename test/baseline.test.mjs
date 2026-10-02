@@ -1,10 +1,14 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
+const req = createRequire(import.meta.url);
+const { latestBefore } = req("../vscode/review-state.js");
+const { review } = req("../vscode/diff.js");
 const hook = path.resolve(import.meta.dirname, "../hooks/baseline.mjs");
 
 function repo() {
@@ -17,21 +21,25 @@ function repo() {
 }
 
 function run(dir, file, ...exts) {
-  const input = JSON.stringify({ tool_name: "Edit", cwd: dir, tool_input: { file_path: path.join(dir, file) } });
+  const input = JSON.stringify({ session_id: "s1", tool_name: "Edit", cwd: dir, tool_input: { file_path: path.join(dir, file) } });
   const r = spawnSync("node", [hook, ...exts], { input, env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
   return r.status;
 }
 
-const copy = (dir, file) => path.join(dir, ".claude/review-baseline", file);
+const copy = (dir, file) => path.join(dir, ".claude/agent-review/baseline", file);
+const log = (dir, file) => path.join(dir, ".claude/agent-review/history", `${file}.jsonl`);
 const read = (p) => fs.readFileSync(p, "utf8");
+const history = (dir, file) => read(log(dir, file)).trimEnd().split("\n").map((l) => JSON.parse(l));
 
-test("first touch copies the file", () => {
-  const { dir, git } = repo();
+test("first touch copies the file and logs the edit", () => {
+  const { dir } = repo();
   fs.writeFileSync(path.join(dir, "a.md"), "one\n");
-  git("add", "a.md");
-  git("commit", "-qm", "x");
   assert.equal(run(dir, "a.md"), 0);
   assert.equal(read(copy(dir, "a.md")), "one\n");
+  const [h] = history(dir, "a.md");
+  assert.equal(h.before, "one\n");
+  assert.equal(h.session, "s1");
+  assert.equal(h.tool, "Edit");
 });
 
 test("new file gets an empty copy", () => {
@@ -40,19 +48,7 @@ test("new file gets an empty copy", () => {
   assert.equal(read(copy(dir, "docs/new.md")), "");
 });
 
-test("copy is kept while unstaged changes remain", () => {
-  const { dir, git } = repo();
-  const f = path.join(dir, "a.md");
-  fs.writeFileSync(f, "one\n");
-  git("add", "a.md");
-  git("commit", "-qm", "x");
-  run(dir, "a.md");
-  fs.writeFileSync(f, "two\n"); // the agent's edit
-  run(dir, "a.md"); // second touch
-  assert.equal(read(copy(dir, "a.md")), "one\n");
-});
-
-test("copy stays while staged, is overwritten once committed", () => {
+test("copy survives staging and commit; every edit adds a history line", () => {
   const { dir, git } = repo();
   const f = path.join(dir, "a.md");
   fs.writeFileSync(f, "one\n");
@@ -60,12 +56,13 @@ test("copy stays while staged, is overwritten once committed", () => {
   git("commit", "-qm", "x");
   run(dir, "a.md");
   fs.writeFileSync(f, "two\n");
-  git("add", "a.md"); // user reviewed and staged
+  git("add", "a.md");
+  git("commit", "-qm", "y"); // git does not end the review
   run(dir, "a.md");
+  fs.writeFileSync(f, "three\n");
   assert.equal(read(copy(dir, "a.md")), "one\n");
-  git("commit", "-qm", "y"); // committed: the review round is over
-  run(dir, "a.md");
-  assert.equal(read(copy(dir, "a.md")), "two\n");
+  assert.deepEqual(history(dir, "a.md").map((h) => h.before), ["one\n", "two\n"]);
+  assert.equal(latestBefore(log(dir, "a.md")), "two\n");
 });
 
 test("other extensions and outside files are ignored, exit 0", () => {
@@ -84,52 +81,26 @@ test("bad input never blocks the tool", () => {
   assert.equal(r.status, 0);
 });
 
-test("ignored file keeps its copy across edits", () => {
-  const { dir } = repo();
-  fs.writeFileSync(path.join(dir, ".gitignore"), "notes/\n");
-  fs.mkdirSync(path.join(dir, "notes"));
-  const f = path.join(dir, "notes/a.md");
-  fs.writeFileSync(f, "one\n");
-  run(dir, "notes/a.md");
-  fs.writeFileSync(f, "two\n");
-  run(dir, "notes/a.md");
-  assert.equal(read(copy(dir, "notes/a.md")), "one\n");
+test("no git repo: copies go to the project dir", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-review-nogit-"));
+  fs.writeFileSync(path.join(dir, "a.md"), "x\n");
+  assert.equal(run(dir, "a.md"), 0);
+  assert.equal(read(copy(dir, "a.md")), "x\n");
 });
 
 test("path with a space still runs the hook", () => {
   const { dir } = repo();
   const spaced = path.join(dir, "my project");
-  fs.mkdirSync(spaced);
-  fs.copyFileSync(hook, path.join(spaced, "baseline.mjs"));
-  fs.mkdirSync(path.join(dir, "vscode"));
-  fs.copyFileSync(path.resolve(import.meta.dirname, "../vscode/review-state.js"), path.join(dir, "vscode/review-state.js"));
+  fs.mkdirSync(path.join(spaced, "hooks"), { recursive: true });
+  fs.mkdirSync(path.join(spaced, "vscode"));
+  fs.copyFileSync(hook, path.join(spaced, "hooks/baseline.mjs"));
+  fs.copyFileSync(path.resolve(import.meta.dirname, "../vscode/review-state.js"), path.join(spaced, "vscode/review-state.js"));
   const input = JSON.stringify({ tool_input: { file_path: path.join(dir, "b.md") } });
-  spawnSync("node", [path.join(spaced, "baseline.mjs")], { input, env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
+  spawnSync("node", [path.join(spaced, "hooks/baseline.mjs")], { input, env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
   assert.equal(read(copy(dir, "b.md")), "");
 });
 
-test("review state: unstaged, staged (copy kept), clean (copy done)", async () => {
-  const { createRequire } = await import("node:module");
-  const { reviewState } = createRequire(import.meta.url)("../vscode/review-state.js");
-  const { dir, git } = repo();
-  const f = path.join(dir, "a.md");
-  fs.writeFileSync(f, "one\n");
-  git("add", "a.md");
-  git("commit", "-qm", "x");
-  assert.equal(reviewState(dir, "a.md"), "clean");
-  fs.writeFileSync(f, "two\n");
-  assert.equal(reviewState(dir, "a.md"), "unstaged");
-  git("add", "a.md");
-  assert.equal(reviewState(dir, "a.md"), "staged");
-  git("restore", "--staged", "a.md"); // unstage: the marks come back
-  assert.equal(reviewState(dir, "a.md"), "unstaged");
-});
-
-test("C1, C2 staged then C3: all three show, only C3 bright", async () => {
-  const { createRequire } = await import("node:module");
-  const req = createRequire(import.meta.url);
-  const { indexText } = req("../vscode/review-state.js");
-  const { review } = req("../vscode/diff.js");
+test("C1, C2, C3 by the agent, committed in between: all three show, only C3 bright", () => {
   const { dir, git } = repo();
   const f = path.join(dir, "a.md");
   fs.writeFileSync(f, "a\n");
@@ -138,11 +109,11 @@ test("C1, C2 staged then C3: all three show, only C3 bright", async () => {
   for (const c of ["C1", "C2", "C3"]) {
     run(dir, "a.md"); // agent touches the file
     fs.appendFileSync(f, `${c}\n`);
-    if (c !== "C3") git("add", "a.md"); // user stages C1 and C2
+    git("add", "a.md");
+    git("commit", "-qm", c);
   }
-  const marks = review(read(copy(dir, "a.md")), indexText(dir, "a.md"), read(f)).flatMap((h) => h.marks.map((m) => [m.line, m.fresh]));
+  const marks = review(read(copy(dir, "a.md")), latestBefore(log(dir, "a.md")), read(f)).flatMap((h) =>
+    h.marks.map((m) => [m.line, m.fresh]),
+  );
   assert.deepEqual(marks, [[1, false], [2, false], [3, true]]);
-  git("restore", "--staged", "a.md"); // unstage all: all three bright again
-  const again = review(read(copy(dir, "a.md")), indexText(dir, "a.md"), read(f)).flatMap((h) => h.marks.map((m) => m.fresh));
-  assert.deepEqual(again, [true, true, true]);
 });

@@ -1,35 +1,35 @@
 # agent-review
 
-See what an AI coding agent changed, right in the editor, like tracked changes
-in a word processor, until you stage it.
+See what an AI coding agent changed in your docs, right in the editor, like
+tracked changes in a word processor, until you accept it. Git is not involved:
+staging or committing does not clear the marks.
 
 - Added lines get a green background.
-- In a changed line only the changed words are marked: new words highlighted,
-  old words struck through in red next to them.
+- A changed line where only one word changed marks that word: the new word
+  highlighted, the old one struck through in red next to it. When more than one
+  word changed, the old sentence is struck through and the new one follows.
 - A deleted block shows a red marker on the line before it; hover to read it.
+- The agent's latest edit is bright, its earlier edits dim.
 - Marks in the overview ruler, a change count in the status bar.
 - **Agent Review: Accept Agent Change at Cursor** and **Accept All Agent
-  Changes in File** clear the marks without touching git.
-- Changes you have not staged yet are bright; staged ones turn dim, so after
-  several rounds you still see everything the agent changed since the last
-  commit and which part is new. Commit and the marks go away.
+  Changes in File** clear the marks.
 
 Colors show in the text editor only, not in the Markdown preview.
 
 ## How it works
 
-1. A Claude Code `PreToolUse` hook ([hooks/baseline.mjs](hooks/baseline.mjs))
-   copies a file to `.claude/review-baseline/<path>` before the agent first
-   edits it (an empty copy for a new file). The copy is kept until the file is
-   committed; the first edit after a commit takes a fresh copy.
+1. A Claude Code `PreToolUse` hook ([hooks/baseline.mjs](hooks/baseline.mjs)),
+   before each agent edit of a listed file type:
+   - copies the file to `.claude/agent-review/baseline/<path>` if there is no
+     copy yet (an empty copy for a new file);
+   - appends `{t, session, tool, before}` to
+     `.claude/agent-review/history/<path>.jsonl`, a history of the agent's edits.
 2. The VS Code extension ([vscode/](vscode/)) diffs each open file against its
-   copy (line LCS, then word LCS inside changed lines), and against the staged
-   text (`git show :<path>`) to tell new changes (bright) from staged ones (dim).
-3. The extension watches `.git/index`; when a file is committed its copy is
-   deleted and the marks go away.
-
-The agent should not commit its own changes: a commit clears the marks before
-you have looked. If it stages, the changes only turn dim.
+   copy (line LCS, then word LCS inside changed lines), and against the text
+   before the latest edit (last history line) to tell latest (bright) from
+   earlier (dim).
+3. Accept writes the change at the cursor into the copy; Accept all deletes the
+   copy. The history stays.
 
 ## Install
 
@@ -51,15 +51,17 @@ Requires Node 22+, git and VS Code 1.100+.
    }
    ```
 
-2. Ignore the copies: add `.claude/review-baseline/` to `.gitignore`.
+2. Ignore the copies: add `.claude/agent-review/` to `.gitignore` (or to your
+   global git ignore file).
 3. Extension: `npm run package`, then install `dist/agent-review-<version>.vsix`
    (`code --install-extension …`, or Extensions view → Install from VSIX).
 
 ## Limits
 
-- New vs staged is decided per line: a line with both staged and new words shows bright.
-- The copy is taken on the agent's first edit, so your own unstaged edits made
-  before that count as the baseline, not as agent changes.
+- Latest vs earlier is decided per line.
+- Every difference between the copy and the file is marked, including your own
+  edits to the same file.
+- The history stores the full text before each edit: small for documents.
 - Plain O(n·m) LCS on the part between the common head and tail; fine for
   documents, slow for files with thousands of changed lines.
 

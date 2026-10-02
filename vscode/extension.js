@@ -1,44 +1,40 @@
 // @ts-check
 // Shows an agent's edits in the editor like tracked changes, against the copy
-// the hook took in .claude/review-baseline/. Changes not staged yet are bright,
-// staged ones dim; the copy is dropped once the file is committed.
+// the hook took in .claude/agent-review/baseline/. The agent's latest edit is
+// bright, earlier ones dim. Git is not consulted: marks stay until accepted.
 "use strict";
 const vscode = require("vscode");
 const fs = require("node:fs");
 const path = require("node:path");
 const { review, acceptHunk } = require("./diff.js");
-const { BASELINE_DIR, git, repoRoot, reviewState, indexText } = require("./review-state.js");
-
-// A copy younger than this is never cleaned: the hook writes it just before
-// the agent's edit lands, when the file still looks clean to git.
-const FRESH_MS = 5000;
+const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore } = require("./review-state.js");
 
 const color = (id) => new vscode.ThemeColor(id);
 const ruler = { overviewRulerLane: vscode.OverviewRulerLane.Left };
-/** One set of decoration types per layer: bright = not staged yet, dim = staged. @param {boolean} dim */
+/** One set of decoration types per layer: bright = latest agent edit, dim = earlier ones. @param {boolean} dim */
 const layer = (dim) => {
-  const c = (bright, staged) => color(dim ? staged : bright);
+  const c = (bright, earlier) => color(dim ? earlier : bright);
   return {
     added: vscode.window.createTextEditorDecorationType({
       isWholeLine: true,
-      backgroundColor: c("diffEditor.insertedLineBackground", "agentReview.stagedAddedBackground"),
+      backgroundColor: c("diffEditor.insertedLineBackground", "agentReview.earlierAddedBackground"),
       overviewRulerColor: color("editorOverviewRuler.addedForeground"),
       ...ruler,
     }),
     changed: vscode.window.createTextEditorDecorationType({
       isWholeLine: true,
-      backgroundColor: c("agentReview.changedLineBackground", "agentReview.stagedChangedBackground"),
+      backgroundColor: c("agentReview.changedLineBackground", "agentReview.earlierChangedBackground"),
       overviewRulerColor: color("editorOverviewRuler.modifiedForeground"),
       ...ruler,
     }),
     insertedText: vscode.window.createTextEditorDecorationType({
-      backgroundColor: c("diffEditor.insertedTextBackground", "agentReview.stagedInsertedTextBackground"),
+      backgroundColor: c("diffEditor.insertedTextBackground", "agentReview.earlierInsertedTextBackground"),
     }),
     deletedText: vscode.window.createTextEditorDecorationType({
-      before: { color: c("agentReview.deletedForeground", "agentReview.stagedDeletedForeground"), textDecoration: "line-through" },
+      before: { color: c("agentReview.deletedForeground", "agentReview.earlierDeletedForeground"), textDecoration: "line-through" },
     }),
     deletedBlock: vscode.window.createTextEditorDecorationType({
-      after: { color: c("agentReview.deletedForeground", "agentReview.stagedDeletedForeground"), margin: "0 0 0 1em" },
+      after: { color: c("agentReview.deletedForeground", "agentReview.earlierDeletedForeground"), margin: "0 0 0 1em" },
       overviewRulerColor: color("editorOverviewRuler.deletedForeground"),
       ...ruler,
     }),
@@ -50,8 +46,6 @@ const layers = { bright: layer(false), dim: layer(true) };
 const roots = new Set();
 /** @type {Map<string, ReturnType<typeof review>>} hunks by document path */
 const hunksByFile = new Map();
-/** Staged text by file path; cleared when the index changes. @type {Map<string, string | undefined>} */
-const indexCache = new Map();
 let status = /** @type {vscode.StatusBarItem} */ (/** @type {unknown} */ (undefined));
 
 const norm = (p) => (process.platform === "win32" ? path.resolve(p).toLowerCase() : path.resolve(p));
@@ -77,8 +71,8 @@ function hunksFor(doc) {
   const copy = doc.uri.scheme === "file" ? copyPath(file) : undefined;
   const root = rootOf(file);
   if (!copy || !root || !fs.existsSync(copy)) return [];
-  if (!indexCache.has(file)) indexCache.set(file, indexText(root, path.relative(root, norm(file))));
-  return review(fs.readFileSync(copy, "utf8"), indexCache.get(file), doc.getText());
+  const log = path.join(root, HISTORY_DIR, `${path.relative(root, norm(file))}.jsonl`);
+  return review(fs.readFileSync(copy, "utf8"), latestBefore(log), doc.getText());
 }
 
 // Spaces in injected text collapse; keep them visible.
@@ -97,7 +91,7 @@ function render(editor) {
   for (const h of hunks)
     for (const m of h.marks) {
       const out = outs[m.fresh ? "bright" : "dim"];
-      const tag = m.fresh ? "" : " (staged)";
+      const tag = m.fresh ? " (latest edit)" : " (earlier edit)";
       if (m.kind === "added") out.added.push({ range: lineAt(m.line).range });
       else if (m.kind === "changed") {
         const line = lineAt(m.line);
@@ -128,8 +122,8 @@ function render(editor) {
 function updateStatus(hunks) {
   if (!hunks.length) return status.hide();
   const fresh = hunks.filter((h) => h.fresh).length;
-  status.text = `$(diff) ${hunks.length} agent change${hunks.length === 1 ? "" : "s"} (${fresh} new)`;
-  status.tooltip = "Agent changes since the last commit. Bright: not staged yet. Dim: staged. Commit to clear.";
+  status.text = `$(diff) ${hunks.length} agent change${hunks.length === 1 ? "" : "s"} (${fresh} latest)`;
+  status.tooltip = "Agent changes to review. Bright: the agent's latest edit. Dim: earlier edits. Accept to clear.";
   status.show();
 }
 
@@ -138,39 +132,14 @@ function renderAll() {
   if (!vscode.window.activeTextEditor) status.hide();
 }
 
-/** Delete the copy once its file is committed. @param {string} root @param {string} copy */
-function sync(root, copy) {
-  if (Date.now() - fs.statSync(copy).mtimeMs < FRESH_MS) return;
-  if (reviewState(root, path.relative(path.join(root, BASELINE_DIR), copy)) === "clean") fs.rmSync(copy);
-}
-
-/** @param {string} root */
-function cleanup(root) {
-  const dir = path.join(root, BASELINE_DIR);
-  if (!fs.existsSync(dir)) return;
-  for (const ent of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
-    if (!ent.isFile()) continue;
-    sync(root, path.join(ent.parentPath, ent.name));
-  }
-}
-
 /** @param {vscode.WorkspaceFolder} folder @param {vscode.ExtensionContext} ctx */
 function addFolder(folder, ctx) {
-  const found = repoRoot(folder.uri.fsPath);
-  if (!found || roots.has(norm(found))) return;
-  const index = git(found, ["rev-parse", "--path-format=absolute", "--git-path", "index"])?.trim();
-  if (!index) return;
+  const found = repoRoot(folder.uri.fsPath) ?? folder.uri.fsPath;
+  if (roots.has(norm(found))) return;
   roots.add(norm(found));
-  // Non-recursive pattern: files.watcherExclude (which covers .git) does not apply.
-  const iw = vscode.workspace.createFileSystemWatcher(
-    new vscode.RelativePattern(vscode.Uri.file(path.dirname(index)), path.basename(index)),
-  );
-  const onIndex = () => { indexCache.clear(); cleanup(found); renderAll(); };
-  const bw = vscode.workspace.createFileSystemWatcher(
-    new vscode.RelativePattern(vscode.Uri.file(found), ".claude/review-baseline/**"),
-  );
-  ctx.subscriptions.push(iw, bw, iw.onDidChange(onIndex), iw.onDidCreate(onIndex), bw.onDidChange(renderAll), bw.onDidCreate(renderAll), bw.onDidDelete(renderAll));
-  cleanup(found);
+  // Copies and history change on every agent edit; re-render on any of them.
+  const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(found), ".claude/agent-review/**"));
+  ctx.subscriptions.push(w, w.onDidChange(renderAll), w.onDidCreate(renderAll), w.onDidDelete(renderAll));
 }
 
 /** @param {vscode.ExtensionContext} ctx */

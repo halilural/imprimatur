@@ -74,6 +74,25 @@ function wordDiff(oldLine, newLine) {
   return { inserted, deleted };
 }
 
+const WORD = /[\p{L}\p{N}_]+/gu;
+const words = (s) => (s.match(WORD) || []).length;
+
+/**
+ * Word marks only when a single word changed (one replaced, added or removed);
+ * otherwise the whole line: the old sentence struck through, then the new one
+ * highlighted. Several marked words in a rewritten sentence are unreadable.
+ * @param {string} oldLine @param {string} newLine
+ */
+function lineOrWordDiff(oldLine, newLine) {
+  const w = wordDiff(oldLine, newLine);
+  const added = w.inserted.reduce((n, [s, e]) => n + words(newLine.slice(s, e)), 0);
+  const removed = w.deleted.reduce((n, d) => n + words(d.text), 0);
+  if (added <= 1 && removed <= 1) return w;
+  // Old sentence first, struck through, then the new one (after the indent).
+  const at = newLine.length - newLine.trimStart().length;
+  return { inserted: [[at, newLine.length]], deleted: [{ at, text: `${oldLine.trim()} ` }] };
+}
+
 /**
  * @typedef {{kind: "added", line: number}
  *   | {kind: "changed", line: number, oldText: string, inserted: Array<[number, number]>, deleted: Array<{at: number, text: string}>}
@@ -102,7 +121,7 @@ function diff(oldText, newText) {
     const pairs = Math.min(dels.length, adds.length);
     for (let k = 0; k < pairs; k++) {
       const o = a[dels[k]], nw = b[adds[k]];
-      marks.push({ kind: "changed", line: adds[k], oldText: o, ...wordDiff(o, nw) });
+      marks.push({ kind: "changed", line: adds[k], oldText: o, ...lineOrWordDiff(o, nw) });
     }
     for (let k = pairs; k < adds.length; k++) marks.push({ kind: "added", line: adds[k] });
     if (dels.length > pairs) {
@@ -158,4 +177,4 @@ function review(base, staged, current) {
   });
 }
 
-module.exports = { diff, wordDiff, acceptHunk, review };
+module.exports = { diff, wordDiff, lineOrWordDiff, acceptHunk, review };
