@@ -86,7 +86,7 @@ function logOf(file) {
 function updateHistoryButton() {
   const doc = vscode.window.activeTextEditor?.document;
   const log = doc?.uri.scheme === "file" ? logOf(doc.uri.fsPath) : undefined;
-  const edits = log && fs.existsSync(log) ? fs.readFileSync(log, "utf8").split("\n").filter(Boolean).length : 0;
+  const edits = log ? historyEdits(log, doc.getText()).length : 0;
   if (!edits) return historyButton.hide();
   historyButton.text = `$(history) ${edits} agent edit${edits === 1 ? "" : "s"}`;
   historyButton.tooltip = "Show the agent's edits to this file, newest first";

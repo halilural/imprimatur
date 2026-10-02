@@ -146,3 +146,12 @@ test("history reads like a commit log: newest first, each edit's before and afte
   );
   assert.deepEqual(historyEdits(log(dir, "none.md"), ""), []);
 });
+
+test("history: a duplicate row from a parallel second hook counts once", () => {
+  const { historyEdits } = req("../vscode/review-state.js");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-review-dup-"));
+  const l = path.join(dir, "a.md.jsonl");
+  const row = (t, before) => JSON.stringify({ t, tool: "Edit", before }) + "\n";
+  fs.writeFileSync(l, row("2026-10-02T10:00:00.000Z", "a\n") + row("2026-10-02T10:00:00.300Z", "a\n") + row("2026-10-02T10:05:00.000Z", "a\nb\n"));
+  assert.deepEqual(historyEdits(l, "a\nb\nc\n").map((e) => [e.n, e.added]), [[2, 1], [1, 1]]);
+});

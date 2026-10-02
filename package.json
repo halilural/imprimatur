@@ -1,6 +1,6 @@
 {
   "name": "agent-review",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "See an AI agent's edits like tracked changes in VS Code until you stage them: a Claude Code hook plus a VS Code extension.",
   "license": "MIT",

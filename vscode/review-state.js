@@ -57,7 +57,10 @@ function historyEdits(log, current) {
       } catch {
         return [];
       }
-    });
+    })
+    // Two copies of the hook (project + user settings) run in parallel and can
+    // both write the same edit; same text within 2 s is one edit.
+    .filter((r, i, all) => !(i > 0 && r.before === all[i - 1].before && Date.parse(r.t) - Date.parse(all[i - 1].t) < 2000));
   const { diff } = require("./diff.js");
   return rows
     .map((r, i) => {
