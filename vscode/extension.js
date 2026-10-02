@@ -4,21 +4,14 @@
 // no unstaged changes for the file (the user staged or committed it).
 "use strict";
 const vscode = require("vscode");
-const cp = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const { diff, acceptHunk } = require("./diff.js");
+const { BASELINE_DIR, git, repoRoot, hasUnstagedChanges } = require("./review-state.js");
 
-const BASELINE_DIR = path.join(".claude", "review-baseline");
-
-/** @param {string} cwd @param {string[]} args */
-function git(cwd, args) {
-  try {
-    return cp.execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-  } catch {
-    return undefined;
-  }
-}
+// A copy younger than this is never cleaned: the hook writes it just before
+// the agent's edit lands, when the file still looks clean to git.
+const FRESH_MS = 5000;
 
 const color = (id) => new vscode.ThemeColor(id);
 const types = {
@@ -47,22 +40,26 @@ const types = {
   }),
 };
 
-/** @type {Map<string, {root: string, index: string}>} repo root by workspace folder path */
-const repos = new Map();
+/** Git roots, normalized for comparison. @type {Set<string>} */
+const roots = new Set();
 /** @type {Map<string, import("./diff.js").Hunk[]>} hunks by document path */
 const hunksByFile = new Map();
 let status = /** @type {vscode.StatusBarItem} */ (/** @type {unknown} */ (undefined));
 
-/** @param {string} file */
-function repoOf(file) {
-  for (const r of repos.values()) if (file.startsWith(r.root + path.sep)) return r;
+const norm = (p) => (process.platform === "win32" ? path.resolve(p).toLowerCase() : path.resolve(p));
+
+/** @param {string} file @returns {string | undefined} */
+function copyPath(file) {
+  const f = norm(file);
+  for (const root of roots)
+    if (f.startsWith(root + path.sep)) return path.join(root, BASELINE_DIR, f.slice(root.length + 1));
   return undefined;
 }
 
-/** @param {string} file */
-function copyPath(file) {
-  const r = repoOf(file);
-  return r && path.join(r.root, BASELINE_DIR, path.relative(r.root, file));
+/** @param {vscode.TextDocument} doc */
+function hunksFor(doc) {
+  const copy = doc.uri.scheme === "file" ? copyPath(doc.uri.fsPath) : undefined;
+  return copy && fs.existsSync(copy) ? diff(fs.readFileSync(copy, "utf8"), doc.getText()) : [];
 }
 
 // Spaces in injected text collapse; keep them visible.
@@ -71,30 +68,30 @@ const keepSpaces = (s) => s.replace(/ /g, " ");
 /** @param {vscode.TextEditor} editor */
 function render(editor) {
   const doc = editor.document;
-  const copy = doc.uri.scheme === "file" ? copyPath(doc.uri.fsPath) : undefined;
-  const hunks = copy && fs.existsSync(copy) ? diff(fs.readFileSync(copy, "utf8"), doc.getText()) : [];
+  const hunks = hunksFor(doc);
   hunksByFile.set(doc.uri.fsPath, hunks);
+  const last = doc.lineCount - 1;
+  const lineAt = (n) => doc.lineAt(Math.min(Math.max(n, 0), last));
   /** @type {Record<string, vscode.DecorationOptions[]>} */
   const out = { added: [], changed: [], insertedText: [], deletedText: [], deletedBlock: [] };
   for (const h of hunks)
     for (const m of h.marks) {
-      if (m.kind === "added") out.added.push({ range: doc.lineAt(m.line).range });
+      if (m.kind === "added") out.added.push({ range: lineAt(m.line).range });
       else if (m.kind === "changed") {
-        const line = doc.lineAt(m.line);
+        const line = lineAt(m.line);
         const hover = new vscode.MarkdownString().appendText("Before: ").appendCodeblock(m.oldText);
         out.changed.push({ range: line.range, hoverMessage: hover });
-        for (const [s, e] of m.inserted) out.insertedText.push({ range: new vscode.Range(m.line, s, m.line, e) });
+        for (const [s, e] of m.inserted) out.insertedText.push({ range: new vscode.Range(line.lineNumber, s, line.lineNumber, e) });
         for (const d of m.deleted)
           out.deletedText.push({
-            range: new vscode.Range(m.line, d.at, m.line, d.at),
+            range: new vscode.Range(line.lineNumber, d.at, line.lineNumber, d.at),
             renderOptions: { before: { contentText: keepSpaces(d.text) } },
           });
       } else {
-        const lineNo = Math.max(m.afterLine, 0);
         const n = m.oldLines.length;
         const where = m.afterLine < 0 ? " above" : "";
         out.deletedBlock.push({
-          range: doc.lineAt(lineNo).range,
+          range: lineAt(m.afterLine).range,
           hoverMessage: new vscode.MarkdownString().appendText(`Deleted${where}:`).appendCodeblock(m.oldLines.join("\n")),
           renderOptions: { after: { contentText: `⌫ ${n} line${n === 1 ? "" : "s"} deleted${where}` } },
         });
@@ -118,38 +115,35 @@ function renderAll() {
 }
 
 // Drop copies of files git sees no unstaged changes for.
-/** @param {{root: string}} r */
-function cleanup(r) {
-  const dir = path.join(r.root, BASELINE_DIR);
+/** @param {string} root */
+function cleanup(root) {
+  const dir = path.join(root, BASELINE_DIR);
   if (!fs.existsSync(dir)) return;
   for (const ent of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
     if (!ent.isFile()) continue;
     const copy = path.join(ent.parentPath, ent.name);
-    const rel = path.relative(dir, copy);
-    const st = git(r.root, ["status", "--porcelain=v1", "--", rel]);
-    if (st === undefined) continue;
-    if (st === "" || st[1] === " ") fs.rmSync(copy);
+    if (Date.now() - fs.statSync(copy).mtimeMs < FRESH_MS) continue;
+    if (!hasUnstagedChanges(root, path.relative(dir, copy))) fs.rmSync(copy);
   }
 }
 
 /** @param {vscode.WorkspaceFolder} folder @param {vscode.ExtensionContext} ctx */
 function addFolder(folder, ctx) {
-  const cwd = folder.uri.fsPath;
-  const root = git(cwd, ["rev-parse", "--show-toplevel"]);
-  const index = git(cwd, ["rev-parse", "--path-format=absolute", "--git-path", "index"]);
-  if (!root || !index) return;
-  const r = { root, index };
-  repos.set(cwd, r);
+  const found = repoRoot(folder.uri.fsPath);
+  if (!found || roots.has(norm(found))) return;
+  const index = git(found, ["rev-parse", "--path-format=absolute", "--git-path", "index"])?.trim();
+  if (!index) return;
+  roots.add(norm(found));
   // Non-recursive pattern: files.watcherExclude (which covers .git) does not apply.
   const iw = vscode.workspace.createFileSystemWatcher(
     new vscode.RelativePattern(vscode.Uri.file(path.dirname(index)), path.basename(index)),
   );
-  const onIndex = () => { cleanup(r); renderAll(); };
+  const onIndex = () => { cleanup(found); renderAll(); };
   const bw = vscode.workspace.createFileSystemWatcher(
-    new vscode.RelativePattern(vscode.Uri.file(root), `${BASELINE_DIR.split(path.sep).join("/")}/**`),
+    new vscode.RelativePattern(vscode.Uri.file(found), ".claude/review-baseline/**"),
   );
   ctx.subscriptions.push(iw, bw, iw.onDidChange(onIndex), iw.onDidCreate(onIndex), bw.onDidChange(renderAll), bw.onDidCreate(renderAll), bw.onDidDelete(renderAll));
-  cleanup(r);
+  cleanup(found);
 }
 
 /** @param {vscode.ExtensionContext} ctx */
@@ -170,14 +164,15 @@ function activate(ctx) {
       }, 150);
     }),
     vscode.commands.registerTextEditorCommand("agentReview.accept", (editor) => {
-      const file = editor.document.uri.fsPath;
-      const copy = copyPath(file);
+      const doc = editor.document;
+      const copy = copyPath(doc.uri.fsPath);
       const line = editor.selection.active.line;
-      const hunk = (hunksByFile.get(file) ?? []).find((h) =>
+      // Fresh diff: the cached one can lag the debounced render by a keystroke.
+      const hunk = hunksFor(doc).find((h) =>
         (line >= h.newStart && line < h.newEnd) || h.marks.some((m) => m.kind === "deleted" && Math.max(m.afterLine, 0) === line),
       );
       if (!copy || !hunk) return void vscode.window.showInformationMessage("No agent change at the cursor.");
-      fs.writeFileSync(copy, acceptHunk(fs.readFileSync(copy, "utf8"), editor.document.getText(), hunk));
+      fs.writeFileSync(copy, acceptHunk(fs.readFileSync(copy, "utf8"), doc.getText(), hunk));
       render(editor);
     }),
     vscode.commands.registerTextEditorCommand("agentReview.acceptAll", (editor) => {

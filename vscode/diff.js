@@ -1,9 +1,11 @@
 // @ts-check
 // Line diff with word diff inside changed lines. Plain LCS: common head and
 // tail are trimmed first, so a typical agent edit leaves a small table.
-// ponytail: O(n*m) LCS on the middle part; switch to Myers if files with
-// thousands of changed lines show up.
+// ponytail: O(n*m) LCS on the middle part, capped at MAX_CELLS; past the cap
+// the middle is shown as one replaced block. Myers if that shows up in practice.
 "use strict";
+
+const MAX_CELLS = 4_000_000;
 
 /** @template T @param {T[]} a @param {T[]} b @returns {Array<["=",number,number]|["-",number]|["+",number]>} */
 function lcsScript(a, b) {
@@ -13,14 +15,20 @@ function lcsScript(a, b) {
   while (tail < a.length - head && tail < b.length - head && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
   const n = a.length - head - tail;
   const m = b.length - head - tail;
+  /** @type {Array<any>} */
+  const out = [];
+  for (let k = 0; k < head; k++) out.push(["=", k, k]);
+  if (n * m > MAX_CELLS) {
+    for (let i = 0; i < n; i++) out.push(["-", head + i]);
+    for (let j = 0; j < m; j++) out.push(["+", head + j]);
+    for (let k = 0; k < tail; k++) out.push(["=", a.length - tail + k, b.length - tail + k]);
+    return out;
+  }
   // dp[i][j] = LCS length of a[head+i..] and b[head+j..] (middle part)
   const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
   for (let i = n - 1; i >= 0; i--)
     for (let j = m - 1; j >= 0; j--)
       dp[i][j] = a[head + i] === b[head + j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
-  /** @type {Array<any>} */
-  const out = [];
-  for (let k = 0; k < head; k++) out.push(["=", k, k]);
   let i = 0, j = 0;
   while (i < n || j < m) {
     if (i < n && j < m && a[head + i] === b[head + j]) { out.push(["=", head + i, head + j]); i++; j++; }
@@ -74,10 +82,14 @@ function wordDiff(oldLine, newLine) {
  * @typedef {{oldStart: number, oldEnd: number, newStart: number, newEnd: number, marks: Mark[]}} Hunk
  */
 
+// CRLF and LF compare equal: an EOL switch is not an agent change.
+/** @param {string} text */
+const lines = (text) => text.split(/\r?\n/);
+
 /** @param {string} oldText @param {string} newText @returns {Hunk[]} */
 function diff(oldText, newText) {
-  const a = oldText.split("\n");
-  const b = newText.split("\n");
+  const a = lines(oldText);
+  const b = lines(newText);
   /** @type {Hunk[]} */
   const hunks = [];
   /** @type {number[]} */ let dels = [];
@@ -114,8 +126,8 @@ function diff(oldText, newText) {
  * @param {string} oldText @param {string} newText @param {Hunk} hunk
  */
 function acceptHunk(oldText, newText, hunk) {
-  const a = oldText.split("\n");
-  const b = newText.split("\n");
+  const a = lines(oldText);
+  const b = lines(newText);
   a.splice(hunk.oldStart, hunk.oldEnd - hunk.oldStart, ...b.slice(hunk.newStart, hunk.newEnd));
   return a.join("\n");
 }

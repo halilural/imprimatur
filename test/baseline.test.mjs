@@ -80,3 +80,27 @@ test("bad input never blocks the tool", () => {
   const r = spawnSync("node", [hook], { input: "not json" });
   assert.equal(r.status, 0);
 });
+
+test("ignored file keeps its copy across edits", () => {
+  const { dir } = repo();
+  fs.writeFileSync(path.join(dir, ".gitignore"), "notes/\n");
+  fs.mkdirSync(path.join(dir, "notes"));
+  const f = path.join(dir, "notes/a.md");
+  fs.writeFileSync(f, "one\n");
+  run(dir, "notes/a.md");
+  fs.writeFileSync(f, "two\n");
+  run(dir, "notes/a.md");
+  assert.equal(read(copy(dir, "notes/a.md")), "one\n");
+});
+
+test("path with a space still runs the hook", () => {
+  const { dir } = repo();
+  const spaced = path.join(dir, "my project");
+  fs.mkdirSync(spaced);
+  fs.copyFileSync(hook, path.join(spaced, "baseline.mjs"));
+  fs.mkdirSync(path.join(dir, "vscode"));
+  fs.copyFileSync(path.resolve(import.meta.dirname, "../vscode/review-state.js"), path.join(dir, "vscode/review-state.js"));
+  const input = JSON.stringify({ tool_input: { file_path: path.join(dir, "b.md") } });
+  spawnSync("node", [path.join(spaced, "baseline.mjs")], { input, env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
+  assert.equal(read(copy(dir, "b.md")), "");
+});

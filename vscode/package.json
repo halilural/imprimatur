@@ -2,13 +2,13 @@
   "name": "agent-review",
   "displayName": "Agent Review",
   "description": "See an AI agent's edits in the editor like tracked changes until you stage them.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "halilural",
   "license": "MIT",
   "engines": { "vscode": "^1.100.0" },
   "categories": ["SCM Providers", "Other"],
   "main": "./extension.js",
-  "files": ["extension.js", "diff.js"],
+  "files": ["extension.js", "diff.js", "review-state.js"],
   "activationEvents": ["onStartupFinished"],
   "contributes": {
     "commands": [

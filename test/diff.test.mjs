@@ -47,3 +47,14 @@ test("accepting every hunk yields the new text", () => {
   }
   assert.equal(base, newT);
 });
+
+test("CRLF and LF compare equal", () => {
+  assert.deepEqual(diff("a\r\nb\r\n", "a\nb\n"), []);
+});
+
+test("past the size cap the middle is one replaced block", () => {
+  const big = (p) => Array.from({ length: 2100 }, (_, i) => p + i).join("\n");
+  const h = diff(big("x"), big("y"));
+  assert.equal(h.length, 1);
+  assert.equal(h[0].oldEnd - h[0].oldStart, 2100);
+});

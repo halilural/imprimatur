@@ -1,41 +1,31 @@
 #!/usr/bin/env node
 // Claude Code PreToolUse hook for Edit|Write. Before the agent touches a
 // tracked file type for the first time, copy the file to
-// .claude/review-baseline/<path> (an empty copy for a new file). The editor
-// extension diffs the file against that copy until the user stages it.
+// <git root>/.claude/review-baseline/<path> (an empty copy for a new file).
+// The editor extension diffs the file against that copy until it is staged.
 //
 //   node baseline.mjs [ext ...]   default extensions: md mdx
 //
 // Keeps an existing copy while the file still has unstaged changes; once the
 // file is staged or committed the copy is stale and is overwritten. Never
 // blocks the tool: every path ends in exit 0.
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
-export const BASELINE_DIR = path.join(".claude", "review-baseline");
+const { BASELINE_DIR, repoRoot, hasUnstagedChanges } = createRequire(import.meta.url)("../vscode/review-state.js");
 
-// True when git sees work-tree changes for rel (second status column set, or
-// untracked). Outside a git repo there is nothing to compare, so a copy is kept.
-export function hasUnstagedChanges(root, rel) {
-  try {
-    const out = execFileSync("git", ["status", "--porcelain=v1", "-z", "--", rel], {
-      cwd: root,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    return out.length > 0 && out[1] !== " ";
-  } catch {
-    return true;
-  }
-}
-
-export function takeBaseline(root, file, exts = ["md", "mdx"]) {
+/** @param {string} project Claude's project dir; files outside it are skipped */
+export function takeBaseline(project, file, exts = ["md", "mdx"]) {
   const ext = path.extname(file).slice(1).toLowerCase();
   if (!exts.includes(ext)) return "skipped";
-  const abs = path.resolve(root, file);
+  const abs = path.resolve(project, file);
+  const inProject = path.relative(project, abs);
+  if (inProject.startsWith("..") || path.isAbsolute(inProject)) return "skipped";
+  // The copy lives at the git root, where the extension looks for it.
+  const root = repoRoot(path.dirname(abs)) ?? path.resolve(project);
   const rel = path.relative(root, abs);
-  if (rel.startsWith("..") || path.isAbsolute(rel)) return "skipped";
   const copy = path.join(root, BASELINE_DIR, rel);
   if (fs.existsSync(copy) && hasUnstagedChanges(root, rel)) return "kept";
   fs.mkdirSync(path.dirname(copy), { recursive: true });
@@ -43,16 +33,16 @@ export function takeBaseline(root, file, exts = ["md", "mdx"]) {
   return "written";
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   let input = "";
   process.stdin.on("data", (d) => (input += d));
   process.stdin.on("end", () => {
     try {
       const data = JSON.parse(input || "{}");
       const file = data.tool_input?.file_path;
-      const root = process.env.CLAUDE_PROJECT_DIR || data.cwd || process.cwd();
+      const project = process.env.CLAUDE_PROJECT_DIR || data.cwd || process.cwd();
       const exts = process.argv.slice(2).map((e) => e.toLowerCase());
-      if (file) takeBaseline(root, file, exts.length ? exts : undefined);
+      if (file) takeBaseline(project, file, exts.length ? exts : undefined);
     } catch (e) {
       process.stderr.write(`agent-review baseline: ${e.message}\n`);
     }
