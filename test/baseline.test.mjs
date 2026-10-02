@@ -121,3 +121,23 @@ test("review state: unstaged, staged (copy kept), clean (copy done)", async () =
   git("restore", "--staged", "a.md"); // unstage: the marks come back
   assert.equal(reviewState(dir, "a.md"), "unstaged");
 });
+
+test("edit after staging: copy becomes the staged text, only the new change shows", async () => {
+  const { createRequire } = await import("node:module");
+  const req = createRequire(import.meta.url);
+  const { reviewState } = req("../vscode/review-state.js");
+  const { diff } = req("../vscode/diff.js");
+  const { dir, git } = repo();
+  const f = path.join(dir, "a.md");
+  fs.writeFileSync(f, "one\ntwo\n");
+  git("add", "a.md");
+  git("commit", "-qm", "x");
+  run(dir, "a.md");
+  fs.writeFileSync(f, "one\nTWO\n"); // first agent change
+  git("add", "a.md"); // user stages it
+  run(dir, "a.md"); // agent edits again: hook refreshes the copy
+  fs.writeFileSync(f, "one\nTWO\nC1\n"); // C1
+  assert.equal(reviewState(dir, "a.md"), "unstaged");
+  const marks = diff(read(copy(dir, "a.md")), read(f)).flatMap((h) => h.marks);
+  assert.deepEqual(marks, [{ kind: "added", line: 2 }]);
+});

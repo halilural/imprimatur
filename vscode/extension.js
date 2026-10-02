@@ -62,7 +62,11 @@ function copyPath(file) {
 /** @param {vscode.TextDocument} doc */
 function hunksFor(doc) {
   const copy = doc.uri.scheme === "file" ? copyPath(doc.uri.fsPath) : undefined;
-  return copy && !staged.has(copy) && fs.existsSync(copy) ? diff(fs.readFileSync(copy, "utf8"), doc.getText()) : [];
+  if (!copy || !fs.existsSync(copy)) return [];
+  // A hidden (staged) copy is re-checked on every render: the agent may have
+  // edited the file again, which no index event reports.
+  if (staged.has(copy)) for (const root of roots) if (copy.startsWith(path.join(root, BASELINE_DIR) + path.sep)) sync(root, copy);
+  return staged.has(copy) || !fs.existsSync(copy) ? [] : diff(fs.readFileSync(copy, "utf8"), doc.getText());
 }
 
 // Spaces in injected text collapse; keep them visible.
@@ -165,13 +169,7 @@ function activate(ctx) {
   ctx.subscriptions.push(
     vscode.window.onDidChangeVisibleTextEditors(renderAll),
     vscode.window.onDidChangeActiveTextEditor((e) => (e ? updateStatus(hunksByFile.get(e.document.uri.fsPath) ?? []) : status.hide())),
-    // Saving can turn a staged file back into one with unstaged changes.
-    vscode.workspace.onDidSaveTextDocument((doc) => {
-      const copy = copyPath(doc.uri.fsPath);
-      if (!copy || !fs.existsSync(copy)) return;
-      for (const root of roots) if (copy.startsWith(path.join(root, BASELINE_DIR))) sync(root, copy);
-      renderAll();
-    }),
+    vscode.workspace.onDidSaveTextDocument(renderAll),
     vscode.workspace.onDidChangeTextDocument((ev) => {
       clearTimeout(timer);
       timer = setTimeout(() => {
