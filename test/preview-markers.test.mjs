@@ -55,7 +55,7 @@ test("preview marker bar: one tick per marked block, colored by kind, click scro
   const bar = dom.body.children[0];
   assert.equal(bar.id, "agent-review-markers");
   assert.equal(bar.children.length, 3);
-  assert.match(bar.children[0].style.cssText, /top:10%;.*rgb\(46, 160, 67\);opacity:1/);
+  assert.match(bar.children[0].style.cssText, /top:10%;.*rgb\(46, 160, 67\);opacity:0.9/);
   assert.match(bar.children[1].style.cssText, /top:50%;.*rgb\(248, 81, 73\);opacity:0.5/);
   bar.children[2].handlers.click({ preventDefault() {}, stopPropagation() {} });
   assert.equal(dom.els[2].scrolled, true);

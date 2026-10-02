@@ -1,7 +1,8 @@
 // Runs inside the Markdown preview (markdown.previewScripts). Draws a bar on
 // the right edge with one colored tick per agent change; click a tick to jump
-// there. Redrawn whenever the preview content updates. The bar sits just left
-// of the preview's own scrollbar so it does not cover it.
+// there. Redrawn whenever the preview content updates. Thin ticks over the
+// scrollbar, like the editor's overview ruler; only the ticks take clicks, so
+// the scrollbar still works around them.
 (function () {
   "use strict";
   const KINDS = [
@@ -20,7 +21,7 @@
     if (!bar) {
       bar = document.createElement("div");
       bar.id = "agent-review-markers";
-      bar.style.cssText = "position:fixed;top:0;right:10px;bottom:0;width:12px;z-index:1000;pointer-events:none;";
+      bar.style.cssText = "position:fixed;top:0;right:0;bottom:0;width:10px;z-index:1000;pointer-events:none;";
       document.body.appendChild(bar);
     }
     bar.textContent = "";
@@ -35,8 +36,8 @@
       const earlier = el.classList.contains("agent-review-earlier");
       tick.title = earlier ? "Earlier agent edit" : "Latest agent edit";
       tick.style.cssText =
-        `position:absolute;right:1px;width:10px;top:${top}%;height:${height}%;min-height:3px;` +
-        `background:${kind[1]};opacity:${earlier ? 0.5 : 1};border-radius:2px;cursor:pointer;pointer-events:auto;`;
+        `position:absolute;right:2px;width:6px;top:${top}%;height:${height}%;min-height:2px;` +
+        `background:${kind[1]};opacity:${earlier ? 0.5 : 0.9};cursor:pointer;pointer-events:auto;`;
       tick.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation(); // the preview would otherwise jump the editor to this line
