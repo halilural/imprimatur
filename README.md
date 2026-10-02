@@ -16,6 +16,9 @@ staging or committing does not clear the marks.
 - A status bar button, **N agent edits**, lists the agent's edits to the file
   newest first, like a commit log; pick one to open its diff (before / after),
   or **All changes under review**. It stays after Accept all.
+- **Agent Change Graph** (from that list, or the command palette): every agent
+  edit in the repo as a table like Git Graph, one colored lane per Claude
+  session, the user's request that led to each edit, click a row for its diff.
 
 The Markdown preview shows the same changes per block: changed blocks are
 colored, their old text struck through right above them, deleted lines struck
@@ -27,7 +30,7 @@ through where they were.
    before each agent edit of a listed file type:
    - copies the file to `.claude/agent-review/baseline/<path>` if there is no
      copy yet (an empty copy for a new file);
-   - appends `{t, session, tool, before}` to
+   - appends `{t, session, tool, prompt, before}` to
      `.claude/agent-review/history/<path>.jsonl`, a history of the agent's edits.
 2. The VS Code extension ([vscode/](vscode/)) diffs each open file against its
    copy (line LCS, then word LCS inside changed lines), and against the text

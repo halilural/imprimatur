@@ -43,7 +43,7 @@ function latestBefore(log) {
  * The agent's edits to one file, newest first, like a commit log. Each edit's
  * "after" is the next edit's "before", or the current text for the latest one.
  * @param {string} log path of the .jsonl history @param {string} current current text
- * @returns {Array<{n: number, t: string, session?: string, tool?: string, before: string, after: string, added: number, removed: number}>}
+ * @returns {Array<{n: number, t: string, session?: string, tool?: string, prompt?: string, before: string, after: string, added: number, removed: number}>}
  */
 function historyEdits(log, current) {
   if (!fs.existsSync(log)) return [];
@@ -71,7 +71,7 @@ function historyEdits(log, current) {
         added += h.newEnd - h.newStart;
         removed += h.oldEnd - h.oldStart;
       }
-      return { n: i + 1, t: r.t, session: r.session, tool: r.tool, before: r.before, after, added, removed };
+      return { n: i + 1, t: r.t, session: r.session, tool: r.tool, prompt: r.prompt, before: r.before, after, added, removed };
     })
     .reverse();
 }

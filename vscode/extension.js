@@ -8,6 +8,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { review, acceptHunk } = require("./diff.js");
 const { markdownItPlugin } = require("./preview.js");
+const { openGraph, refreshGraph } = require("./graphView.js");
 const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, historyEdits } = require("./review-state.js");
 
 const color = (id) => new vscode.ThemeColor(id);
@@ -108,6 +109,24 @@ function historyContent(uri) {
   return edit ? edit[side === "before" ? "before" : "after"] : "";
 }
 
+/** @param {string} file @param {number} n */
+function openEditDiff(file, n) {
+  const e = historyEdits(logOf(file) ?? "", currentText(file) ?? "").find((x) => x.n === n);
+  const time = e ? new Date(e.t).toLocaleString() : "";
+  return vscode.commands.executeCommand("vscode.diff", historyUri(file, n, "before"), historyUri(file, n, "after"),
+    `${path.basename(file)} · agent edit #${n} (${time})`);
+}
+
+/** Open-editor text (unsaved edits included), else undefined. @param {string} file */
+const currentText = (file) => vscode.workspace.textDocuments.find((d) => d.uri.fsPath === file)?.getText();
+
+function showGraph() {
+  const active = vscode.window.activeTextEditor?.document.uri;
+  const root = (active?.scheme === "file" && rootOf(active.fsPath)) || [...roots][0];
+  if (!root) return void vscode.window.showInformationMessage("Agent Change Graph: no folder open.");
+  openGraph(root, openEditDiff, currentText);
+}
+
 async function showHistory() {
   const doc = vscode.window.activeTextEditor?.document;
   if (!doc || doc.uri.scheme !== "file") return;
@@ -119,10 +138,8 @@ async function showHistory() {
   const items = edits.map((e) => ({
     label: `$(git-commit) #${e.n}  ${time(e.t)}`,
     description: `${e.tool ?? "edit"} · +${e.added} −${e.removed}`,
-    detail: e.session ? `session ${e.session.slice(0, 8)}` : undefined,
-    open: () =>
-      vscode.commands.executeCommand("vscode.diff", historyUri(file, e.n, "before"), historyUri(file, e.n, "after"),
-        `${path.basename(file)} · agent edit #${e.n} (${time(e.t)})`),
+    detail: [e.prompt, e.session && `session ${e.session.slice(0, 8)}`].filter(Boolean).join(" · ") || undefined,
+    open: () => openEditDiff(file, e.n),
   }));
   const copy = copyPath(file);
   if (copy && fs.existsSync(copy))
@@ -131,6 +148,7 @@ async function showHistory() {
       description: "copy before the agent's first edit ↔ now",
       open: () => vscode.commands.executeCommand("vscode.diff", historyUri(file, "base", "before"), doc.uri, `${path.basename(file)} · all agent changes`),
     });
+  items.unshift({ label: "$(git-merge) Open Agent Change Graph", description: "every agent edit in this repo", open: async () => showGraph() });
   const pick = await vscode.window.showQuickPick(items, { title: `Agent edits · ${path.basename(file)}`, matchOnDescription: true });
   await pick?.open();
 }
@@ -205,6 +223,7 @@ function addFolder(folder, ctx) {
   const onChange = () => {
     renderAll();
     updateHistoryButton();
+    refreshGraph();
     vscode.commands.executeCommand("markdown.preview.refresh").then(undefined, () => {});
   };
   ctx.subscriptions.push(w, w.onDidChange(onChange), w.onDidCreate(onChange), w.onDidDelete(onChange));
@@ -222,6 +241,7 @@ function activate(ctx) {
     ...Object.values(layers.dim),
     vscode.workspace.registerTextDocumentContentProvider(SCHEME, { provideTextDocumentContent: historyContent }),
     vscode.commands.registerCommand("agentReview.showHistory", showHistory),
+    vscode.commands.registerCommand("agentReview.openGraph", showGraph),
   );
   for (const f of vscode.workspace.workspaceFolders ?? []) addFolder(f, ctx);
 

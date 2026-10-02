@@ -2,7 +2,7 @@
   "name": "agent-review",
   "displayName": "Agent Review",
   "description": "See an AI agent's edits in the editor like tracked changes until you accept them.",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "publisher": "halilural",
   "license": "MIT",
   "engines": {
@@ -18,7 +18,9 @@
     "diff.js",
     "review-state.js",
     "preview.js",
-    "preview.css"
+    "preview.css",
+    "graph.js",
+    "graphView.js"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -40,6 +42,12 @@
         "title": "Show Agent Edit History",
         "category": "Agent Review",
         "icon": "$(history)"
+      },
+      {
+        "command": "agentReview.openGraph",
+        "title": "Open Agent Change Graph",
+        "category": "Agent Review",
+        "icon": "$(git-merge)"
       }
     ],
     "colors": [

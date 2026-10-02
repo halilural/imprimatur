@@ -155,3 +155,21 @@ test("history: a duplicate row from a parallel second hook counts once", () => {
   fs.writeFileSync(l, row("2026-10-02T10:00:00.000Z", "a\n") + row("2026-10-02T10:00:00.300Z", "a\n") + row("2026-10-02T10:05:00.000Z", "a\nb\n"));
   assert.deepEqual(historyEdits(l, "a\nb\nc\n").map((e) => [e.n, e.added]), [[2, 1], [1, 1]]);
 });
+
+test("history row carries the user's latest request from the transcript", () => {
+  const { dir } = repo();
+  const tr = path.join(dir, "t.jsonl");
+  fs.writeFileSync(
+    tr,
+    [
+      { type: "user", message: { content: "old" } },
+      { type: "last-prompt", lastPrompt: "first ask", sessionId: "s1" },
+      { type: "assistant" },
+      { type: "last-prompt", lastPrompt: "change cumartesi to pazartesi\nsecond line", sessionId: "s1" },
+    ].map((r) => JSON.stringify(r)).join("\n") + "\n",
+  );
+  fs.writeFileSync(path.join(dir, "a.md"), "x\n");
+  const input = JSON.stringify({ session_id: "s1", tool_name: "Edit", transcript_path: tr, tool_input: { file_path: path.join(dir, "a.md") } });
+  spawnSync("node", [hook], { input, env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
+  assert.equal(history(dir, "a.md")[0].prompt, "change cumartesi to pazartesi");
+});
