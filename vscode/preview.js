@@ -41,40 +41,60 @@ function planBlocks(blocks, hunks) {
 const LEAF = new Set(["paragraph_open", "heading_open", "tr_open", "fence", "code_block", "html_block", "hr"]);
 
 /**
- * markdown-it plugin. getHunks(env) returns the hunks for the document being
- * rendered (env.currentDocument), or [] when it has no review copy.
- * @param {any} md @param {(env: any, src: string) => ReturnType<typeof import("./diff.js").review>} getHunks
+ * markdown-it plugin. VS Code parses (and caches the tokens) without knowing
+ * the document; only renderer.render gets env.currentDocument. So the marks are
+ * added at render time, on copies of the cached tokens.
+ * getHunks(env) returns the hunks for the document being rendered, [] for none.
+ * @param {any} md @param {(env: any) => ReturnType<typeof import("./diff.js").review>} getHunks
  */
 function markdownItPlugin(md, getHunks) {
-  md.core.ruler.push("agent_review", (state) => {
-    const hunks = getHunks(state.env, state.src);
-    if (!hunks.length) return;
-    const tokens = state.tokens;
-    const idx = [];
-    tokens.forEach((t, i) => t.map && LEAF.has(t.type) && idx.push(i));
-    const plan = planBlocks(idx.map((i) => ({ start: tokens[i].map[0], end: tokens[i].map[1] })), hunks);
-    const html = (content) => Object.assign(new state.Token("html_block", "", 0), { content });
-    /** @type {Map<number, any[]>} token index -> tokens to put before / after it */
-    const before = new Map();
-    const after = new Map();
-    idx.forEach((i, k) => {
-      const p = plan[k];
-      if (p.cls) tokens[i].attrJoin("class", p.cls);
-      // A div cannot sit inside a table: rows only get the class.
-      if (tokens[i].type === "tr_open") return;
-      if (p.before.length) before.set(i, p.before.map(html));
-      if (!p.after.length) return;
-      // after the whole block: its matching *_close, or itself for single tokens
-      let j = i;
-      if (tokens[i].type.endsWith("_open")) {
-        const close = tokens[i].type.replace("_open", "_close");
-        while (j < tokens.length && !(tokens[j].type === close && tokens[j].level === tokens[i].level)) j++;
-      }
-      after.set(j, [...(after.get(j) ?? []), ...p.after.map(html)]);
-    });
-    state.tokens = tokens.flatMap((t, i) => [...(before.get(i) ?? []), t, ...(after.get(i) ?? [])]);
-  });
+  const render = md.renderer.render.bind(md.renderer);
+  md.renderer.render = (tokens, options, env) => {
+    let hunks = [];
+    try {
+      hunks = getHunks(env);
+    } catch {
+      // a broken copy must never break the preview
+    }
+    return render(hunks.length ? annotate(tokens, hunks) : tokens, options, env);
+  };
   return md;
 }
 
-module.exports = { planBlocks, markdownItPlugin };
+/** New token list with the marks; the input tokens are not changed. @param {any[]} tokens */
+function annotate(tokens, hunks) {
+  const Token = tokens[0]?.constructor;
+  if (!Token) return tokens;
+  const idx = [];
+  tokens.forEach((t, i) => t.map && LEAF.has(t.type) && idx.push(i));
+  const plan = planBlocks(idx.map((i) => ({ start: tokens[i].map[0], end: tokens[i].map[1] })), hunks);
+  const html = (content) => Object.assign(new Token("html_block", "", 0), { content });
+  /** @type {Map<number, any>} */
+  const replaced = new Map();
+  /** @type {Map<number, any[]>} token index -> tokens to put before / after it */
+  const before = new Map();
+  const after = new Map();
+  idx.forEach((i, k) => {
+    const p = plan[k];
+    if (p.cls) {
+      const copy = Object.assign(new Token(tokens[i].type, tokens[i].tag, tokens[i].nesting), tokens[i]);
+      copy.attrs = tokens[i].attrs ? tokens[i].attrs.map((a) => [...a]) : null;
+      copy.attrJoin("class", p.cls);
+      replaced.set(i, copy);
+    }
+    // A div cannot sit inside a table: rows only get the class.
+    if (tokens[i].type === "tr_open") return;
+    if (p.before.length) before.set(i, p.before.map(html));
+    if (!p.after.length) return;
+    // after the whole block: its matching *_close, or itself for single tokens
+    let j = i;
+    if (tokens[i].type.endsWith("_open")) {
+      const close = tokens[i].type.replace("_open", "_close");
+      while (j < tokens.length && !(tokens[j].type === close && tokens[j].level === tokens[i].level)) j++;
+    }
+    after.set(j, [...(after.get(j) ?? []), ...p.after.map(html)]);
+  });
+  return tokens.flatMap((t, i) => [...(before.get(i) ?? []), replaced.get(i) ?? t, ...(after.get(i) ?? [])]);
+}
+
+module.exports = { planBlocks, markdownItPlugin, annotate };

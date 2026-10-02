@@ -189,10 +189,13 @@ function activate(ctx) {
   // Markdown preview: the built-in markdown extension calls this with its markdown-it.
   return {
     extendMarkdownIt: (md) =>
-      markdownItPlugin(md, (env, src) => {
+      markdownItPlugin(md, (env) => {
         /** @type {vscode.Uri | undefined} */
         const uri = env?.currentDocument;
-        return uri?.scheme === "file" ? hunksOf(uri.fsPath, src) : [];
+        if (uri?.scheme !== "file") return [];
+        // The preview renders the open document, unsaved edits included.
+        const doc = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
+        return hunksOf(uri.fsPath, doc ? doc.getText() : fs.readFileSync(uri.fsPath, "utf8"));
       }),
   };
 }
