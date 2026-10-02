@@ -39,4 +39,38 @@ function latestBefore(log) {
   }
 }
 
-module.exports = { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore };
+/**
+ * The agent's edits to one file, newest first, like a commit log. Each edit's
+ * "after" is the next edit's "before", or the current text for the latest one.
+ * @param {string} log path of the .jsonl history @param {string} current current text
+ * @returns {Array<{n: number, t: string, session?: string, tool?: string, before: string, after: string, added: number, removed: number}>}
+ */
+function historyEdits(log, current) {
+  if (!fs.existsSync(log)) return [];
+  const rows = fs
+    .readFileSync(log, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .flatMap((l) => {
+      try {
+        return [JSON.parse(l)];
+      } catch {
+        return [];
+      }
+    });
+  const { diff } = require("./diff.js");
+  return rows
+    .map((r, i) => {
+      const after = i + 1 < rows.length ? rows[i + 1].before : current;
+      let added = 0;
+      let removed = 0;
+      for (const h of diff(r.before, after)) {
+        added += h.newEnd - h.newStart;
+        removed += h.oldEnd - h.oldStart;
+      }
+      return { n: i + 1, t: r.t, session: r.session, tool: r.tool, before: r.before, after, added, removed };
+    })
+    .reverse();
+}
+
+module.exports = { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, historyEdits };

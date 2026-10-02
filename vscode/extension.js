@@ -8,7 +8,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { review, acceptHunk } = require("./diff.js");
 const { markdownItPlugin } = require("./preview.js");
-const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore } = require("./review-state.js");
+const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, historyEdits } = require("./review-state.js");
 
 const color = (id) => new vscode.ThemeColor(id);
 const ruler = { overviewRulerLane: vscode.OverviewRulerLane.Left };
@@ -48,6 +48,7 @@ const roots = new Set();
 /** @type {Map<string, ReturnType<typeof review>>} hunks by document path */
 const hunksByFile = new Map();
 let status = /** @type {vscode.StatusBarItem} */ (/** @type {unknown} */ (undefined));
+let historyButton = /** @type {vscode.StatusBarItem} */ (/** @type {unknown} */ (undefined));
 
 const norm = (p) => (process.platform === "win32" ? path.resolve(p).toLowerCase() : path.resolve(p));
 
@@ -73,6 +74,65 @@ function hunksOf(file, text) {
   if (!copy || !root || !fs.existsSync(copy)) return [];
   const log = path.join(root, HISTORY_DIR, `${path.relative(root, norm(file))}.jsonl`);
   return review(fs.readFileSync(copy, "utf8"), latestBefore(log), text);
+}
+
+/** @param {string} file */
+function logOf(file) {
+  const root = rootOf(file);
+  return root && path.join(root, HISTORY_DIR, `${path.relative(root, norm(file))}.jsonl`);
+}
+
+/** Status bar button: shown whenever the active file has an agent history. */
+function updateHistoryButton() {
+  const doc = vscode.window.activeTextEditor?.document;
+  const log = doc?.uri.scheme === "file" ? logOf(doc.uri.fsPath) : undefined;
+  const edits = log && fs.existsSync(log) ? fs.readFileSync(log, "utf8").split("\n").filter(Boolean).length : 0;
+  if (!edits) return historyButton.hide();
+  historyButton.text = `$(history) ${edits} agent edit${edits === 1 ? "" : "s"}`;
+  historyButton.tooltip = "Show the agent's edits to this file, newest first";
+  historyButton.show();
+}
+
+// Read-only documents for the diff view: agent-review:/<name>?<file, edit, side>
+const SCHEME = "agent-review";
+/** @param {string} file @param {number | "base"} n @param {"before" | "after" | "current"} side */
+const historyUri = (file, n, side) =>
+  vscode.Uri.from({ scheme: SCHEME, path: `/${path.basename(file)}`, query: JSON.stringify({ file, n, side }) });
+
+/** @param {vscode.Uri} uri */
+function historyContent(uri) {
+  const { file, n, side } = JSON.parse(uri.query);
+  if (n === "base") return fs.readFileSync(copyPath(file) ?? "", "utf8");
+  const current = vscode.workspace.textDocuments.find((d) => d.uri.fsPath === file)?.getText() ?? fs.readFileSync(file, "utf8");
+  const edit = historyEdits(logOf(file) ?? "", current).find((e) => e.n === n);
+  return edit ? edit[side === "before" ? "before" : "after"] : "";
+}
+
+async function showHistory() {
+  const doc = vscode.window.activeTextEditor?.document;
+  if (!doc || doc.uri.scheme !== "file") return;
+  const file = doc.uri.fsPath;
+  const edits = historyEdits(logOf(file) ?? "", doc.getText());
+  if (!edits.length) return void vscode.window.showInformationMessage("No agent edits recorded for this file.");
+  const time = (t) => new Date(t).toLocaleString();
+  /** @type {Array<vscode.QuickPickItem & {open: () => Thenable<unknown>}>} */
+  const items = edits.map((e) => ({
+    label: `$(git-commit) #${e.n}  ${time(e.t)}`,
+    description: `${e.tool ?? "edit"} · +${e.added} −${e.removed}`,
+    detail: e.session ? `session ${e.session.slice(0, 8)}` : undefined,
+    open: () =>
+      vscode.commands.executeCommand("vscode.diff", historyUri(file, e.n, "before"), historyUri(file, e.n, "after"),
+        `${path.basename(file)} · agent edit #${e.n} (${time(e.t)})`),
+  }));
+  const copy = copyPath(file);
+  if (copy && fs.existsSync(copy))
+    items.unshift({
+      label: "$(diff) All changes under review",
+      description: "copy before the agent's first edit ↔ now",
+      open: () => vscode.commands.executeCommand("vscode.diff", historyUri(file, "base", "before"), doc.uri, `${path.basename(file)} · all agent changes`),
+    });
+  const pick = await vscode.window.showQuickPick(items, { title: `Agent edits · ${path.basename(file)}`, matchOnDescription: true });
+  await pick?.open();
 }
 
 /** @param {vscode.TextDocument} doc */
@@ -144,6 +204,7 @@ function addFolder(folder, ctx) {
   const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(found), ".claude/agent-review/**"));
   const onChange = () => {
     renderAll();
+    updateHistoryButton();
     vscode.commands.executeCommand("markdown.preview.refresh").then(undefined, () => {});
   };
   ctx.subscriptions.push(w, w.onDidChange(onChange), w.onDidCreate(onChange), w.onDidDelete(onChange));
@@ -152,14 +213,27 @@ function addFolder(folder, ctx) {
 /** @param {vscode.ExtensionContext} ctx */
 function activate(ctx) {
   status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
-  ctx.subscriptions.push(status, ...Object.values(layers.bright), ...Object.values(layers.dim));
+  historyButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 49);
+  historyButton.command = "agentReview.showHistory";
+  ctx.subscriptions.push(
+    status,
+    historyButton,
+    ...Object.values(layers.bright),
+    ...Object.values(layers.dim),
+    vscode.workspace.registerTextDocumentContentProvider(SCHEME, { provideTextDocumentContent: historyContent }),
+    vscode.commands.registerCommand("agentReview.showHistory", showHistory),
+  );
   for (const f of vscode.workspace.workspaceFolders ?? []) addFolder(f, ctx);
 
   /** @type {NodeJS.Timeout | undefined} */
   let timer;
   ctx.subscriptions.push(
     vscode.window.onDidChangeVisibleTextEditors(renderAll),
-    vscode.window.onDidChangeActiveTextEditor((e) => (e ? updateStatus(hunksByFile.get(e.document.uri.fsPath) ?? []) : status.hide())),
+    vscode.window.onDidChangeActiveTextEditor((e) => {
+      if (e) updateStatus(hunksByFile.get(e.document.uri.fsPath) ?? []);
+      else status.hide();
+      updateHistoryButton();
+    }),
     vscode.workspace.onDidSaveTextDocument(renderAll),
     vscode.workspace.onDidChangeTextDocument((ev) => {
       clearTimeout(timer);
@@ -186,6 +260,7 @@ function activate(ctx) {
     }),
   );
   renderAll();
+  updateHistoryButton();
   // Markdown preview: the built-in markdown extension calls this with its markdown-it.
   return {
     extendMarkdownIt: (md) =>

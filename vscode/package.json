@@ -2,7 +2,7 @@
   "name": "agent-review",
   "displayName": "Agent Review",
   "description": "See an AI agent's edits in the editor like tracked changes until you accept them.",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "publisher": "halilural",
   "license": "MIT",
   "engines": {
@@ -34,6 +34,12 @@
         "command": "agentReview.acceptAll",
         "title": "Accept All Agent Changes in File",
         "category": "Agent Review"
+      },
+      {
+        "command": "agentReview.showHistory",
+        "title": "Show Agent Edit History",
+        "category": "Agent Review",
+        "icon": "$(history)"
       }
     ],
     "colors": [

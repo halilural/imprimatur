@@ -125,3 +125,24 @@ test("hook installed twice (project + user settings): one history line per edit"
   run(dir, "a.md"); // the second copy of the hook, same edit
   assert.equal(history(dir, "a.md").length, 1);
 });
+
+test("history reads like a commit log: newest first, each edit's before and after", () => {
+  const { historyEdits } = req("../vscode/review-state.js");
+  const { dir } = repo();
+  const f = path.join(dir, "a.md");
+  fs.writeFileSync(f, "a\n");
+  for (const c of ["C1", "C2"]) {
+    run(dir, "a.md");
+    fs.appendFileSync(f, `${c}\n`);
+    fs.utimesSync(log(dir, "a.md"), new Date(0), new Date(0)); // outside the double-hook window
+  }
+  const edits = historyEdits(log(dir, "a.md"), read(f));
+  assert.deepEqual(
+    edits.map((e) => [e.n, e.before, e.after, e.added, e.removed, e.tool]),
+    [
+      [2, "a\nC1\n", "a\nC1\nC2\n", 1, 0, "Edit"],
+      [1, "a\n", "a\nC1\n", 1, 0, "Edit"],
+    ],
+  );
+  assert.deepEqual(historyEdits(log(dir, "none.md"), ""), []);
+});

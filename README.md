@@ -13,6 +13,9 @@ staging or committing does not clear the marks.
 - Marks in the overview ruler, a change count in the status bar.
 - **Agent Review: Accept Agent Change at Cursor** and **Accept All Agent
   Changes in File** clear the marks.
+- A status bar button, **N agent edits**, lists the agent's edits to the file
+  newest first, like a commit log; pick one to open its diff (before / after),
+  or **All changes under review**. It stays after Accept all.
 
 The Markdown preview shows the same changes per block: changed blocks are
 colored, their old text struck through right above them, deleted lines struck
