@@ -6,7 +6,7 @@
 const vscode = require("vscode");
 const fs = require("node:fs");
 const path = require("node:path");
-const { review, acceptHunk } = require("./diff.js");
+const { review, acceptHunk, acceptLines } = require("./diff.js");
 const { markdownItPlugin } = require("./preview.js");
 const { openGraph, refreshGraph } = require("./graphView.js");
 const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, historyEdits } = require("./review-state.js");
@@ -117,21 +117,13 @@ function historyContent(uri) {
 /** Hunks of an open or on-disk file. @param {string} file */
 const hunksOfFile = (file) => hunksOf(file, currentText(file) ?? (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : ""));
 
-/** Does a hunk touch new-text lines [start, end)? Deletions count at the line before them. */
-const touches = (h, start, end) =>
-  (h.newStart < end && h.newEnd > start) || h.marks.some((m) => m.kind === "deleted" && Math.max(m.afterLine, 0) >= start && Math.max(m.afterLine, 0) < end);
-
-/** Accept every agent change in new-text lines [start, end) of a file: write them into the copy. */
+/** Accept the agent's changes on new-text lines [start, end) of a file: write just those into the copy. */
 function acceptRange(file, start, end) {
   const copy = copyPath(file);
   if (!copy || !fs.existsSync(copy)) return;
   const text = currentText(file) ?? fs.readFileSync(file, "utf8");
-  // One hunk at a time: accepting changes old-text positions, new-text ones stay.
-  for (let guard = 0; guard < 1000; guard++) {
-    const h = hunksOfFile(file).find((x) => touches(x, start, end));
-    if (!h) break;
-    fs.writeFileSync(copy, acceptHunk(fs.readFileSync(copy, "utf8"), text, h));
-  }
+  // Only these lines: a hunk can span several blocks (an added item's EN and TR paragraphs).
+  fs.writeFileSync(copy, acceptLines(fs.readFileSync(copy, "utf8"), text, start, end));
   // Move on to the next change in the editor, like a review queue.
   const next = hunksOfFile(file).find((h) => h.newStart >= start) ?? hunksOfFile(file)[0];
   const editor = vscode.window.visibleTextEditors.find((e) => e.document.uri.fsPath === file);

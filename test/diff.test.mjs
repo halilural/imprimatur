@@ -94,3 +94,31 @@ test("changes inside fenced code blocks are not marked", () => {
   assert.deepEqual(marks, [["changed", 0]]); // only the prose line; code edits and the deleted code line are skipped
   assert.deepEqual([...codeLines("a\n````\nx\n```\ny\n````\nb")], [1, 2, 3, 4, 5]); // closing fence must be as long
 });
+
+test("accepting one block takes only its lines, not the whole hunk", () => {
+  const { acceptLines, diff } = createRequire(import.meta.url)("../vscode/diff.js");
+  // The agent added a list item with an English and a Turkish paragraph: one hunk.
+  const base = "- x\n\n  X\n\n- y\n";
+  const cur = "- x\n\n  X\n\n- new en\n\n  yeni tr\n\n- y\n";
+  assert.equal(diff(base, cur).length, 1);
+  const copy = acceptLines(base, cur, 4, 5); // only "- new en"
+  const left = diff(copy, cur).flatMap((h) => h.marks.map((m) => [m.kind, m.line]));
+  assert.deepEqual(left, [["added", 6], ["added", 7]]); // the Turkish paragraph (and its blank) still to review
+  assert.equal(acceptLines(copy, cur, 6, 7), cur); // accepting it too reaches the new text
+});
+
+test("accepting a changed line leaves the other changed lines", () => {
+  const { acceptLines, diff } = createRequire(import.meta.url)("../vscode/diff.js");
+  const base = "one\ntwo\nthree\n";
+  const cur = "ONE\nTWO\nthree\n";
+  const copy = acceptLines(base, cur, 0, 1);
+  assert.equal(copy, "ONE\ntwo\nthree\n");
+  assert.deepEqual(diff(copy, cur).flatMap((h) => h.marks.map((m) => m.line)), [1]);
+});
+
+test("accepting at a deletion removes only that deletion", () => {
+  const { acceptLines } = createRequire(import.meta.url)("../vscode/diff.js");
+  const base = "a\ngone\nb\n\nc\nalso gone\nd\n";
+  const cur = "a\nb\n\nc\nd\n";
+  assert.equal(acceptLines(base, cur, 0, 1), "a\nb\n\nc\nalso gone\nd\n");
+});

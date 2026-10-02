@@ -208,4 +208,47 @@ function codeLines(text) {
   return out;
 }
 
-module.exports = { diff, wordDiff, lineOrWordDiff, acceptHunk, review, codeLines };
+/**
+ * Baseline with only new-text lines [start, end) accepted: added lines in the
+ * range come in, deleted lines at the range go out, everything else stays as
+ * it was. Blank lines right next to the range go with it, so a paragraph's
+ * surrounding blank lines do not linger as a change. One pass, no cascade.
+ * @param {string} oldText @param {string} newText @param {number} start @param {number} end
+ */
+function acceptLines(oldText, newText, start, end) {
+  const a = lines(oldText);
+  const b = lines(newText);
+  const blank = (l) => l.trim() === "";
+  const take = (j, l) => (j >= start && j < end) || (blank(l) && (j === start - 1 || j === end));
+  const out = [];
+  /** @type {number[]} */ let dels = [];
+  /** @type {number[]} */ let adds = [];
+  let ni = 0; // new-text line where the current run starts
+  const flush = () => {
+    // Same pairing as diff(): dels[k] became adds[k] (a changed line).
+    const pairs = Math.min(dels.length, adds.length);
+    for (let k = 0; k < pairs; k++) out.push(take(adds[k], b[adds[k]]) ? b[adds[k]] : a[dels[k]]);
+    for (let k = pairs; k < adds.length; k++) if (take(adds[k], b[adds[k]])) out.push(b[adds[k]]);
+    // Extra deletions sit after the last new line of the run.
+    const at = pairs ? adds[pairs - 1] : ni - 1;
+    for (let k = pairs; k < dels.length; k++) {
+      const gone = take(at, b[at] ?? "") || take(at + 1, a[dels[k]]);
+      if (!gone) out.push(a[dels[k]]);
+    }
+    dels = [];
+    adds = [];
+  };
+  for (const op of lcsScript(a, b)) {
+    if (op[0] === "-") dels.push(op[1]);
+    else if (op[0] === "+") adds.push(op[1]);
+    else {
+      flush();
+      out.push(a[op[1]]);
+      ni = op[2] + 1;
+    }
+  }
+  flush();
+  return out.join("\n");
+}
+
+module.exports = { diff, wordDiff, lineOrWordDiff, acceptHunk, acceptLines, review, codeLines };
