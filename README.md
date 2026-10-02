@@ -24,6 +24,10 @@ staging or committing does not clear the marks.
   edit in the repo as a table like Git Graph, one colored lane per Claude
   session, the user's request that led to each edit, click a row for its diff.
 
+Setting `agentReview.showIn`: Markdown files are marked only in the preview by
+default (`preview`); `both` adds the editor marks and its ✓ Accept lenses,
+`editor` uses the editor only. Other file types are always marked in the editor.
+
 The Markdown preview shows the same changes per block: changed blocks are
 colored, their old text struck through right above them, deleted lines struck
 through where they were.

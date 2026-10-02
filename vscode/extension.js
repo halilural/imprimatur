@@ -145,7 +145,7 @@ const codeLenses = {
   /** @param {vscode.TextDocument} doc */
   provideCodeLenses(doc) {
     // CodeLens belongs to the document, not the editor: hide while it is in a diff tab.
-    if (doc.uri.scheme !== "file" || diffTabUris().has(doc.uri.toString())) return [];
+    if (doc.uri.scheme !== "file" || diffTabUris().has(doc.uri.toString()) || !marksInEditor(doc)) return [];
     return hunksFor(doc).map((h) => {
       const start = Math.min(h.newStart < h.newEnd ? h.newStart : Math.max(h.marks[0].afterLine ?? 0, 0), doc.lineCount - 1);
       const end = Math.max(h.newEnd, start + 1);
@@ -233,10 +233,18 @@ function inDiffTab(editor) {
   return !(group?.activeTab?.input instanceof vscode.TabInputText);
 }
 
+/** Markdown is reviewed in the preview unless agentReview.showIn says otherwise. @param {vscode.TextDocument} doc */
+function marksInEditor(doc) {
+  const isMarkdown = doc.languageId === "markdown" || /\.mdx?$/i.test(doc.uri.fsPath);
+  if (!isMarkdown) return true; // no preview for other files
+  return vscode.workspace.getConfiguration("agentReview", doc.uri).get("showIn", "preview") !== "preview";
+}
+
 /** @param {vscode.TextEditor} editor */
 function render(editor) {
   const doc = editor.document;
-  const hunks = inDiffTab(editor) ? [] : hunksFor(doc);
+  const all = inDiffTab(editor) ? [] : hunksFor(doc);
+  const hunks = marksInEditor(doc) ? all : [];
   hunksByFile.set(doc.uri.fsPath, hunks);
   const last = doc.lineCount - 1;
   const lineAt = (n) => doc.lineAt(Math.min(Math.max(n, 0), last));
@@ -270,7 +278,7 @@ function render(editor) {
     }
   for (const name of /** @type {const} */ (["bright", "dim"]))
     for (const [k, t] of Object.entries(layers[name])) editor.setDecorations(t, outs[name][k]);
-  if (editor === vscode.window.activeTextEditor) updateStatus(hunks);
+  if (editor === vscode.window.activeTextEditor) updateStatus(all);
 }
 
 /** @param {ReturnType<typeof review>} hunks */
@@ -348,6 +356,9 @@ function activate(ctx) {
   let timer;
   ctx.subscriptions.push(
     vscode.window.onDidChangeVisibleTextEditors(renderAll),
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("agentReview")) refreshEverything();
+    }),
     vscode.window.tabGroups.onDidChangeTabs(() => {
       renderAll();
       codeLensChanged.fire();
@@ -402,6 +413,7 @@ function activate(ctx) {
         /** @type {vscode.Uri | undefined} */
         const uri = env?.currentDocument;
         if (uri?.scheme !== "file") return [];
+        if (vscode.workspace.getConfiguration("agentReview", uri).get("showIn", "preview") === "editor") return [];
         // The preview renders the open document, unsaved edits included.
         const doc = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
         return hunksOf(uri.fsPath, doc ? doc.getText() : fs.readFileSync(uri.fsPath, "utf8"));

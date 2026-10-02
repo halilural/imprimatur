@@ -2,7 +2,7 @@
   "name": "agent-review",
   "displayName": "Agent Review",
   "description": "See an AI agent's edits in the editor like tracked changes until you accept them.",
-  "version": "0.7.3",
+  "version": "0.8.0",
   "publisher": "halilural",
   "license": "MIT",
   "engines": {
@@ -158,6 +158,26 @@
           "when": "false"
         }
       ]
+    },
+    "configuration": {
+      "title": "Agent Review",
+      "properties": {
+        "agentReview.showIn": {
+          "type": "string",
+          "enum": [
+            "preview",
+            "both",
+            "editor"
+          ],
+          "enumDescriptions": [
+            "Markdown: marks only in the Markdown preview (other files: editor).",
+            "Markdown: marks in both the preview and the editor.",
+            "Markdown: marks only in the editor."
+          ],
+          "default": "preview",
+          "description": "Where agent changes to Markdown files are marked. Other file types are always marked in the editor."
+        }
+      }
     }
   }
 }
