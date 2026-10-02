@@ -14,7 +14,9 @@ staging or committing does not clear the marks.
 - **Agent Review: Accept Agent Change at Cursor** and **Accept All Agent
   Changes in File** clear the marks.
 
-Colors show in the text editor only, not in the Markdown preview.
+The Markdown preview shows the same changes per block: changed blocks are
+colored, their old text struck through right above them, deleted lines struck
+through where they were.
 
 ## How it works
 
@@ -59,6 +61,8 @@ Requires Node 22+, git and VS Code 1.100+.
 ## Limits
 
 - Latest vs earlier is decided per line.
+- The preview works per block (no word marks there); a deleted table row is not
+  shown in the preview.
 - Every difference between the copy and the file is marked, including your own
   edits to the same file.
 - The history stores the full text before each edit: small for documents.
@@ -68,7 +72,8 @@ Requires Node 22+, git and VS Code 1.100+.
 ## Develop
 
 ```sh
-npm test         # hook and diff tests (node:test)
+npm install      # markdown-it, for the preview tests only
+npm test         # hook, diff and preview tests (node:test)
 npm run package  # builds dist/agent-review-<version>.vsix
 ```
 

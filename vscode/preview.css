@@ -1,0 +1,13 @@
+/* agent-review: agent changes in the Markdown preview (latest bright, earlier dim). */
+.agent-review-added,
+.agent-review-changed {
+  border-left: 3px solid;
+  padding-left: 6px;
+}
+.agent-review-added.agent-review-latest { background: rgba(46, 160, 67, 0.22); border-color: rgb(46, 160, 67); }
+.agent-review-added.agent-review-earlier { background: rgba(46, 160, 67, 0.09); border-color: rgba(46, 160, 67, 0.45); }
+.agent-review-changed.agent-review-latest { background: rgba(31, 111, 235, 0.2); border-color: rgb(31, 111, 235); }
+.agent-review-changed.agent-review-earlier { background: rgba(31, 111, 235, 0.08); border-color: rgba(31, 111, 235, 0.45); }
+.agent-review-old { margin: 0.4em 0 0; padding-left: 9px; border-left: 3px solid rgb(248, 81, 73); }
+.agent-review-old del { color: rgb(248, 81, 73); }
+.agent-review-old.agent-review-earlier { opacity: 0.55; }

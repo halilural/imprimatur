@@ -7,6 +7,7 @@ const vscode = require("vscode");
 const fs = require("node:fs");
 const path = require("node:path");
 const { review, acceptHunk } = require("./diff.js");
+const { markdownItPlugin } = require("./preview.js");
 const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore } = require("./review-state.js");
 
 const color = (id) => new vscode.ThemeColor(id);
@@ -65,15 +66,17 @@ function rootOf(file) {
   return undefined;
 }
 
-/** @param {vscode.TextDocument} doc */
-function hunksFor(doc) {
-  const file = doc.uri.fsPath;
-  const copy = doc.uri.scheme === "file" ? copyPath(file) : undefined;
+/** @param {string} file @param {string} text */
+function hunksOf(file, text) {
+  const copy = copyPath(file);
   const root = rootOf(file);
   if (!copy || !root || !fs.existsSync(copy)) return [];
   const log = path.join(root, HISTORY_DIR, `${path.relative(root, norm(file))}.jsonl`);
-  return review(fs.readFileSync(copy, "utf8"), latestBefore(log), doc.getText());
+  return review(fs.readFileSync(copy, "utf8"), latestBefore(log), text);
 }
+
+/** @param {vscode.TextDocument} doc */
+const hunksFor = (doc) => (doc.uri.scheme === "file" ? hunksOf(doc.uri.fsPath, doc.getText()) : []);
 
 // Spaces in injected text collapse; keep them visible.
 const keepSpaces = (s) => s.replace(/ /g, " ");
@@ -139,7 +142,11 @@ function addFolder(folder, ctx) {
   roots.add(norm(found));
   // Copies and history change on every agent edit; re-render on any of them.
   const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(found), ".claude/agent-review/**"));
-  ctx.subscriptions.push(w, w.onDidChange(renderAll), w.onDidCreate(renderAll), w.onDidDelete(renderAll));
+  const onChange = () => {
+    renderAll();
+    vscode.commands.executeCommand("markdown.preview.refresh").then(undefined, () => {});
+  };
+  ctx.subscriptions.push(w, w.onDidChange(onChange), w.onDidCreate(onChange), w.onDidDelete(onChange));
 }
 
 /** @param {vscode.ExtensionContext} ctx */
@@ -170,7 +177,7 @@ function activate(ctx) {
       );
       if (!copy || !hunk) return void vscode.window.showInformationMessage("No agent change at the cursor.");
       fs.writeFileSync(copy, acceptHunk(fs.readFileSync(copy, "utf8"), doc.getText(), hunk));
-      render(editor);
+      render(editor); // the copy watcher refreshes the preview
     }),
     vscode.commands.registerTextEditorCommand("agentReview.acceptAll", (editor) => {
       const copy = copyPath(editor.document.uri.fsPath);
@@ -179,6 +186,15 @@ function activate(ctx) {
     }),
   );
   renderAll();
+  // Markdown preview: the built-in markdown extension calls this with its markdown-it.
+  return {
+    extendMarkdownIt: (md) =>
+      markdownItPlugin(md, (env, src) => {
+        /** @type {vscode.Uri | undefined} */
+        const uri = env?.currentDocument;
+        return uri?.scheme === "file" ? hunksOf(uri.fsPath, src) : [];
+      }),
+  };
 }
 
 module.exports = { activate, deactivate() {} };

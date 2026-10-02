@@ -1,13 +1,18 @@
 {
   "name": "agent-review",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "See an AI agent's edits like tracked changes in VS Code until you stage them: a Claude Code hook plus a VS Code extension.",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "node --test",
     "package": "mkdir -p dist && cd vscode && npx --yes @vscode/vsce@4.0.0 package --skip-license --allow-missing-repository -o ../dist/"
+  },
+  "devDependencies": {
+    "markdown-it": "^15.0.2"
   }
 }

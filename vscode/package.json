@@ -2,7 +2,7 @@
   "name": "agent-review",
   "displayName": "Agent Review",
   "description": "See an AI agent's edits in the editor like tracked changes until you accept them.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "halilural",
   "license": "MIT",
   "engines": {
@@ -16,7 +16,9 @@
   "files": [
     "extension.js",
     "diff.js",
-    "review-state.js"
+    "review-state.js",
+    "preview.js",
+    "preview.css"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -95,6 +97,10 @@
           "highContrastLight": "#a40e26a6"
         }
       }
+    ],
+    "markdown.markdownItPlugins": true,
+    "markdown.previewStyles": [
+      "./preview.css"
     ]
   }
 }
