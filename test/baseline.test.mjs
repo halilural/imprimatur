@@ -117,3 +117,11 @@ test("C1, C2, C3 by the agent, committed in between: all three show, only C3 bri
   );
   assert.deepEqual(marks, [[1, false], [2, false], [3, true]]);
 });
+
+test("hook installed twice (project + user settings): one history line per edit", () => {
+  const { dir } = repo();
+  fs.writeFileSync(path.join(dir, "a.md"), "one\n");
+  run(dir, "a.md");
+  run(dir, "a.md"); // the second copy of the hook, same edit
+  assert.equal(history(dir, "a.md").length, 1);
+});

@@ -15,7 +15,10 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const { BASELINE_DIR, HISTORY_DIR, repoRoot } = createRequire(import.meta.url)("../vscode/review-state.js");
+const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore } = createRequire(import.meta.url)("../vscode/review-state.js");
+
+/** True when the log was written in the last 2 s: a second copy of this hook on the same edit. */
+const sameEditWindow = (log) => Date.now() - fs.statSync(log).mtimeMs < 2000;
 
 /**
  * @param {string} project Claude's project dir; files outside it are skipped
@@ -38,6 +41,8 @@ export function takeBaseline(project, file, exts = ["md", "mdx"], meta = {}) {
     fs.writeFileSync(copy, before);
   }
   const log = path.join(root, HISTORY_DIR, `${rel}.jsonl`);
+  // The same hook can be installed twice (project and user settings); one line per edit.
+  if (latestBefore(log) === before && sameEditWindow(log)) return kept ? "kept" : "written";
   fs.mkdirSync(path.dirname(log), { recursive: true });
   fs.appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), session: meta.session, tool: meta.tool, before }) + "\n");
   return kept ? "kept" : "written";
