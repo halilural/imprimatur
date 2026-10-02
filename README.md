@@ -15,8 +15,8 @@ staging or committing does not clear the marks.
   changed block in the Markdown preview accepts that block; **Agent Review:
   Accept Agent Change at Cursor** and **Accept All Agent Changes in File** do
   the same from the command palette.
-- Old text stays readable: normal text color on a light red band, struck
-  through with a thin red line; in the preview it is rendered as Markdown.
+- Old text is shown as plain text in a red box (no strike line, so it stays
+  readable); in the preview it is rendered as Markdown.
 - A status bar button, **N agent edits**, lists the agent's edits to the file
   newest first, like a commit log; pick one to open its diff (before / after),
   or **All changes under review**. It stays after Accept all.

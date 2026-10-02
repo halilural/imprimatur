@@ -32,12 +32,12 @@ const layer = (dim) => {
     insertedText: vscode.window.createTextEditorDecorationType({
       backgroundColor: c("diffEditor.insertedTextBackground", "agentReview.earlierInsertedTextBackground"),
     }),
-    // Old text stays readable: normal-ish color on a light red band, thin red strike.
+    // Old text stays readable: plain text in a red box, no strike line.
     deletedText: vscode.window.createTextEditorDecorationType({
       before: {
         color: c("agentReview.oldTextForeground", "agentReview.earlierOldTextForeground"),
         backgroundColor: color("agentReview.oldTextBackground"),
-        textDecoration: "line-through rgba(248, 81, 73, 0.9)",
+        border: "1px solid rgba(248, 81, 73, 0.6)",
       },
     }),
     deletedBlock: vscode.window.createTextEditorDecorationType({
