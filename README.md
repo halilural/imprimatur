@@ -34,6 +34,10 @@ overview ruler: one colored tick
 per change (green added, blue changed, red old or deleted; earlier edits dim),
 click a tick to jump there.
 
+Changed Mermaid flowcharts are colored in the preview like a visual diff: new
+nodes and arrows green, changed labels orange, removed ones red and dashed
+(kept visible), with a legend and an Accept button above the diagram.
+
 The Markdown preview shows the same changes per block: changed blocks are
 colored, their old text struck through right above them, deleted lines struck
 through where they were.

@@ -14,3 +14,7 @@
 .agent-review-old.agent-review-earlier { opacity: 0.6; }
 .agent-review-accept { float: right; font-size: 0.85em; padding: 0 8px; border-radius: 3px; text-decoration: none; color: var(--vscode-button-foreground, #fff); background: var(--vscode-button-background, #0e639c); }
 .agent-review-accept:hover { background: var(--vscode-button-hoverBackground, #1177bb); text-decoration: none; }
+.agent-review-diagram { margin: 0.6em 0 0.2em; padding: 3px 8px; font-size: 0.85em; border-left: 3px solid rgb(210, 153, 34); background: rgba(210, 153, 34, 0.1); }
+.agent-review-d-added { color: rgb(46, 160, 67); }
+.agent-review-d-changed { color: rgb(210, 153, 34); }
+.agent-review-d-removed { color: rgb(248, 81, 73); }

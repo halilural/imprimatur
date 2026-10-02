@@ -76,3 +76,15 @@ test("cached tokens are not changed by a render", () => {
   assert.equal(first, second); // no class piling up on reuse
   assert.equal(tokens[0].attrs, null);
 });
+
+test("a changed Mermaid diagram gets color lines and a legend, the file text stays", () => {
+  const oldMd = "# T\n\n```mermaid\nflowchart LR\n  A --> B\n```\n";
+  const newMd = "# T\n\n```mermaid\nflowchart LR\n  A -->|id| B\n  B --> C[New]\n```\n";
+  const md = markdownItPlugin(new MarkdownIt({ html: true }), () => [], () => "vscode://x/accept", () => oldMd);
+  const tokens = md.parse(newMd, {});
+  const html = md.renderer.render(tokens, md.options, {});
+  assert.match(html, /Agent changes in this diagram/);
+  assert.match(html, /class C arAdded/);
+  assert.match(html, /linkStyle 0 stroke:#d29922/);
+  assert.doesNotMatch(tokens.find((t) => t.type === "fence").content, /arAdded/); // cached token untouched
+});

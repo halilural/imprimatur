@@ -4,6 +4,7 @@
 // block's old text goes struck through right above it; deleted lines go
 // struck through where they were.
 "use strict";
+const { mermaidDiff, mermaidBlocks, matchOld } = require("./mermaid-diff.js");
 
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -64,20 +65,46 @@ const LEAF = new Set(["paragraph_open", "heading_open", "tr_open", "fence", "cod
  * link(env, start, end), when given, is the href of an Accept button for that line range.
  * @param {any} md @param {(env: any) => ReturnType<typeof import("./diff.js").review>} getHunks
  * @param {(env: any, start: number, end: number) => string | undefined} [link]
+ * @param {(env: any) => string | undefined} [getBase] the copy's text, for Mermaid diagram diffs
  */
-function markdownItPlugin(md, getHunks, link) {
+function markdownItPlugin(md, getHunks, link, getBase) {
   const render = md.renderer.render.bind(md.renderer);
   md.renderer.render = (tokens, options, env) => {
     let hunks = [];
+    let base;
     try {
       hunks = getHunks(env);
+      base = getBase?.(env);
     } catch {
       // a broken copy must never break the preview
     }
-    const opts = { fmt: (line) => md.renderInline(line), link: link && ((start, end) => link(env, start, end)) };
-    return render(hunks.length ? annotate(tokens, hunks, opts) : tokens, options, env);
+    const opts = { fmt: (line) => md.renderInline(line), link: link && ((start, end) => link(env, start, end)), base };
+    return render(hunks.length || base ? annotate(tokens, hunks, opts) : tokens, options, env);
   };
   return md;
+}
+
+/**
+ * Mermaid fences the agent changed: a copy of the token with color lines
+ * appended, and a legend (with an Accept button) to put above it.
+ */
+function diagramDiff(t, opts, Token, html) {
+  if (!opts?.base || t.type !== "fence" || t.info.trim().split(/\s+/)[0] !== "mermaid") return undefined;
+  const old = matchOld(mermaidBlocks(opts.base), t.content);
+  if (old === undefined || old.trim() === t.content.trim()) return undefined;
+  const d = mermaidDiff(old, t.content);
+  if (!d.lines.length) return undefined;
+  const copy = Object.assign(new Token(t.type, t.tag, t.nesting), t);
+  copy.content = `${t.content.replace(/\s*$/, "")}\n${d.lines.join("\n")}\n`;
+  const href = t.map && opts.link?.(t.map[0], t.map[1]);
+  const button = href ? `<a class="agent-review-accept" href="${href}" title="Accept this diagram's changes">✓ Accept</a>` : "";
+  const legend = html(
+    `<div class="agent-review-diagram">${button}Agent changes in this diagram: ` +
+      `<span class="agent-review-d-added">■ added ${d.added}</span> ` +
+      `<span class="agent-review-d-changed">■ changed ${d.changed}</span> ` +
+      `<span class="agent-review-d-removed">■ removed ${d.removed}</span></div>`,
+  );
+  return { copy, legend };
 }
 
 /** New token list with the marks; the input tokens are not changed. @param {any[]} tokens */
@@ -93,6 +120,12 @@ function annotate(tokens, hunks, opts) {
   /** @type {Map<number, any[]>} token index -> tokens to put before / after it */
   const before = new Map();
   const after = new Map();
+  tokens.forEach((t, i) => {
+    const dd = diagramDiff(t, opts, Token, html);
+    if (!dd) return;
+    replaced.set(i, dd.copy);
+    before.set(i, [dd.legend]);
+  });
   idx.forEach((i, k) => {
     const p = plan[k];
     if (p.cls) {
@@ -103,7 +136,7 @@ function annotate(tokens, hunks, opts) {
     }
     // A div cannot sit inside a table: rows only get the class.
     if (tokens[i].type === "tr_open") return;
-    if (p.before.length) before.set(i, p.before.map(html));
+    if (p.before.length) before.set(i, [...(before.get(i) ?? []), ...p.before.map(html)]);
     if (!p.after.length) return;
     // after the whole block: its matching *_close, or itself for single tokens
     let j = i;

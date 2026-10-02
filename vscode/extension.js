@@ -54,24 +54,33 @@ const roots = new Set();
 /** @type {Map<string, ReturnType<typeof review>>} hunks by document path */
 const hunksByFile = new Map();
 let status = /** @type {vscode.StatusBarItem} */ (/** @type {unknown} */ (undefined));
+/** "Agent Review" output channel: what Accept links did, for troubleshooting. */
+let log = /** @type {vscode.LogOutputChannel} */ (/** @type {unknown} */ (undefined));
 let historyButton = /** @type {vscode.StatusBarItem} */ (/** @type {unknown} */ (undefined));
 
 const norm = (p) => (process.platform === "win32" ? path.resolve(p).toLowerCase() : path.resolve(p));
 
 /** @param {string} file @returns {string | undefined} */
 function copyPath(file) {
-  const f = norm(file);
-  for (const root of roots)
-    if (f.startsWith(root + path.sep)) return path.join(root, BASELINE_DIR, f.slice(root.length + 1));
-  return undefined;
+  const root = rootOf(file);
+  return root && path.join(root, BASELINE_DIR, norm(file).slice(root.length + 1));
 }
 
-/** @param {string} file */
+/**
+ * Repo root of a file: a workspace root, or else the file's own git root (an
+ * Accept link from the preview can arrive in another VS Code window).
+ * @param {string} file
+ */
 function rootOf(file) {
   const f = norm(file);
   for (const root of roots) if (f.startsWith(root + path.sep)) return root;
-  return undefined;
+  const dir = path.dirname(f);
+  if (!ownRoots.has(dir)) ownRoots.set(dir, repoRoot(dir)); // git is asked once per folder
+  const own = ownRoots.get(dir);
+  return own && f.startsWith(norm(own) + path.sep) ? norm(own) : undefined;
 }
+/** @type {Map<string, string | undefined>} */
+const ownRoots = new Map();
 
 /** @param {string} file @param {string} text */
 function hunksOf(file, text) {
@@ -120,7 +129,11 @@ const hunksOfFile = (file) => hunksOf(file, currentText(file) ?? (fs.existsSync(
 /** Accept the agent's changes on new-text lines [start, end) of a file: write just those into the copy. */
 function acceptRange(file, start, end) {
   const copy = copyPath(file);
-  if (!copy || !fs.existsSync(copy)) return;
+  if (!copy || !fs.existsSync(copy)) {
+    log.warn(`accept ${file} [${start}, ${end}): no review copy (${copy ?? "file outside any repo"})`);
+    return;
+  }
+  log.info(`accept ${file} [${start}, ${end})`);
   const text = currentText(file) ?? fs.readFileSync(file, "utf8");
   // Only these lines: a hunk can span several blocks (an added item's EN and TR paragraphs).
   fs.writeFileSync(copy, acceptLines(fs.readFileSync(copy, "utf8"), text, start, end));
@@ -340,6 +353,8 @@ function addFolder(folder, ctx) {
 
 /** @param {vscode.ExtensionContext} ctx */
 function activate(ctx) {
+  log = vscode.window.createOutputChannel("Agent Review", { log: true });
+  ctx.subscriptions.push(log);
   status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
   historyButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 49);
   historyButton.command = "agentReview.showHistory";
@@ -356,6 +371,7 @@ function activate(ctx) {
     // Accept buttons in the Markdown preview: vscode://<this extension>/accept?file&start&end
     vscode.window.registerUriHandler({
       handleUri(uri) {
+        log.info(`uri ${uri.toString(true)}`);
         if (uri.path !== "/accept") return;
         const q = new URLSearchParams(uri.query);
         const file = q.get("file");
@@ -440,6 +456,14 @@ function activate(ctx) {
           if (uri?.scheme !== "file") return undefined;
           const q = new URLSearchParams({ file: uri.fsPath, start: String(start), end: String(end) });
           return `${vscode.env.uriScheme}://${ctx.extension.id}/accept?${q}`;
+        },
+        (env) => {
+          /** @type {vscode.Uri | undefined} */
+          const uri = env?.currentDocument;
+          if (uri?.scheme !== "file") return undefined;
+          if (vscode.workspace.getConfiguration("agentReview", uri).get("showIn", "preview") === "editor") return undefined;
+          const copy = copyPath(uri.fsPath);
+          return copy && fs.existsSync(copy) ? fs.readFileSync(copy, "utf8") : undefined;
         },
       ),
   };

@@ -9,11 +9,12 @@
     ["agent-review-added", "rgb(46, 160, 67)"],
     ["agent-review-changed", "rgb(31, 111, 235)"],
     ["agent-review-old", "rgb(248, 81, 73)"],
+    ["agent-review-diagram", "rgb(210, 153, 34)"],
   ];
 
   function draw() {
     let bar = document.getElementById("agent-review-markers");
-    const marks = document.querySelectorAll(".agent-review-added, .agent-review-changed, .agent-review-old");
+    const marks = document.querySelectorAll(".agent-review-added, .agent-review-changed, .agent-review-old, .agent-review-diagram");
     if (!marks.length) {
       if (bar) bar.remove();
       return;
@@ -80,7 +81,7 @@
     true,
   );
 
-  const MARKED = ".agent-review-added, .agent-review-changed, .agent-review-old";
+  const MARKED = ".agent-review-added, .agent-review-changed, .agent-review-old, .agent-review-diagram";
   function restore() {
     let saved;
     try {
