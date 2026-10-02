@@ -168,13 +168,44 @@ function review(base, staged, current) {
   if (staged !== undefined)
     for (const h of diff(staged, current))
       for (const m of h.marks) (m.kind === "deleted" ? freshDeletes.add(m.afterLine) : freshLines.add(m.line));
-  return diff(base, current).map((h) => {
-    const marks = h.marks.map((m) => ({
-      ...m,
-      fresh: staged === undefined || (m.kind === "deleted" ? freshDeletes.has(m.afterLine) : freshLines.has(m.line)),
-    }));
-    return { ...h, marks, fresh: marks.some((m) => m.fresh) };
+  // Changes inside fenced code blocks are not marked (user, #28).
+  const codeNew = codeLines(current);
+  const codeOld = codeLines(base);
+  const inCode = (h, m) =>
+    m.kind === "deleted"
+      ? m.oldLines.every((_, k) => codeOld.has(h.oldEnd - m.oldLines.length + k))
+      : codeNew.has(m.line);
+  return diff(base, current).flatMap((h) => {
+    const marks = h.marks
+      .filter((m) => !inCode(h, m))
+      .map((m) => ({
+        ...m,
+        fresh: staged === undefined || (m.kind === "deleted" ? freshDeletes.has(m.afterLine) : freshLines.has(m.line)),
+      }));
+    return marks.length ? [{ ...h, marks, fresh: marks.some((m) => m.fresh) }] : [];
   });
 }
 
-module.exports = { diff, wordDiff, lineOrWordDiff, acceptHunk, review };
+/**
+ * Line numbers inside Markdown fenced code blocks (``` or ~~~), fence lines included.
+ * An unclosed fence runs to the end of the text, as in CommonMark.
+ * @param {string} text @returns {Set<number>}
+ */
+function codeLines(text) {
+  const out = new Set();
+  /** @type {{ch: string, len: number} | undefined} */
+  let open;
+  lines(text).forEach((l, i) => {
+    const f = /^ {0,3}(`{3,}|~{3,})/.exec(l);
+    if (open) {
+      out.add(i);
+      if (f && f[1][0] === open.ch && f[1].length >= open.len && l.trim() === f[1]) open = undefined;
+    } else if (f) {
+      open = { ch: f[1][0], len: f[1].length };
+      out.add(i);
+    }
+  });
+  return out;
+}
+
+module.exports = { diff, wordDiff, lineOrWordDiff, acceptHunk, review, codeLines };

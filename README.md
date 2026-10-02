@@ -66,6 +66,8 @@ Requires Node 22+, git and VS Code 1.100+.
 
 ## Limits
 
+- Changes inside fenced code blocks (``` or ~~~) are not marked; the edit
+  history still lists them.
 - Latest vs earlier is decided per line.
 - The preview works per block (no word marks there); a deleted table row is not
   shown in the preview.

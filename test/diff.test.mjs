@@ -85,3 +85,12 @@ test("one word changed: word marks; several words: whole line", () => {
   // indented: old sentence goes after the indent
   assert.deepEqual(lineOrWordDiff("  a b c", "  x y z").deleted, [{ at: 2, text: "a b c " }]);
 });
+
+test("changes inside fenced code blocks are not marked", () => {
+  const { review, codeLines } = createRequire(import.meta.url)("../vscode/diff.js");
+  const base = "intro\n\n```js\nconst a = 1;\n```\n\n~~~\nold\nkeep\n~~~\nend\n";
+  const current = "intro changed\n\n```js\nconst a = 2;\nconst b = 3;\n```\n\n~~~\nkeep\n~~~\nend\n";
+  const marks = review(base, undefined, current).flatMap((h) => h.marks.map((m) => [m.kind, m.line ?? m.afterLine]));
+  assert.deepEqual(marks, [["changed", 0]]); // only the prose line; code edits and the deleted code line are skipped
+  assert.deepEqual([...codeLines("a\n````\nx\n```\ny\n````\nb")], [1, 2, 3, 4, 5]); // closing fence must be as long
+});
