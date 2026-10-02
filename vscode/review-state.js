@@ -32,8 +32,7 @@ function repoRoot(p) {
 /**
  * Review state of rel from `git status` XY:
  * - "unstaged": work-tree changes (Y set), untracked or ignored, or git cannot tell
- * - "staged": everything staged but not committed (X set, Y blank); unstaging
- *   brings the changes back, so the copy must stay
+ * - "staged": everything staged but not committed (X set, Y blank)
  * - "clean": committed; the copy is done
  * @param {string} root @param {string} rel @returns {"unstaged" | "staged" | "clean"}
  */
@@ -44,7 +43,7 @@ function reviewState(root, rel) {
   return out[1] !== " " ? "unstaged" : "staged";
 }
 
-/** @param {string} root @param {string} rel */
-const hasUnstagedChanges = (root, rel) => reviewState(root, rel) === "unstaged";
+/** Staged text of rel (`git show :rel`), undefined when the file is not in the index. @param {string} root @param {string} rel */
+const indexText = (root, rel) => git(root, ["show", `:${rel.split(path.sep).join("/")}`]);
 
-module.exports = { BASELINE_DIR, git, repoRoot, reviewState, hasUnstagedChanges };
+module.exports = { BASELINE_DIR, git, repoRoot, reviewState, indexText };

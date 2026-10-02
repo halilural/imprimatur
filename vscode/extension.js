@@ -1,52 +1,57 @@
 // @ts-check
 // Shows an agent's edits in the editor like tracked changes, against the copy
-// the hook took in .claude/review-baseline/. The copy is dropped once git has
-// no unstaged changes for the file (the user staged or committed it).
+// the hook took in .claude/review-baseline/. Changes not staged yet are bright,
+// staged ones dim; the copy is dropped once the file is committed.
 "use strict";
 const vscode = require("vscode");
 const fs = require("node:fs");
 const path = require("node:path");
-const { diff, acceptHunk } = require("./diff.js");
-const { BASELINE_DIR, git, repoRoot, reviewState } = require("./review-state.js");
+const { review, acceptHunk } = require("./diff.js");
+const { BASELINE_DIR, git, repoRoot, reviewState, indexText } = require("./review-state.js");
 
 // A copy younger than this is never cleaned: the hook writes it just before
 // the agent's edit lands, when the file still looks clean to git.
 const FRESH_MS = 5000;
 
-/** Copies of fully staged files: kept so unstaging brings the marks back, but not shown. @type {Set<string>} */
-const staged = new Set();
-
 const color = (id) => new vscode.ThemeColor(id);
-const types = {
-  added: vscode.window.createTextEditorDecorationType({
-    isWholeLine: true,
-    backgroundColor: color("diffEditor.insertedLineBackground"),
-    overviewRulerColor: color("editorOverviewRuler.addedForeground"),
-    overviewRulerLane: vscode.OverviewRulerLane.Left,
-  }),
-  changed: vscode.window.createTextEditorDecorationType({
-    isWholeLine: true,
-    backgroundColor: color("agentReview.changedLineBackground"),
-    overviewRulerColor: color("editorOverviewRuler.modifiedForeground"),
-    overviewRulerLane: vscode.OverviewRulerLane.Left,
-  }),
-  insertedText: vscode.window.createTextEditorDecorationType({
-    backgroundColor: color("diffEditor.insertedTextBackground"),
-  }),
-  deletedText: vscode.window.createTextEditorDecorationType({
-    before: { color: color("agentReview.deletedForeground"), textDecoration: "line-through" },
-  }),
-  deletedBlock: vscode.window.createTextEditorDecorationType({
-    after: { color: color("agentReview.deletedForeground"), margin: "0 0 0 1em" },
-    overviewRulerColor: color("editorOverviewRuler.deletedForeground"),
-    overviewRulerLane: vscode.OverviewRulerLane.Left,
-  }),
+const ruler = { overviewRulerLane: vscode.OverviewRulerLane.Left };
+/** One set of decoration types per layer: bright = not staged yet, dim = staged. @param {boolean} dim */
+const layer = (dim) => {
+  const c = (bright, staged) => color(dim ? staged : bright);
+  return {
+    added: vscode.window.createTextEditorDecorationType({
+      isWholeLine: true,
+      backgroundColor: c("diffEditor.insertedLineBackground", "agentReview.stagedAddedBackground"),
+      overviewRulerColor: color("editorOverviewRuler.addedForeground"),
+      ...ruler,
+    }),
+    changed: vscode.window.createTextEditorDecorationType({
+      isWholeLine: true,
+      backgroundColor: c("agentReview.changedLineBackground", "agentReview.stagedChangedBackground"),
+      overviewRulerColor: color("editorOverviewRuler.modifiedForeground"),
+      ...ruler,
+    }),
+    insertedText: vscode.window.createTextEditorDecorationType({
+      backgroundColor: c("diffEditor.insertedTextBackground", "agentReview.stagedInsertedTextBackground"),
+    }),
+    deletedText: vscode.window.createTextEditorDecorationType({
+      before: { color: c("agentReview.deletedForeground", "agentReview.stagedDeletedForeground"), textDecoration: "line-through" },
+    }),
+    deletedBlock: vscode.window.createTextEditorDecorationType({
+      after: { color: c("agentReview.deletedForeground", "agentReview.stagedDeletedForeground"), margin: "0 0 0 1em" },
+      overviewRulerColor: color("editorOverviewRuler.deletedForeground"),
+      ...ruler,
+    }),
+  };
 };
+const layers = { bright: layer(false), dim: layer(true) };
 
 /** Git roots, normalized for comparison. @type {Set<string>} */
 const roots = new Set();
-/** @type {Map<string, import("./diff.js").Hunk[]>} hunks by document path */
+/** @type {Map<string, ReturnType<typeof review>>} hunks by document path */
 const hunksByFile = new Map();
+/** Staged text by file path; cleared when the index changes. @type {Map<string, string | undefined>} */
+const indexCache = new Map();
 let status = /** @type {vscode.StatusBarItem} */ (/** @type {unknown} */ (undefined));
 
 const norm = (p) => (process.platform === "win32" ? path.resolve(p).toLowerCase() : path.resolve(p));
@@ -59,14 +64,21 @@ function copyPath(file) {
   return undefined;
 }
 
+/** @param {string} file */
+function rootOf(file) {
+  const f = norm(file);
+  for (const root of roots) if (f.startsWith(root + path.sep)) return root;
+  return undefined;
+}
+
 /** @param {vscode.TextDocument} doc */
 function hunksFor(doc) {
-  const copy = doc.uri.scheme === "file" ? copyPath(doc.uri.fsPath) : undefined;
-  if (!copy || !fs.existsSync(copy)) return [];
-  // A hidden (staged) copy is re-checked on every render: the agent may have
-  // edited the file again, which no index event reports.
-  if (staged.has(copy)) for (const root of roots) if (copy.startsWith(path.join(root, BASELINE_DIR) + path.sep)) sync(root, copy);
-  return staged.has(copy) || !fs.existsSync(copy) ? [] : diff(fs.readFileSync(copy, "utf8"), doc.getText());
+  const file = doc.uri.fsPath;
+  const copy = doc.uri.scheme === "file" ? copyPath(file) : undefined;
+  const root = rootOf(file);
+  if (!copy || !root || !fs.existsSync(copy)) return [];
+  if (!indexCache.has(file)) indexCache.set(file, indexText(root, path.relative(root, norm(file))));
+  return review(fs.readFileSync(copy, "utf8"), indexCache.get(file), doc.getText());
 }
 
 // Spaces in injected text collapse; keep them visible.
@@ -79,14 +91,17 @@ function render(editor) {
   hunksByFile.set(doc.uri.fsPath, hunks);
   const last = doc.lineCount - 1;
   const lineAt = (n) => doc.lineAt(Math.min(Math.max(n, 0), last));
-  /** @type {Record<string, vscode.DecorationOptions[]>} */
-  const out = { added: [], changed: [], insertedText: [], deletedText: [], deletedBlock: [] };
+  const empty = () => ({ added: [], changed: [], insertedText: [], deletedText: [], deletedBlock: [] });
+  /** @type {Record<"bright" | "dim", Record<string, vscode.DecorationOptions[]>>} */
+  const outs = { bright: empty(), dim: empty() };
   for (const h of hunks)
     for (const m of h.marks) {
+      const out = outs[m.fresh ? "bright" : "dim"];
+      const tag = m.fresh ? "" : " (staged)";
       if (m.kind === "added") out.added.push({ range: lineAt(m.line).range });
       else if (m.kind === "changed") {
         const line = lineAt(m.line);
-        const hover = new vscode.MarkdownString().appendText("Before: ").appendCodeblock(m.oldText);
+        const hover = new vscode.MarkdownString().appendText(`Before${tag}: `).appendCodeblock(m.oldText);
         out.changed.push({ range: line.range, hoverMessage: hover });
         for (const [s, e] of m.inserted) out.insertedText.push({ range: new vscode.Range(line.lineNumber, s, line.lineNumber, e) });
         for (const d of m.deleted)
@@ -99,20 +114,22 @@ function render(editor) {
         const where = m.afterLine < 0 ? " above" : "";
         out.deletedBlock.push({
           range: lineAt(m.afterLine).range,
-          hoverMessage: new vscode.MarkdownString().appendText(`Deleted${where}:`).appendCodeblock(m.oldLines.join("\n")),
+          hoverMessage: new vscode.MarkdownString().appendText(`Deleted${where}${tag}:`).appendCodeblock(m.oldLines.join("\n")),
           renderOptions: { after: { contentText: `⌫ ${n} line${n === 1 ? "" : "s"} deleted${where}` } },
         });
       }
     }
-  for (const [k, t] of Object.entries(types)) editor.setDecorations(t, out[k]);
+  for (const name of /** @type {const} */ (["bright", "dim"]))
+    for (const [k, t] of Object.entries(layers[name])) editor.setDecorations(t, outs[name][k]);
   if (editor === vscode.window.activeTextEditor) updateStatus(hunks);
 }
 
-/** @param {import("./diff.js").Hunk[]} hunks */
+/** @param {ReturnType<typeof review>} hunks */
 function updateStatus(hunks) {
   if (!hunks.length) return status.hide();
-  status.text = `$(diff) ${hunks.length} agent change${hunks.length === 1 ? "" : "s"}`;
-  status.tooltip = "Unreviewed agent changes in this file. Stage the file to accept them.";
+  const fresh = hunks.filter((h) => h.fresh).length;
+  status.text = `$(diff) ${hunks.length} agent change${hunks.length === 1 ? "" : "s"} (${fresh} new)`;
+  status.tooltip = "Agent changes since the last commit. Bright: not staged yet. Dim: staged. Commit to clear.";
   status.show();
 }
 
@@ -121,12 +138,10 @@ function renderAll() {
   if (!vscode.window.activeTextEditor) status.hide();
 }
 
-/** Sort one copy by git state: shown, hidden while staged, or deleted once committed. @param {string} root @param {string} copy */
+/** Delete the copy once its file is committed. @param {string} root @param {string} copy */
 function sync(root, copy) {
-  const state = reviewState(root, path.relative(path.join(root, BASELINE_DIR), copy));
-  if (state === "staged") staged.add(copy);
-  else staged.delete(copy);
-  if (state === "clean" && Date.now() - fs.statSync(copy).mtimeMs >= FRESH_MS) fs.rmSync(copy);
+  if (Date.now() - fs.statSync(copy).mtimeMs < FRESH_MS) return;
+  if (reviewState(root, path.relative(path.join(root, BASELINE_DIR), copy)) === "clean") fs.rmSync(copy);
 }
 
 /** @param {string} root */
@@ -150,7 +165,7 @@ function addFolder(folder, ctx) {
   const iw = vscode.workspace.createFileSystemWatcher(
     new vscode.RelativePattern(vscode.Uri.file(path.dirname(index)), path.basename(index)),
   );
-  const onIndex = () => { cleanup(found); renderAll(); };
+  const onIndex = () => { indexCache.clear(); cleanup(found); renderAll(); };
   const bw = vscode.workspace.createFileSystemWatcher(
     new vscode.RelativePattern(vscode.Uri.file(found), ".claude/review-baseline/**"),
   );
@@ -161,7 +176,7 @@ function addFolder(folder, ctx) {
 /** @param {vscode.ExtensionContext} ctx */
 function activate(ctx) {
   status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
-  ctx.subscriptions.push(status, ...Object.values(types));
+  ctx.subscriptions.push(status, ...Object.values(layers.bright), ...Object.values(layers.dim));
   for (const f of vscode.workspace.workspaceFolders ?? []) addFolder(f, ctx);
 
   /** @type {NodeJS.Timeout | undefined} */

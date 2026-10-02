@@ -132,4 +132,30 @@ function acceptHunk(oldText, newText, hunk) {
   return a.join("\n");
 }
 
-module.exports = { diff, wordDiff, acceptHunk };
+/**
+ * Agent changes since the copy, each mark flagged `fresh` when it is not staged
+ * yet: the line also differs between the staged text and the current text.
+ * Staged-only changes are reviewed but not committed. No staged text (file not
+ * in the index) means everything is fresh.
+ * ponytail: freshness is per line; a line with both staged and new words counts as fresh.
+ * @param {string} base copy taken before the agent's first edit
+ * @param {string | undefined} staged index text
+ * @param {string} current editor text
+ * @returns {Array<Hunk & {fresh: boolean, marks: Array<Mark & {fresh: boolean}>}>}
+ */
+function review(base, staged, current) {
+  const freshLines = new Set();
+  const freshDeletes = new Set();
+  if (staged !== undefined)
+    for (const h of diff(staged, current))
+      for (const m of h.marks) (m.kind === "deleted" ? freshDeletes.add(m.afterLine) : freshLines.add(m.line));
+  return diff(base, current).map((h) => {
+    const marks = h.marks.map((m) => ({
+      ...m,
+      fresh: staged === undefined || (m.kind === "deleted" ? freshDeletes.has(m.afterLine) : freshLines.has(m.line)),
+    }));
+    return { ...h, marks, fresh: marks.some((m) => m.fresh) };
+  });
+}
+
+module.exports = { diff, wordDiff, acceptHunk, review };

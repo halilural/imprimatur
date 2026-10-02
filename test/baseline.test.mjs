@@ -52,7 +52,7 @@ test("copy is kept while unstaged changes remain", () => {
   assert.equal(read(copy(dir, "a.md")), "one\n");
 });
 
-test("copy is overwritten once the file is staged", () => {
+test("copy stays while staged, is overwritten once committed", () => {
   const { dir, git } = repo();
   const f = path.join(dir, "a.md");
   fs.writeFileSync(f, "one\n");
@@ -61,6 +61,9 @@ test("copy is overwritten once the file is staged", () => {
   run(dir, "a.md");
   fs.writeFileSync(f, "two\n");
   git("add", "a.md"); // user reviewed and staged
+  run(dir, "a.md");
+  assert.equal(read(copy(dir, "a.md")), "one\n");
+  git("commit", "-qm", "y"); // committed: the review round is over
   run(dir, "a.md");
   assert.equal(read(copy(dir, "a.md")), "two\n");
 });
@@ -122,22 +125,24 @@ test("review state: unstaged, staged (copy kept), clean (copy done)", async () =
   assert.equal(reviewState(dir, "a.md"), "unstaged");
 });
 
-test("edit after staging: copy becomes the staged text, only the new change shows", async () => {
+test("C1, C2 staged then C3: all three show, only C3 bright", async () => {
   const { createRequire } = await import("node:module");
   const req = createRequire(import.meta.url);
-  const { reviewState } = req("../vscode/review-state.js");
-  const { diff } = req("../vscode/diff.js");
+  const { indexText } = req("../vscode/review-state.js");
+  const { review } = req("../vscode/diff.js");
   const { dir, git } = repo();
   const f = path.join(dir, "a.md");
-  fs.writeFileSync(f, "one\ntwo\n");
+  fs.writeFileSync(f, "a\n");
   git("add", "a.md");
   git("commit", "-qm", "x");
-  run(dir, "a.md");
-  fs.writeFileSync(f, "one\nTWO\n"); // first agent change
-  git("add", "a.md"); // user stages it
-  run(dir, "a.md"); // agent edits again: hook refreshes the copy
-  fs.writeFileSync(f, "one\nTWO\nC1\n"); // C1
-  assert.equal(reviewState(dir, "a.md"), "unstaged");
-  const marks = diff(read(copy(dir, "a.md")), read(f)).flatMap((h) => h.marks);
-  assert.deepEqual(marks, [{ kind: "added", line: 2 }]);
+  for (const c of ["C1", "C2", "C3"]) {
+    run(dir, "a.md"); // agent touches the file
+    fs.appendFileSync(f, `${c}\n`);
+    if (c !== "C3") git("add", "a.md"); // user stages C1 and C2
+  }
+  const marks = review(read(copy(dir, "a.md")), indexText(dir, "a.md"), read(f)).flatMap((h) => h.marks.map((m) => [m.line, m.fresh]));
+  assert.deepEqual(marks, [[1, false], [2, false], [3, true]]);
+  git("restore", "--staged", "a.md"); // unstage all: all three bright again
+  const again = review(read(copy(dir, "a.md")), indexText(dir, "a.md"), read(f)).flatMap((h) => h.marks.map((m) => m.fresh));
+  assert.deepEqual(again, [true, true, true]);
 });

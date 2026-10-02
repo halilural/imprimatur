@@ -58,3 +58,17 @@ test("past the size cap the middle is one replaced block", () => {
   assert.equal(h.length, 1);
   assert.equal(h[0].oldEnd - h[0].oldStart, 2100);
 });
+
+test("review: staged rounds dim, new round bright (C1, C2 staged; C3 new)", () => {
+  const { review } = createRequire(import.meta.url)("../vscode/diff.js");
+  const base = "a\n";
+  const staged = "a\nC1\nC2\n";
+  const current = "a\nC1\nC2\nC3\n";
+  const marks = review(base, staged, current).flatMap((h) => h.marks.map((m) => [m.line, m.fresh]));
+  assert.deepEqual(marks, [[1, false], [2, false], [3, true]]);
+});
+
+test("review: file not in the index is all fresh", () => {
+  const { review } = createRequire(import.meta.url)("../vscode/diff.js");
+  assert.ok(review("", undefined, "x\ny").every((h) => h.fresh));
+});

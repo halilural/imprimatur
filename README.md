@@ -10,9 +10,9 @@ in a word processor, until you stage it.
 - Marks in the overview ruler, a change count in the status bar.
 - **Agent Review: Accept Agent Change at Cursor** and **Accept All Agent
   Changes in File** clear the marks without touching git.
-- Stage the file (`git add`) and the marks disappear: staging is the review.
-  Unstage it and they come back. Edits the agent makes after you staged show
-  on their own, against the staged text.
+- Changes you have not staged yet are bright; staged ones turn dim, so after
+  several rounds you still see everything the agent changed since the last
+  commit and which part is new. Commit and the marks go away.
 
 Colors show in the text editor only, not in the Markdown preview.
 
@@ -20,17 +20,16 @@ Colors show in the text editor only, not in the Markdown preview.
 
 1. A Claude Code `PreToolUse` hook ([hooks/baseline.mjs](hooks/baseline.mjs))
    copies a file to `.claude/review-baseline/<path>` before the agent first
-   edits it (an empty copy for a new file). While the file has unstaged
-   changes the copy is kept; once it is fully staged or committed, the next
-   edit takes a fresh copy, so new edits are compared with the staged text.
+   edits it (an empty copy for a new file). The copy is kept until the file is
+   committed; the first edit after a commit takes a fresh copy.
 2. The VS Code extension ([vscode/](vscode/)) diffs each open file against its
-   copy: line LCS, then word LCS inside changed lines.
-3. The extension watches `.git/index` and sorts each copy by `git status`:
-   unstaged changes → marks shown; fully staged → copy kept, marks hidden
-   (unstaging brings them back); committed → copy deleted.
+   copy (line LCS, then word LCS inside changed lines), and against the staged
+   text (`git show :<path>`) to tell new changes (bright) from staged ones (dim).
+3. The extension watches `.git/index`; when a file is committed its copy is
+   deleted and the marks go away.
 
-The agent should not stage its own changes: if it stages or commits, the marks
-disappear before you have looked.
+The agent should not commit its own changes: a commit clears the marks before
+you have looked. If it stages, the changes only turn dim.
 
 ## Install
 
@@ -58,7 +57,7 @@ Requires Node 22+, git and VS Code 1.100+.
 
 ## Limits
 
-- Partial staging: staged parts stay marked until the whole file is staged.
+- New vs staged is decided per line: a line with both staged and new words shows bright.
 - The copy is taken on the agent's first edit, so your own unstaged edits made
   before that count as the baseline, not as agent changes.
 - Plain O(n·m) LCS on the part between the common head and tail; fine for

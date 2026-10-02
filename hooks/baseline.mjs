@@ -6,15 +6,15 @@
 //
 //   node baseline.mjs [ext ...]   default extensions: md mdx
 //
-// Keeps an existing copy while the file still has unstaged changes; once the
-// file is staged or committed the copy is stale and is overwritten. Never
-// blocks the tool: every path ends in exit 0.
+// Keeps an existing copy until the file is committed (staged changes still
+// count as under review); once git shows the file clean the copy is stale and
+// is overwritten. Never blocks the tool: every path ends in exit 0.
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const { BASELINE_DIR, repoRoot, hasUnstagedChanges } = createRequire(import.meta.url)("../vscode/review-state.js");
+const { BASELINE_DIR, repoRoot, reviewState } = createRequire(import.meta.url)("../vscode/review-state.js");
 
 /** @param {string} project Claude's project dir; files outside it are skipped */
 export function takeBaseline(project, file, exts = ["md", "mdx"]) {
@@ -27,7 +27,7 @@ export function takeBaseline(project, file, exts = ["md", "mdx"]) {
   const root = repoRoot(path.dirname(abs)) ?? path.resolve(project);
   const rel = path.relative(root, abs);
   const copy = path.join(root, BASELINE_DIR, rel);
-  if (fs.existsSync(copy) && hasUnstagedChanges(root, rel)) return "kept";
+  if (fs.existsSync(copy) && reviewState(root, rel) !== "clean") return "kept";
   fs.mkdirSync(path.dirname(copy), { recursive: true });
   fs.writeFileSync(copy, fs.existsSync(abs) ? fs.readFileSync(abs) : "");
   return "written";

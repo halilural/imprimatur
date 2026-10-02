@@ -2,29 +2,98 @@
   "name": "agent-review",
   "displayName": "Agent Review",
   "description": "See an AI agent's edits in the editor like tracked changes until you stage them.",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "publisher": "halilural",
   "license": "MIT",
-  "engines": { "vscode": "^1.100.0" },
-  "categories": ["SCM Providers", "Other"],
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
   "main": "./extension.js",
-  "files": ["extension.js", "diff.js", "review-state.js"],
-  "activationEvents": ["onStartupFinished"],
+  "files": [
+    "extension.js",
+    "diff.js",
+    "review-state.js"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "contributes": {
     "commands": [
-      { "command": "agentReview.accept", "title": "Accept Agent Change at Cursor", "category": "Agent Review" },
-      { "command": "agentReview.acceptAll", "title": "Accept All Agent Changes in File", "category": "Agent Review" }
+      {
+        "command": "agentReview.accept",
+        "title": "Accept Agent Change at Cursor",
+        "category": "Agent Review"
+      },
+      {
+        "command": "agentReview.acceptAll",
+        "title": "Accept All Agent Changes in File",
+        "category": "Agent Review"
+      }
     ],
     "colors": [
       {
         "id": "agentReview.changedLineBackground",
         "description": "Background of a line the agent changed.",
-        "defaults": { "dark": "#1f6feb1f", "light": "#0969da14", "highContrast": "#1f6feb33", "highContrastLight": "#0969da22" }
+        "defaults": {
+          "dark": "#1f6feb1f",
+          "light": "#0969da14",
+          "highContrast": "#1f6feb33",
+          "highContrastLight": "#0969da22"
+        }
       },
       {
         "id": "agentReview.deletedForeground",
         "description": "Text the agent deleted, shown struck through.",
-        "defaults": { "dark": "#f85149", "light": "#cf222e", "highContrast": "#ff6a69", "highContrastLight": "#a40e26" }
+        "defaults": {
+          "dark": "#f85149",
+          "light": "#cf222e",
+          "highContrast": "#ff6a69",
+          "highContrastLight": "#a40e26"
+        }
+      },
+      {
+        "id": "agentReview.stagedAddedBackground",
+        "description": "Background of an added line that is staged (reviewed, not committed).",
+        "defaults": {
+          "dark": "#2ea04314",
+          "light": "#1a7f3710",
+          "highContrast": "#2ea04322",
+          "highContrastLight": "#1a7f3718"
+        }
+      },
+      {
+        "id": "agentReview.stagedChangedBackground",
+        "description": "Background of a changed line that is staged.",
+        "defaults": {
+          "dark": "#1f6feb0d",
+          "light": "#0969da0a",
+          "highContrast": "#1f6feb1a",
+          "highContrastLight": "#0969da14"
+        }
+      },
+      {
+        "id": "agentReview.stagedInsertedTextBackground",
+        "description": "New words in a staged changed line.",
+        "defaults": {
+          "dark": "#2ea04326",
+          "light": "#1a7f371f",
+          "highContrast": "#2ea04333",
+          "highContrastLight": "#1a7f372a"
+        }
+      },
+      {
+        "id": "agentReview.stagedDeletedForeground",
+        "description": "Deleted text in a staged change.",
+        "defaults": {
+          "dark": "#f8514973",
+          "light": "#cf222e73",
+          "highContrast": "#ff6a6999",
+          "highContrastLight": "#a40e2699"
+        }
       }
     ]
   }
