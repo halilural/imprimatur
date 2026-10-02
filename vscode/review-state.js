@@ -30,15 +30,21 @@ function repoRoot(p) {
 }
 
 /**
- * True when the copy of rel is still needed: git sees work-tree changes (second
- * porcelain column set), the file is untracked or ignored, or git cannot tell.
- * @param {string} root @param {string} rel
+ * Review state of rel from `git status` XY:
+ * - "unstaged": work-tree changes (Y set), untracked or ignored, or git cannot tell
+ * - "staged": everything staged but not committed (X set, Y blank); unstaging
+ *   brings the changes back, so the copy must stay
+ * - "clean": committed; the copy is done
+ * @param {string} root @param {string} rel @returns {"unstaged" | "staged" | "clean"}
  */
-function hasUnstagedChanges(root, rel) {
+function reviewState(root, rel) {
   const out = git(root, ["status", "--porcelain=v1", "-z", "--ignored=matching", "--", rel]);
-  if (out === undefined) return true;
-  if (out === "") return false; // tracked and clean: staged or committed
-  return out[1] !== " "; // " M", "MM", "??", "!!" keep; "M " / "A " are fully staged
+  if (out === undefined) return "unstaged";
+  if (out === "") return "clean";
+  return out[1] !== " " ? "unstaged" : "staged";
 }
 
-module.exports = { BASELINE_DIR, git, repoRoot, hasUnstagedChanges };
+/** @param {string} root @param {string} rel */
+const hasUnstagedChanges = (root, rel) => reviewState(root, rel) === "unstaged";
+
+module.exports = { BASELINE_DIR, git, repoRoot, reviewState, hasUnstagedChanges };

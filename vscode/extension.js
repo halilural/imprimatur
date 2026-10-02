@@ -7,11 +7,14 @@ const vscode = require("vscode");
 const fs = require("node:fs");
 const path = require("node:path");
 const { diff, acceptHunk } = require("./diff.js");
-const { BASELINE_DIR, git, repoRoot, hasUnstagedChanges } = require("./review-state.js");
+const { BASELINE_DIR, git, repoRoot, reviewState } = require("./review-state.js");
 
 // A copy younger than this is never cleaned: the hook writes it just before
 // the agent's edit lands, when the file still looks clean to git.
 const FRESH_MS = 5000;
+
+/** Copies of fully staged files: kept so unstaging brings the marks back, but not shown. @type {Set<string>} */
+const staged = new Set();
 
 const color = (id) => new vscode.ThemeColor(id);
 const types = {
@@ -59,7 +62,7 @@ function copyPath(file) {
 /** @param {vscode.TextDocument} doc */
 function hunksFor(doc) {
   const copy = doc.uri.scheme === "file" ? copyPath(doc.uri.fsPath) : undefined;
-  return copy && fs.existsSync(copy) ? diff(fs.readFileSync(copy, "utf8"), doc.getText()) : [];
+  return copy && !staged.has(copy) && fs.existsSync(copy) ? diff(fs.readFileSync(copy, "utf8"), doc.getText()) : [];
 }
 
 // Spaces in injected text collapse; keep them visible.
@@ -114,16 +117,21 @@ function renderAll() {
   if (!vscode.window.activeTextEditor) status.hide();
 }
 
-// Drop copies of files git sees no unstaged changes for.
+/** Sort one copy by git state: shown, hidden while staged, or deleted once committed. @param {string} root @param {string} copy */
+function sync(root, copy) {
+  const state = reviewState(root, path.relative(path.join(root, BASELINE_DIR), copy));
+  if (state === "staged") staged.add(copy);
+  else staged.delete(copy);
+  if (state === "clean" && Date.now() - fs.statSync(copy).mtimeMs >= FRESH_MS) fs.rmSync(copy);
+}
+
 /** @param {string} root */
 function cleanup(root) {
   const dir = path.join(root, BASELINE_DIR);
   if (!fs.existsSync(dir)) return;
   for (const ent of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
     if (!ent.isFile()) continue;
-    const copy = path.join(ent.parentPath, ent.name);
-    if (Date.now() - fs.statSync(copy).mtimeMs < FRESH_MS) continue;
-    if (!hasUnstagedChanges(root, path.relative(dir, copy))) fs.rmSync(copy);
+    sync(root, path.join(ent.parentPath, ent.name));
   }
 }
 
@@ -157,6 +165,13 @@ function activate(ctx) {
   ctx.subscriptions.push(
     vscode.window.onDidChangeVisibleTextEditors(renderAll),
     vscode.window.onDidChangeActiveTextEditor((e) => (e ? updateStatus(hunksByFile.get(e.document.uri.fsPath) ?? []) : status.hide())),
+    // Saving can turn a staged file back into one with unstaged changes.
+    vscode.workspace.onDidSaveTextDocument((doc) => {
+      const copy = copyPath(doc.uri.fsPath);
+      if (!copy || !fs.existsSync(copy)) return;
+      for (const root of roots) if (copy.startsWith(path.join(root, BASELINE_DIR))) sync(root, copy);
+      renderAll();
+    }),
     vscode.workspace.onDidChangeTextDocument((ev) => {
       clearTimeout(timer);
       timer = setTimeout(() => {

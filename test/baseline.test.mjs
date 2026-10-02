@@ -104,3 +104,20 @@ test("path with a space still runs the hook", () => {
   spawnSync("node", [path.join(spaced, "baseline.mjs")], { input, env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
   assert.equal(read(copy(dir, "b.md")), "");
 });
+
+test("review state: unstaged, staged (copy kept), clean (copy done)", async () => {
+  const { createRequire } = await import("node:module");
+  const { reviewState } = createRequire(import.meta.url)("../vscode/review-state.js");
+  const { dir, git } = repo();
+  const f = path.join(dir, "a.md");
+  fs.writeFileSync(f, "one\n");
+  git("add", "a.md");
+  git("commit", "-qm", "x");
+  assert.equal(reviewState(dir, "a.md"), "clean");
+  fs.writeFileSync(f, "two\n");
+  assert.equal(reviewState(dir, "a.md"), "unstaged");
+  git("add", "a.md");
+  assert.equal(reviewState(dir, "a.md"), "staged");
+  git("restore", "--staged", "a.md"); // unstage: the marks come back
+  assert.equal(reviewState(dir, "a.md"), "unstaged");
+});

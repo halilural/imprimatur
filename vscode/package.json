@@ -2,7 +2,7 @@
   "name": "agent-review",
   "displayName": "Agent Review",
   "description": "See an AI agent's edits in the editor like tracked changes until you stage them.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "halilural",
   "license": "MIT",
   "engines": { "vscode": "^1.100.0" },
