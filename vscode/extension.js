@@ -267,6 +267,26 @@ function renderAll() {
   if (!vscode.window.activeTextEditor) status.hide();
 }
 
+function refreshEverything() {
+  renderAll();
+  updateHistoryButton();
+  refreshGraph();
+  codeLensChanged.fire();
+  vscode.commands.executeCommand("markdown.preview.refresh").then(undefined, () => {});
+}
+
+/** @type {NodeJS.Timeout[]} */
+let refreshTimers = [];
+/**
+ * The hook writes the copy and history just BEFORE the agent's edit lands on
+ * disk, so refresh now and again shortly after, when the edit is there.
+ */
+function refreshSoon() {
+  refreshTimers.forEach(clearTimeout);
+  refreshEverything();
+  refreshTimers = [500, 2000].map((ms) => setTimeout(refreshEverything, ms));
+}
+
 /** @param {vscode.WorkspaceFolder} folder @param {vscode.ExtensionContext} ctx */
 function addFolder(folder, ctx) {
   const found = repoRoot(folder.uri.fsPath) ?? folder.uri.fsPath;
@@ -274,14 +294,7 @@ function addFolder(folder, ctx) {
   roots.add(norm(found));
   // Copies and history change on every agent edit; re-render on any of them.
   const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(found), ".claude/agent-review/**"));
-  const onChange = () => {
-    renderAll();
-    updateHistoryButton();
-    refreshGraph();
-    codeLensChanged.fire();
-    vscode.commands.executeCommand("markdown.preview.refresh").then(undefined, () => {});
-  };
-  ctx.subscriptions.push(w, w.onDidChange(onChange), w.onDidCreate(onChange), w.onDidDelete(onChange));
+  ctx.subscriptions.push(w, w.onDidChange(refreshSoon), w.onDidCreate(refreshSoon), w.onDidDelete(refreshSoon));
 }
 
 /** @param {vscode.ExtensionContext} ctx */
@@ -326,6 +339,14 @@ function activate(ctx) {
       clearTimeout(timer);
       timer = setTimeout(() => {
         for (const e of vscode.window.visibleTextEditors) if (e.document === ev.document) render(e);
+        // A file under review changed (the agent's edit landed): preview, lenses, button too.
+        const copy = ev.document.uri.scheme === "file" ? copyPath(ev.document.uri.fsPath) : undefined;
+        if (copy && fs.existsSync(copy)) {
+          codeLensChanged.fire();
+          updateHistoryButton();
+          refreshGraph();
+          vscode.commands.executeCommand("markdown.preview.refresh").then(undefined, () => {});
+        }
       }, 150);
     }),
     vscode.commands.registerTextEditorCommand("agentReview.accept", (editor) => {
