@@ -70,6 +70,7 @@ Requires Node 22+, git and VS Code 1.100+.
 
 ## Limits
 
+- No marks in diff tabs (e.g. Working Tree): git already colors those.
 - Changes inside fenced code blocks (``` or ~~~) are not marked; the edit
   history still lists them.
 - Latest vs earlier is decided per line.

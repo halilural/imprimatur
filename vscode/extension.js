@@ -207,10 +207,16 @@ const hunksFor = (doc) => (doc.uri.scheme === "file" ? hunksOf(doc.uri.fsPath, d
 // Spaces in injected text collapse; keep them visible.
 const keepSpaces = (s) => s.replace(/ /g, " ");
 
+/** Is this editor one side of a diff tab (e.g. Working Tree)? Git already colors those. @param {vscode.TextEditor} editor */
+function inDiffTab(editor) {
+  const group = vscode.window.tabGroups.all.find((g) => g.viewColumn === editor.viewColumn);
+  return group?.activeTab?.input instanceof vscode.TabInputTextDiff;
+}
+
 /** @param {vscode.TextEditor} editor */
 function render(editor) {
   const doc = editor.document;
-  const hunks = hunksFor(doc);
+  const hunks = inDiffTab(editor) ? [] : hunksFor(doc);
   hunksByFile.set(doc.uri.fsPath, hunks);
   const last = doc.lineCount - 1;
   const lineAt = (n) => doc.lineAt(Math.min(Math.max(n, 0), last));
@@ -309,6 +315,7 @@ function activate(ctx) {
   let timer;
   ctx.subscriptions.push(
     vscode.window.onDidChangeVisibleTextEditors(renderAll),
+    vscode.window.tabGroups.onDidChangeTabs(renderAll),
     vscode.window.onDidChangeActiveTextEditor((e) => {
       if (e) updateStatus(hunksByFile.get(e.document.uri.fsPath) ?? []);
       else status.hide();
