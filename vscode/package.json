@@ -1,0 +1,31 @@
+{
+  "name": "agent-review",
+  "displayName": "Agent Review",
+  "description": "See an AI agent's edits in the editor like tracked changes until you stage them.",
+  "version": "0.1.0",
+  "publisher": "halilural",
+  "license": "MIT",
+  "engines": { "vscode": "^1.100.0" },
+  "categories": ["SCM Providers", "Other"],
+  "main": "./extension.js",
+  "files": ["extension.js", "diff.js"],
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "commands": [
+      { "command": "agentReview.accept", "title": "Accept Agent Change at Cursor", "category": "Agent Review" },
+      { "command": "agentReview.acceptAll", "title": "Accept All Agent Changes in File", "category": "Agent Review" }
+    ],
+    "colors": [
+      {
+        "id": "agentReview.changedLineBackground",
+        "description": "Background of a line the agent changed.",
+        "defaults": { "dark": "#1f6feb1f", "light": "#0969da14", "highContrast": "#1f6feb33", "highContrastLight": "#0969da22" }
+      },
+      {
+        "id": "agentReview.deletedForeground",
+        "description": "Text the agent deleted, shown struck through.",
+        "defaults": { "dark": "#f85149", "light": "#cf222e", "highContrast": "#ff6a69", "highContrastLight": "#a40e26" }
+      }
+    ]
+  }
+}
