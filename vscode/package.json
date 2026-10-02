@@ -2,7 +2,7 @@
   "name": "agent-review",
   "displayName": "Agent Review",
   "description": "See an AI agent's edits in the editor like tracked changes until you accept them.",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "publisher": "halilural",
   "license": "MIT",
   "engines": {
@@ -48,6 +48,11 @@
         "title": "Open Agent Change Graph",
         "category": "Agent Review",
         "icon": "$(git-merge)"
+      },
+      {
+        "command": "agentReview.acceptRange",
+        "title": "Accept Agent Changes in Range",
+        "category": "Agent Review"
       }
     ],
     "colors": [
@@ -110,11 +115,49 @@
           "highContrast": "#ff6a69a6",
           "highContrastLight": "#a40e26a6"
         }
+      },
+      {
+        "id": "agentReview.oldTextForeground",
+        "description": "Old text the agent replaced (struck through, kept readable).",
+        "defaults": {
+          "dark": "#c9d1d9cc",
+          "light": "#57606acc",
+          "highContrast": "#ffffffcc",
+          "highContrastLight": "#000000cc"
+        }
+      },
+      {
+        "id": "agentReview.earlierOldTextForeground",
+        "description": "Old text from an earlier agent edit.",
+        "defaults": {
+          "dark": "#c9d1d980",
+          "light": "#57606a80",
+          "highContrast": "#ffffff99",
+          "highContrastLight": "#00000099"
+        }
+      },
+      {
+        "id": "agentReview.oldTextBackground",
+        "description": "Band behind old text the agent replaced.",
+        "defaults": {
+          "dark": "#f851491f",
+          "light": "#cf222e14",
+          "highContrast": "#f8514933",
+          "highContrastLight": "#cf222e22"
+        }
       }
     ],
     "markdown.markdownItPlugins": true,
     "markdown.previewStyles": [
       "./preview.css"
-    ]
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "agentReview.acceptRange",
+          "when": "false"
+        }
+      ]
+    }
   }
 }

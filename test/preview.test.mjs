@@ -41,9 +41,26 @@ test("table row gets the class, no div inside the table", () => {
   assert.doesNotMatch(html.slice(html.indexOf("<table>"), html.indexOf("</table>")), /<div/);
 });
 
-test("old text is escaped", () => {
-  const html = render("<b>x</b> y z\n", undefined, "plain new text\n");
-  assert.match(html, /<del>&lt;b&gt;x&lt;\/b&gt; y z<\/del>/);
+test("old text renders as Markdown, without the list marker", () => {
+  const html = render("- **bold** y z\n", undefined, "- plain new text\n");
+  assert.match(html, /<del><strong>bold<\/strong> y z<\/del>/);
+});
+
+test("without a formatter old text is escaped", () => {
+  const { planBlocks } = req("../vscode/preview.js");
+  const plan = planBlocks([{ start: 0, end: 1 }], review("<b>x</b> y z\n", undefined, "plain new text\n"));
+  assert.match(plan[0].before[0], /<del>&lt;b&gt;x&lt;\/b&gt; y z<\/del>/);
+});
+
+test("accept button per changed block, with the block's line range", () => {
+  const md = markdownItPlugin(
+    new MarkdownIt({ html: true }),
+    () => review("a\n\nold one two\n", undefined, "a\n\nnew three four\n"),
+    (_env, start, end) => `vscode://x.y/accept?start=${start}&end=${end}`,
+  );
+  const html = md.renderer.render(md.parse("a\n\nnew three four\n", {}), md.options, {});
+  assert.match(html, /<a class="agent-review-accept" href="vscode:\/\/x\.y\/accept\?start=2&amp;end=3"|<a class="agent-review-accept" href="vscode:\/\/x\.y\/accept\?start=2&end=3"/);
+  assert.equal((html.match(/agent-review-accept/g) || []).length, 1);
 });
 
 test("no copy: output unchanged", () => {

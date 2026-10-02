@@ -32,8 +32,13 @@ const layer = (dim) => {
     insertedText: vscode.window.createTextEditorDecorationType({
       backgroundColor: c("diffEditor.insertedTextBackground", "agentReview.earlierInsertedTextBackground"),
     }),
+    // Old text stays readable: normal-ish color on a light red band, thin red strike.
     deletedText: vscode.window.createTextEditorDecorationType({
-      before: { color: c("agentReview.deletedForeground", "agentReview.earlierDeletedForeground"), textDecoration: "line-through" },
+      before: {
+        color: c("agentReview.oldTextForeground", "agentReview.earlierOldTextForeground"),
+        backgroundColor: color("agentReview.oldTextBackground"),
+        textDecoration: "line-through rgba(248, 81, 73, 0.9)",
+      },
     }),
     deletedBlock: vscode.window.createTextEditorDecorationType({
       after: { color: c("agentReview.deletedForeground", "agentReview.earlierDeletedForeground"), margin: "0 0 0 1em" },
@@ -108,6 +113,49 @@ function historyContent(uri) {
   const edit = historyEdits(logOf(file) ?? "", current).find((e) => e.n === n);
   return edit ? edit[side === "before" ? "before" : "after"] : "";
 }
+
+/** Hunks of an open or on-disk file. @param {string} file */
+const hunksOfFile = (file) => hunksOf(file, currentText(file) ?? (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : ""));
+
+/** Does a hunk touch new-text lines [start, end)? Deletions count at the line before them. */
+const touches = (h, start, end) =>
+  (h.newStart < end && h.newEnd > start) || h.marks.some((m) => m.kind === "deleted" && Math.max(m.afterLine, 0) >= start && Math.max(m.afterLine, 0) < end);
+
+/** Accept every agent change in new-text lines [start, end) of a file: write them into the copy. */
+function acceptRange(file, start, end) {
+  const copy = copyPath(file);
+  if (!copy || !fs.existsSync(copy)) return;
+  const text = currentText(file) ?? fs.readFileSync(file, "utf8");
+  // One hunk at a time: accepting changes old-text positions, new-text ones stay.
+  for (let guard = 0; guard < 1000; guard++) {
+    const h = hunksOfFile(file).find((x) => touches(x, start, end));
+    if (!h) break;
+    fs.writeFileSync(copy, acceptHunk(fs.readFileSync(copy, "utf8"), text, h));
+  }
+  renderAll();
+  codeLensChanged.fire();
+  vscode.commands.executeCommand("markdown.preview.refresh").then(undefined, () => {});
+}
+
+const codeLensChanged = new vscode.EventEmitter();
+
+/** "✓ Accept" above each change block in the editor. */
+const codeLenses = {
+  onDidChangeCodeLenses: codeLensChanged.event,
+  /** @param {vscode.TextDocument} doc */
+  provideCodeLenses(doc) {
+    if (doc.uri.scheme !== "file") return [];
+    return hunksFor(doc).map((h) => {
+      const start = Math.min(h.newStart < h.newEnd ? h.newStart : Math.max(h.marks[0].afterLine ?? 0, 0), doc.lineCount - 1);
+      const end = Math.max(h.newEnd, start + 1);
+      return new vscode.CodeLens(new vscode.Range(start, 0, start, 0), {
+        title: `$(check) Accept${h.fresh ? "" : " (earlier edit)"}`,
+        command: "agentReview.acceptRange",
+        arguments: [doc.uri.fsPath, start, end],
+      });
+    });
+  },
+};
 
 /** @param {string} file @param {number} n */
 function openEditDiff(file, n) {
@@ -224,6 +272,7 @@ function addFolder(folder, ctx) {
     renderAll();
     updateHistoryButton();
     refreshGraph();
+    codeLensChanged.fire();
     vscode.commands.executeCommand("markdown.preview.refresh").then(undefined, () => {});
   };
   ctx.subscriptions.push(w, w.onDidChange(onChange), w.onDidCreate(onChange), w.onDidDelete(onChange));
@@ -242,6 +291,17 @@ function activate(ctx) {
     vscode.workspace.registerTextDocumentContentProvider(SCHEME, { provideTextDocumentContent: historyContent }),
     vscode.commands.registerCommand("agentReview.showHistory", showHistory),
     vscode.commands.registerCommand("agentReview.openGraph", showGraph),
+    vscode.commands.registerCommand("agentReview.acceptRange", acceptRange),
+    vscode.languages.registerCodeLensProvider({ scheme: "file" }, codeLenses),
+    // Accept buttons in the Markdown preview: vscode://<this extension>/accept?file&start&end
+    vscode.window.registerUriHandler({
+      handleUri(uri) {
+        if (uri.path !== "/accept") return;
+        const q = new URLSearchParams(uri.query);
+        const file = q.get("file");
+        if (file) acceptRange(file, Number(q.get("start")), Number(q.get("end")));
+      },
+    }),
   );
   for (const f of vscode.workspace.workspaceFolders ?? []) addFolder(f, ctx);
 
@@ -273,6 +333,7 @@ function activate(ctx) {
       fs.writeFileSync(copy, acceptHunk(fs.readFileSync(copy, "utf8"), doc.getText(), hunk));
       render(editor); // the copy watcher refreshes the preview
     }),
+    codeLensChanged,
     vscode.commands.registerTextEditorCommand("agentReview.acceptAll", (editor) => {
       const copy = copyPath(editor.document.uri.fsPath);
       if (copy && fs.existsSync(copy)) fs.rmSync(copy);
@@ -284,14 +345,24 @@ function activate(ctx) {
   // Markdown preview: the built-in markdown extension calls this with its markdown-it.
   return {
     extendMarkdownIt: (md) =>
-      markdownItPlugin(md, (env) => {
+      markdownItPlugin(
+        md,
+        (env) => {
         /** @type {vscode.Uri | undefined} */
         const uri = env?.currentDocument;
         if (uri?.scheme !== "file") return [];
         // The preview renders the open document, unsaved edits included.
         const doc = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
         return hunksOf(uri.fsPath, doc ? doc.getText() : fs.readFileSync(uri.fsPath, "utf8"));
-      }),
+        },
+        (env, start, end) => {
+          /** @type {vscode.Uri | undefined} */
+          const uri = env?.currentDocument;
+          if (uri?.scheme !== "file") return undefined;
+          const q = new URLSearchParams({ file: uri.fsPath, start: String(start), end: String(end) });
+          return `${vscode.env.uriScheme}://${ctx.extension.id}/accept?${q}`;
+        },
+      ),
   };
 }
 

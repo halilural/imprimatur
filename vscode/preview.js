@@ -7,29 +7,45 @@
 
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+/** Block markers (list bullet, number, heading, quote) left out of the old text. */
+const stripMarker = (line) => line.replace(/^\s*(?:[-*+]|\d+[.)]|#{1,6}|>)\s+/, "");
+
 /**
  * @param {Array<{start: number, end: number}>} blocks source line ranges [start, end) of leaf blocks, in order
  * @param {ReturnType<typeof import("./diff.js").review>} hunks
+ * @param {{fmt?: (line: string) => string, link?: (start: number, end: number) => string | undefined}} [opts]
+ *   fmt: old line to HTML (default: escaped text); link: href of an Accept button for a line range
  * @returns {Array<{cls?: string, before: string[], after: string[]}>} one entry per block
  */
-function planBlocks(blocks, hunks) {
+function planBlocks(blocks, hunks, opts = {}) {
+  const fmt = opts.fmt ?? esc;
+  const button = (start, end) => {
+    const href = opts.link?.(start, end);
+    return href ? `<a class="agent-review-accept" href="${href}" title="Accept this change">✓ Accept</a>` : "";
+  };
   const plan = blocks.map(() => ({ cls: /** @type {string | undefined} */ (undefined), before: /** @type {string[]} */ ([]), after: /** @type {string[]} */ ([]) }));
   const at = (line) => blocks.findIndex((b) => line >= b.start && line < b.end);
   const old = (lines, fresh) =>
-    `<div class="agent-review-old ${fresh ? "agent-review-latest" : "agent-review-earlier"}"><del>${lines.map(esc).join("<br>")}</del></div>`;
+    `<div class="agent-review-old ${fresh ? "agent-review-latest" : "agent-review-earlier"}"><del>${lines.map((l) => fmt(stripMarker(l))).join("<br>")}</del></div>`;
   for (const h of hunks)
     for (const m of h.marks) {
       if (m.kind === "deleted") {
         // after the block holding the line before the deletion; at the top if none
         let i = m.afterLine < 0 ? -1 : at(m.afterLine);
         if (i < 0 && m.afterLine >= 0) i = blocks.findLastIndex((b) => b.end <= m.afterLine + 1);
-        if (i < 0) (plan[0] ?? { before: [] }).before.push(old(m.oldLines, m.fresh));
-        else plan[i].after.push(old(m.oldLines, m.fresh));
+        const at = Math.max(m.afterLine, 0);
+        const bar = button(at, at + 1);
+        if (i < 0) (plan[0] ?? { before: [] }).before.push(bar + old(m.oldLines, m.fresh));
+        else plan[i].after.push(bar + old(m.oldLines, m.fresh));
         continue;
       }
       const i = at(m.line);
       if (i < 0) continue; // blank line or outside any leaf block
       const p = plan[i];
+      if (!p.cls) {
+        const bar = button(blocks[i].start, blocks[i].end);
+        if (bar) p.before.push(bar);
+      }
       const kind = m.kind === "added" && (!p.cls || p.cls.includes("added")) ? "added" : "changed";
       const layer = m.fresh || p.cls?.includes("latest") ? "latest" : "earlier";
       p.cls = `agent-review-${kind} agent-review-${layer}`;
@@ -45,9 +61,11 @@ const LEAF = new Set(["paragraph_open", "heading_open", "tr_open", "fence", "cod
  * the document; only renderer.render gets env.currentDocument. So the marks are
  * added at render time, on copies of the cached tokens.
  * getHunks(env) returns the hunks for the document being rendered, [] for none.
+ * link(env, start, end), when given, is the href of an Accept button for that line range.
  * @param {any} md @param {(env: any) => ReturnType<typeof import("./diff.js").review>} getHunks
+ * @param {(env: any, start: number, end: number) => string | undefined} [link]
  */
-function markdownItPlugin(md, getHunks) {
+function markdownItPlugin(md, getHunks, link) {
   const render = md.renderer.render.bind(md.renderer);
   md.renderer.render = (tokens, options, env) => {
     let hunks = [];
@@ -56,18 +74,19 @@ function markdownItPlugin(md, getHunks) {
     } catch {
       // a broken copy must never break the preview
     }
-    return render(hunks.length ? annotate(tokens, hunks) : tokens, options, env);
+    const opts = { fmt: (line) => md.renderInline(line), link: link && ((start, end) => link(env, start, end)) };
+    return render(hunks.length ? annotate(tokens, hunks, opts) : tokens, options, env);
   };
   return md;
 }
 
 /** New token list with the marks; the input tokens are not changed. @param {any[]} tokens */
-function annotate(tokens, hunks) {
+function annotate(tokens, hunks, opts) {
   const Token = tokens[0]?.constructor;
   if (!Token) return tokens;
   const idx = [];
   tokens.forEach((t, i) => t.map && LEAF.has(t.type) && idx.push(i));
-  const plan = planBlocks(idx.map((i) => ({ start: tokens[i].map[0], end: tokens[i].map[1] })), hunks);
+  const plan = planBlocks(idx.map((i) => ({ start: tokens[i].map[0], end: tokens[i].map[1] })), hunks, opts);
   const html = (content) => Object.assign(new Token("html_block", "", 0), { content });
   /** @type {Map<number, any>} */
   const replaced = new Map();

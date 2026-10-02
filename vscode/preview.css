@@ -8,6 +8,9 @@
 .agent-review-added.agent-review-earlier { background: rgba(46, 160, 67, 0.09); border-color: rgba(46, 160, 67, 0.45); }
 .agent-review-changed.agent-review-latest { background: rgba(31, 111, 235, 0.2); border-color: rgb(31, 111, 235); }
 .agent-review-changed.agent-review-earlier { background: rgba(31, 111, 235, 0.08); border-color: rgba(31, 111, 235, 0.45); }
-.agent-review-old { margin: 0.4em 0 0; padding-left: 9px; border-left: 3px solid rgb(248, 81, 73); }
-.agent-review-old del { color: rgb(248, 81, 73); }
-.agent-review-old.agent-review-earlier { opacity: 0.55; }
+/* Old text: normal text color on a light red band, a thin red strike line, so it stays readable. */
+.agent-review-old { margin: 0.4em 0 0; padding: 2px 9px; border-left: 3px solid rgb(248, 81, 73); background: rgba(248, 81, 73, 0.1); }
+.agent-review-old del { color: inherit; opacity: 0.85; text-decoration-color: rgba(248, 81, 73, 0.9); text-decoration-thickness: 1.5px; }
+.agent-review-old.agent-review-earlier { opacity: 0.6; }
+.agent-review-accept { float: right; font-size: 0.85em; padding: 0 8px; border-radius: 3px; text-decoration: none; color: var(--vscode-button-foreground, #fff); background: var(--vscode-button-background, #0e639c); }
+.agent-review-accept:hover { background: var(--vscode-button-hoverBackground, #1177bb); text-decoration: none; }
