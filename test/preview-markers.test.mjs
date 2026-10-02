@@ -24,12 +24,15 @@ function fakeDom(blocks) {
   }));
   const document = {
     readyState: "complete",
+    listeners: {},
     body,
     documentElement: { scrollHeight: 1000 },
     getElementById: (id) => created.find((e) => e.id === id),
     createElement: mk,
     querySelectorAll: () => els,
-    addEventListener() {},
+    addEventListener(n, f) {
+      this.listeners[n] = f;
+    },
   };
   const storage = {};
   const window = {
@@ -71,4 +74,18 @@ test("preview scroll: a reload right after a scroll goes back there; a first ope
   Object.assign(reload.storage, first.storage);
   vm.runInNewContext(src, ctx(reload));
   assert.equal(reload.window.scrollY, 700);
+});
+
+test("after an accept, the reload goes to the next change below it", () => {
+  const src = fs.readFileSync(path.resolve(import.meta.dirname, "../vscode/preview-markers.js"), "utf8");
+  const ctx = (dom) => ({ ...dom, setTimeout: (f) => f(), clearTimeout() {} });
+  const before = fakeDom([["agent-review-old agent-review-latest", 300, 20], ["agent-review-changed agent-review-latest", 600, 20]]);
+  vm.runInNewContext(src, ctx(before));
+  const link = { closest: () => link, getBoundingClientRect: () => ({ top: 300 }) };
+  before.document.listeners.click({ target: link }); // ✓ Accept on the block at 300
+  // reloaded: the accepted block is gone, the next one is at 600
+  const after = fakeDom([["agent-review-changed agent-review-latest", 600, 20]]);
+  Object.assign(after.storage, before.storage);
+  vm.runInNewContext(src, ctx(after));
+  assert.equal(after.els[0].scrolled, true);
 });

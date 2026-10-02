@@ -132,6 +132,15 @@ function acceptRange(file, start, end) {
     if (!h) break;
     fs.writeFileSync(copy, acceptHunk(fs.readFileSync(copy, "utf8"), text, h));
   }
+  // Move on to the next change in the editor, like a review queue.
+  const next = hunksOfFile(file).find((h) => h.newStart >= start) ?? hunksOfFile(file)[0];
+  const editor = vscode.window.visibleTextEditors.find((e) => e.document.uri.fsPath === file);
+  if (next && editor) {
+    const line = Math.min(next.newStart, editor.document.lineCount - 1);
+    const pos = new vscode.Position(line, 0);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
+  }
   renderAll();
   codeLensChanged.fire();
   vscode.commands.executeCommand("markdown.preview.refresh").then(undefined, () => {});

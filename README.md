@@ -14,7 +14,8 @@ staging or committing does not clear the marks.
 - **✓ Accept** above each change block in the editor (CodeLens) and on each
   changed block in the Markdown preview accepts that block; **Agent Review:
   Accept Agent Change at Cursor** and **Accept All Agent Changes in File** do
-  the same from the command palette.
+  the same from the command palette. After an accept the view moves to the
+  next change, like a review queue.
 - Old text is shown as plain text in a red box (no strike line, so it stays
   readable); in the preview it is rendered as Markdown.
 - A status bar button, **N agent edits**, lists the agent's edits to the file

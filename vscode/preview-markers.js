@@ -65,6 +65,21 @@
       } catch {}
     }, 100);
   });
+  // Clicking ✓ Accept: remember where that block was, so the reload can go to the next change.
+  document.addEventListener(
+    "click",
+    (e) => {
+      const a = e.target?.closest?.("a.agent-review-accept");
+      if (!a) return;
+      const y = a.getBoundingClientRect().top + window.scrollY;
+      try {
+        store?.setItem(KEY, JSON.stringify({ y: window.scrollY, next: y, t: Date.now() }));
+      } catch {}
+    },
+    true,
+  );
+
+  const MARKED = ".agent-review-added, .agent-review-changed, .agent-review-old";
   function restore() {
     let saved;
     try {
@@ -72,7 +87,15 @@
     } catch {}
     if (!saved || Date.now() - saved.t > 5000) return; // first open: leave the preview's own sync alone
     // The preview scrolls to the editor line after loading; land after it.
-    for (const ms of [0, 150, 400]) setTimeout(() => window.scrollTo(0, saved.y), ms);
+    const go = () => {
+      if (saved.next !== undefined) {
+        // After an Accept: the first change at or below the accepted one.
+        const target = [...document.querySelectorAll(MARKED)].find((el) => el.getBoundingClientRect().top + window.scrollY >= saved.next - 5);
+        if (target) return target.scrollIntoView({ block: "center" });
+      }
+      window.scrollTo(0, saved.y);
+    };
+    for (const ms of [0, 150, 400]) setTimeout(go, ms);
   }
 
   let timer;

@@ -2,7 +2,7 @@
   "name": "agent-review",
   "displayName": "Agent Review",
   "description": "See an AI agent's edits in the editor like tracked changes until you accept them.",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "publisher": "halilural",
   "license": "MIT",
   "engines": {
