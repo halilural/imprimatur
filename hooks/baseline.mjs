@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Claude Code PreToolUse hook for Edit|Write. Before the agent edits a file of
-// a listed type:
+// Claude Code hook: PreToolUse for Edit|Write|Bash, PostToolUse for Bash.
+// Bash edits (python, sed) are caught by the paths named in the command: text
+// before, compared after. Before the agent edits a file of a listed type:
 // - if there is no copy yet, copy the file to
 //   <root>/.claude/agent-review/baseline/<path> (an empty copy for a new file);
 // - append {t, session, tool, prompt, before} to .claude/agent-review/history/<path>.jsonl.
@@ -56,8 +57,9 @@ const sameEditWindow = (log) => Date.now() - fs.statSync(log).mtimeMs < 2000;
 /**
  * @param {string} project Claude's project dir; files outside it are skipped
  * @param {string} file @param {string[]} [exts] @param {{session?: string, tool?: string, prompt?: string}} [meta]
+ * @param {string} [knownBefore] text before the edit when the caller already has it (Bash edits)
  */
-export function takeBaseline(project, file, exts = ["md", "mdx"], meta = {}) {
+export function takeBaseline(project, file, exts = ["md", "mdx"], meta = {}, knownBefore) {
   const ext = path.extname(file).slice(1).toLowerCase();
   if (!exts.includes(ext)) return "skipped";
   const abs = path.resolve(project, file);
@@ -66,7 +68,7 @@ export function takeBaseline(project, file, exts = ["md", "mdx"], meta = {}) {
   // Copies live at the git root (where the extension looks), else the project root.
   const root = repoRoot(path.dirname(abs)) ?? path.resolve(project);
   const rel = path.relative(root, abs);
-  const before = fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "";
+  const before = knownBefore ?? (fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "");
   const copy = path.join(root, BASELINE_DIR, rel);
   const kept = fs.existsSync(copy);
   if (!kept) {
@@ -81,6 +83,58 @@ export function takeBaseline(project, file, exts = ["md", "mdx"], meta = {}) {
   return kept ? "kept" : "written";
 }
 
+/**
+ * Paths of listed file types named in a shell command (python/sed edits).
+ * ponytail: files reached only through a glob (`sed -i *.md`) are not seen.
+ * @param {string} command @param {string[]} exts
+ */
+export function pathsInCommand(command, exts) {
+  const re = new RegExp(String.raw`[\w./~@+-]+\.(?:${exts.join("|")})\b`, "gi");
+  return [...new Set(command.match(re) ?? [])];
+}
+
+const PENDING_DIR = path.join(".claude", "agent-review", "pending");
+
+/**
+ * Bash, before: remember the text of the named files. After: record the ones
+ * whose text changed, like an Edit; read-only commands (cat, grep) leave no trace.
+ * @param {"PreToolUse" | "PostToolUse"} event @param {any} data @param {string} project @param {string[]} exts
+ */
+export function bashEdit(event, data, project, exts) {
+  const id = String(data.tool_use_id ?? "").replace(/[^\w-]/g, "");
+  if (!id) return;
+  const pending = path.join(path.resolve(project), PENDING_DIR, `${id}.json`);
+  if (event === "PreToolUse") {
+    const command = String(data.tool_input?.command ?? "");
+    // Relative paths: the command's own `cd <dir>` first, then the tool's cwd, then the project.
+    const cd = /^\s*cd\s+("[^"]+"|'[^']+'|\S+)/.exec(command)?.[1]?.replace(/^["']|["']$/g, "");
+    const bases = [cd && path.resolve(data.cwd || project, cd.replace(/^~(?=\/|$)/, process.env.HOME ?? "~")), data.cwd, project].filter(Boolean);
+    /** @type {Record<string, string>} */
+    const before = {};
+    for (const p of pathsInCommand(command, exts)) {
+      const candidates = bases.map((b) => path.resolve(b, p));
+      const abs = candidates.find((c) => fs.existsSync(c)) ?? candidates[0];
+      const inProject = path.relative(project, abs);
+      if (inProject.startsWith("..") || path.isAbsolute(inProject)) continue;
+      if (inProject.split(path.sep).slice(0, 2).join("/") === ".claude/agent-review") continue;
+      before[abs] = fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "";
+    }
+    if (!Object.keys(before).length) return;
+    fs.mkdirSync(path.dirname(pending), { recursive: true });
+    fs.writeFileSync(pending, JSON.stringify(before));
+    return;
+  }
+  if (!fs.existsSync(pending)) return;
+  /** @type {Record<string, string>} */
+  const before = JSON.parse(fs.readFileSync(pending, "utf8"));
+  fs.rmSync(pending, { force: true });
+  const meta = { session: data.session_id, tool: "Bash", prompt: lastPrompt(data.transcript_path) };
+  for (const [abs, text] of Object.entries(before)) {
+    const now = fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "";
+    if (now !== text) takeBaseline(project, abs, exts, meta, text);
+  }
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   let input = "";
   process.stdin.on("data", (d) => (input += d));
@@ -89,8 +143,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       const data = JSON.parse(input || "{}");
       const file = data.tool_input?.file_path;
       const project = process.env.CLAUDE_PROJECT_DIR || data.cwd || process.cwd();
-      const exts = process.argv.slice(2).map((e) => e.toLowerCase());
-      if (file) takeBaseline(project, file, exts.length ? exts : undefined, { session: data.session_id, tool: data.tool_name, prompt: lastPrompt(data.transcript_path) });
+      const args = process.argv.slice(2).map((e) => e.toLowerCase());
+      const exts = args.length ? args : ["md", "mdx"];
+      if (data.tool_name === "Bash") bashEdit(data.hook_event_name, data, project, exts);
+      else if (file && data.hook_event_name !== "PostToolUse")
+        takeBaseline(project, file, exts, { session: data.session_id, tool: data.tool_name, prompt: lastPrompt(data.transcript_path) });
     } catch (e) {
       process.stderr.write(`agent-review baseline: ${e.message}\n`);
     }

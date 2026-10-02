@@ -173,3 +173,44 @@ test("history row carries the user's latest request from the transcript", () => 
   spawnSync("node", [hook], { input, env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
   assert.equal(history(dir, "a.md")[0].prompt, "change cumartesi to pazartesi");
 });
+
+function bash(dir, id, command, event) {
+  const input = JSON.stringify({ hook_event_name: event, session_id: "s1", tool_name: "Bash", tool_use_id: id, cwd: dir, tool_input: { command } });
+  return spawnSync("node", [hook], { input, env: { ...process.env, CLAUDE_PROJECT_DIR: dir } }).status;
+}
+
+test("bash edit (python heredoc) is recorded like an Edit; a read-only command leaves no trace", () => {
+  const { dir } = repo();
+  const f = path.join(dir, "docs/a.md");
+  fs.mkdirSync(path.dirname(f));
+  fs.writeFileSync(f, "one\n");
+  const cmd = "python3 - <<'EOF'\np='docs/a.md'; s=open(p).read(); open(p,'w').write(s.replace('one','two'))\nEOF";
+  assert.equal(bash(dir, "t1", cmd, "PreToolUse"), 0);
+  fs.writeFileSync(f, "two\n"); // the command runs
+  assert.equal(bash(dir, "t1", cmd, "PostToolUse"), 0);
+  assert.equal(read(copy(dir, "docs/a.md")), "one\n");
+  const [h] = history(dir, "docs/a.md");
+  assert.equal(h.before, "one\n");
+  assert.equal(h.tool, "Bash");
+  bash(dir, "t2", "cat docs/a.md", "PreToolUse");
+  bash(dir, "t2", "cat docs/a.md", "PostToolUse");
+  assert.equal(history(dir, "docs/a.md").length, 1);
+  assert.equal(fs.readdirSync(path.join(dir, ".claude/agent-review/pending")).length, 0);
+});
+
+test("paths named in a command", async () => {
+  const { pathsInCommand } = await import(hook);
+  assert.deepEqual(pathsInCommand("sed -i s/a/b/ README.md docs/x.MDX notes.txt && cat ./a/b.md", ["md", "mdx"]), ["README.md", "docs/x.MDX", "./a/b.md"]);
+});
+
+test("bash edit: relative paths follow the command's own cd", () => {
+  const { dir } = repo();
+  fs.mkdirSync(path.join(dir, "sub"));
+  fs.writeFileSync(path.join(dir, "a.md"), "one\n");
+  const cmd = `cd ${dir} && sed -i s/one/two/ a.md`;
+  const input = (event) => JSON.stringify({ hook_event_name: event, tool_name: "Bash", tool_use_id: "t9", cwd: path.join(dir, "sub"), tool_input: { command: cmd } });
+  spawnSync("node", [hook], { input: input("PreToolUse"), env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
+  fs.writeFileSync(path.join(dir, "a.md"), "two\n");
+  spawnSync("node", [hook], { input: input("PostToolUse"), env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
+  assert.equal(history(dir, "a.md")[0].before, "one\n");
+});

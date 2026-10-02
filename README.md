@@ -34,8 +34,10 @@ through where they were.
 
 ## How it works
 
-1. A Claude Code `PreToolUse` hook ([hooks/baseline.mjs](hooks/baseline.mjs)),
-   before each agent edit of a listed file type:
+1. A Claude Code hook ([hooks/baseline.mjs](hooks/baseline.mjs)), before each
+   agent edit of a listed file type (Edit, Write, or a Bash command that names
+   the file, e.g. a python or sed edit; Bash is compared before/after so read-only
+   commands leave no trace):
    - copies the file to `.claude/agent-review/baseline/<path>` if there is no
      copy yet (an empty copy for a new file);
    - appends `{t, session, tool, prompt, before}` to
@@ -59,7 +61,13 @@ Requires Node 22+, git and VS Code 1.100+.
      "hooks": {
        "PreToolUse": [
          {
-           "matcher": "Edit|Write",
+           "matcher": "Edit|Write|Bash",
+           "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/path/to/agent-review/hooks/baseline.mjs md mdx" }]
+         }
+       ],
+       "PostToolUse": [
+         {
+           "matcher": "Bash",
            "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/path/to/agent-review/hooks/baseline.mjs md mdx" }]
          }
        ]
@@ -75,6 +83,8 @@ Requires Node 22+, git and VS Code 1.100+.
 ## Limits
 
 - No marks in diff tabs (e.g. Working Tree): git already colors those.
+- Bash edits are seen only for files named in the command; a glob
+  (`sed -i *.md`) is missed.
 - Changes inside fenced code blocks (``` or ~~~) are not marked; the edit
   history still lists them.
 - Latest vs earlier is decided per line.
