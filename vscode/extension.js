@@ -144,7 +144,8 @@ const codeLenses = {
   onDidChangeCodeLenses: codeLensChanged.event,
   /** @param {vscode.TextDocument} doc */
   provideCodeLenses(doc) {
-    if (doc.uri.scheme !== "file") return [];
+    // CodeLens belongs to the document, not the editor: hide while it is in a diff tab.
+    if (doc.uri.scheme !== "file" || diffTabUris().has(doc.uri.toString())) return [];
     return hunksFor(doc).map((h) => {
       const start = Math.min(h.newStart < h.newEnd ? h.newStart : Math.max(h.marks[0].afterLine ?? 0, 0), doc.lineCount - 1);
       const end = Math.max(h.newEnd, start + 1);
@@ -207,10 +208,29 @@ const hunksFor = (doc) => (doc.uri.scheme === "file" ? hunksOf(doc.uri.fsPath, d
 // Spaces in injected text collapse; keep them visible.
 const keepSpaces = (s) => s.replace(/ /g, " ");
 
-/** Is this editor one side of a diff tab (e.g. Working Tree)? Git already colors those. @param {vscode.TextEditor} editor */
+/** URIs shown right now in an active diff tab (Working Tree, git compare): git already colors those. */
+function diffTabUris() {
+  const out = new Set();
+  for (const g of vscode.window.tabGroups.all) {
+    const input = g.activeTab?.input;
+    if (input instanceof vscode.TabInputTextDiff) {
+      out.add(input.modified.toString());
+      out.add(input.original.toString());
+    }
+  }
+  return out;
+}
+
+/**
+ * Is this editor one side of a diff tab? A diff side's viewColumn can be
+ * undefined, so match by URI; an editor in a group whose active tab is a plain
+ * text tab is not a diff side even if the same file is also in a diff elsewhere.
+ * @param {vscode.TextEditor} editor
+ */
 function inDiffTab(editor) {
+  if (!diffTabUris().has(editor.document.uri.toString())) return false;
   const group = vscode.window.tabGroups.all.find((g) => g.viewColumn === editor.viewColumn);
-  return group?.activeTab?.input instanceof vscode.TabInputTextDiff;
+  return !(group?.activeTab?.input instanceof vscode.TabInputText);
 }
 
 /** @param {vscode.TextEditor} editor */
@@ -328,7 +348,10 @@ function activate(ctx) {
   let timer;
   ctx.subscriptions.push(
     vscode.window.onDidChangeVisibleTextEditors(renderAll),
-    vscode.window.tabGroups.onDidChangeTabs(renderAll),
+    vscode.window.tabGroups.onDidChangeTabs(() => {
+      renderAll();
+      codeLensChanged.fire();
+    }),
     vscode.window.onDidChangeActiveTextEditor((e) => {
       if (e) updateStatus(hunksByFile.get(e.document.uri.fsPath) ?? []);
       else status.hide();
