@@ -31,8 +31,14 @@ function fakeDom(blocks) {
     querySelectorAll: () => els,
     addEventListener() {},
   };
-  const window = { scrollY: 0, addEventListener: (n, f) => (listeners[n] = f) };
-  return { document, window, body, els };
+  const storage = {};
+  const window = {
+    scrollY: 0,
+    addEventListener: (n, f) => (listeners[n] = f),
+    scrollTo: (_x, y) => (window.scrollY = y),
+    sessionStorage: { getItem: (k) => storage[k] ?? null, setItem: (k, v) => (storage[k] = v) },
+  };
+  return { document, window, body, els, listeners, storage };
 }
 
 test("preview marker bar: one tick per marked block, colored by kind, click scrolls", async () => {
@@ -50,4 +56,19 @@ test("preview marker bar: one tick per marked block, colored by kind, click scro
   assert.match(bar.children[1].style.cssText, /top:50%;.*rgb\(248, 81, 73\);opacity:0.5/);
   bar.children[2].handlers.click({ preventDefault() {}, stopPropagation() {} });
   assert.equal(dom.els[2].scrolled, true);
+});
+
+test("preview scroll: a reload right after a scroll goes back there; a first open does not", () => {
+  const src = fs.readFileSync(path.resolve(import.meta.dirname, "../vscode/preview-markers.js"), "utf8");
+  const ctx = (dom) => ({ ...dom, setTimeout: (f) => f(), clearTimeout() {} });
+  const first = fakeDom([["agent-review-added agent-review-latest", 100, 50]]);
+  vm.runInNewContext(src, ctx(first));
+  assert.equal(first.window.scrollY, 0); // nothing saved: stays where the preview put it
+  first.window.scrollY = 700;
+  first.listeners.scroll();
+  // the refresh reloads the page: same storage, scroll back at the top
+  const reload = fakeDom([["agent-review-added agent-review-latest", 100, 50]]);
+  Object.assign(reload.storage, first.storage);
+  vm.runInNewContext(src, ctx(reload));
+  assert.equal(reload.window.scrollY, 700);
 });

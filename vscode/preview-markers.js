@@ -46,6 +46,35 @@
     }
   }
 
+  // Accept and agent edits refresh the preview, which reloads it at the top.
+  // Remember where the reader was; on a reload within 5 s, go back there.
+  const KEY = "agentReview.scroll";
+  const store = (() => {
+    try {
+      return window.sessionStorage;
+    } catch {
+      return undefined;
+    }
+  })();
+  let saveTimer;
+  window.addEventListener("scroll", () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      try {
+        store?.setItem(KEY, JSON.stringify({ y: window.scrollY, t: Date.now() }));
+      } catch {}
+    }, 100);
+  });
+  function restore() {
+    let saved;
+    try {
+      saved = JSON.parse(store?.getItem(KEY) ?? "null");
+    } catch {}
+    if (!saved || Date.now() - saved.t > 5000) return; // first open: leave the preview's own sync alone
+    // The preview scrolls to the editor line after loading; land after it.
+    for (const ms of [0, 150, 400]) setTimeout(() => window.scrollTo(0, saved.y), ms);
+  }
+
   let timer;
   const later = () => {
     clearTimeout(timer);
@@ -54,6 +83,12 @@
   window.addEventListener("vscode.markdown.updateContent", later);
   window.addEventListener("resize", later);
   window.addEventListener("load", later);
-  if (document.readyState !== "loading") later();
-  else document.addEventListener("DOMContentLoaded", later);
+  if (document.readyState !== "loading") {
+    restore();
+    later();
+  } else
+    document.addEventListener("DOMContentLoaded", () => {
+      restore();
+      later();
+    });
 })();
