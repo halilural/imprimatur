@@ -143,7 +143,7 @@ function acceptRange(file, start, end) {
   }
   renderAll();
   codeLensChanged.fire();
-  vscode.commands.executeCommand("markdown.preview.refresh").then(undefined, () => {});
+  refreshPreview();
 }
 
 const codeLensChanged = new vscode.EventEmitter();
@@ -304,24 +304,36 @@ function renderAll() {
   if (!vscode.window.activeTextEditor) status.hide();
 }
 
+/** @type {NodeJS.Timeout | undefined} */
+let previewTimer;
+/**
+ * A preview refresh reloads the whole page (and restarts other preview scripts,
+ * e.g. Mermaid renderers), so do it once, after things settle.
+ */
+function refreshPreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => vscode.commands.executeCommand("markdown.preview.refresh").then(undefined, () => {}), 700);
+}
+
 function refreshEverything() {
   renderAll();
   updateHistoryButton();
   refreshGraph();
   codeLensChanged.fire();
-  vscode.commands.executeCommand("markdown.preview.refresh").then(undefined, () => {});
 }
 
 /** @type {NodeJS.Timeout[]} */
 let refreshTimers = [];
 /**
  * The hook writes the copy and history just BEFORE the agent's edit lands on
- * disk, so refresh now and again shortly after, when the edit is there.
+ * disk, so redraw the editor now and again shortly after, when the edit is
+ * there; the preview once, when it is quiet.
  */
 function refreshSoon() {
   refreshTimers.forEach(clearTimeout);
   refreshEverything();
   refreshTimers = [500, 2000].map((ms) => setTimeout(refreshEverything, ms));
+  refreshPreview();
 }
 
 /** @param {vscode.WorkspaceFolder} folder @param {vscode.ExtensionContext} ctx */
@@ -366,7 +378,10 @@ function activate(ctx) {
   ctx.subscriptions.push(
     vscode.window.onDidChangeVisibleTextEditors(renderAll),
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration("agentReview")) refreshEverything();
+      if (e.affectsConfiguration("agentReview")) {
+        refreshEverything();
+        refreshPreview();
+      }
     }),
     vscode.window.tabGroups.onDidChangeTabs(() => {
       renderAll();
@@ -384,11 +399,11 @@ function activate(ctx) {
         for (const e of vscode.window.visibleTextEditors) if (e.document === ev.document) render(e);
         // A file under review changed (the agent's edit landed): preview, lenses, button too.
         const copy = ev.document.uri.scheme === "file" ? copyPath(ev.document.uri.fsPath) : undefined;
+        // The preview re-renders a changed document by itself; no extra refresh here.
         if (copy && fs.existsSync(copy)) {
           codeLensChanged.fire();
           updateHistoryButton();
           refreshGraph();
-          vscode.commands.executeCommand("markdown.preview.refresh").then(undefined, () => {});
         }
       }, 150);
     }),
