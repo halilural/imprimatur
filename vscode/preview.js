@@ -9,7 +9,7 @@ const { mermaidDiff, mermaidBlocks, matchOld } = require("./mermaid-diff.js");
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /** Block markers (list bullet, number, heading, quote) left out of the old text. */
-const stripMarker = (line) => line.replace(/^\s*(?:[-*+]|\d+[.)]|#{1,6}|>)\s+/, "");
+const stripMarker = (line) => line.replace(/^\s*(?:[-*+]|\d+[.)]|#{1,6}|>)\s+/, "").trim();
 
 /**
  * @param {Array<{start: number, end: number}>} blocks source line ranges [start, end) of leaf blocks, in order

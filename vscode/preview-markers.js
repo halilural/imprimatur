@@ -62,7 +62,7 @@
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       try {
-        store?.setItem(KEY, JSON.stringify({ y: window.scrollY, t: Date.now() }));
+        store?.setItem(KEY, JSON.stringify({ y: window.scrollY, t: Date.now(), hold: true }));
       } catch {}
     }, 100);
   });
@@ -97,6 +97,10 @@
       const a = e.target?.closest?.("a.agent-review-accept");
       if (!a) return;
       const y = a.getBoundingClientRect().top + window.scrollY;
+      // Remember where the reader is: the settle refresh a few seconds later comes back here.
+      try {
+        store?.setItem(KEY, JSON.stringify({ y: window.scrollY, t: Date.now(), hold: true }));
+      } catch {}
       if (clearAccepted(a)) {
         draw();
         const next = [...document.querySelectorAll(".agent-review-added, .agent-review-changed, .agent-review-old, .agent-review-diagram")].find(
@@ -118,7 +122,8 @@
     try {
       saved = JSON.parse(store?.getItem(KEY) ?? "null");
     } catch {}
-    if (!saved || Date.now() - saved.t > 5000) return; // first open: leave the preview's own sync alone
+    // first open: leave the preview's own sync alone; after an accept, the settle refresh comes ~5 s later
+    if (!saved || Date.now() - saved.t > (saved.hold ? 10000 : 5000)) return;
     // The preview scrolls to the editor line after loading; land after it.
     const go = () => {
       if (saved.next !== undefined) {

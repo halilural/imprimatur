@@ -118,5 +118,6 @@ test("accept in the preview clears the block at once, no reload, and moves to th
   assert.equal(block.classList.has("agent-review-changed"), false);
   assert.equal(link.removed, true);
   assert.equal(next.scrolled, true);
-  assert.equal(dom.storage["agentReview.scroll"], undefined); // no reload expected, nothing saved for one
+  // the settle refresh a few seconds later restores this position
+  assert.equal(JSON.parse(dom.storage["agentReview.scroll"]).hold, true);
 });
