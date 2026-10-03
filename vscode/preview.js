@@ -27,15 +27,15 @@ function planBlocks(blocks, hunks, opts = {}) {
   const plan = blocks.map(() => ({ cls: /** @type {string | undefined} */ (undefined), before: /** @type {string[]} */ ([]), after: /** @type {string[]} */ ([]) }));
   const at = (line) => blocks.findIndex((b) => line >= b.start && line < b.end);
   const old = (lines, fresh) =>
-    `<div class="agent-review-old ${fresh ? "agent-review-latest" : "agent-review-earlier"}"><del>${lines.map((l) => fmt(stripMarker(l))).join("<br>")}</del></div>`;
+    `<div class="agent-review-old ${fresh ? "agent-review-latest" : "agent-review-earlier"}"><del>${lines.filter((l) => l.trim()).map((l) => fmt(stripMarker(l))).join("<br>")}</del></div>`;
   for (const h of hunks)
     for (const m of h.marks) {
       if (m.kind === "deleted") {
         // after the block holding the line before the deletion; at the top if none
         let i = m.afterLine < 0 ? -1 : at(m.afterLine);
         if (i < 0 && m.afterLine >= 0) i = blocks.findLastIndex((b) => b.end <= m.afterLine + 1);
-        const at = Math.max(m.afterLine, 0);
-        const bar = button(at, at + 1);
+        const line = Math.max(m.afterLine, 0);
+        const bar = button(line, line + 1);
         if (i < 0) (plan[0] ?? { before: [] }).before.push(bar + old(m.oldLines, m.fresh));
         else plan[i].after.push(bar + old(m.oldLines, m.fresh));
         continue;
@@ -69,7 +69,9 @@ const LEAF = new Set(["paragraph_open", "heading_open", "tr_open", "fence", "cod
  */
 function markdownItPlugin(md, getHunks, link, getBase) {
   const render = md.renderer.render.bind(md.renderer);
+  const INLINE = { agentReviewInline: true }; // our own renderInline calls: no marks there
   md.renderer.render = (tokens, options, env) => {
+    if (env?.agentReviewInline) return render(tokens, options, env);
     let hunks = [];
     let base;
     try {
@@ -78,8 +80,16 @@ function markdownItPlugin(md, getHunks, link, getBase) {
     } catch {
       // a broken copy must never break the preview
     }
-    const opts = { fmt: (line) => md.renderInline(line), link: link && ((start, end) => link(env, start, end)), base };
-    return render(hunks.length || base ? annotate(tokens, hunks, opts) : tokens, options, env);
+    if (!hunks.length && !base) return render(tokens, options, env);
+    const opts = { fmt: (line) => md.renderInline(line, INLINE), link: link && ((start, end) => link(env, start, end)), base };
+    let marked = tokens;
+    try {
+      marked = annotate(tokens, hunks, opts);
+    } catch (e) {
+      // A bug in the marks must never blank the preview: show it unmarked.
+      console.error("agent-review preview:", e);
+    }
+    return render(marked, options, env);
   };
   return md;
 }

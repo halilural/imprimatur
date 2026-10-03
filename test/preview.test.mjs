@@ -95,3 +95,16 @@ test("a table with marked rows gets one Accept above it", () => {
   assert.match(html, /✓ Accept table<\/a>\s*<table>/);
   assert.equal((html.match(/agent-review-accept/g) || []).length, 1);
 });
+
+test("a deletion with accept links renders (regression: blank preview)", () => {
+  const md = markdownItPlugin(new MarkdownIt({ html: true }), () => review("a\n\ngone\n\nz\n", undefined, "a\n\nz\n"), (_e, s, e) => `vscode://x/accept?start=${s}&end=${e}`);
+  const html = md.renderer.render(md.parse("a\n\nz\n", {}), md.options, {});
+  assert.match(html, /<del>gone<\/del>/);
+  assert.match(html, /agent-review-accept/);
+});
+
+test("a bug in the marks leaves the preview rendered, unmarked", () => {
+  const md = markdownItPlugin(new MarkdownIt({ html: true }), () => [{ marks: [{ kind: "changed", line: 0, oldText: null }] }]);
+  const html = md.renderer.render(md.parse("text\n", {}), md.options, {});
+  assert.match(html, /<p>text<\/p>/);
+});
