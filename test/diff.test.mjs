@@ -174,3 +174,17 @@ test("accept groups from parser blocks: every new block type is one unit", async
     [28, 29], // new thematic break
   ]);
 });
+
+test("rows added to an existing table are one accept; items added to a list stay apart", () => {
+  const req = createRequire(import.meta.url);
+  const { acceptGroups, diff } = req("../vscode/diff.js");
+  const { markdownBlocks } = req("../vscode/preview.js");
+  const md = new (req("markdown-it"))({ html: true });
+  const base = "| a | b |\n| - | - |\n\n- one\n";
+  const cur = "| a | b |\n| - | - |\n| 1 | 2 |\n| 3 | 4 |\n| 5 | 6 |\n\n- one\n- two\n- three\n";
+  assert.deepEqual(acceptGroups(cur, diff(base, cur), markdownBlocks(md, cur)), [
+    [2, 5], // three rows added to the table: one accept
+    [7, 8], // list item two
+    [8, 9], // list item three
+  ]);
+});

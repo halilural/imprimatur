@@ -324,6 +324,23 @@ function groupsByBlocks(text, hunks, blocks) {
     for (let k = start; k < end; k++) taken.add(k);
     groups.push([start, end]);
   }
+  // Added lines next to each other inside the same (smallest) block go together:
+  // rows added to an existing table, lines added to a paragraph or a quote.
+  // List items are blocks of their own, so items stay apart.
+  const innermost = (line) => {
+    let best;
+    for (const blk of blocks)
+      if (line >= blk.start && line < blk.end && (!best || blk.end - blk.start < best.end - best.start)) best = blk;
+    return best;
+  };
+  for (const line of [...added].sort((x, y) => x - y)) {
+    if (taken.has(line) || (b[line] ?? "").trim() === "") continue;
+    const blk = innermost(line);
+    let end = line + 1;
+    while (blk && added.has(end) && !taken.has(end) && end < blk.end && (b[end] ?? "").trim() !== "") end++;
+    for (let k = line; k < end; k++) taken.add(k);
+    groups.push([line, end]);
+  }
   for (const h of hunks)
     for (const m of h.marks) {
       const at = m.kind === "deleted" ? Math.max(m.afterLine, 0) : m.line;
