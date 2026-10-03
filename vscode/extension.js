@@ -251,7 +251,11 @@ function inDiffTab(editor) {
 function marksInEditor(doc) {
   const isMarkdown = doc.languageId === "markdown" || /\.mdx?$/i.test(doc.uri.fsPath);
   if (!isMarkdown) return true; // no preview for other files
-  return vscode.workspace.getConfiguration("agentReview", doc.uri).get("showIn", "preview") !== "preview";
+  const config = vscode.workspace.getConfiguration("agentReview", doc.uri);
+  if (config.get("showIn", "preview") !== "preview") return true;
+  // Paths that want marks in the source too (e.g. task lists read in both views).
+  const globs = /** @type {string[]} */ (config.get("editorAlsoFor", []));
+  return globs.some((pattern) => vscode.languages.match({ pattern }, doc) > 0);
 }
 
 /** @param {vscode.TextEditor} editor */

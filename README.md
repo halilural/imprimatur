@@ -27,6 +27,8 @@ staging or committing does not clear the marks.
 Setting `agentReview.showIn`: Markdown files are marked only in the preview by
 default (`preview`); `both` adds the editor marks and its ✓ Accept lenses,
 `editor` uses the editor only. Other file types are always marked in the editor.
+`agentReview.editorAlsoFor` (globs, e.g. `["**/todos/**"]`) adds the editor
+marks for matching Markdown files while `showIn` stays `preview`.
 
 The Markdown preview also gets thin marks over its scrollbar, like the editor's
 overview ruler: one colored tick
