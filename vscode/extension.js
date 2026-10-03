@@ -1,7 +1,7 @@
 // @ts-check
 // Shows an agent's edits in the editor like tracked changes, against the copy
-// the hook took in .claude/agent-review/baseline/. The agent's latest edit is
-// bright, earlier ones dim. Git is not consulted: marks stay until accepted.
+// the hook took in .claude/agent-review/baseline/. Every change looks the same,
+// whichever agent edit made it. Git is not consulted: marks stay until accepted.
 "use strict";
 const vscode = require("vscode");
 const fs = require("node:fs");
@@ -13,41 +13,41 @@ const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, historyEdits } = requ
 
 const color = (id) => new vscode.ThemeColor(id);
 const ruler = { overviewRulerLane: vscode.OverviewRulerLane.Left };
-/** One set of decoration types per layer: bright = latest agent edit, dim = earlier ones. @param {boolean} dim */
-const layer = (dim) => {
-  const c = (bright, earlier) => color(dim ? earlier : bright);
+/** Decoration types for agent changes. */
+const makeTypes = () => {
+  const c = (id) => color(id);
   return {
     added: vscode.window.createTextEditorDecorationType({
       isWholeLine: true,
-      backgroundColor: c("diffEditor.insertedLineBackground", "agentReview.earlierAddedBackground"),
+      backgroundColor: c("diffEditor.insertedLineBackground"),
       overviewRulerColor: color("editorOverviewRuler.addedForeground"),
       ...ruler,
     }),
     changed: vscode.window.createTextEditorDecorationType({
       isWholeLine: true,
-      backgroundColor: c("agentReview.changedLineBackground", "agentReview.earlierChangedBackground"),
+      backgroundColor: c("agentReview.changedLineBackground"),
       overviewRulerColor: color("editorOverviewRuler.modifiedForeground"),
       ...ruler,
     }),
     insertedText: vscode.window.createTextEditorDecorationType({
-      backgroundColor: c("diffEditor.insertedTextBackground", "agentReview.earlierInsertedTextBackground"),
+      backgroundColor: c("diffEditor.insertedTextBackground"),
     }),
     // Old text stays readable: plain text in a red box, no strike line.
     deletedText: vscode.window.createTextEditorDecorationType({
       before: {
-        color: c("agentReview.oldTextForeground", "agentReview.earlierOldTextForeground"),
+        color: c("agentReview.oldTextForeground"),
         backgroundColor: color("agentReview.oldTextBackground"),
         border: "1px solid rgba(248, 81, 73, 0.6)",
       },
     }),
     deletedBlock: vscode.window.createTextEditorDecorationType({
-      after: { color: c("agentReview.deletedForeground", "agentReview.earlierDeletedForeground"), margin: "0 0 0 1em" },
+      after: { color: c("agentReview.deletedForeground"), margin: "0 0 0 1em" },
       overviewRulerColor: color("editorOverviewRuler.deletedForeground"),
       ...ruler,
     }),
   };
 };
-const layers = { bright: layer(false), dim: layer(true) };
+const types = makeTypes();
 
 /** Git roots, normalized for comparison. @type {Set<string>} */
 const roots = new Set();
@@ -164,7 +164,7 @@ const codeLenses = {
       const start = Math.min(h.newStart < h.newEnd ? h.newStart : Math.max(h.marks[0].afterLine ?? 0, 0), doc.lineCount - 1);
       const end = Math.max(h.newEnd, start + 1);
       return new vscode.CodeLens(new vscode.Range(start, 0, start, 0), {
-        title: `$(check) Accept${h.fresh ? "" : " (earlier edit)"}`,
+        title: "$(check) Accept",
         command: "agentReview.acceptRange",
         arguments: [doc.uri.fsPath, start, end],
       });
@@ -262,17 +262,14 @@ function render(editor) {
   hunksByFile.set(doc.uri.fsPath, hunks);
   const last = doc.lineCount - 1;
   const lineAt = (n) => doc.lineAt(Math.min(Math.max(n, 0), last));
-  const empty = () => ({ added: [], changed: [], insertedText: [], deletedText: [], deletedBlock: [] });
-  /** @type {Record<"bright" | "dim", Record<string, vscode.DecorationOptions[]>>} */
-  const outs = { bright: empty(), dim: empty() };
+  /** @type {Record<string, vscode.DecorationOptions[]>} */
+  const out = { added: [], changed: [], insertedText: [], deletedText: [], deletedBlock: [] };
   for (const h of hunks)
     for (const m of h.marks) {
-      const out = outs[m.fresh ? "bright" : "dim"];
-      const tag = m.fresh ? " (latest edit)" : " (earlier edit)";
       if (m.kind === "added") out.added.push({ range: lineAt(m.line).range });
       else if (m.kind === "changed") {
         const line = lineAt(m.line);
-        const hover = new vscode.MarkdownString().appendText(`Before${tag}: `).appendCodeblock(m.oldText);
+        const hover = new vscode.MarkdownString().appendText("Before: ").appendCodeblock(m.oldText);
         out.changed.push({ range: line.range, hoverMessage: hover });
         for (const [s, e] of m.inserted) out.insertedText.push({ range: new vscode.Range(line.lineNumber, s, line.lineNumber, e) });
         for (const d of m.deleted)
@@ -285,22 +282,20 @@ function render(editor) {
         const where = m.afterLine < 0 ? " above" : "";
         out.deletedBlock.push({
           range: lineAt(m.afterLine).range,
-          hoverMessage: new vscode.MarkdownString().appendText(`Deleted${where}${tag}:`).appendCodeblock(m.oldLines.join("\n")),
+          hoverMessage: new vscode.MarkdownString().appendText(`Deleted${where}:`).appendCodeblock(m.oldLines.join("\n")),
           renderOptions: { after: { contentText: `⌫ ${n} line${n === 1 ? "" : "s"} deleted${where}` } },
         });
       }
     }
-  for (const name of /** @type {const} */ (["bright", "dim"]))
-    for (const [k, t] of Object.entries(layers[name])) editor.setDecorations(t, outs[name][k]);
+  for (const [k, t] of Object.entries(types)) editor.setDecorations(t, out[k]);
   if (editor === vscode.window.activeTextEditor) updateStatus(all);
 }
 
 /** @param {ReturnType<typeof review>} hunks */
 function updateStatus(hunks) {
   if (!hunks.length) return status.hide();
-  const fresh = hunks.filter((h) => h.fresh).length;
-  status.text = `$(diff) ${hunks.length} agent change${hunks.length === 1 ? "" : "s"} (${fresh} latest)`;
-  status.tooltip = "Agent changes to review. Bright: the agent's latest edit. Dim: earlier edits. Accept to clear.";
+  status.text = `$(diff) ${hunks.length} agent change${hunks.length === 1 ? "" : "s"}`;
+  status.tooltip = "Agent changes to review. Accept to clear.";
   status.show();
 }
 
@@ -361,8 +356,7 @@ function activate(ctx) {
   ctx.subscriptions.push(
     status,
     historyButton,
-    ...Object.values(layers.bright),
-    ...Object.values(layers.dim),
+    ...Object.values(types),
     vscode.workspace.registerTextDocumentContentProvider(SCHEME, { provideTextDocumentContent: historyContent }),
     vscode.commands.registerCommand("agentReview.showHistory", showHistory),
     vscode.commands.registerCommand("agentReview.openGraph", showGraph),

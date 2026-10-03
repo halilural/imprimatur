@@ -34,11 +34,10 @@
       const top = ((rect.top + window.scrollY) / total) * 100;
       const height = Math.max((rect.height / total) * 100, 0.4);
       const tick = document.createElement("div");
-      const earlier = el.classList.contains("agent-review-earlier");
-      tick.title = earlier ? "Earlier agent edit" : "Latest agent edit";
+      tick.title = "Agent change";
       tick.style.cssText =
         `position:absolute;right:2px;width:6px;top:${top}%;height:${height}%;min-height:2px;` +
-        `background:${kind[1]};opacity:${earlier ? 0.5 : 0.9};cursor:pointer;pointer-events:auto;`;
+        `background:${kind[1]};opacity:0.9;cursor:pointer;pointer-events:auto;`;
       tick.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation(); // the preview would otherwise jump the editor to this line

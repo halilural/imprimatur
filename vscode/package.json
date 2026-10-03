@@ -2,7 +2,7 @@
   "name": "agent-review",
   "displayName": "Agent Review",
   "description": "See an AI agent's edits in the editor like tracked changes until you accept them.",
-  "version": "0.11.1",
+  "version": "0.12.0",
   "publisher": "halilural",
   "license": "MIT",
   "engines": {
@@ -79,46 +79,6 @@
         }
       },
       {
-        "id": "agentReview.earlierAddedBackground",
-        "description": "Background of a line added in an earlier agent edit.",
-        "defaults": {
-          "dark": "#2ea0431f",
-          "light": "#1a7f3714",
-          "highContrast": "#2ea0432a",
-          "highContrastLight": "#1a7f371f"
-        }
-      },
-      {
-        "id": "agentReview.earlierChangedBackground",
-        "description": "Background of a line changed in an earlier agent edit.",
-        "defaults": {
-          "dark": "#1f6feb14",
-          "light": "#0969da0f",
-          "highContrast": "#1f6feb22",
-          "highContrastLight": "#0969da1a"
-        }
-      },
-      {
-        "id": "agentReview.earlierInsertedTextBackground",
-        "description": "New words from an earlier agent edit.",
-        "defaults": {
-          "dark": "#2ea04333",
-          "light": "#1a7f3726",
-          "highContrast": "#2ea04340",
-          "highContrastLight": "#1a7f3733"
-        }
-      },
-      {
-        "id": "agentReview.earlierDeletedForeground",
-        "description": "Deleted text from an earlier agent edit.",
-        "defaults": {
-          "dark": "#f8514980",
-          "light": "#cf222e80",
-          "highContrast": "#ff6a69a6",
-          "highContrastLight": "#a40e26a6"
-        }
-      },
-      {
         "id": "agentReview.oldTextForeground",
         "description": "Old text the agent replaced (struck through, kept readable).",
         "defaults": {
@@ -126,16 +86,6 @@
           "light": "#57606acc",
           "highContrast": "#ffffffcc",
           "highContrastLight": "#000000cc"
-        }
-      },
-      {
-        "id": "agentReview.earlierOldTextForeground",
-        "description": "Old text from an earlier agent edit.",
-        "defaults": {
-          "dark": "#c9d1d980",
-          "light": "#57606a80",
-          "highContrast": "#ffffff99",
-          "highContrastLight": "#00000099"
         }
       },
       {

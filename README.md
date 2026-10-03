@@ -9,7 +9,6 @@ staging or committing does not clear the marks.
   highlighted, the old one struck through in red next to it. When more than one
   word changed, the old sentence is struck through and the new one follows.
 - A deleted block shows a red marker on the line before it; hover to read it.
-- The agent's latest edit is bright, its earlier edits dim.
 - Marks in the overview ruler, a change count in the status bar.
 - **✓ Accept** above each change block in the editor (CodeLens) and on each
   changed block in the Markdown preview accepts that block; **Agent Review:
@@ -31,7 +30,7 @@ default (`preview`); `both` adds the editor marks and its ✓ Accept lenses,
 
 The Markdown preview also gets thin marks over its scrollbar, like the editor's
 overview ruler: one colored tick
-per change (green added, blue changed, red old or deleted; earlier edits dim),
+per change (green added, blue changed, red old or deleted),
 click a tick to jump there.
 
 Changed Mermaid flowcharts are colored in the preview like a visual diff: new
@@ -53,9 +52,8 @@ through where they were.
    - appends `{t, session, tool, prompt, before}` to
      `.claude/agent-review/history/<path>.jsonl`, a history of the agent's edits.
 2. The VS Code extension ([vscode/](vscode/)) diffs each open file against its
-   copy (line LCS, then word LCS inside changed lines), and against the text
-   before the latest edit (last history line) to tell latest (bright) from
-   earlier (dim).
+   copy (line LCS, then word LCS inside changed lines). Every change looks the
+   same, whichever agent edit made it; the edit history keeps the order.
 3. Accept writes the change at the cursor into the copy; Accept all deletes the
    copy. The history stays.
 
@@ -97,7 +95,6 @@ Requires Node 22+, git and VS Code 1.100+.
   (`sed -i *.md`) is missed.
 - Changes inside fenced code blocks (``` or ~~~) are not marked; the edit
   history still lists them.
-- Latest vs earlier is decided per line.
 - The preview works per block (no word marks there); a deleted table row is not
   shown in the preview.
 - Every difference between the copy and the file is marked, including your own
