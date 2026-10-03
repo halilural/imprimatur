@@ -66,13 +66,45 @@
       } catch {}
     }, 100);
   });
-  // Clicking ✓ Accept: remember where that block was, so the reload can go to the next change.
+  const MARKS = ["agent-review-added", "agent-review-changed", "agent-review-latest", "agent-review-earlier"];
+  /**
+   * Clear the accepted block right here, at once: the old-text boxes after the
+   * button and the marks on the block (or a table's rows). The file text does
+   * not change on accept, so every other button stays right and no reload is
+   * needed. Returns false when the preview must be re-rendered (a diagram).
+   */
+  function clearAccepted(a) {
+    if (a.closest?.(".agent-review-diagram") || !String(a.getAttribute?.("href") ?? "").includes("ui=1")) return false;
+    let el = a.nextElementSibling;
+    while (el && el.classList?.contains("agent-review-old")) {
+      const next = el.nextElementSibling;
+      el.remove();
+      el = next;
+    }
+    if (el?.tagName === "TABLE") el.querySelectorAll("tr").forEach((tr) => tr.classList.remove(...MARKS));
+    else if (el && MARKS.some((c) => el.classList?.contains(c))) el.classList.remove(...MARKS);
+    // Hide now, remove later: the link must still open (its click goes to the extension).
+    a.style.visibility = "hidden";
+    setTimeout(() => a.remove(), 500);
+    return true;
+  }
+
+  // Clicking ✓ Accept: clear the block now and move on to the next change. For a
+  // diagram, remember where it was, so the reload can go to the next change.
   document.addEventListener(
     "click",
     (e) => {
       const a = e.target?.closest?.("a.agent-review-accept");
       if (!a) return;
       const y = a.getBoundingClientRect().top + window.scrollY;
+      if (clearAccepted(a)) {
+        draw();
+        const next = [...document.querySelectorAll(".agent-review-added, .agent-review-changed, .agent-review-old, .agent-review-diagram")].find(
+          (el) => el.getBoundingClientRect().top + window.scrollY >= y - 5,
+        );
+        next?.scrollIntoView({ block: "center", behavior: "smooth" });
+        return; // the link still goes to the extension, which writes the copy
+      }
       try {
         store?.setItem(KEY, JSON.stringify({ y: window.scrollY, next: y, t: Date.now() }));
       } catch {}

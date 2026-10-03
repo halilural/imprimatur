@@ -331,11 +331,14 @@ function renderAll() {
 
 /** @type {NodeJS.Timeout | undefined} */
 let previewTimer;
+/** An Accept clicked in the preview already updated it there: no reload (it would jump). */
+let skipPreviewUntil = 0;
 /**
  * A preview refresh reloads the whole page (and restarts other preview scripts,
  * e.g. Mermaid renderers), so do it once, after things settle.
  */
 function refreshPreview() {
+  if (Date.now() < skipPreviewUntil) return;
   clearTimeout(previewTimer);
   previewTimer = setTimeout(() => vscode.commands.executeCommand("markdown.preview.refresh").then(undefined, () => {}), 700);
 }
@@ -394,7 +397,10 @@ function activate(ctx) {
         if (uri.path !== "/accept") return;
         const q = new URLSearchParams(uri.query);
         const file = q.get("file");
-        if (file) acceptRange(file, Number(q.get("start")), Number(q.get("end")));
+        if (file) {
+          if (q.get("ui") === "1") skipPreviewUntil = Date.now() + 3000;
+          acceptRange(file, Number(q.get("start")), Number(q.get("end")));
+        }
       },
     }),
   );
@@ -473,11 +479,12 @@ function activate(ctx) {
         const doc = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
         return hunksOf(uri.fsPath, doc ? doc.getText() : fs.readFileSync(uri.fsPath, "utf8"));
         },
-        (env, start, end) => {
+        (env, start, end, rerender) => {
           /** @type {vscode.Uri | undefined} */
           const uri = env?.currentDocument;
           if (uri?.scheme !== "file") return undefined;
-          const q = new URLSearchParams({ file: uri.fsPath, start: String(start), end: String(end) });
+          // ui=1: the preview clears the block itself, no reload needed (a diagram needs one).
+          const q = new URLSearchParams({ file: uri.fsPath, start: String(start), end: String(end), ui: rerender ? "0" : "1" });
           return `${vscode.env.uriScheme}://${ctx.extension.id}/accept?${q}`;
         },
         (env) => {

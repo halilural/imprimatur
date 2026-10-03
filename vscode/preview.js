@@ -81,7 +81,7 @@ function markdownItPlugin(md, getHunks, link, getBase) {
       // a broken copy must never break the preview
     }
     if (!hunks.length && !base) return render(tokens, options, env);
-    const opts = { fmt: (line) => md.renderInline(line, INLINE), link: link && ((start, end) => link(env, start, end)), base };
+    const opts = { fmt: (line) => md.renderInline(line, INLINE), link: link && ((start, end, rerender) => link(env, start, end, rerender)), base };
     let marked = tokens;
     try {
       marked = annotate(tokens, hunks, opts);
@@ -106,7 +106,8 @@ function diagramDiff(t, opts, Token, html) {
   if (!d.lines.length) return undefined;
   const copy = Object.assign(new Token(t.type, t.tag, t.nesting), t);
   copy.content = `${t.content.replace(/\s*$/, "")}\n${d.lines.join("\n")}\n`;
-  const href = t.map && opts.link?.(t.map[0], t.map[1]);
+  // A diagram's colors live in the rendered SVG: its accept needs a real re-render.
+  const href = t.map && opts.link?.(t.map[0], t.map[1], true);
   const button = href ? `<a class="agent-review-accept" href="${href}" title="Accept this diagram's changes">✓ Accept</a>` : "";
   const legend = html(
     `<div class="agent-review-diagram">${button}Agent changes in this diagram: ` +

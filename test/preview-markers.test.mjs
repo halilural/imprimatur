@@ -89,3 +89,34 @@ test("after an accept, the reload goes to the next change below it", () => {
   vm.runInNewContext(src, ctx(after));
   assert.equal(after.els[0].scrolled, true);
 });
+
+test("accept in the preview clears the block at once, no reload, and moves to the next change", () => {
+  const src = fs.readFileSync(path.resolve(import.meta.dirname, "../vscode/preview-markers.js"), "utf8");
+  const cls = (names) => {
+    const set = new Set(names);
+    return { contains: (c) => set.has(c), remove: (...cs) => cs.forEach((c) => set.delete(c)), has: (c) => set.has(c) };
+  };
+  const block = { classList: cls(["agent-review-changed", "agent-review-latest"]), getBoundingClientRect: () => ({ top: 300, height: 20 }) };
+  const old = { classList: cls(["agent-review-old"]), getBoundingClientRect: () => ({ top: 280, height: 20 }) };
+  const next = { classList: cls(["agent-review-added"]), getBoundingClientRect: () => ({ top: 600, height: 20 }), scrollIntoView() { this.scrolled = true; } };
+  const link = {
+    getAttribute: () => "vscode://x/accept?start=1&end=2&ui=1",
+    getBoundingClientRect: () => ({ top: 270 }),
+    closest: (sel) => (sel === "a.agent-review-accept" ? link : null),
+    nextElementSibling: old,
+    style: {},
+    remove() { this.removed = true; },
+  };
+  old.nextElementSibling = block;
+  old.remove = () => (old.removed = true);
+  const dom = fakeDom([]);
+  const live = () => [old, block, next].filter((e) => !e.removed && [...["agent-review-added", "agent-review-changed", "agent-review-old"]].some((c) => e.classList.contains(c)));
+  dom.document.querySelectorAll = () => live();
+  vm.runInNewContext(src, { ...dom, setTimeout: (f) => f(), clearTimeout() {} });
+  dom.document.listeners.click({ target: link });
+  assert.equal(old.removed, true);
+  assert.equal(block.classList.has("agent-review-changed"), false);
+  assert.equal(link.removed, true);
+  assert.equal(next.scrolled, true);
+  assert.equal(dom.storage["agentReview.scroll"], undefined); // no reload expected, nothing saved for one
+});
