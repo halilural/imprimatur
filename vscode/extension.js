@@ -160,15 +160,27 @@ const codeLenses = {
   provideCodeLenses(doc) {
     // CodeLens belongs to the document, not the editor: hide while it is in a diff tab.
     if (doc.uri.scheme !== "file" || diffTabUris().has(doc.uri.toString()) || !marksInEditor(doc)) return [];
-    return hunksFor(doc).map((h) => {
+    const lenses = [];
+    for (const h of hunksFor(doc)) {
       const start = Math.min(h.newStart < h.newEnd ? h.newStart : Math.max(h.marks[0].afterLine ?? 0, 0), doc.lineCount - 1);
       const end = Math.max(h.newEnd, start + 1);
-      return new vscode.CodeLens(new vscode.Range(start, 0, start, 0), {
+      lenses.push(new vscode.CodeLens(new vscode.Range(start, 0, start, 0), {
         title: "$(check) Accept",
         command: "agentReview.acceptRange",
         arguments: [doc.uri.fsPath, start, end],
-      });
-    });
+      }));
+      // The editor cannot insert a real line: the old sentence sits above the new one as a lens.
+      for (const m of h.marks)
+        if (m.kind === "changed" && m.whole) {
+          const old = m.oldText.trim();
+          lenses.push(new vscode.CodeLens(new vscode.Range(m.line, 0, m.line, 0), {
+            title: `− ${old.length > 200 ? `${old.slice(0, 199)}…` : old}`,
+            tooltip: `Before: ${old}`,
+            command: "",
+          }));
+        }
+    }
+    return lenses;
   },
 };
 
@@ -276,8 +288,10 @@ function render(editor) {
         const hover = new vscode.MarkdownString().appendText("Before: ").appendCodeblock(m.oldText);
         out.changed.push({ range: line.range, hoverMessage: hover });
         for (const [s, e] of m.inserted) out.insertedText.push({ range: new vscode.Range(line.lineNumber, s, line.lineNumber, e) });
-        for (const d of m.deleted)
-          out.deletedText.push({
+        // A rewritten sentence's old text goes above the line (CodeLens); a single word stays inline.
+        if (!m.whole)
+          for (const d of m.deleted)
+            out.deletedText.push({
             range: new vscode.Range(line.lineNumber, d.at, line.lineNumber, d.at),
             renderOptions: { before: { contentText: keepSpaces(d.text) } },
           });

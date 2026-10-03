@@ -90,7 +90,7 @@ function lineOrWordDiff(oldLine, newLine) {
   if (added <= 1 && removed <= 1) return w;
   // Old sentence first, struck through, then the new one (after the indent).
   const at = newLine.length - newLine.trimStart().length;
-  return { inserted: [[at, newLine.length]], deleted: [{ at, text: `${oldLine.trim()} ` }] };
+  return { inserted: [[at, newLine.length]], deleted: [{ at, text: `${oldLine.trim()} ` }], whole: true };
 }
 
 /**

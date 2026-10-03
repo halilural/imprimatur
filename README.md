@@ -6,8 +6,9 @@ staging or committing does not clear the marks.
 
 - Added lines get a green background.
 - A changed line where only one word changed marks that word: the new word
-  highlighted, the old one struck through in red next to it. When more than one
-  word changed, the old sentence is struck through and the new one follows.
+  highlighted, the old one in a red box next to it. When more than one word
+  changed, the old sentence is shown above the line (a CodeLens: the editor API
+  cannot insert a real line) and the new line is highlighted.
 - A deleted block shows a red marker on the line before it; hover to read it.
 - Marks in the overview ruler, a change count in the status bar.
 - **✓ Accept** above each change block in the editor (CodeLens) and on each

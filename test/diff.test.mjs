@@ -81,7 +81,7 @@ test("one word changed: word marks; several words: whole line", () => {
   });
   const oldL = "7. Clinician side: what triggers an alert, and where is it stored?";
   const newL = "7. Alerts: what does the device flag, and who sets the threshold?";
-  assert.deepEqual(lineOrWordDiff(oldL, newL), { inserted: [[0, newL.length]], deleted: [{ at: 0, text: `${oldL} ` }] });
+  assert.deepEqual(lineOrWordDiff(oldL, newL), { inserted: [[0, newL.length]], deleted: [{ at: 0, text: `${oldL} ` }], whole: true });
   // indented: old sentence goes after the indent
   assert.deepEqual(lineOrWordDiff("  a b c", "  x y z").deleted, [{ at: 2, text: "a b c " }]);
 });
