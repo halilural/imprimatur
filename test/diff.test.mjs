@@ -129,3 +129,48 @@ test("adjacent list items (one hunk): accepting one line leaves its neighbours",
   assert.equal(copy, "- a\n- B\n- c\n");
   assert.deepEqual(diff(copy, "- A\n- B\n- C\n").flatMap((h) => h.marks.map((m) => m.line)), [0, 2]);
 });
+
+test("accept groups: a new table is one unit, a changed cell is its own line, list items stay apart", () => {
+  const { acceptGroups, diff } = createRequire(import.meta.url)("../vscode/diff.js");
+  const base = "intro\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n- t1\n";
+  const cur = "intro\n\n| a | b |\n| - | - |\n| 1 | 3 |\n\nNew table:\n\n| x | y |\n| - | - |\n| 5 | 6 |\n| 7 | 8 |\n\n- t1\n- t2\n- t3\n> q1\n> q2\n";
+  const groups = acceptGroups(cur, diff(base, cur));
+  assert.deepEqual(groups, [
+    [4, 5], // changed cell row: just that line
+    [6, 7], // "New table:" paragraph
+    [8, 12], // the whole new table
+    [14, 15], // list item t2
+    [15, 16], // list item t3
+    [16, 18], // the new quote
+  ]);
+});
+
+test("accept groups from parser blocks: every new block type is one unit", async () => {
+  const req = createRequire(import.meta.url);
+  const { acceptGroups, diff } = req("../vscode/diff.js");
+  const { markdownBlocks } = req("../vscode/preview.js");
+  const md = new (req("markdown-it"))({ html: true });
+  const base = "# Doc\n\nkept\n\n| a |\n| - |\n| 1 |\n";
+  const cur = [
+    "# Doc", "", "kept", "", "| a |", "| - |", "| 2 |", "", // 6: changed cell row
+    "## New heading", "", // 8
+    "A new paragraph", "on two lines.", "", // 10-11
+    "> a quote", "> - with a list", "", // 13-14
+    "- item one", "  continued", "- item two", "", // 16-17, 18
+    "```js", "code()", "```", "", // 20-22 (fence: not marked, so no group)
+    "<details>", "<summary>x</summary>", "</details>", "", // 24-26
+    "---", // 28
+  ].join("\n") + "\n";
+  const groups = acceptGroups(cur, diff(base, cur), markdownBlocks(md, cur));
+  assert.deepEqual(groups, [
+    [6, 7], // changed table cell: its row only
+    [8, 9], // new heading
+    [10, 12], // new paragraph, both lines
+    [13, 15], // new quote with its list
+    [16, 18], // new list item with its continuation
+    [18, 19], // the next list item on its own
+    [20, 23], // new fenced code block (the extension passes code-filtered hunks, so it gets none)
+    [24, 27], // new HTML block
+    [28, 29], // new thematic break
+  ]);
+});

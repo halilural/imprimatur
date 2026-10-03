@@ -6,8 +6,8 @@
 const vscode = require("vscode");
 const fs = require("node:fs");
 const path = require("node:path");
-const { review, acceptHunk, acceptLines } = require("./diff.js");
-const { markdownItPlugin } = require("./preview.js");
+const { review, acceptHunk, acceptLines, acceptGroups } = require("./diff.js");
+const { markdownItPlugin, markdownBlocks } = require("./preview.js");
 const { openGraph, refreshGraph } = require("./graphView.js");
 const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, historyEdits } = require("./review-state.js");
 
@@ -54,6 +54,8 @@ const roots = new Set();
 /** @type {Map<string, ReturnType<typeof review>>} hunks by document path */
 const hunksByFile = new Map();
 let status = /** @type {vscode.StatusBarItem} */ (/** @type {unknown} */ (undefined));
+/** The preview's markdown-it, also used to find Markdown blocks for Accept units. */
+let markdownIt;
 /** "Agent Review" output channel: what Accept links did, for troubleshooting. */
 let log = /** @type {vscode.LogOutputChannel} */ (/** @type {unknown} */ (undefined));
 let historyButton = /** @type {vscode.StatusBarItem} */ (/** @type {unknown} */ (undefined));
@@ -161,20 +163,19 @@ const codeLenses = {
     // CodeLens belongs to the document, not the editor: hide while it is in a diff tab.
     if (doc.uri.scheme !== "file" || diffTabUris().has(doc.uri.toString()) || !marksInEditor(doc)) return [];
     const lenses = [];
-    const accepted = new Set();
-    for (const h of hunksFor(doc)) {
-      // One Accept per changed or added line (a deletion: on the line before it). A hunk can be
-      // many lines, e.g. ten list items with no blank line between them: accept them one by one.
-      for (const m of h.marks) {
-        const line = Math.min(Math.max(m.kind === "deleted" ? m.afterLine : m.line, 0), doc.lineCount - 1);
-        if (accepted.has(line)) continue;
-        accepted.add(line);
-        lenses.push(new vscode.CodeLens(new vscode.Range(line, 0, line, 0), {
-          title: "$(check) Accept",
-          command: "agentReview.acceptRange",
-          arguments: [doc.uri.fsPath, line, line + 1],
-        }));
-      }
+    const hunks = hunksFor(doc);
+    // One Accept per Markdown unit: a changed line alone, a newly added table or quote whole,
+    // list items one by one (acceptGroups). Not per hunk: ten list items can be one hunk.
+    const blocks = markdownIt && doc.languageId === "markdown" ? markdownBlocks(markdownIt, doc.getText()) : undefined;
+    for (const [start, end] of acceptGroups(doc.getText(), hunks, blocks)) {
+      const line = Math.min(start, doc.lineCount - 1);
+      lenses.push(new vscode.CodeLens(new vscode.Range(line, 0, line, 0), {
+        title: end - start > 1 ? `$(check) Accept ${end - start} lines` : "$(check) Accept",
+        command: "agentReview.acceptRange",
+        arguments: [doc.uri.fsPath, start, end],
+      }));
+    }
+    for (const h of hunks) {
       // The editor cannot insert a real line: the old sentence sits above the new one as a lens.
       for (const m of h.marks)
         if (m.kind === "changed" && m.whole) {
@@ -454,10 +455,14 @@ function activate(ctx) {
   );
   renderAll();
   updateHistoryButton();
+  // Load the markdown extension's plugins now, so Accept units use its parser before any preview opens.
+  vscode.commands.executeCommand("markdown.api.render", "").then(undefined, () => {});
   // Markdown preview: the built-in markdown extension calls this with its markdown-it.
   return {
-    extendMarkdownIt: (md) =>
-      markdownItPlugin(
+    extendMarkdownIt: (md) => {
+      markdownIt = md;
+      codeLensChanged.fire();
+      return markdownItPlugin(
         md,
         (env) => {
         /** @type {vscode.Uri | undefined} */
@@ -483,7 +488,8 @@ function activate(ctx) {
           const copy = copyPath(uri.fsPath);
           return copy && fs.existsSync(copy) ? fs.readFileSync(copy, "utf8") : undefined;
         },
-      ),
+      );
+    },
   };
 }
 

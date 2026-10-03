@@ -251,4 +251,87 @@ function acceptLines(oldText, newText, start, end) {
   return out.join("\n");
 }
 
-module.exports = { diff, wordDiff, lineOrWordDiff, acceptHunk, acceptLines, review, codeLines };
+/**
+ * What one ✓ Accept covers, as new-text line ranges [start, end). A changed
+ * line is its own group (a table cell update stays per line). Runs of ADDED
+ * lines join along Markdown blocks: table rows into one table, quote lines into
+ * one quote, a paragraph's or list item's continuation lines into it; list
+ * items and headings stay apart. A deletion goes with the line before it.
+ * With `blocks` (Markdown block line ranges from a real parser, see
+ * markdownBlocks): a block whose every non-blank line is added is one unit,
+ * whatever its type (table, quote, list item, code, HTML, paragraph, heading,
+ * rule); the rest goes line by line. Without them, the line heuristics below.
+ * @param {string} text current text @param {Hunk[]} hunks
+ * @param {Array<{start: number, end: number}>} [blocks]
+ * @returns {Array<[number, number]>}
+ */
+function acceptGroups(text, hunks, blocks) {
+  if (blocks) return groupsByBlocks(text, hunks, blocks);
+  const b = lines(text);
+  const isTable = (l) => /^\s*\|/.test(l);
+  const isQuote = (l) => /^\s*>/.test(l);
+  const startsBlock = (l) => /^\s*(?:[-*+]\s|\d+[.)]\s|#{1,6}\s|```|~~~)/.test(l) || l.trim() === "";
+  const joins = (prev, next) =>
+    (isTable(prev) && isTable(next)) || (isQuote(prev) && isQuote(next)) || (!isTable(next) && !isQuote(next) && !startsBlock(next));
+  const added = new Set();
+  /** @type {Array<[number, number]>} */
+  const groups = [];
+  for (const h of hunks) for (const m of h.marks) if (m.kind === "added") added.add(m.line);
+  const seen = new Set();
+  for (const h of hunks)
+    for (const m of h.marks) {
+      if (m.kind === "deleted") {
+        const at = Math.max(m.afterLine, 0);
+        if (!seen.has(at)) groups.push([at, at + 1]);
+        seen.add(at);
+      } else if (m.kind === "changed") {
+        if (!seen.has(m.line)) groups.push([m.line, m.line + 1]);
+        seen.add(m.line);
+      } else if (!seen.has(m.line) && b[m.line].trim() !== "") {
+        // (an added blank line goes along with the block next to it, see acceptLines)
+        let end = m.line + 1;
+        while (added.has(end) && joins(b[end - 1], b[end])) end++;
+        for (let k = m.line; k < end; k++) seen.add(k);
+        groups.push([m.line, end]);
+      }
+    }
+  return groups.sort((x, y) => x[0] - y[0]);
+}
+
+/** acceptGroups with parser blocks: new blocks whole, everything else per line. */
+function groupsByBlocks(text, hunks, blocks) {
+  const b = lines(text);
+  const added = new Set();
+  for (const h of hunks) for (const m of h.marks) if (m.kind === "added") added.add(m.line);
+  const taken = new Set();
+  /** @type {Array<[number, number]>} */
+  const groups = [];
+  // Biggest first at each start: a new quote or list item wins over its paragraphs.
+  const sorted = [...blocks].sort((x, y) => x.start - y.start || y.end - x.end);
+  for (const { start, end: rawEnd } of sorted) {
+    let end = rawEnd;
+    while (end > start && (b[end - 1] ?? "").trim() === "") end--;
+    if (end <= start) continue;
+    let all = true;
+    let any = false;
+    for (let k = start; k < end; k++) {
+      if (taken.has(k)) all = false;
+      if ((b[k] ?? "").trim() === "") continue;
+      if (added.has(k)) any = true;
+      else all = false;
+    }
+    if (!all || !any) continue;
+    for (let k = start; k < end; k++) taken.add(k);
+    groups.push([start, end]);
+  }
+  for (const h of hunks)
+    for (const m of h.marks) {
+      const at = m.kind === "deleted" ? Math.max(m.afterLine, 0) : m.line;
+      if (taken.has(at) || (m.kind === "added" && (b[at] ?? "").trim() === "")) continue;
+      taken.add(at);
+      groups.push([at, at + 1]);
+    }
+  return groups.sort((x, y) => x[0] - y[0]);
+}
+
+module.exports = { diff, wordDiff, lineOrWordDiff, acceptHunk, acceptLines, acceptGroups, review, codeLines };

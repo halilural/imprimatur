@@ -88,3 +88,10 @@ test("a changed Mermaid diagram gets color lines and a legend, the file text sta
   assert.match(html, /linkStyle 0 stroke:#d29922/);
   assert.doesNotMatch(tokens.find((t) => t.type === "fence").content, /arAdded/); // cached token untouched
 });
+
+test("a table with marked rows gets one Accept above it", () => {
+  const md = markdownItPlugin(new MarkdownIt({ html: true }), () => review("| a |\n| - |\n| 1 |\n", undefined, "| a |\n| - |\n| 2 |\n| 3 |\n"), (_e, s, e) => `vscode://x/accept?start=${s}&end=${e}`);
+  const html = md.renderer.render(md.parse("| a |\n| - |\n| 2 |\n| 3 |\n", {}), md.options, {});
+  assert.match(html, /✓ Accept table<\/a>\s*<table>/);
+  assert.equal((html.match(/agent-review-accept/g) || []).length, 1);
+});

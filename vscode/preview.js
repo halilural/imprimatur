@@ -126,6 +126,15 @@ function annotate(tokens, hunks, opts) {
     replaced.set(i, dd.copy);
     before.set(i, [dd.legend]);
   });
+  // A table cannot hold a button: one Accept above a table with marked rows.
+  tokens.forEach((t, i) => {
+    if (t.type !== "table_open" || !t.map || !opts?.link) return;
+    let j = i;
+    while (j < tokens.length && tokens[j].type !== "table_close") j++;
+    const marked = idx.some((x, k) => x > i && x < j && plan[k].cls);
+    const href = marked && opts.link(t.map[0], t.map[1]);
+    if (href) before.set(i, [...(before.get(i) ?? []), html(`<a class="agent-review-accept" href="${href}" title="Accept this table's changes">✓ Accept table</a>`)]);
+  });
   idx.forEach((i, k) => {
     const p = plan[k];
     if (p.cls) {
@@ -149,4 +158,19 @@ function annotate(tokens, hunks, opts) {
   return tokens.flatMap((t, i) => [...(before.get(i) ?? []), replaced.get(i) ?? t, ...(after.get(i) ?? [])]);
 }
 
-module.exports = { planBlocks, markdownItPlugin, annotate };
+/** Block types that are one unit of review when all new (CommonMark leaf and container blocks, GFM tables). */
+const UNITS = new Set(["table_open", "blockquote_open", "list_item_open", "fence", "code_block", "html_block", "paragraph_open", "heading_open", "hr"]);
+
+/**
+ * Line ranges of the Markdown blocks in a text, from the same markdown-it the
+ * preview uses. Lists are not units: their items are.
+ * @param {any} md markdown-it instance @param {string} text
+ */
+function markdownBlocks(md, text) {
+  return md
+    .parse(text, {})
+    .filter((t) => t.map && UNITS.has(t.type))
+    .map((t) => ({ start: t.map[0], end: t.map[1] }));
+}
+
+module.exports = { planBlocks, markdownItPlugin, annotate, markdownBlocks };

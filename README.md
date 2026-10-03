@@ -11,7 +11,9 @@ staging or committing does not clear the marks.
   cannot insert a real line) and the new line is highlighted.
 - A deleted block shows a red marker on the line before it; hover to read it.
 - Marks in the overview ruler, a change count in the status bar.
-- **✓ Accept** above each change block in the editor (CodeLens) and on each
+- **✓ Accept** in the editor (CodeLens) per Markdown unit: a block that is all
+  new (table, quote, list item, paragraph, heading, code, HTML, rule) is one
+  unit, a changed line (e.g. a table cell) is its own; and on each
   changed block in the Markdown preview accepts that block; **Agent Review:
   Accept Agent Change at Cursor** and **Accept All Agent Changes in File** do
   the same from the command palette. After an accept the view moves to the
