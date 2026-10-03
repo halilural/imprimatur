@@ -161,14 +161,20 @@ const codeLenses = {
     // CodeLens belongs to the document, not the editor: hide while it is in a diff tab.
     if (doc.uri.scheme !== "file" || diffTabUris().has(doc.uri.toString()) || !marksInEditor(doc)) return [];
     const lenses = [];
+    const accepted = new Set();
     for (const h of hunksFor(doc)) {
-      const start = Math.min(h.newStart < h.newEnd ? h.newStart : Math.max(h.marks[0].afterLine ?? 0, 0), doc.lineCount - 1);
-      const end = Math.max(h.newEnd, start + 1);
-      lenses.push(new vscode.CodeLens(new vscode.Range(start, 0, start, 0), {
-        title: "$(check) Accept",
-        command: "agentReview.acceptRange",
-        arguments: [doc.uri.fsPath, start, end],
-      }));
+      // One Accept per changed or added line (a deletion: on the line before it). A hunk can be
+      // many lines, e.g. ten list items with no blank line between them: accept them one by one.
+      for (const m of h.marks) {
+        const line = Math.min(Math.max(m.kind === "deleted" ? m.afterLine : m.line, 0), doc.lineCount - 1);
+        if (accepted.has(line)) continue;
+        accepted.add(line);
+        lenses.push(new vscode.CodeLens(new vscode.Range(line, 0, line, 0), {
+          title: "$(check) Accept",
+          command: "agentReview.acceptRange",
+          arguments: [doc.uri.fsPath, line, line + 1],
+        }));
+      }
       // The editor cannot insert a real line: the old sentence sits above the new one as a lens.
       for (const m of h.marks)
         if (m.kind === "changed" && m.whole) {

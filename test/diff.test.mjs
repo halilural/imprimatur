@@ -122,3 +122,10 @@ test("accepting at a deletion removes only that deletion", () => {
   const cur = "a\nb\n\nc\nd\n";
   assert.equal(acceptLines(base, cur, 0, 1), "a\nb\n\nc\nalso gone\nd\n");
 });
+
+test("adjacent list items (one hunk): accepting one line leaves its neighbours", () => {
+  const { acceptLines, diff } = createRequire(import.meta.url)("../vscode/diff.js");
+  const copy = acceptLines("- a\n- b\n- c\n", "- A\n- B\n- C\n", 1, 2);
+  assert.equal(copy, "- a\n- B\n- c\n");
+  assert.deepEqual(diff(copy, "- A\n- B\n- C\n").flatMap((h) => h.marks.map((m) => m.line)), [0, 2]);
+});
