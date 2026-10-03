@@ -101,6 +101,11 @@ function lineOrWordDiff(oldLine, newLine) {
  * @typedef {{oldStart: number, oldEnd: number, newStart: number, newEnd: number, marks: Mark[]}} Hunk
  */
 
+// An ordered list's item number is not compared: deleting item 2 renumbers the
+// rest, and that renumbering is not a change of its own (it stays in the text).
+/** @param {string} line */
+const listKey = (line) => line.replace(/^(\s*)\d+([.)])(?=\s)/, "$11$2");
+
 // CRLF and LF compare equal: an EOL switch is not an agent change.
 /** @param {string} text */
 const lines = (text) => text.split(/\r?\n/);
@@ -131,7 +136,7 @@ function diff(oldText, newText) {
     hunks.push({ oldStart: oi, oldEnd: oi + dels.length, newStart: ni, newEnd: ni + adds.length, marks });
     dels = []; adds = [];
   };
-  for (const op of lcsScript(a, b)) {
+  for (const op of lcsScript(a.map(listKey), b.map(listKey))) {
     if (op[0] === "-") dels.push(op[1]);
     else if (op[0] === "+") adds.push(op[1]);
     else { flush(); oi = op[1] + 1; ni = op[2] + 1; }
@@ -238,7 +243,7 @@ function acceptLines(oldText, newText, start, end) {
     dels = [];
     adds = [];
   };
-  for (const op of lcsScript(a, b)) {
+  for (const op of lcsScript(a.map(listKey), b.map(listKey))) {
     if (op[0] === "-") dels.push(op[1]);
     else if (op[0] === "+") adds.push(op[1]);
     else {

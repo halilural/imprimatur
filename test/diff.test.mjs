@@ -188,3 +188,12 @@ test("rows added to an existing table are one accept; items added to a list stay
     [8, 9], // list item three
   ]);
 });
+
+test("a deleted list item does not mark the renumbered items after it", () => {
+  const { diff, acceptLines } = createRequire(import.meta.url)("../vscode/diff.js");
+  const base = "1. Edge\n2. Auth\n3. Envs\n4. DB\n";
+  const cur = "1. Edge\n2. Envs\n3. DB\n";
+  const marks = diff(base, cur).flatMap((h) => h.marks.map((m) => [m.kind, m.kind === "deleted" ? m.oldLines : m.line]));
+  assert.deepEqual(marks, [["deleted", ["2. Auth"]]]);
+  assert.deepEqual(diff(acceptLines(base, cur, 0, 1), cur), []); // accepting the deletion clears it
+});

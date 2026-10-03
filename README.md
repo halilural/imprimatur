@@ -100,6 +100,8 @@ Requires Node 22+, git and VS Code 1.100+.
 - No marks in diff tabs (e.g. Working Tree): git already colors those.
 - Bash edits are seen only for files named in the command; a glob
   (`sed -i *.md`) is missed.
+- Ordered list numbers are not compared: deleting an item does not mark the
+  renumbered items after it.
 - Changes inside fenced code blocks (``` or ~~~) are not marked; the edit
   history still lists them.
 - The preview works per block (no word marks there); a deleted table row is not
