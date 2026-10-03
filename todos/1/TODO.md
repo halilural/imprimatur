@@ -1,6 +1,6 @@
 # #1 · Publish Imprimatur as a VS Code extension (Marketplace + Open VSX)
 
-[#1](https://github.com/halilural/imprimatur/issues/1) · moved from groundwork#34 (2026-10-03)
+[#1](https://github.com/halilural/imprimatur/issues/1) · Part of [#2](../2/TODO.md) · moved from groundwork#34 (2026-10-03)
 
 ## Status
 
