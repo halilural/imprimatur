@@ -491,7 +491,10 @@ function activate(ctx) {
           /** @type {vscode.Uri | undefined} */
           const uri = env?.currentDocument;
           if (uri?.scheme !== "file") return undefined;
-          if (vscode.workspace.getConfiguration("agentReview", uri).get("showIn", "preview") === "editor") return undefined;
+          const config = vscode.workspace.getConfiguration("agentReview", uri);
+          if (config.get("showIn", "preview") === "editor") return undefined;
+          // Off by default: changing a Mermaid block's source races other Mermaid preview extensions.
+          if (!config.get("mermaidDiff", false)) return undefined;
           const copy = copyPath(uri.fsPath);
           return copy && fs.existsSync(copy) ? fs.readFileSync(copy, "utf8") : undefined;
         },

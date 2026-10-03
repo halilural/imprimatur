@@ -38,7 +38,9 @@ overview ruler: one colored tick
 per change (green added, blue changed, red old or deleted),
 click a tick to jump there.
 
-Changed Mermaid flowcharts are colored in the preview like a visual diff: new
+With `agentReview.mermaidDiff` on (off by default; two Mermaid preview
+extensions in one window can then fail to render), changed Mermaid flowcharts
+are colored in the preview like a visual diff: new
 nodes and arrows green, changed labels orange, removed ones red and dashed
 (kept visible), with a legend and an Accept button above the diagram.
 

@@ -2,7 +2,7 @@
   "name": "agent-review",
   "displayName": "Agent Review",
   "description": "See an AI agent's edits in the editor like tracked changes until you accept them.",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "publisher": "halilural",
   "license": "MIT",
   "engines": {
@@ -136,6 +136,11 @@
           },
           "default": [],
           "markdownDescription": "Glob patterns of Markdown files that also get marks in the editor when `#agentReview.showIn#` is `preview`, e.g. `**/todos/**`."
+        },
+        "agentReview.mermaidDiff": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Color what the agent changed inside Mermaid flowcharts in the preview (adds style lines to the rendered diagram). Off by default: with two Mermaid preview extensions installed (e.g. Mermaid Chart and Markdown Mermaid Zoom) the diagrams can fail to render."
         }
       }
     },
