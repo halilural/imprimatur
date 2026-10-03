@@ -12,7 +12,7 @@ const { review } = req("../vscode/diff.js");
 const hook = path.resolve(import.meta.dirname, "../hooks/baseline.mjs");
 
 function repo() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-review-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-"));
   const git = (...a) => execFileSync("git", a, { cwd: dir, stdio: "ignore" });
   git("init", "-q", "-b", "main");
   git("config", "user.email", "t@t");
@@ -26,8 +26,8 @@ function run(dir, file, ...exts) {
   return r.status;
 }
 
-const copy = (dir, file) => path.join(dir, ".claude/agent-review/baseline", file);
-const log = (dir, file) => path.join(dir, ".claude/agent-review/history", `${file}.jsonl`);
+const copy = (dir, file) => path.join(dir, ".claude/imprimatur/baseline", file);
+const log = (dir, file) => path.join(dir, ".claude/imprimatur/history", `${file}.jsonl`);
 const read = (p) => fs.readFileSync(p, "utf8");
 const history = (dir, file) => read(log(dir, file)).trimEnd().split("\n").map((l) => JSON.parse(l));
 
@@ -82,7 +82,7 @@ test("bad input never blocks the tool", () => {
 });
 
 test("no git repo: copies go to the project dir", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-review-nogit-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-nogit-"));
   fs.writeFileSync(path.join(dir, "a.md"), "x\n");
   assert.equal(run(dir, "a.md"), 0);
   assert.equal(read(copy(dir, "a.md")), "x\n");
@@ -149,7 +149,7 @@ test("history reads like a commit log: newest first, each edit's before and afte
 
 test("history: a duplicate row from a parallel second hook counts once", () => {
   const { historyEdits } = req("../vscode/review-state.js");
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-review-dup-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-dup-"));
   const l = path.join(dir, "a.md.jsonl");
   const row = (t, before) => JSON.stringify({ t, tool: "Edit", before }) + "\n";
   fs.writeFileSync(l, row("2026-10-02T10:00:00.000Z", "a\n") + row("2026-10-02T10:00:00.300Z", "a\n") + row("2026-10-02T10:05:00.000Z", "a\nb\n"));
@@ -195,7 +195,7 @@ test("bash edit (python heredoc) is recorded like an Edit; a read-only command l
   bash(dir, "t2", "cat docs/a.md", "PreToolUse");
   bash(dir, "t2", "cat docs/a.md", "PostToolUse");
   assert.equal(history(dir, "docs/a.md").length, 1);
-  assert.equal(fs.readdirSync(path.join(dir, ".claude/agent-review/pending")).length, 0);
+  assert.equal(fs.readdirSync(path.join(dir, ".claude/imprimatur/pending")).length, 0);
 });
 
 test("paths named in a command", async () => {

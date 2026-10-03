@@ -47,13 +47,13 @@ function fakeDom(blocks) {
 test("preview marker bar: one tick per marked block, colored by kind, click scrolls", async () => {
   const src = fs.readFileSync(path.resolve(import.meta.dirname, "../vscode/preview-markers.js"), "utf8");
   const dom = fakeDom([
-    ["agent-review-added agent-review-latest", 100, 50],
-    ["agent-review-old agent-review-earlier", 500, 20],
-    ["agent-review-changed agent-review-latest", 900, 10],
+    ["imprimatur-added imprimatur-latest", 100, 50],
+    ["imprimatur-old imprimatur-earlier", 500, 20],
+    ["imprimatur-changed imprimatur-latest", 900, 10],
   ]);
   vm.runInNewContext(src, { ...dom, setTimeout: (f) => f(), clearTimeout() {} });
   const bar = dom.body.children[0];
-  assert.equal(bar.id, "agent-review-markers");
+  assert.equal(bar.id, "imprimatur-markers");
   assert.equal(bar.children.length, 3);
   assert.match(bar.children[0].style.cssText, /top:10%;.*rgb\(46, 160, 67\);opacity:0.9/);
   assert.match(bar.children[1].style.cssText, /top:50%;.*rgb\(248, 81, 73\);opacity:0.9/);
@@ -64,13 +64,13 @@ test("preview marker bar: one tick per marked block, colored by kind, click scro
 test("preview scroll: a reload right after a scroll goes back there; a first open does not", () => {
   const src = fs.readFileSync(path.resolve(import.meta.dirname, "../vscode/preview-markers.js"), "utf8");
   const ctx = (dom) => ({ ...dom, setTimeout: (f) => f(), clearTimeout() {} });
-  const first = fakeDom([["agent-review-added agent-review-latest", 100, 50]]);
+  const first = fakeDom([["imprimatur-added imprimatur-latest", 100, 50]]);
   vm.runInNewContext(src, ctx(first));
   assert.equal(first.window.scrollY, 0); // nothing saved: stays where the preview put it
   first.window.scrollY = 700;
   first.listeners.scroll();
   // the refresh reloads the page: same storage, scroll back at the top
-  const reload = fakeDom([["agent-review-added agent-review-latest", 100, 50]]);
+  const reload = fakeDom([["imprimatur-added imprimatur-latest", 100, 50]]);
   Object.assign(reload.storage, first.storage);
   vm.runInNewContext(src, ctx(reload));
   assert.equal(reload.window.scrollY, 700);
@@ -79,12 +79,12 @@ test("preview scroll: a reload right after a scroll goes back there; a first ope
 test("after an accept, the reload goes to the next change below it", () => {
   const src = fs.readFileSync(path.resolve(import.meta.dirname, "../vscode/preview-markers.js"), "utf8");
   const ctx = (dom) => ({ ...dom, setTimeout: (f) => f(), clearTimeout() {} });
-  const before = fakeDom([["agent-review-old agent-review-latest", 300, 20], ["agent-review-changed agent-review-latest", 600, 20]]);
+  const before = fakeDom([["imprimatur-old imprimatur-latest", 300, 20], ["imprimatur-changed imprimatur-latest", 600, 20]]);
   vm.runInNewContext(src, ctx(before));
   const link = { closest: () => link, getBoundingClientRect: () => ({ top: 300 }) };
   before.document.listeners.click({ target: link }); // ✓ Accept on the block at 300
   // reloaded: the accepted block is gone, the next one is at 600
-  const after = fakeDom([["agent-review-changed agent-review-latest", 600, 20]]);
+  const after = fakeDom([["imprimatur-changed imprimatur-latest", 600, 20]]);
   Object.assign(after.storage, before.storage);
   vm.runInNewContext(src, ctx(after));
   assert.equal(after.els[0].scrolled, true);
@@ -96,13 +96,13 @@ test("accept in the preview clears the block at once, no reload, and moves to th
     const set = new Set(names);
     return { contains: (c) => set.has(c), remove: (...cs) => cs.forEach((c) => set.delete(c)), has: (c) => set.has(c) };
   };
-  const block = { classList: cls(["agent-review-changed", "agent-review-latest"]), getBoundingClientRect: () => ({ top: 300, height: 20 }) };
-  const old = { classList: cls(["agent-review-old"]), getBoundingClientRect: () => ({ top: 280, height: 20 }) };
-  const next = { classList: cls(["agent-review-added"]), getBoundingClientRect: () => ({ top: 600, height: 20 }), scrollIntoView() { this.scrolled = true; } };
+  const block = { classList: cls(["imprimatur-changed", "imprimatur-latest"]), getBoundingClientRect: () => ({ top: 300, height: 20 }) };
+  const old = { classList: cls(["imprimatur-old"]), getBoundingClientRect: () => ({ top: 280, height: 20 }) };
+  const next = { classList: cls(["imprimatur-added"]), getBoundingClientRect: () => ({ top: 600, height: 20 }), scrollIntoView() { this.scrolled = true; } };
   const link = {
     getAttribute: (n) => (n === "href" ? "vscode://x/accept?start=1&end=2&ui=1" : null),
     getBoundingClientRect: () => ({ top: 270 }),
-    closest: (sel) => (sel === "a.agent-review-accept" ? link : null),
+    closest: (sel) => (sel === "a.imprimatur-accept" ? link : null),
     nextElementSibling: old,
     style: {},
     remove() { this.removed = true; },
@@ -110,15 +110,15 @@ test("accept in the preview clears the block at once, no reload, and moves to th
   old.nextElementSibling = block;
   old.remove = () => (old.removed = true);
   const dom = fakeDom([]);
-  const live = () => [old, block, next].filter((e) => !e.removed && [...["agent-review-added", "agent-review-changed", "agent-review-old"]].some((c) => e.classList.contains(c)));
+  const live = () => [old, block, next].filter((e) => !e.removed && [...["imprimatur-added", "imprimatur-changed", "imprimatur-old"]].some((c) => e.classList.contains(c)));
   dom.document.querySelectorAll = () => live();
   vm.runInNewContext(src, { ...dom, setTimeout: (f) => f(), clearTimeout() {} });
   dom.document.listeners.click({ target: link });
   assert.equal(old.removed, true);
-  assert.equal(block.classList.has("agent-review-changed"), false);
+  assert.equal(block.classList.has("imprimatur-changed"), false);
   assert.equal(link.removed, true);
   assert.equal(next.scrolled, true);
-  assert.equal(dom.storage["agentReview.scroll"], undefined); // no reload expected, nothing saved for one
+  assert.equal(dom.storage["imprimatur.scroll"], undefined); // no reload expected, nothing saved for one
 });
 
 test("accept clears its block by data-ar even when something sits between box and block", () => {
@@ -127,13 +127,13 @@ test("accept clears its block by data-ar even when something sits between box an
     const set = new Set(names);
     return { contains: (c) => set.has(c), remove: (...cs) => cs.forEach((c) => set.delete(c)), has: (c) => set.has(c) };
   };
-  const box = { classList: cls(["agent-review-old"]), remove() { this.removed = true; }, getBoundingClientRect: () => ({ top: 280 }) };
-  const block = { classList: cls(["agent-review-changed", "agent-review-latest"]), getBoundingClientRect: () => ({ top: 300 }) };
-  const other = { classList: cls(["agent-review-changed"]), getBoundingClientRect: () => ({ top: 600 }), scrollIntoView() {} };
+  const box = { classList: cls(["imprimatur-old"]), remove() { this.removed = true; }, getBoundingClientRect: () => ({ top: 280 }) };
+  const block = { classList: cls(["imprimatur-changed", "imprimatur-latest"]), getBoundingClientRect: () => ({ top: 300 }) };
+  const other = { classList: cls(["imprimatur-changed"]), getBoundingClientRect: () => ({ top: 600 }), scrollIntoView() {} };
   const link = {
     getAttribute: (n) => ({ href: "vscode://x/accept?ui=1", "data-ar": "5-6" })[n] ?? null,
     getBoundingClientRect: () => ({ top: 270 }),
-    closest: (sel) => (sel === "a.agent-review-accept" ? link : null),
+    closest: (sel) => (sel === "a.imprimatur-accept" ? link : null),
     nextElementSibling: { classList: cls([]) }, // e.g. a wrapper the preview added
     style: {},
     remove() {},
@@ -143,6 +143,6 @@ test("accept clears its block by data-ar even when something sits between box an
   vm.runInNewContext(src, { ...dom, setTimeout: (f) => f(), clearTimeout() {} });
   dom.document.listeners.click({ target: link });
   assert.equal(box.removed, true);
-  assert.equal(block.classList.has("agent-review-changed"), false);
-  assert.equal(other.classList.has("agent-review-changed"), true);
+  assert.equal(block.classList.has("imprimatur-changed"), false);
+  assert.equal(other.classList.has("imprimatur-changed"), true);
 });

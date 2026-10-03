@@ -1,6 +1,6 @@
 // @ts-check
 // Shows an agent's edits in the editor like tracked changes, against the copy
-// the hook took in .claude/agent-review/baseline/. Every change looks the same,
+// the hook took in .claude/imprimatur/baseline/. Every change looks the same,
 // whichever agent edit made it. Git is not consulted: marks stay until accepted.
 "use strict";
 const vscode = require("vscode");
@@ -370,7 +370,7 @@ function addFolder(folder, ctx) {
   if (roots.has(norm(found))) return;
   roots.add(norm(found));
   // Copies and history change on every agent edit; re-render on any of them.
-  const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(found), ".claude/agent-review/**"));
+  const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(found), ".claude/imprimatur/**"));
   ctx.subscriptions.push(w, w.onDidChange(refreshSoon), w.onDidCreate(refreshSoon), w.onDidDelete(refreshSoon));
 }
 

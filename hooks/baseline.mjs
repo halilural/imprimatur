@@ -3,8 +3,8 @@
 // Bash edits (python, sed) are caught by the paths named in the command: text
 // before, compared after. Before the agent edits a file of a listed type:
 // - if there is no copy yet, copy the file to
-//   <root>/.claude/agent-review/baseline/<path> (an empty copy for a new file);
-// - append {t, session, tool, prompt, before} to .claude/agent-review/history/<path>.jsonl.
+//   <root>/.claude/imprimatur/baseline/<path> (an empty copy for a new file);
+// - append {t, session, tool, prompt, before} to .claude/imprimatur/history/<path>.jsonl.
 // The editor extension diffs the file against the copy until the user accepts.
 // Git state is not consulted: staging or committing does not end a review.
 //
@@ -93,7 +93,7 @@ export function pathsInCommand(command, exts) {
   return [...new Set(command.match(re) ?? [])];
 }
 
-const PENDING_DIR = path.join(".claude", "agent-review", "pending");
+const PENDING_DIR = path.join(".claude", "imprimatur", "pending");
 
 /**
  * Bash, before: remember the text of the named files. After: record the ones
@@ -116,7 +116,7 @@ export function bashEdit(event, data, project, exts) {
       const abs = candidates.find((c) => fs.existsSync(c)) ?? candidates[0];
       const inProject = path.relative(project, abs);
       if (inProject.startsWith("..") || path.isAbsolute(inProject)) continue;
-      if (inProject.split(path.sep).slice(0, 2).join("/") === ".claude/agent-review") continue;
+      if (inProject.split(path.sep).slice(0, 2).join("/") === ".claude/imprimatur") continue;
       before[abs] = fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "";
     }
     if (!Object.keys(before).length) return;
@@ -149,7 +149,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       else if (file && data.hook_event_name !== "PostToolUse")
         takeBaseline(project, file, exts, { session: data.session_id, tool: data.tool_name, prompt: lastPrompt(data.transcript_path) });
     } catch (e) {
-      process.stderr.write(`agent-review baseline: ${e.message}\n`);
+      process.stderr.write(`imprimatur baseline: ${e.message}\n`);
     }
     process.exit(0);
   });

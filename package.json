@@ -1,5 +1,5 @@
 {
-  "name": "agent-review",
+  "name": "imprimatur",
   "version": "0.17.1",
   "private": true,
   "description": "See an AI agent's edits like tracked changes in VS Code until you accept them (Imprimatur): a Claude Code hook plus a VS Code extension.",

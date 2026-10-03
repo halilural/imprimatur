@@ -20,25 +20,25 @@ function render(base, before, current) {
 
 test("changed paragraph: class on the block, old text struck right above", () => {
   const html = render("# T\n\nSprint cumartesi başlar.\n", undefined, "# T\n\nSprint pazartesi başlar.\n");
-  assert.match(html, /<div class="agent-review-old agent-review-latest"><del>Sprint cumartesi başlar\.<\/del><\/div>\s*<p class="agent-review-changed agent-review-latest">Sprint pazartesi başlar\.<\/p>/);
+  assert.match(html, /<div class="imprimatur-old imprimatur-latest"><del>Sprint cumartesi başlar\.<\/del><\/div>\s*<p class="imprimatur-changed imprimatur-latest">Sprint pazartesi başlar\.<\/p>/);
   assert.match(html, /<h1>T<\/h1>/); // untouched block stays plain
 });
 
 test("added heading and deleted paragraph", () => {
   const html = render("a\n\ngone\n\nz\n", undefined, "a\n\n## New\n\nz\n");
-  assert.match(html, /<h2 class="agent-review-[a-z]+ agent-review-latest">New<\/h2>/);
+  assert.match(html, /<h2 class="imprimatur-[a-z]+ imprimatur-latest">New<\/h2>/);
   assert.match(html, /<del>gone<\/del>/);
 });
 
 test("earlier edits dim, latest bright", () => {
   const html = render("a\n", "a\n\nC1\n", "a\n\nC1\n\nC2\n");
-  assert.match(html, /<p class="agent-review-added agent-review-earlier">C1<\/p>/);
-  assert.match(html, /<p class="agent-review-added agent-review-latest">C2<\/p>/);
+  assert.match(html, /<p class="imprimatur-added imprimatur-earlier">C1<\/p>/);
+  assert.match(html, /<p class="imprimatur-added imprimatur-latest">C2<\/p>/);
 });
 
 test("table row gets the class, no div inside the table", () => {
   const html = render("| a |\n| - |\n| x |\n", undefined, "| a |\n| - |\n| y |\n");
-  assert.match(html, /<tr class="agent-review-changed agent-review-latest">\s*<td>y<\/td>/);
+  assert.match(html, /<tr class="imprimatur-changed imprimatur-latest">\s*<td>y<\/td>/);
   assert.doesNotMatch(html.slice(html.indexOf("<table>"), html.indexOf("</table>")), /<div/);
 });
 
@@ -60,8 +60,8 @@ test("accept button per changed block, with the block's line range", () => {
     (_env, start, end) => `vscode://x.y/accept?start=${start}&end=${end}`,
   );
   const html = md.renderer.render(md.parse("a\n\nnew three four\n", {}), md.options, {});
-  assert.match(html, /<a class="agent-review-accept" data-ar="2-3" href="vscode:\/\/x\.y\/accept\?start=2&(amp;)?end=3"/);
-  assert.equal((html.match(/agent-review-accept/g) || []).length, 1);
+  assert.match(html, /<a class="imprimatur-accept" data-ar="2-3" href="vscode:\/\/x\.y\/accept\?start=2&(amp;)?end=3"/);
+  assert.equal((html.match(/imprimatur-accept/g) || []).length, 1);
 });
 
 test("no copy: output unchanged", () => {
@@ -94,14 +94,14 @@ test("a table with marked rows gets one Accept above it", () => {
   const md = markdownItPlugin(new MarkdownIt({ html: true }), () => review("| a |\n| - |\n| 1 |\n", undefined, "| a |\n| - |\n| 2 |\n| 3 |\n"), (_e, s, e) => `vscode://x/accept?start=${s}&end=${e}`);
   const html = md.renderer.render(md.parse("| a |\n| - |\n| 2 |\n| 3 |\n", {}), md.options, {});
   assert.match(html, /✓ Accept table<\/a>\s*<table>/);
-  assert.equal((html.match(/agent-review-accept/g) || []).length, 1);
+  assert.equal((html.match(/imprimatur-accept/g) || []).length, 1);
 });
 
 test("a deletion with accept links renders (regression: blank preview)", () => {
   const md = markdownItPlugin(new MarkdownIt({ html: true }), () => review("a\n\ngone\n\nz\n", undefined, "a\n\nz\n"), (_e, s, e) => `vscode://x/accept?start=${s}&end=${e}`);
   const html = md.renderer.render(md.parse("a\n\nz\n", {}), md.options, {});
   assert.match(html, /<del>gone<\/del>/);
-  assert.match(html, /agent-review-accept/);
+  assert.match(html, /imprimatur-accept/);
 });
 
 test("a bug in the marks leaves the preview rendered, unmarked", () => {

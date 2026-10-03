@@ -5,8 +5,8 @@ const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const BASELINE_DIR = path.join(".claude", "agent-review", "baseline");
-const HISTORY_DIR = path.join(".claude", "agent-review", "history");
+const BASELINE_DIR = path.join(".claude", "imprimatur", "baseline");
+const HISTORY_DIR = path.join(".claude", "imprimatur", "history");
 
 /** Git top level for a path (walks up to an existing directory), resolved like fsPath. @param {string} p */
 function repoRoot(p) {

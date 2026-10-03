@@ -56,10 +56,10 @@ through where they were.
    agent edit of a listed file type (Edit, Write, or a Bash command that names
    the file, e.g. a python or sed edit; Bash is compared before/after so read-only
    commands leave no trace):
-   - copies the file to `.claude/agent-review/baseline/<path>` if there is no
+   - copies the file to `.claude/imprimatur/baseline/<path>` if there is no
      copy yet (an empty copy for a new file);
    - appends `{t, session, tool, prompt, before}` to
-     `.claude/agent-review/history/<path>.jsonl`, a history of the agent's edits.
+     `.claude/imprimatur/history/<path>.jsonl`, a history of the agent's edits.
 2. The VS Code extension ([vscode/](vscode/)) diffs each open file against its
    copy (line LCS, then word LCS inside changed lines). Every change looks the
    same, whichever agent edit made it; the edit history keeps the order.
@@ -79,20 +79,20 @@ Requires Node 22+, git and VS Code 1.100+.
        "PreToolUse": [
          {
            "matcher": "Edit|Write|Bash",
-           "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/path/to/agent-review/hooks/baseline.mjs md mdx" }]
+           "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/path/to/imprimatur/hooks/baseline.mjs md mdx" }]
          }
        ],
        "PostToolUse": [
          {
            "matcher": "Bash",
-           "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/path/to/agent-review/hooks/baseline.mjs md mdx" }]
+           "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/path/to/imprimatur/hooks/baseline.mjs md mdx" }]
          }
        ]
      }
    }
    ```
 
-2. Ignore the copies: add `.claude/agent-review/` to `.gitignore` (or to your
+2. Ignore the copies: add `.claude/imprimatur/` to `.gitignore` (or to your
    global git ignore file).
 3. Extension: `npm run package`, then install `dist/imprimatur-<version>.vsix`
    (`code --install-extension …`, or Extensions view → Install from VSIX).

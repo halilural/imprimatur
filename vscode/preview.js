@@ -22,13 +22,13 @@ function planBlocks(blocks, hunks, opts = {}) {
   const fmt = opts.fmt ?? esc;
   const button = (start, end) => {
     const href = opts.link?.(start, end);
-    return href ? `<a class="agent-review-accept" data-ar="${start}-${end}" href="${href}" title="Accept this change">✓ Accept</a>` : "";
+    return href ? `<a class="imprimatur-accept" data-ar="${start}-${end}" href="${href}" title="Accept this change">✓ Accept</a>` : "";
   };
   const plan = blocks.map(() => ({ cls: /** @type {string | undefined} */ (undefined), id: /** @type {string | undefined} */ (undefined), before: /** @type {string[]} */ ([]), after: /** @type {string[]} */ ([]) }));
   const at = (line) => blocks.findIndex((b) => line >= b.start && line < b.end);
   // data-ar ties a button to everything it clears in the preview: its old boxes and its block
   const old = (lines, fresh, id) =>
-    `<div class="agent-review-old ${fresh ? "agent-review-latest" : "agent-review-earlier"}" data-ar="${id}"><del>${lines.filter((l) => l.trim()).map((l) => fmt(stripMarker(l))).join("<br>")}</del></div>`;
+    `<div class="imprimatur-old ${fresh ? "imprimatur-latest" : "imprimatur-earlier"}" data-ar="${id}"><del>${lines.filter((l) => l.trim()).map((l) => fmt(stripMarker(l))).join("<br>")}</del></div>`;
   for (const h of hunks)
     for (const m of h.marks) {
       if (m.kind === "deleted") {
@@ -52,7 +52,7 @@ function planBlocks(blocks, hunks, opts = {}) {
       }
       const kind = m.kind === "added" && (!p.cls || p.cls.includes("added")) ? "added" : "changed";
       const layer = m.fresh || p.cls?.includes("latest") ? "latest" : "earlier";
-      p.cls = `agent-review-${kind} agent-review-${layer}`;
+      p.cls = `imprimatur-${kind} imprimatur-${layer}`;
       if (m.kind === "changed") p.before.push(old([m.oldText], m.fresh, p.id));
     }
   return plan;
@@ -72,9 +72,9 @@ const LEAF = new Set(["paragraph_open", "heading_open", "tr_open", "fence", "cod
  */
 function markdownItPlugin(md, getHunks, link, getBase) {
   const render = md.renderer.render.bind(md.renderer);
-  const INLINE = { agentReviewInline: true }; // our own renderInline calls: no marks there
+  const INLINE = { imprimaturInline: true }; // our own renderInline calls: no marks there
   md.renderer.render = (tokens, options, env) => {
-    if (env?.agentReviewInline) return render(tokens, options, env);
+    if (env?.imprimaturInline) return render(tokens, options, env);
     let hunks = [];
     let base;
     try {
@@ -90,7 +90,7 @@ function markdownItPlugin(md, getHunks, link, getBase) {
       marked = annotate(tokens, hunks, opts);
     } catch (e) {
       // A bug in the marks must never blank the preview: show it unmarked.
-      console.error("agent-review preview:", e);
+      console.error("imprimatur preview:", e);
     }
     return render(marked, options, env);
   };
@@ -111,12 +111,12 @@ function diagramDiff(t, opts, Token, html) {
   copy.content = `${t.content.replace(/\s*$/, "")}\n${d.lines.join("\n")}\n`;
   // A diagram's colors live in the rendered SVG: its accept needs a real re-render.
   const href = t.map && opts.link?.(t.map[0], t.map[1], true);
-  const button = href ? `<a class="agent-review-accept" href="${href}" title="Accept this diagram's changes">✓ Accept</a>` : "";
+  const button = href ? `<a class="imprimatur-accept" href="${href}" title="Accept this diagram's changes">✓ Accept</a>` : "";
   const legend = html(
-    `<div class="agent-review-diagram">${button}Agent changes in this diagram: ` +
-      `<span class="agent-review-d-added">■ added ${d.added}</span> ` +
-      `<span class="agent-review-d-changed">■ changed ${d.changed}</span> ` +
-      `<span class="agent-review-d-removed">■ removed ${d.removed}</span></div>`,
+    `<div class="imprimatur-diagram">${button}Agent changes in this diagram: ` +
+      `<span class="imprimatur-d-added">■ added ${d.added}</span> ` +
+      `<span class="imprimatur-d-changed">■ changed ${d.changed}</span> ` +
+      `<span class="imprimatur-d-removed">■ removed ${d.removed}</span></div>`,
   );
   return { copy, legend };
 }
@@ -147,7 +147,7 @@ function annotate(tokens, hunks, opts) {
     while (j < tokens.length && tokens[j].type !== "table_close") j++;
     const marked = idx.some((x, k) => x > i && x < j && plan[k].cls);
     const href = marked && opts.link(t.map[0], t.map[1]);
-    if (href) before.set(i, [...(before.get(i) ?? []), html(`<a class="agent-review-accept" href="${href}" title="Accept this table's changes">✓ Accept table</a>`)]);
+    if (href) before.set(i, [...(before.get(i) ?? []), html(`<a class="imprimatur-accept" href="${href}" title="Accept this table's changes">✓ Accept table</a>`)]);
   });
   idx.forEach((i, k) => {
     const p = plan[k];

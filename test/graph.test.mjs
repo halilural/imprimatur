@@ -9,7 +9,7 @@ const { graphRows } = createRequire(import.meta.url)("../vscode/graph.js");
 
 test("graph: all files' edits newest first, one lane per session", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-graph-"));
-  const h = path.join(root, ".claude/agent-review/history");
+  const h = path.join(root, ".claude/imprimatur/history");
   fs.mkdirSync(path.join(h, "docs"), { recursive: true });
   const row = (t, session, prompt, before) => JSON.stringify({ t, session, tool: "Edit", prompt, before }) + "\n";
   fs.writeFileSync(path.join(h, "a.md.jsonl"), row("2026-10-02T10:00:00Z", "s1", "first", "") + row("2026-10-02T12:00:00Z", "s2", "third", "x\n"));

@@ -6,22 +6,22 @@
 (function () {
   "use strict";
   const KINDS = [
-    ["agent-review-added", "rgb(46, 160, 67)"],
-    ["agent-review-changed", "rgb(31, 111, 235)"],
-    ["agent-review-old", "rgb(248, 81, 73)"],
-    ["agent-review-diagram", "rgb(210, 153, 34)"],
+    ["imprimatur-added", "rgb(46, 160, 67)"],
+    ["imprimatur-changed", "rgb(31, 111, 235)"],
+    ["imprimatur-old", "rgb(248, 81, 73)"],
+    ["imprimatur-diagram", "rgb(210, 153, 34)"],
   ];
 
   function draw() {
-    let bar = document.getElementById("agent-review-markers");
-    const marks = document.querySelectorAll(".agent-review-added, .agent-review-changed, .agent-review-old, .agent-review-diagram");
+    let bar = document.getElementById("imprimatur-markers");
+    const marks = document.querySelectorAll(".imprimatur-added, .imprimatur-changed, .imprimatur-old, .imprimatur-diagram");
     if (!marks.length) {
       if (bar) bar.remove();
       return;
     }
     if (!bar) {
       bar = document.createElement("div");
-      bar.id = "agent-review-markers";
+      bar.id = "imprimatur-markers";
       bar.style.cssText = "position:fixed;top:0;right:0;bottom:0;width:10px;z-index:1000;pointer-events:none;";
       document.body.appendChild(bar);
     }
@@ -49,7 +49,7 @@
 
   // Accept and agent edits refresh the preview, which reloads it at the top.
   // Remember where the reader was; on a reload within 5 s, go back there.
-  const KEY = "agentReview.scroll";
+  const KEY = "imprimatur.scroll";
   const store = (() => {
     try {
       return window.sessionStorage;
@@ -66,7 +66,7 @@
       } catch {}
     }, 100);
   });
-  const MARKS = ["agent-review-added", "agent-review-changed", "agent-review-latest", "agent-review-earlier"];
+  const MARKS = ["imprimatur-added", "imprimatur-changed", "imprimatur-latest", "imprimatur-earlier"];
   /**
    * Clear the accepted block right here, at once: the old-text boxes after the
    * button and the marks on the block (or a table's rows). The file text does
@@ -74,15 +74,15 @@
    * needed. Returns false when the preview must be re-rendered (a diagram).
    */
   function clearAccepted(a) {
-    if (a.closest?.(".agent-review-diagram") || !String(a.getAttribute?.("href") ?? "").includes("ui=1")) return false;
+    if (a.closest?.(".imprimatur-diagram") || !String(a.getAttribute?.("href") ?? "").includes("ui=1")) return false;
     // Everything this button stands for carries its data-ar, wherever the preview put it.
     const id = a.getAttribute?.("data-ar");
     const tagged = id ? [...document.querySelectorAll(`[data-ar="${id}"]`)].filter((el) => el !== a) : [];
     for (const el of tagged)
-      if (el.classList.contains("agent-review-old")) el.remove();
+      if (el.classList.contains("imprimatur-old")) el.remove();
       else el.classList.remove(...MARKS);
     let el = a.nextElementSibling;
-    while (el && el.classList?.contains("agent-review-old")) {
+    while (el && el.classList?.contains("imprimatur-old")) {
       const next = el.nextElementSibling;
       el.remove();
       el = next;
@@ -100,12 +100,12 @@
   document.addEventListener(
     "click",
     (e) => {
-      const a = e.target?.closest?.("a.agent-review-accept");
+      const a = e.target?.closest?.("a.imprimatur-accept");
       if (!a) return;
       const y = a.getBoundingClientRect().top + window.scrollY;
       if (clearAccepted(a)) {
         draw();
-        const next = [...document.querySelectorAll(".agent-review-added, .agent-review-changed, .agent-review-old, .agent-review-diagram")].find(
+        const next = [...document.querySelectorAll(".imprimatur-added, .imprimatur-changed, .imprimatur-old, .imprimatur-diagram")].find(
           (el) => el.getBoundingClientRect().top + window.scrollY >= y - 5,
         );
         if (typeof next?.scrollIntoView === "function") next.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -118,7 +118,7 @@
     true,
   );
 
-  const MARKED = ".agent-review-added, .agent-review-changed, .agent-review-old, .agent-review-diagram";
+  const MARKED = ".imprimatur-added, .imprimatur-changed, .imprimatur-old, .imprimatur-diagram";
   function restore() {
     let saved;
     try {
