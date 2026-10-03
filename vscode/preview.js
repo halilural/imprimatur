@@ -22,12 +22,13 @@ function planBlocks(blocks, hunks, opts = {}) {
   const fmt = opts.fmt ?? esc;
   const button = (start, end) => {
     const href = opts.link?.(start, end);
-    return href ? `<a class="agent-review-accept" href="${href}" title="Accept this change">✓ Accept</a>` : "";
+    return href ? `<a class="agent-review-accept" data-ar="${start}-${end}" href="${href}" title="Accept this change">✓ Accept</a>` : "";
   };
-  const plan = blocks.map(() => ({ cls: /** @type {string | undefined} */ (undefined), before: /** @type {string[]} */ ([]), after: /** @type {string[]} */ ([]) }));
+  const plan = blocks.map(() => ({ cls: /** @type {string | undefined} */ (undefined), id: /** @type {string | undefined} */ (undefined), before: /** @type {string[]} */ ([]), after: /** @type {string[]} */ ([]) }));
   const at = (line) => blocks.findIndex((b) => line >= b.start && line < b.end);
-  const old = (lines, fresh) =>
-    `<div class="agent-review-old ${fresh ? "agent-review-latest" : "agent-review-earlier"}"><del>${lines.filter((l) => l.trim()).map((l) => fmt(stripMarker(l))).join("<br>")}</del></div>`;
+  // data-ar ties a button to everything it clears in the preview: its old boxes and its block
+  const old = (lines, fresh, id) =>
+    `<div class="agent-review-old ${fresh ? "agent-review-latest" : "agent-review-earlier"}" data-ar="${id}"><del>${lines.filter((l) => l.trim()).map((l) => fmt(stripMarker(l))).join("<br>")}</del></div>`;
   for (const h of hunks)
     for (const m of h.marks) {
       if (m.kind === "deleted") {
@@ -36,13 +37,15 @@ function planBlocks(blocks, hunks, opts = {}) {
         if (i < 0 && m.afterLine >= 0) i = blocks.findLastIndex((b) => b.end <= m.afterLine + 1);
         const line = Math.max(m.afterLine, 0);
         const bar = button(line, line + 1);
-        if (i < 0) (plan[0] ?? { before: [] }).before.push(bar + old(m.oldLines, m.fresh));
-        else plan[i].after.push(bar + old(m.oldLines, m.fresh));
+        const box = bar + old(m.oldLines, m.fresh, `${line}-${line + 1}`);
+        if (i < 0) (plan[0] ?? { before: [] }).before.push(box);
+        else plan[i].after.push(box);
         continue;
       }
       const i = at(m.line);
       if (i < 0) continue; // blank line or outside any leaf block
       const p = plan[i];
+      p.id = `${blocks[i].start}-${blocks[i].end}`;
       if (!p.cls) {
         const bar = button(blocks[i].start, blocks[i].end);
         if (bar) p.before.push(bar);
@@ -50,7 +53,7 @@ function planBlocks(blocks, hunks, opts = {}) {
       const kind = m.kind === "added" && (!p.cls || p.cls.includes("added")) ? "added" : "changed";
       const layer = m.fresh || p.cls?.includes("latest") ? "latest" : "earlier";
       p.cls = `agent-review-${kind} agent-review-${layer}`;
-      if (m.kind === "changed") p.before.push(old([m.oldText], m.fresh));
+      if (m.kind === "changed") p.before.push(old([m.oldText], m.fresh, p.id));
     }
   return plan;
 }
@@ -152,6 +155,7 @@ function annotate(tokens, hunks, opts) {
       const copy = Object.assign(new Token(tokens[i].type, tokens[i].tag, tokens[i].nesting), tokens[i]);
       copy.attrs = tokens[i].attrs ? tokens[i].attrs.map((a) => [...a]) : null;
       copy.attrJoin("class", p.cls);
+      copy.attrSet("data-ar", p.id);
       replaced.set(i, copy);
     }
     // A div cannot sit inside a table: rows only get the class.

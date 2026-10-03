@@ -100,7 +100,7 @@ test("accept in the preview clears the block at once, no reload, and moves to th
   const old = { classList: cls(["agent-review-old"]), getBoundingClientRect: () => ({ top: 280, height: 20 }) };
   const next = { classList: cls(["agent-review-added"]), getBoundingClientRect: () => ({ top: 600, height: 20 }), scrollIntoView() { this.scrolled = true; } };
   const link = {
-    getAttribute: () => "vscode://x/accept?start=1&end=2&ui=1",
+    getAttribute: (n) => (n === "href" ? "vscode://x/accept?start=1&end=2&ui=1" : null),
     getBoundingClientRect: () => ({ top: 270 }),
     closest: (sel) => (sel === "a.agent-review-accept" ? link : null),
     nextElementSibling: old,
@@ -118,6 +118,31 @@ test("accept in the preview clears the block at once, no reload, and moves to th
   assert.equal(block.classList.has("agent-review-changed"), false);
   assert.equal(link.removed, true);
   assert.equal(next.scrolled, true);
-  // the settle refresh a few seconds later restores this position
-  assert.equal(JSON.parse(dom.storage["agentReview.scroll"]).hold, true);
+  assert.equal(dom.storage["agentReview.scroll"], undefined); // no reload expected, nothing saved for one
+});
+
+test("accept clears its block by data-ar even when something sits between box and block", () => {
+  const src = fs.readFileSync(path.resolve(import.meta.dirname, "../vscode/preview-markers.js"), "utf8");
+  const cls = (names) => {
+    const set = new Set(names);
+    return { contains: (c) => set.has(c), remove: (...cs) => cs.forEach((c) => set.delete(c)), has: (c) => set.has(c) };
+  };
+  const box = { classList: cls(["agent-review-old"]), remove() { this.removed = true; }, getBoundingClientRect: () => ({ top: 280 }) };
+  const block = { classList: cls(["agent-review-changed", "agent-review-latest"]), getBoundingClientRect: () => ({ top: 300 }) };
+  const other = { classList: cls(["agent-review-changed"]), getBoundingClientRect: () => ({ top: 600 }), scrollIntoView() {} };
+  const link = {
+    getAttribute: (n) => ({ href: "vscode://x/accept?ui=1", "data-ar": "5-6" })[n] ?? null,
+    getBoundingClientRect: () => ({ top: 270 }),
+    closest: (sel) => (sel === "a.agent-review-accept" ? link : null),
+    nextElementSibling: { classList: cls([]) }, // e.g. a wrapper the preview added
+    style: {},
+    remove() {},
+  };
+  const dom = fakeDom([]);
+  dom.document.querySelectorAll = (sel) => (sel === '[data-ar="5-6"]' ? [link, box, block] : [box, block, other].filter((e) => !e.removed));
+  vm.runInNewContext(src, { ...dom, setTimeout: (f) => f(), clearTimeout() {} });
+  dom.document.listeners.click({ target: link });
+  assert.equal(box.removed, true);
+  assert.equal(block.classList.has("agent-review-changed"), false);
+  assert.equal(other.classList.has("agent-review-changed"), true);
 });

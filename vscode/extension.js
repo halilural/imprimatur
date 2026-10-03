@@ -333,8 +333,6 @@ function renderAll() {
 let previewTimer;
 /** An Accept clicked in the preview already updated it there: no reload (it would jump). */
 let skipPreviewUntil = 0;
-/** @type {NodeJS.Timeout | undefined} */
-let settleTimer;
 /**
  * A preview refresh reloads the whole page (and restarts other preview scripts,
  * e.g. Mermaid renderers), so do it once, after things settle.
@@ -400,16 +398,7 @@ function activate(ctx) {
         const q = new URLSearchParams(uri.query);
         const file = q.get("file");
         if (file) {
-          if (q.get("ui") === "1") {
-            // The preview cleared the block itself; once the clicking stops, one quiet
-            // refresh makes sure what it shows matches the copy.
-            skipPreviewUntil = Date.now() + 3000;
-            clearTimeout(settleTimer);
-            settleTimer = setTimeout(() => {
-              skipPreviewUntil = 0;
-              refreshPreview();
-            }, 4000);
-          }
+          if (q.get("ui") === "1") skipPreviewUntil = Date.now() + 3000;
           acceptRange(file, Number(q.get("start")), Number(q.get("end")));
         }
       },

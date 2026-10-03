@@ -14,7 +14,8 @@ const { markdownItPlugin } = req("../vscode/preview.js");
 function render(base, before, current) {
   const md = markdownItPlugin(new MarkdownIt({ html: true }), (env) => (env.currentDocument === "doc" ? review(base, before, current) : []));
   const tokens = md.parse(current, { currentDocument: undefined });
-  return md.renderer.render(tokens, md.options, { currentDocument: "doc" });
+  // data-ar (the accept group id) has its own test; leave it out of the shape checks
+  return md.renderer.render(tokens, md.options, { currentDocument: "doc" }).replace(/ data-ar="[^"]*"/g, "");
 }
 
 test("changed paragraph: class on the block, old text struck right above", () => {
@@ -59,7 +60,7 @@ test("accept button per changed block, with the block's line range", () => {
     (_env, start, end) => `vscode://x.y/accept?start=${start}&end=${end}`,
   );
   const html = md.renderer.render(md.parse("a\n\nnew three four\n", {}), md.options, {});
-  assert.match(html, /<a class="agent-review-accept" href="vscode:\/\/x\.y\/accept\?start=2&amp;end=3"|<a class="agent-review-accept" href="vscode:\/\/x\.y\/accept\?start=2&end=3"/);
+  assert.match(html, /<a class="agent-review-accept" data-ar="2-3" href="vscode:\/\/x\.y\/accept\?start=2&(amp;)?end=3"/);
   assert.equal((html.match(/agent-review-accept/g) || []).length, 1);
 });
 
@@ -107,4 +108,11 @@ test("a bug in the marks leaves the preview rendered, unmarked", () => {
   const md = markdownItPlugin(new MarkdownIt({ html: true }), () => [{ marks: [{ kind: "changed", line: 0, oldText: null }] }]);
   const html = md.renderer.render(md.parse("text\n", {}), md.options, {});
   assert.match(html, /<p>text<\/p>/);
+});
+
+test("a button, its old box and its block share one data-ar id", () => {
+  const md = markdownItPlugin(new MarkdownIt(), () => review("# T\n\nold words here\n", undefined, "# T\n\nnew text there\n"), () => "vscode://x.y/accept?ui=1");
+  const html = md.renderer.render(md.parse("# T\n\nnew text there\n", {}), md.options, {});
+  const ids = [...html.matchAll(/data-ar="([^"]*)"/g)].map((m) => m[1]);
+  assert.deepEqual(ids, ["2-3", "2-3", "2-3"]);
 });

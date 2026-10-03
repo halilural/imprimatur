@@ -62,7 +62,7 @@
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       try {
-        store?.setItem(KEY, JSON.stringify({ y: window.scrollY, t: Date.now(), hold: true }));
+        store?.setItem(KEY, JSON.stringify({ y: window.scrollY, t: Date.now() }));
       } catch {}
     }, 100);
   });
@@ -75,6 +75,12 @@
    */
   function clearAccepted(a) {
     if (a.closest?.(".agent-review-diagram") || !String(a.getAttribute?.("href") ?? "").includes("ui=1")) return false;
+    // Everything this button stands for carries its data-ar, wherever the preview put it.
+    const id = a.getAttribute?.("data-ar");
+    const tagged = id ? [...document.querySelectorAll(`[data-ar="${id}"]`)].filter((el) => el !== a) : [];
+    for (const el of tagged)
+      if (el.classList.contains("agent-review-old")) el.remove();
+      else el.classList.remove(...MARKS);
     let el = a.nextElementSibling;
     while (el && el.classList?.contains("agent-review-old")) {
       const next = el.nextElementSibling;
@@ -97,16 +103,12 @@
       const a = e.target?.closest?.("a.agent-review-accept");
       if (!a) return;
       const y = a.getBoundingClientRect().top + window.scrollY;
-      // Remember where the reader is: the settle refresh a few seconds later comes back here.
-      try {
-        store?.setItem(KEY, JSON.stringify({ y: window.scrollY, t: Date.now(), hold: true }));
-      } catch {}
       if (clearAccepted(a)) {
         draw();
         const next = [...document.querySelectorAll(".agent-review-added, .agent-review-changed, .agent-review-old, .agent-review-diagram")].find(
           (el) => el.getBoundingClientRect().top + window.scrollY >= y - 5,
         );
-        next?.scrollIntoView({ block: "center", behavior: "smooth" });
+        if (typeof next?.scrollIntoView === "function") next.scrollIntoView({ block: "center", behavior: "smooth" });
         return; // the link still goes to the extension, which writes the copy
       }
       try {
@@ -122,8 +124,7 @@
     try {
       saved = JSON.parse(store?.getItem(KEY) ?? "null");
     } catch {}
-    // first open: leave the preview's own sync alone; after an accept, the settle refresh comes ~5 s later
-    if (!saved || Date.now() - saved.t > (saved.hold ? 10000 : 5000)) return;
+    if (!saved || Date.now() - saved.t > 5000) return; // first open: leave the preview's own sync alone
     // The preview scrolls to the editor line after loading; land after it.
     const go = () => {
       if (saved.next !== undefined) {
