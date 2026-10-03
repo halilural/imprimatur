@@ -88,7 +88,7 @@ let onRow;
  */
 function openGraph(root, openDiff, currentText) {
   if (!panel) {
-    panel = vscode.window.createWebviewPanel("agentReview.graph", "Agent Change Graph", vscode.ViewColumn.Active, { enableScripts: true });
+    panel = vscode.window.createWebviewPanel("imprimatur.graph", "Agent Change Graph", vscode.ViewColumn.Active, { enableScripts: true });
     panel.webview.onDidReceiveMessage((m) => onRow?.(m));
     panel.onDidDispose(() => {
       panel = undefined;

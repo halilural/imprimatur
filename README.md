@@ -1,4 +1,6 @@
-# agent-review
+# Imprimatur
+
+*Imprimatur* (Latin, "let it be printed"): the approval stamp.
 
 See what an AI coding agent changed in your docs, right in the editor, like
 tracked changes in a word processor, until you accept it. Git is not involved:
@@ -14,7 +16,7 @@ staging or committing does not clear the marks.
 - **✓ Accept** in the editor (CodeLens) per Markdown unit: a block that is all
   new (table, quote, list item, paragraph, heading, code, HTML, rule) is one
   unit, a changed line (e.g. a table cell) is its own; and on each
-  changed block in the Markdown preview accepts that block; **Agent Review:
+  changed block in the Markdown preview accepts that block; **Imprimatur:
   Accept Agent Change at Cursor** and **Accept All Agent Changes in File** do
   the same from the command palette. After an accept the view moves to the
   next change, like a review queue.
@@ -27,10 +29,10 @@ staging or committing does not clear the marks.
   edit in the repo as a table like Git Graph, one colored lane per Claude
   session, the user's request that led to each edit, click a row for its diff.
 
-Setting `agentReview.showIn`: Markdown files are marked only in the preview by
+Setting `imprimatur.showIn`: Markdown files are marked only in the preview by
 default (`preview`); `both` adds the editor marks and its ✓ Accept lenses,
 `editor` uses the editor only. Other file types are always marked in the editor.
-`agentReview.editorAlsoFor` (globs, e.g. `["**/todos/**"]`) adds the editor
+`imprimatur.editorAlsoFor` (globs, e.g. `["**/todos/**"]`) adds the editor
 marks for matching Markdown files while `showIn` stays `preview`.
 
 The Markdown preview also gets thin marks over its scrollbar, like the editor's
@@ -38,7 +40,7 @@ overview ruler: one colored tick
 per change (green added, blue changed, red old or deleted),
 click a tick to jump there.
 
-With `agentReview.mermaidDiff` on (off by default; two Mermaid preview
+With `imprimatur.mermaidDiff` on (off by default; two Mermaid preview
 extensions in one window can then fail to render), changed Mermaid flowcharts
 are colored in the preview like a visual diff: new
 nodes and arrows green, changed labels orange, removed ones red and dashed
@@ -92,7 +94,7 @@ Requires Node 22+, git and VS Code 1.100+.
 
 2. Ignore the copies: add `.claude/agent-review/` to `.gitignore` (or to your
    global git ignore file).
-3. Extension: `npm run package`, then install `dist/agent-review-<version>.vsix`
+3. Extension: `npm run package`, then install `dist/imprimatur-<version>.vsix`
    (`code --install-extension …`, or Extensions view → Install from VSIX).
 
 ## Limits
@@ -117,7 +119,7 @@ Requires Node 22+, git and VS Code 1.100+.
 ```sh
 npm install      # markdown-it, for the preview tests only
 npm test         # hook, diff and preview tests (node:test)
-npm run package  # builds dist/agent-review-<version>.vsix
+npm run package  # builds dist/imprimatur-<version>.vsix
 ```
 
 ## License

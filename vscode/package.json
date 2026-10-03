@@ -1,8 +1,8 @@
 {
-  "name": "agent-review",
-  "displayName": "Agent Review",
-  "description": "See an AI agent's edits in the editor like tracked changes until you accept them.",
-  "version": "0.17.3",
+  "name": "imprimatur",
+  "displayName": "Imprimatur",
+  "description": "Review your AI agent's edits like tracked changes: marked in the editor and the Markdown preview until you accept them.",
+  "version": "0.18.0",
   "publisher": "halilural",
   "license": "MIT",
   "engines": {
@@ -30,36 +30,36 @@
   "contributes": {
     "commands": [
       {
-        "command": "agentReview.accept",
+        "command": "imprimatur.accept",
         "title": "Accept Agent Change at Cursor",
-        "category": "Agent Review"
+        "category": "Imprimatur"
       },
       {
-        "command": "agentReview.acceptAll",
+        "command": "imprimatur.acceptAll",
         "title": "Accept All Agent Changes in File",
-        "category": "Agent Review"
+        "category": "Imprimatur"
       },
       {
-        "command": "agentReview.showHistory",
+        "command": "imprimatur.showHistory",
         "title": "Show Agent Edit History",
-        "category": "Agent Review",
+        "category": "Imprimatur",
         "icon": "$(history)"
       },
       {
-        "command": "agentReview.openGraph",
+        "command": "imprimatur.openGraph",
         "title": "Open Agent Change Graph",
-        "category": "Agent Review",
+        "category": "Imprimatur",
         "icon": "$(git-merge)"
       },
       {
-        "command": "agentReview.acceptRange",
+        "command": "imprimatur.acceptRange",
         "title": "Accept Agent Changes in Range",
-        "category": "Agent Review"
+        "category": "Imprimatur"
       }
     ],
     "colors": [
       {
-        "id": "agentReview.changedLineBackground",
+        "id": "imprimatur.changedLineBackground",
         "description": "Background of a line the agent changed.",
         "defaults": {
           "dark": "#1f6feb1f",
@@ -69,7 +69,7 @@
         }
       },
       {
-        "id": "agentReview.deletedForeground",
+        "id": "imprimatur.deletedForeground",
         "description": "Text the agent deleted, shown struck through.",
         "defaults": {
           "dark": "#f85149",
@@ -79,7 +79,7 @@
         }
       },
       {
-        "id": "agentReview.oldTextForeground",
+        "id": "imprimatur.oldTextForeground",
         "description": "Old text the agent replaced (struck through, kept readable).",
         "defaults": {
           "dark": "#c9d1d9cc",
@@ -89,7 +89,7 @@
         }
       },
       {
-        "id": "agentReview.oldTextBackground",
+        "id": "imprimatur.oldTextBackground",
         "description": "Band behind old text the agent replaced.",
         "defaults": {
           "dark": "#f851491f",
@@ -106,15 +106,15 @@
     "menus": {
       "commandPalette": [
         {
-          "command": "agentReview.acceptRange",
+          "command": "imprimatur.acceptRange",
           "when": "false"
         }
       ]
     },
     "configuration": {
-      "title": "Agent Review",
+      "title": "Imprimatur",
       "properties": {
-        "agentReview.showIn": {
+        "imprimatur.showIn": {
           "type": "string",
           "enum": [
             "preview",
@@ -129,15 +129,15 @@
           "default": "preview",
           "description": "Where agent changes to Markdown files are marked. Other file types are always marked in the editor."
         },
-        "agentReview.editorAlsoFor": {
+        "imprimatur.editorAlsoFor": {
           "type": "array",
           "items": {
             "type": "string"
           },
           "default": [],
-          "markdownDescription": "Glob patterns of Markdown files that also get marks in the editor when `#agentReview.showIn#` is `preview`, e.g. `**/todos/**`."
+          "markdownDescription": "Glob patterns of Markdown files that also get marks in the editor when `#imprimatur.showIn#` is `preview`, e.g. `**/todos/**`."
         },
-        "agentReview.mermaidDiff": {
+        "imprimatur.mermaidDiff": {
           "type": "boolean",
           "default": false,
           "markdownDescription": "Color what the agent changed inside Mermaid flowcharts in the preview (adds style lines to the rendered diagram). Off by default: with two Mermaid preview extensions installed (e.g. Mermaid Chart and Markdown Mermaid Zoom) the diagrams can fail to render."

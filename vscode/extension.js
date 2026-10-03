@@ -25,7 +25,7 @@ const makeTypes = () => {
     }),
     changed: vscode.window.createTextEditorDecorationType({
       isWholeLine: true,
-      backgroundColor: c("agentReview.changedLineBackground"),
+      backgroundColor: c("imprimatur.changedLineBackground"),
       overviewRulerColor: color("editorOverviewRuler.modifiedForeground"),
       ...ruler,
     }),
@@ -35,13 +35,13 @@ const makeTypes = () => {
     // Old text stays readable: plain text in a red box, no strike line.
     deletedText: vscode.window.createTextEditorDecorationType({
       before: {
-        color: c("agentReview.oldTextForeground"),
-        backgroundColor: color("agentReview.oldTextBackground"),
+        color: c("imprimatur.oldTextForeground"),
+        backgroundColor: color("imprimatur.oldTextBackground"),
         border: "1px solid rgba(248, 81, 73, 0.6)",
       },
     }),
     deletedBlock: vscode.window.createTextEditorDecorationType({
-      after: { color: c("agentReview.deletedForeground"), margin: "0 0 0 1em" },
+      after: { color: c("imprimatur.deletedForeground"), margin: "0 0 0 1em" },
       overviewRulerColor: color("editorOverviewRuler.deletedForeground"),
       ...ruler,
     }),
@@ -56,7 +56,7 @@ const hunksByFile = new Map();
 let status = /** @type {vscode.StatusBarItem} */ (/** @type {unknown} */ (undefined));
 /** The preview's markdown-it, also used to find Markdown blocks for Accept units. */
 let markdownIt;
-/** "Agent Review" output channel: what Accept links did, for troubleshooting. */
+/** "Imprimatur" output channel: what Accept links did, for troubleshooting. */
 let log = /** @type {vscode.LogOutputChannel} */ (/** @type {unknown} */ (undefined));
 let historyButton = /** @type {vscode.StatusBarItem} */ (/** @type {unknown} */ (undefined));
 
@@ -110,8 +110,8 @@ function updateHistoryButton() {
   historyButton.show();
 }
 
-// Read-only documents for the diff view: agent-review:/<name>?<file, edit, side>
-const SCHEME = "agent-review";
+// Read-only documents for the diff view: imprimatur:/<name>?<file, edit, side>
+const SCHEME = "imprimatur";
 /** @param {string} file @param {number | "base"} n @param {"before" | "after" | "current"} side */
 const historyUri = (file, n, side) =>
   vscode.Uri.from({ scheme: SCHEME, path: `/${path.basename(file)}`, query: JSON.stringify({ file, n, side }) });
@@ -171,7 +171,7 @@ const codeLenses = {
       const line = Math.min(start, doc.lineCount - 1);
       lenses.push(new vscode.CodeLens(new vscode.Range(line, 0, line, 0), {
         title: end - start > 1 ? `$(check) Accept ${end - start} lines` : "$(check) Accept",
-        command: "agentReview.acceptRange",
+        command: "imprimatur.acceptRange",
         arguments: [doc.uri.fsPath, start, end],
       }));
     }
@@ -266,11 +266,11 @@ function inDiffTab(editor) {
   return !(group?.activeTab?.input instanceof vscode.TabInputText);
 }
 
-/** Markdown is reviewed in the preview unless agentReview.showIn says otherwise. @param {vscode.TextDocument} doc */
+/** Markdown is reviewed in the preview unless imprimatur.showIn says otherwise. @param {vscode.TextDocument} doc */
 function marksInEditor(doc) {
   const isMarkdown = doc.languageId === "markdown" || /\.mdx?$/i.test(doc.uri.fsPath);
   if (!isMarkdown) return true; // no preview for other files
-  const config = vscode.workspace.getConfiguration("agentReview", doc.uri);
+  const config = vscode.workspace.getConfiguration("imprimatur", doc.uri);
   if (config.get("showIn", "preview") !== "preview") return true;
   // Paths that want marks in the source too (e.g. task lists read in both views).
   const globs = /** @type {string[]} */ (config.get("editorAlsoFor", []));
@@ -376,19 +376,19 @@ function addFolder(folder, ctx) {
 
 /** @param {vscode.ExtensionContext} ctx */
 function activate(ctx) {
-  log = vscode.window.createOutputChannel("Agent Review", { log: true });
+  log = vscode.window.createOutputChannel("Imprimatur", { log: true });
   ctx.subscriptions.push(log);
   status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
   historyButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 49);
-  historyButton.command = "agentReview.showHistory";
+  historyButton.command = "imprimatur.showHistory";
   ctx.subscriptions.push(
     status,
     historyButton,
     ...Object.values(types),
     vscode.workspace.registerTextDocumentContentProvider(SCHEME, { provideTextDocumentContent: historyContent }),
-    vscode.commands.registerCommand("agentReview.showHistory", showHistory),
-    vscode.commands.registerCommand("agentReview.openGraph", showGraph),
-    vscode.commands.registerCommand("agentReview.acceptRange", acceptRange),
+    vscode.commands.registerCommand("imprimatur.showHistory", showHistory),
+    vscode.commands.registerCommand("imprimatur.openGraph", showGraph),
+    vscode.commands.registerCommand("imprimatur.acceptRange", acceptRange),
     vscode.languages.registerCodeLensProvider({ scheme: "file" }, codeLenses),
     // Accept buttons in the Markdown preview: vscode://<this extension>/accept?file&start&end
     vscode.window.registerUriHandler({
@@ -411,7 +411,7 @@ function activate(ctx) {
   ctx.subscriptions.push(
     vscode.window.onDidChangeVisibleTextEditors(renderAll),
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration("agentReview")) {
+      if (e.affectsConfiguration("imprimatur")) {
         refreshEverything();
         refreshPreview();
       }
@@ -440,7 +440,7 @@ function activate(ctx) {
         }
       }, 150);
     }),
-    vscode.commands.registerTextEditorCommand("agentReview.accept", (editor) => {
+    vscode.commands.registerTextEditorCommand("imprimatur.accept", (editor) => {
       const doc = editor.document;
       const copy = copyPath(doc.uri.fsPath);
       const line = editor.selection.active.line;
@@ -453,7 +453,7 @@ function activate(ctx) {
       render(editor); // the copy watcher refreshes the preview
     }),
     codeLensChanged,
-    vscode.commands.registerTextEditorCommand("agentReview.acceptAll", (editor) => {
+    vscode.commands.registerTextEditorCommand("imprimatur.acceptAll", (editor) => {
       const copy = copyPath(editor.document.uri.fsPath);
       if (copy && fs.existsSync(copy)) fs.rmSync(copy);
       render(editor);
@@ -474,7 +474,7 @@ function activate(ctx) {
         /** @type {vscode.Uri | undefined} */
         const uri = env?.currentDocument;
         if (uri?.scheme !== "file") return [];
-        if (vscode.workspace.getConfiguration("agentReview", uri).get("showIn", "preview") === "editor") return [];
+        if (vscode.workspace.getConfiguration("imprimatur", uri).get("showIn", "preview") === "editor") return [];
         // The preview renders the open document, unsaved edits included.
         const doc = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
         return hunksOf(uri.fsPath, doc ? doc.getText() : fs.readFileSync(uri.fsPath, "utf8"));
@@ -491,7 +491,7 @@ function activate(ctx) {
           /** @type {vscode.Uri | undefined} */
           const uri = env?.currentDocument;
           if (uri?.scheme !== "file") return undefined;
-          const config = vscode.workspace.getConfiguration("agentReview", uri);
+          const config = vscode.workspace.getConfiguration("imprimatur", uri);
           if (config.get("showIn", "preview") === "editor") return undefined;
           // Off by default: changing a Mermaid block's source races other Mermaid preview extensions.
           if (!config.get("mermaidDiff", false)) return undefined;
