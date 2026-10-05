@@ -351,24 +351,27 @@ const scanning = new Set();
  * Scan history (vscode/history.js): what waited on the user before Imprimatur
  * was set up. The Scan history button, and once per project on its own.
  */
-async function scanAll() {
+async function scanAll(again = false) {
   const root = shown;
   if (!root || scanning.has(root)) return;
   scanning.add(root);
   let res;
   await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur: scanning past sessions" }, async (p) => {
     try {
-      res = await scanHistory(root, { lang: modelLang(), progress: (done, total) => p.report({ message: `${done}/${total}` }) });
+      res = await scanHistory(root, { lang: modelLang(), again, progress: (done, total) => p.report({ message: `${done}/${total}` }) });
     } catch (e) {
       vscode.window.showWarningMessage(`Imprimatur: scan failed: ${e instanceof Error ? e.message : e}`);
     }
   });
   scanning.delete(root);
   refreshGraph();
-  if (res)
-    vscode.window.showInformationMessage(
-      `Scan history: ${res.sessions} past session${res.sessions === 1 ? "" : "s"} read, ${res.todos.added} to-do${res.todos.added === 1 ? "" : "s"} from TODO.md added${res.todos.ticked ? `, ${res.todos.ticked} ticked (done in TODO.md)` : ""}.`,
-    );
+  if (!res) return;
+  const msg = `Scan history: ${res.sessions} past session${res.sessions === 1 ? "" : "s"} read, ${res.todos.added} to-do${res.todos.added === 1 ? "" : "s"} from TODO.md added${res.todos.ticked ? `, ${res.todos.ticked} ticked (done in TODO.md)` : ""}.`;
+  // Nothing new: sessions read before are skipped. Rescan writes them anew (e.g. after a language change).
+  const pick = res.sessions || again
+    ? await vscode.window.showInformationMessage(msg)
+    : await vscode.window.showInformationMessage(`${msg} Sessions read before are skipped.`, "Rescan past sessions");
+  if (pick === "Rescan past sessions") scanAll(true);
 }
 
 /** Re-render the open panel, if any (after an agent edit). */

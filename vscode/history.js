@@ -98,6 +98,15 @@ function readScanned(root) {
   }
 }
 
+/**
+ * A waiting log only the scan wrote: its items, your later messages and the
+ * audit's ticks. A hook's records (a turn end, a question) or your own tick
+ * mean the session went on after setup or you worked on it: kept.
+ * @param {string} log
+ */
+const scanOnly = (log) =>
+  readLog(log).every((r) => r.kind === "verify" || r.kind === "answer" || (r.kind === "check" && (r.by === "audit" || r.by === "file")));
+
 /** True once the project was scanned (the extension scans a project once on its own). @param {string} root */
 const scannedBefore = (root) => fs.existsSync(path.join(root, SCANNED));
 
@@ -185,13 +194,22 @@ function scanTodos(root) {
 /**
  * Scan a project's history into "Waiting on you". Runs `parallel` model calls at a time.
  * @param {string} root repo root
- * @param {{ask?: (prompt: string) => Promise<string>, lang?: string, days?: number, home?: string, parallel?: number, progress?: (done: number, total: number) => void}} [opts]
+ * @param {{ask?: (prompt: string) => Promise<string>, lang?: string, days?: number, home?: string, parallel?: number, again?: boolean, progress?: (done: number, total: number) => void}} [opts]
+ * again: rescan the sessions only the scan wrote (their logs are replaced)
  * @returns {Promise<{sessions: number, todos: {added: number, ticked: number}}>}
  */
 async function scanHistory(root, opts = {}) {
   const since = Date.now() - (opts.days ?? DAYS) * 86_400_000;
   const scanned = readScanned(root);
   const done = new Set(scanned.sessions);
+  // Again: what the scan alone wrote is written anew (e.g. in another language).
+  if (opts.again)
+    for (const session of [...done]) {
+      const log = path.join(root, WAITING_DIR, `${session}.jsonl`);
+      if (fs.existsSync(log) && !scanOnly(log)) continue;
+      if (fs.existsSync(log)) fs.rmSync(log);
+      done.delete(session);
+    }
   const jobs = [];
   for (const file of transcriptsOf(root, opts.home)) {
     const session = path.basename(file, ".jsonl").replace(/[^\w-]/g, "");

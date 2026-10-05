@@ -119,3 +119,18 @@ test("history: (K) to-dos in TODO.md become steps; done or removed ones are tick
     ["Yeni iş", "open", undefined],
   ]);
 });
+
+test("history: rescan writes again what only the scan wrote; sessions a hook or you touched are kept", async () => {
+  const { root, home } = project({
+    a: { records: [user("x", ago(10)), said("Done.\n👉 Check it?", ago(9))] },
+    b: { records: [user("y", ago(10)), said("👉 Merge it?", ago(9))] },
+  });
+  const ask = async () => '{"settled": []}';
+  await scanHistory(root, { home, ask });
+  // b went on after setup: the hook wrote a turn end.
+  fs.appendFileSync(path.join(root, ".claude/imprimatur/waiting/b.jsonl"), JSON.stringify({ t: ago(1), session: "b", kind: "step" }) + "\n");
+  assert.equal((await scanHistory(root, { home, ask })).sessions, 0);
+  const res = await scanHistory(root, { home, ask, again: true });
+  assert.equal(res.sessions, 1);
+  assert.deepEqual(waitingSteps(root).map((s) => s.text).sort(), ["Check it?", "Merge it?"]);
+});
