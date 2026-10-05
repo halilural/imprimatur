@@ -1,15 +1,55 @@
 // @ts-check
 // Agent Change Graph: every agent edit in a repo, newest first, one lane per
-// Claude session (like branches in a git graph).
+// Claude session (like branches in a git graph). An edit is accepted when none
+// of its lines still left in the file is an open change under review.
 "use strict";
 const fs = require("node:fs");
 const path = require("node:path");
-const { HISTORY_DIR, historyEdits } = require("./review-state.js");
+const { BASELINE_DIR, HISTORY_DIR, historyEdits, latestBefore } = require("./review-state.js");
+const { diff, review } = require("./diff.js");
+
+/**
+ * Where a line boundary of `a` lands in `b` (hunks = diff(a, b)); undefined when
+ * a later change replaced it. @param {number} p @param {import("./diff.js").Hunk[]} hunks
+ */
+function mapBoundary(p, hunks) {
+  let delta = 0;
+  for (const h of hunks) {
+    if (p <= h.oldStart) break;
+    if (p < h.oldEnd) return undefined;
+    delta += h.newEnd - h.newStart - (h.oldEnd - h.oldStart);
+  }
+  return p + delta;
+}
+
+/**
+ * Which of one file's edits are accepted: their changed lines that survive to
+ * `current` touch no open review hunk (review copy ↔ current).
+ * @param {ReturnType<typeof historyEdits>} edits @param {string | undefined} copy @param {string | undefined} staged @param {string} current
+ * @returns {(e: ReturnType<typeof historyEdits>[number]) => boolean}
+ */
+function acceptedOf(edits, copy, staged, current) {
+  // No copy: Accept all removed it, nothing is under review.
+  const open = copy === undefined ? [] : review(copy, staged, current);
+  if (!open.length) return () => true;
+  return (e) => {
+    const later = diff(e.after, current);
+    return diff(e.before, e.after).every((h) => {
+      // Lines the edit wrote, or the spot where it deleted some.
+      const spots = h.newEnd > h.newStart ? Array.from({ length: h.newEnd - h.newStart }, (_, k) => [h.newStart + k, h.newStart + k + 1]) : [[h.newStart, h.newStart]];
+      return spots.every(([s, t]) => {
+        const [ms, mt] = [mapBoundary(s, later), mapBoundary(t, later)];
+        if (ms === undefined || mt === undefined || (t > s && mt - ms !== t - s)) return true; // rewritten later: that edit owns it
+        return !open.some((o) => (mt > ms ? ms < o.newEnd && mt > o.newStart : ms >= o.newStart && ms <= o.newEnd));
+      });
+    });
+  };
+}
 
 /**
  * @param {string} root repo root
  * @param {(file: string) => string | undefined} [currentText] open-editor text, else read from disk
- * @returns {{rows: Array<{file: string, n: number, t: string, session?: string, tool?: string, prompt?: string, added: number, removed: number, lane: number}>,
+ * @returns {{rows: Array<{file: string, n: number, t: string, session?: string, tool?: string, prompt?: string, added: number, removed: number, accepted: boolean, preview?: Array<[string, string]>, lane: number}>,
  *            lanes: Array<{session: string, first: number, last: number}>}}
  */
 function graphRows(root, currentText = () => undefined) {
@@ -23,8 +63,14 @@ function graphRows(root, currentText = () => undefined) {
     const file = path.relative(dir, log).slice(0, -".jsonl".length);
     const abs = path.join(root, file);
     const current = currentText(abs) ?? (fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "");
-    for (const e of historyEdits(log, current))
-      rows.push({ file, n: e.n, t: e.t, session: e.session, tool: e.tool, prompt: e.prompt, added: e.added, removed: e.removed, lane: 0 });
+    const copy = path.join(root, BASELINE_DIR, file);
+    const edits = historyEdits(log, current);
+    const accepted = acceptedOf(edits, fs.existsSync(copy) ? fs.readFileSync(copy, "utf8") : undefined, latestBefore(log), current);
+    for (const e of edits) {
+      const ok = accepted(e);
+      rows.push({ file, n: e.n, t: e.t, session: e.session, tool: e.tool, prompt: e.prompt, added: e.added, removed: e.removed, accepted: ok,
+        preview: ok ? undefined : previewOf(e.before, e.after), lane: 0 });
+    }
   }
   rows.sort((a, b) => Date.parse(b.t) - Date.parse(a.t));
   /** @type {ReturnType<typeof graphRows>["lanes"]} */
@@ -39,4 +85,22 @@ function graphRows(root, currentText = () => undefined) {
   return { rows, lanes };
 }
 
-module.exports = { graphRows };
+const PREVIEW_LINES = 40;
+
+/**
+ * An edit's change as diff lines for the hover: ["-" | "+" | "…", text].
+ * @param {string} before @param {string} after @returns {Array<[string, string]>}
+ */
+function previewOf(before, after) {
+  const [a, b] = [before.split(/\r?\n/), after.split(/\r?\n/)];
+  /** @type {Array<[string, string]>} */
+  const out = [];
+  for (const h of diff(before, after)) {
+    if (out.length) out.push(["…", ""]);
+    for (let i = h.oldStart; i < h.oldEnd; i++) out.push(["-", a[i]]);
+    for (let i = h.newStart; i < h.newEnd; i++) out.push(["+", b[i]]);
+  }
+  return out.length > PREVIEW_LINES ? [...out.slice(0, PREVIEW_LINES), ["…", `${out.length - PREVIEW_LINES} more lines`]] : out;
+}
+
+module.exports = { graphRows, acceptedOf, previewOf };
