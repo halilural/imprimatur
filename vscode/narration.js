@@ -9,10 +9,15 @@ const fs = require("node:fs");
 /** @type {Map<string, {offset: number, texts: Map<string, string>, byTool: Map<string, string>}>} */
 const cache = new Map();
 
-/** First sentence of the first line, at most 120 characters. @param {string} text */
+/**
+ * First sentence of the first line, at most 120 characters; a short opener
+ * ("Deneyelim.", "Done.") takes the next sentence along. @param {string} text
+ */
 function sentence(text) {
-  const first = text.trim().split("\n")[0].split(/(?<=[.!?…:])\s/)[0].trim();
-  return first.length > 120 ? `${first.slice(0, 119)}…` : first;
+  const parts = text.trim().split("\n")[0].split(/(?<=[.!?…:])\s/);
+  let out = parts[0].trim();
+  for (let i = 1; i < parts.length && out.length < 25; i++) out += ` ${parts[i].trim()}`;
+  return out.length > 120 ? `${out.slice(0, 119)}…` : out;
 }
 
 /**

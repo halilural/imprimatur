@@ -75,6 +75,19 @@ test("waiting: each record closes the session's earlier open items, answers carr
   );
 });
 
+test("waiting: ticked steps are kept per item and close nothing", () => {
+  const [item] = itemsOf(
+    [
+      { t: "T1", kind: "verify", text: "a\nb\nc" },
+      { t: "T2", kind: "check", item: "T1", i: 0, on: true },
+      { t: "T3", kind: "check", item: "T1", i: 2, on: true },
+      { t: "T4", kind: "check", item: "T1", i: 0, on: false },
+    ],
+    "s1",
+  );
+  assert.deepEqual([item.open, item.checked], [true, [2]]);
+});
+
 test("waiting: the hook writes per-session logs; quiet events start none", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-waiting-"));
   const log = path.join(root, ".claude/imprimatur/waiting/s1.jsonl");

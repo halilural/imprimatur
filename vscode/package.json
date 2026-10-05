@@ -77,6 +77,11 @@
         "command": "imprimatur.graph.copyAsk",
         "title": "Copy what to do",
         "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.graph.goTo",
+        "title": "Go to change",
+        "category": "Imprimatur"
       }
     ],
     "colors": [
@@ -146,6 +151,10 @@
         {
           "command": "imprimatur.graph.copyAsk",
           "when": "false"
+        },
+        {
+          "command": "imprimatur.graph.goTo",
+          "when": "false"
         }
       ],
       "webview/context": [
@@ -155,9 +164,14 @@
           "group": "1_review@1"
         },
         {
-          "command": "imprimatur.graph.openDiff",
+          "command": "imprimatur.graph.goTo",
           "when": "webviewId == 'imprimatur.graph' && webviewSection =~ /^edit-/",
           "group": "1_review@2"
+        },
+        {
+          "command": "imprimatur.graph.openDiff",
+          "when": "webviewId == 'imprimatur.graph' && webviewSection =~ /^edit-/",
+          "group": "1_review@3"
         },
         {
           "command": "imprimatur.graph.markDone",

@@ -17,6 +17,8 @@ test("narration: the text written in the same message as the tool call, read as 
   fs.appendFileSync(tr, rec("m2", { type: "text", text: "Tim'e cevabı TODO'ya yazıyorum. Sonra testler.\nikinci satır" }) + rec("m3", { type: "tool_use", id: "t3" }));
   assert.equal(narrationOf(tr, "t2"), "Tim'e cevabı TODO'ya yazıyorum.");
   assert.equal(narrationOf(tr, "t3"), undefined); // a call without words of its own
+  fs.appendFileSync(tr, rec("m4", { type: "text", text: "Deneyelim. İki düzenleme yapıyorum. Sonra bakarız." }) + rec("m4", { type: "tool_use", id: "t4" }));
+  assert.equal(narrationOf(tr, "t4"), "Deneyelim. İki düzenleme yapıyorum.");
   assert.equal(narrationOf(path.join(path.dirname(tr), "gone.jsonl"), "t2"), undefined);
   assert.equal(narrationOf(undefined, "t2"), undefined);
 });
