@@ -6,7 +6,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { BASELINE_DIR, HISTORY_DIR, historyEdits, latestBefore } = require("./review-state.js");
-const { diff, review } = require("./diff.js");
+const { diff, review, acceptLines } = require("./diff.js");
+const { narrationOf } = require("./narration.js");
 
 /**
  * Where a line boundary of `a` lands in `b` (hunks = diff(a, b)); undefined when
@@ -32,18 +33,43 @@ function acceptedOf(edits, copy, staged, current) {
   // No copy: Accept all removed it, nothing is under review.
   const open = copy === undefined ? [] : review(copy, staged, current);
   if (!open.length) return () => true;
-  return (e) => {
-    const later = diff(e.after, current);
-    return diff(e.before, e.after).every((h) => {
-      // Lines the edit wrote, or the spot where it deleted some.
-      const spots = h.newEnd > h.newStart ? Array.from({ length: h.newEnd - h.newStart }, (_, k) => [h.newStart + k, h.newStart + k + 1]) : [[h.newStart, h.newStart]];
-      return spots.every(([s, t]) => {
-        const [ms, mt] = [mapBoundary(s, later), mapBoundary(t, later)];
-        if (ms === undefined || mt === undefined || (t > s && mt - ms !== t - s)) return true; // rewritten later: that edit owns it
-        return !open.some((o) => (mt > ms ? ms < o.newEnd && mt > o.newStart : ms >= o.newStart && ms <= o.newEnd));
-      });
-    });
-  };
+  return (e) =>
+    spotsOf(e, current).every(([ms, mt]) => !open.some((o) => (mt > ms ? ms < o.newEnd && mt > o.newStart : ms >= o.newStart && ms <= o.newEnd)));
+}
+
+/**
+ * The edit's lines in `current`, as [start, end) line ranges: lines it wrote
+ * (one range each), or [p, p) where it deleted some. Lines a later edit
+ * rewrote belong to that edit and are left out.
+ * @param {{before: string, after: string}} e @param {string} current @returns {Array<[number, number]>}
+ */
+function spotsOf(e, current) {
+  const later = diff(e.after, current);
+  /** @type {Array<[number, number]>} */
+  const out = [];
+  for (const h of diff(e.before, e.after)) {
+    const spots = Array.from({ length: h.newEnd - h.newStart }, (_, k) => [h.newStart + k, h.newStart + k + 1]);
+    // More lines gone than written: the rest is a deletion after the last one.
+    if (h.oldEnd - h.oldStart > h.newEnd - h.newStart) spots.push([h.newEnd, h.newEnd]);
+    for (const [s, t] of spots) {
+      const [ms, mt] = [mapBoundary(s, later), mapBoundary(t, later)];
+      if (ms === undefined || mt === undefined || (t > s && mt - ms !== t - s)) continue;
+      out.push([ms, mt]);
+    }
+  }
+  return out;
+}
+
+/**
+ * The review copy with one edit accepted: each of its surviving lines goes in
+ * (acceptLines); a deletion goes with the line before it, as in the editor.
+ * @param {string} copy @param {{before: string, after: string}} e @param {string} current
+ */
+function acceptEdit(copy, e, current) {
+  let out = copy;
+  for (const [s, t] of spotsOf(e, current))
+    out = t > s ? acceptLines(out, current, s, t, "lines") : acceptLines(out, current, s - 1, s, "deletions");
+  return out;
 }
 
 /**
@@ -68,7 +94,7 @@ function graphRows(root, currentText = () => undefined) {
     const accepted = acceptedOf(edits, fs.existsSync(copy) ? fs.readFileSync(copy, "utf8") : undefined, latestBefore(log), current);
     for (const e of edits) {
       const ok = accepted(e);
-      rows.push({ file, n: e.n, t: e.t, session: e.session, tool: e.tool, prompt: e.prompt, intent: e.intent, summary: summaryOf(e.before, e.after),
+      rows.push({ file, n: e.n, t: e.t, session: e.session, tool: e.tool, prompt: e.prompt, intent: e.intent ?? narrationOf(e.transcript, e.toolUseId), summary: summaryOf(e.before, e.after),
         title: e.title, added: e.added, removed: e.removed, accepted: ok, preview: ok ? undefined : previewOf(e.before, e.after), lane: 0 });
     }
   }
@@ -108,7 +134,7 @@ function summaryOf(before, after) {
   return text.length > 120 ? `${text.slice(0, 119)}…` : text;
 }
 
-const PREVIEW_LINES = 40;
+const PREVIEW_LINES = 300;
 
 /**
  * An edit's change as diff lines for the hover: ["-" | "+" | "…", text].
@@ -126,4 +152,4 @@ function previewOf(before, after) {
   return out.length > PREVIEW_LINES ? [...out.slice(0, PREVIEW_LINES), ["…", `${out.length - PREVIEW_LINES} more lines`]] : out;
 }
 
-module.exports = { graphRows, acceptedOf, previewOf, summaryOf };
+module.exports = { graphRows, acceptedOf, acceptEdit, previewOf, summaryOf };

@@ -174,34 +174,15 @@ test("history row carries the user's latest request from the transcript", () => 
   assert.equal(history(dir, "a.md")[0].prompt, "change cumartesi to pazartesi");
 });
 
-test("history row carries the agent's words in this turn and the session title", () => {
+test("history row carries the session title and where to find the agent's words", () => {
   const { dir } = repo();
   const tr = path.join(dir, "t.jsonl");
-  const say = (text) => ({ type: "assistant", message: { content: [{ type: "text", text }] } });
-  const tool = { type: "assistant", message: { content: [{ type: "tool_use", name: "Edit" }] } };
-  const result = { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "x" }] } };
-  const write = (recs) => fs.writeFileSync(tr, recs.map((r) => JSON.stringify(r)).join("\n") + "\n");
-  const edit = () => {
-    const input = JSON.stringify({ session_id: "s1", tool_name: "Edit", transcript_path: tr, tool_input: { file_path: path.join(dir, "a.md") } });
-    spawnSync("node", [hook], { input, env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
-    fs.appendFileSync(path.join(dir, "a.md"), "more\n");
-    return history(dir, "a.md").at(-1);
-  };
+  fs.writeFileSync(tr, [{ type: "ai-title", aiTitle: "Old" }, { type: "ai-title", aiTitle: "Tim'den gelen mail" }].map((r) => JSON.stringify(r)).join("\n") + "\n");
   fs.writeFileSync(path.join(dir, "a.md"), "x\n");
-  write([
-    { type: "ai-title", aiTitle: "Old title" },
-    { type: "user", message: { content: "olur" } },
-    say("Tim'e cevabı TODO'ya yazıyorum. Sonra testler."),
-    tool,
-    result,
-    { type: "ai-title", aiTitle: "Tim'den gelen mail" },
-  ]);
-  const e1 = edit();
-  assert.equal(e1.intent, "Tim'e cevabı TODO'ya yazıyorum.");
-  assert.equal(e1.title, "Tim'den gelen mail");
-  // A new turn without words yet: no intent carried over from the last turn.
-  write([say("Önceki turdan."), { type: "user", message: { content: [{ type: "text", text: "devam" }] } }, tool]);
-  assert.equal(edit().intent, undefined);
+  const input = JSON.stringify({ session_id: "s1", tool_name: "Edit", tool_use_id: "toolu_1", transcript_path: tr, tool_input: { file_path: path.join(dir, "a.md") } });
+  spawnSync("node", [hook], { input, env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
+  const row = history(dir, "a.md")[0];
+  assert.deepEqual([row.title, row.transcript, row.toolUseId, row.intent], ["Tim'den gelen mail", tr, "toolu_1", undefined]);
 });
 
 function bash(dir, id, command, event) {

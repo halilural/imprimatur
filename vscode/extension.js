@@ -8,8 +8,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { review, acceptHunk, acceptLines, acceptGroups } = require("./diff.js");
 const { markdownItPlugin, markdownBlocks } = require("./preview.js");
-const { openGraph, refreshGraph } = require("./graphView.js");
-const { WAITING_DIR } = require("./waiting.js");
+const { openGraph, refreshGraph, graphCommands } = require("./graphView.js");
+const { WAITING_DIR, waitingItems } = require("./waiting.js");
+const { acceptEdit } = require("./graph.js");
 const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, historyEdits } = require("./review-state.js");
 
 const color = (id) => new vscode.ThemeColor(id);
@@ -60,6 +61,7 @@ let markdownIt;
 /** "Imprimatur" output channel: what Accept links did, for troubleshooting. */
 let log = /** @type {vscode.LogOutputChannel} */ (/** @type {unknown} */ (undefined));
 let historyButton = /** @type {vscode.StatusBarItem} */ (/** @type {unknown} */ (undefined));
+let graphButton = /** @type {vscode.StatusBarItem} */ (/** @type {unknown} */ (undefined));
 
 const norm = (p) => (process.platform === "win32" ? path.resolve(p).toLowerCase() : path.resolve(p));
 
@@ -203,11 +205,41 @@ function openEditDiff(file, n) {
 /** Open-editor text (unsaved edits included), else undefined. @param {string} file */
 const currentText = (file) => vscode.workspace.textDocuments.find((d) => d.uri.fsPath === file)?.getText();
 
-function showGraph() {
+/** Accept one agent edit from the graph: its lines still under review go into the copy. @param {string} file @param {number} n */
+function acceptEditOf(file, n) {
+  const copy = copyPath(file);
+  if (!copy || !fs.existsSync(copy)) return;
+  const text = currentText(file) ?? fs.readFileSync(file, "utf8");
+  const e = historyEdits(logOf(file) ?? "", text).find((x) => x.n === n);
+  if (!e) return;
+  log.info(`accept edit #${n} of ${file}`);
+  fs.writeFileSync(copy, acceptEdit(fs.readFileSync(copy, "utf8"), e, text));
+  renderAll();
+  codeLensChanged.fire();
+  refreshPreview();
+  refreshGraph();
+}
+
+/** The repo the graph shows: the active file's, else the first folder's. */
+function graphRoot() {
   const active = vscode.window.activeTextEditor?.document.uri;
-  const root = (active?.scheme === "file" && rootOf(active.fsPath)) || [...roots][0];
+  return (active?.scheme === "file" && rootOf(active.fsPath)) || [...roots][0];
+}
+
+function showGraph() {
+  const root = graphRoot();
   if (!root) return void vscode.window.showInformationMessage("Agent Change Graph: no folder open.");
-  openGraph(root, openEditDiff, currentText);
+  openGraph(root, openEditDiff, currentText, acceptEditOf);
+}
+
+/** Status bar button, always there like Git Graph's: opens the graph, shows open asks. */
+function updateGraphButton() {
+  const root = graphRoot();
+  if (!root) return graphButton.hide();
+  const open = waitingItems(root).filter((w) => w.open).length;
+  graphButton.text = open ? `$(git-merge) Agent Graph $(bell-dot) ${open}` : "$(git-merge) Agent Graph";
+  graphButton.tooltip = open ? `Open the Agent Change Graph · ${open} waiting on you` : "Open the Agent Change Graph";
+  graphButton.show();
 }
 
 async function showHistory() {
@@ -347,6 +379,7 @@ function refreshPreview() {
 function refreshEverything() {
   renderAll();
   updateHistoryButton();
+  updateGraphButton();
   refreshGraph();
   codeLensChanged.fire();
 }
@@ -375,7 +408,11 @@ function addFolder(folder, ctx) {
   const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(found), ".claude/imprimatur/**"));
   /** @param {vscode.Uri} uri */
   const waiting = path.join(found, WAITING_DIR) + path.sep;
-  const changed = (uri) => (uri.fsPath.startsWith(waiting) ? refreshGraph() : refreshSoon());
+  const changed = (uri) => {
+    if (!uri.fsPath.startsWith(waiting)) return refreshSoon();
+    refreshGraph();
+    updateGraphButton();
+  };
   ctx.subscriptions.push(w, w.onDidChange(changed), w.onDidCreate(changed), w.onDidDelete(changed));
 }
 
@@ -386,9 +423,13 @@ function activate(ctx) {
   status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
   historyButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 49);
   historyButton.command = "imprimatur.showHistory";
+  graphButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 48);
+  graphButton.command = "imprimatur.openGraph";
   ctx.subscriptions.push(
     status,
     historyButton,
+    graphButton,
+    ...Object.entries(graphCommands).map(([id, fn]) => vscode.commands.registerCommand(id, fn)),
     ...Object.values(types),
     vscode.workspace.registerTextDocumentContentProvider(SCHEME, { provideTextDocumentContent: historyContent }),
     vscode.commands.registerCommand("imprimatur.showHistory", showHistory),
@@ -429,6 +470,7 @@ function activate(ctx) {
       if (e) updateStatus(hunksByFile.get(e.document.uri.fsPath) ?? []);
       else status.hide();
       updateHistoryButton();
+      updateGraphButton();
     }),
     vscode.workspace.onDidSaveTextDocument(renderAll),
     vscode.workspace.onDidChangeTextDocument((ev) => {
@@ -465,6 +507,7 @@ function activate(ctx) {
     }),
   );
   renderAll();
+  updateGraphButton();
   updateHistoryButton();
   // Load the markdown extension's plugins now, so Accept units use its parser before any preview opens.
   vscode.commands.executeCommand("markdown.api.render", "").then(undefined, () => {});

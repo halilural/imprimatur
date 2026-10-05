@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "Review your AI agent's edits like tracked changes: marked in the editor and the Markdown preview until you accept them.",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "publisher": "halilural",
   "license": "MIT",
   "engines": {
@@ -22,6 +22,7 @@
     "graph.js",
     "graphView.js",
     "waiting.js",
+    "narration.js",
     "preview-markers.js",
     "mermaid-diff.js"
   ],
@@ -55,6 +56,26 @@
       {
         "command": "imprimatur.acceptRange",
         "title": "Accept Agent Changes in Range",
+        "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.graph.acceptEdit",
+        "title": "Accept this edit",
+        "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.graph.openDiff",
+        "title": "Open diff",
+        "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.graph.markDone",
+        "title": "Mark as done",
+        "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.graph.copyAsk",
+        "title": "Copy what to do",
         "category": "Imprimatur"
       }
     ],
@@ -109,6 +130,44 @@
         {
           "command": "imprimatur.acceptRange",
           "when": "false"
+        },
+        {
+          "command": "imprimatur.graph.acceptEdit",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.graph.openDiff",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.graph.markDone",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.graph.copyAsk",
+          "when": "false"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "imprimatur.graph.acceptEdit",
+          "when": "webviewId == 'imprimatur.graph' && webviewSection == 'edit-open'",
+          "group": "1_review@1"
+        },
+        {
+          "command": "imprimatur.graph.openDiff",
+          "when": "webviewId == 'imprimatur.graph' && webviewSection =~ /^edit-/",
+          "group": "1_review@2"
+        },
+        {
+          "command": "imprimatur.graph.markDone",
+          "when": "webviewId == 'imprimatur.graph' && webviewSection == 'waiting-open'",
+          "group": "1_review@1"
+        },
+        {
+          "command": "imprimatur.graph.copyAsk",
+          "when": "webviewId == 'imprimatur.graph' && webviewSection =~ /^waiting-/",
+          "group": "1_review@2"
         }
       ]
     },

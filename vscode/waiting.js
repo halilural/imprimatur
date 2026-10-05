@@ -9,13 +9,13 @@ const path = require("node:path");
 
 const WAITING_DIR = path.join(".claude", "imprimatur", "waiting");
 
-/** Kinds that open an item; "answer" and "step" only close. */
+/** Kinds that open an item; "answer", "step" and "done" (closed by hand) only close. */
 const OPENS = ["question", "command", "verify", "input"];
 
 /**
  * @typedef {{t: string, session?: string, kind: string, text?: string, detail?: string, prompt?: string, title?: string, answer?: string}} WaitingRecord
  * @typedef {{t: string, session: string, kind: string, text: string, detail?: string, prompt?: string, title?: string,
- *            open: boolean, answer?: string, answeredAt?: string}} WaitingItem
+ *            open: boolean, done?: boolean, answer?: string, answeredAt?: string}} WaitingItem
  */
 
 /**
@@ -31,6 +31,7 @@ function itemsOf(records, session) {
       it.open = false;
       it.answeredAt = r.t;
       if (r.kind === "answer" && r.answer) it.answer = r.answer;
+      if (r.kind === "done") it.done = true;
     }
     if (OPENS.includes(r.kind))
       items.push({ t: r.t, session, kind: r.kind, text: r.text ?? "", detail: r.detail, prompt: r.prompt, title: r.title, open: true });
