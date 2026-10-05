@@ -14,7 +14,7 @@ Sürüyor — 2026-10-03
 - DONE: (C) 4. 0.18.0 paketlendi ve kuruldu (`halilural.imprimatur`), `halilural.agent-review` kaldırıldı, makine ayarı `imprimatur.showIn: both`, `imprimatur.editorAlsoFor` (yedek scratchpad'de) — 2026-10-03. Paketle, kur; eski `halilural.agent-review` eklentisini kaldır (iki kopya çakışır); makine ayarlarını `imprimatur.*`'a taşı
 - DONE: (C) 5a. Repodaki ad da Imprimatur (kullanıcı, 2026-10-03: "repodaki adı agent review değil imprimatur olsun"): `modules/imprimatur/` → `modules/imprimatur/`, paket adı, veri klasörü `.claude/agent-review/` → `.claude/imprimatur/` (groundwork, dirtywork, interview'daki veri taşınır), hook yolları (proje + global ayar), git ignore, CSS sınıfları `imprimatur-*`, `docs/testing/imprimatur*.md` → `imprimatur*.md`, ARCHITECTURE bölümü, CLAUDE.md
 - NOTE: (2026-10-03) 5a yapıldı: klasör `modules/imprimatur/`, `docs/testing/imprimatur.md` + `imprimatur-sandbox.md` (sandbox taban metne döndü), veri `.claude/imprimatur/` (groundwork ve interview'da taşındı; dirtywork'te veri yoktu), global hook yolu ve `~/.config/git/ignore` (yedek scratchpad'de), interview `.gitignore` satırı (interview'da commit'lenmedi), CSS sınıfları `imprimatur-*`. 61/61, hook testleri geçti, 0.18.1 kuruldu. Test kimlikleri MT-AR kaldı
-- 👉 TODO: (K) 5. Reload Window (groundwork, dirtywork, interview) → Extensions'ta "Imprimatur"; Claude bir MD değiştirince işaretler ve ✓ Accept çalışıyor
+- DONE: (K) 5. Reload Window (groundwork, dirtywork, interview) → Extensions'ta "Imprimatur"; Claude bir MD değiştirince işaretler ve ✓ Accept çalışıyor — kullanımda doğrulandı (2026-10-05)
 - TODO: (C) 6. `ARCHITECTURE.md` son hâl eşleşmesi
 
 ## Sorular (kullanıcıya)

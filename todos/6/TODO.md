@@ -20,10 +20,10 @@
 - NOTE: (2026-10-02) C3'ün üstündeki boş satır (12) soluk: tazelik farkı boş satırı eskisiyle eşleştiriyor; küçük, kullanıcı istemezse dokunulmaz
 - DONE: (K) MT-AR-008, 009, 010: kullanıcı "bunların hepsi oldu" — geçti — 2026-10-02
 - NOTE: (2026-10-02) Kullanıcı yeni istek: önceki değişiklikleri düğmeyle görmek, "commit commit gibi" → [#7](../7/TODO.md)
-- 👉 TODO: (K) MT-AR-011 dirtywork / interview
-- TODO: (K) MT-AR-001 eklenti kurulu (0.4.0), MT-AR-002 temiz başlangıç
+- DONE: (K) MT-AR-011 dirtywork / interview — kullanımda doğrulandı (2026-10-05)
+- DONE: (K) MT-AR-001 eklenti kurulu (0.4.0), MT-AR-002 temiz başlangıç — kullanımda doğrulandı (2026-10-05)
 - TODO: (K+C) MT-AR-004 cümle, MT-AR-005 ekleme/silme, MT-AR-006 son düzenleme parlak, MT-AR-007 kaydırma çubuğu
-- TODO: (K) MT-AR-008 stage renklere dokunmaz, MT-AR-009 Accept, MT-AR-010 Accept all + tarihçe
+- DONE: (K) MT-AR-008 stage renklere dokunmaz, MT-AR-009 Accept, MT-AR-010 Accept all + tarihçe — kullanımda doğrulandı (2026-10-05)
 - TODO: (C) Sonuçları agent-review.md durum satırlarına yaz; kalan hata → yeni issue
 - TODO: (C) Deneme dosyasını taban metne döndür ve commit'le (bkz. #5 notu)
 

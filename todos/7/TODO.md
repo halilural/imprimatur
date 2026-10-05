@@ -20,7 +20,7 @@ Sürüyor: tasarım — 2026-10-02
 - DONE: (C) Tekrar düzeltmesi 0.5.1: `historyEdits` aynı `before` + 2 sn içindeki satırı tek düzenleme sayar; düğme sayısı da aynı listeden; test 30/30; sandbox ölçümü: 5 gerçek düzenleme (groundwork#5 "Son paragraf" +1 −1 … groundwork#1 pazartesi); kuruldu — 2026-10-02
 - ANSWERED: (kullanıcı, 2026-10-02, ekran 17: Git Graph eklentisi) "Bu şekilde olabiliyor mu?" → evet: Webview paneli kararlı API (Git Graph da webview). Öneri: "Agent Edits" paneli: bütün dosyalardaki ajan düzenlemeleri tablo hâlinde (Açıklama · Dosya · Tarih · Oturum · +/−), satıra tıkla → fark penceresi; dosyaya göre süzgeç. Açıklama için kaynak yok (commit mesajı gibi); seçenek: Claude oturum dökümünden (`transcript_path`) o düzenlemeden önceki kullanıcı isteğinin ilk satırı
 - ANSWERED: (2026-10-02) Panel yapılsın mı; açıklama sütununa kullanıcının o andaki isteği (oturum dökümünden) yazılsın mı? Varsayılan: evet ikisi de (~1,5–2 saat) → kullanıcı: "Agent Change Graph gibi", "tamam yap bakalım" → [#8](../8/TODO.md)
-- 👉 TODO: (K) 5. Gözle: düğme, liste, fark penceresi
+- DONE: (K) 5. Gözle: düğme, liste, fark penceresi — kullanımda doğrulandı (2026-10-05)
 
 ## Sorular (kullanıcıya)
 

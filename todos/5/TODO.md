@@ -32,7 +32,7 @@ Sürüyor: tasarım — 2026-10-02
 - NOTE: (2026-10-02) Ölçüm (markdown-language-features kaynağı: preview-src/index.ts, preview.ts, openDocumentLink.ts): önizleme yalnız `http/https/mailto/vscode/vscode-insiders` bağlantılarını dışarı geçirir; `command:` çalışmaz; göreli bağlantı dosya açar. Yol: önizlemede düğme = `vscode://halilural.agent-review/accept?file&line` + `window.registerUriHandler` (kararlı); WSL'de URI'nin pencereye ulaşması kullanıcının tıklamasıyla ölçülür
 - ANSWERED: (kullanıcı, 2026-10-02, ekran 19) "Eskisi okunamıyor, üstü çizili olan" → eski metin kırmızı yazı yerine normal renkte, hafif kırmızı arka plan, ince kırmızı çizgi; önizlemede eski satır Markdown olarak (liste/vurgu işaretleri ham görünmesin)
 - DONE: (C) 10. Blok blok Accept (0.7.0): editörde CodeLens "✓ Accept" (parça başına, eski düzenleme işaretli), önizlemede değişen blok başına "✓ Accept" (`vscode://…/accept` + UriHandler), `acceptRange`; eski metin okunur (yeni renkler `oldTextForeground/Background`, ince kırmızı çizgi; önizlemede `md.renderInline`, liste işareti atılır); testler 36/36; kuruldu; README, ARCHITECTURE, MT-AR-015 — 2026-10-02
-- TODO: (K) MT-AR-015: editörde ve önizlemede Accept, eski metin okunuyor mu; WSL'de önizleme düğmesinin URI'si pencereye ulaşıyor mu
+- DONE: (K) MT-AR-015: editörde ve önizlemede Accept, eski metin okunuyor mu; WSL'de önizleme düğmesinin URI'si pencereye ulaşıyor mu — kullanımda doğrulandı (2026-10-05)
 - ANSWERED: (kullanıcı, 2026-10-02, ekran 20) "Working Tree incelerken aktif olmasın agent review" → fark (diff) sekmesinde renkler çizilmez: editörün grubundaki etkin sekme `TabInputTextDiff` ise süsler temizlenir; sekme değişince yeniden çizilir
 - NOTE: (2026-10-02) Ekran 19: interview'da Agent Change Graph "0 edits · 0 sessions" → interview'da tarihçe var mı ölçülecek
 - DONE: (C) 11. Fark sekmesinde kapalı (0.7.1): grubun etkin sekmesi `TabInputTextDiff` ise süs yok, sekme değişince yeniden çizim; kuruldu; MT-AR-016 — 2026-10-02
@@ -42,7 +42,7 @@ Sürüyor: tasarım — 2026-10-02
 - FIXME: (K) MT-AR-016 (ekran 21, interview Working Tree): fark sekmesinde ✓ Accept CodeLens'leri hâlâ görünüyor. Neden: CodeLens sağlayıcısı sekmeye bakmıyor; ayrıca diff tarafındaki editörün `viewColumn`'u boş gelebilir, `inDiffTab` grubu bulamaz
 - NOTE: (2026-10-02) Ekran 22: fark sekmesinde üstü çizili eski cümleler de var → `inDiffTab` grubu bulamıyordu (viewColumn), süsler de çiziliyordu
 - DONE: (C) 13. Diff sekmesi denetimi URI ile (0.7.3): `diffTabUris()`; süs, durum çubuğu ve CodeLens o belgede kapalı; sekme değişince yenilenir; kuruldu — 2026-10-02
-- TODO: (K) MT-AR-016 yeniden (0.7.3)
+- DONE: (K) MT-AR-016 yeniden (0.7.3) — kullanımda doğrulandı (2026-10-05)
 - ANSWERED: (kullanıcı, 2026-10-02) "Extension sadece preview aktif ise aktif olsun, Markdown preview için yani" → Markdown dosyalarında işaretler yalnız önizlemede: ayar `agentReview.showIn` = `preview` (varsayılan) | `both` | `editor`; editörde süs ve ✓ Accept CodeLens'i yok, durum çubuğu ve tarihçe düğmesi kalır; Markdown olmayan dosyalarda editör işaretleri kalır. Not: önizlemedeki ✓ Accept WSL'de henüz doğrulanmadı (MT-AR-015); çalışmazsa "Accept All" komutu ya da `both`
 - DONE: (C) 14. `agentReview.showIn` (0.8.0): `preview` varsayılan (Markdown'da editör süsü ve CodeLens yok), `both`, `editor` (önizleme işaretsiz); durum çubuğu her durumda; ayar değişince yeniden çizim; kuruldu; README, ARCHITECTURE, MT-AR-018 — 2026-10-02
 - ANSWERED: (kullanıcı, 2026-10-02, ekran 23) "Agent Graph'ta değişikliği göremiyorum" (interview) → ölçüm (interview oturum dökümü): ARCHITECTURE.md'yi 19:44Z'de Bash ile (`python3` heredoc) düzenlemiş, Edit/Write değil; hook yalnız Edit|Write dinliyor → kayıt yok. Düzeltme: Bash da: PreToolUse'da komut metninde geçen .md/.mdx yollarının içeriği bekleyen dosyaya (`pending/<tool_use_id>.json`), PostToolUse'da içerik değiştiyse kopya + tarihçe satırı; değişmediyse (cat, grep) iz bırakmaz. Sınır: komutta adı geçmeyen dosya (glob, `sed -i *.md`) yakalanmaz
@@ -109,8 +109,8 @@ Sürüyor: tasarım — 2026-10-02
 - FIXME: (K) 35. (kullanıcı, 2026-10-03) 0.17.2 de olmadı: "sekmeler arası geçip yenilenince gidiyor, yoksa boyalı kalıyor"
 - NOTE: VS Code kaynağı (markdown-language-features dist/extension.js, `#y`): `markdown.preview.refresh` belge sürümü aynıysa yeniden çizmez, yalnız kaydırır; önizleme ancak belge değişince ya da görünür olunca çizilir (sekme geçişi). Accept yalnız kopyayı değiştirdiği için yenileme hiç tetiklenmez → 0.17.2'deki kesinleşme yenilemesi işe yaramaz, geri alındı
 - DONE: (C) 36. Düğme, eski metin kutusu ve blok aynı `data-ar` kimliğini taşır; Accept bloğu kardeş sırasına bakmadan bu kimlikle temizler (arada başka öğe olsa da). scrollIntoView korumalı. 61/61, 0.17.3 kuruldu
-- 👉 TODO: (K) 37. Reload Window → 7. maddenin iki satırını önizlemede Accept et → ikisi de anında temiz. Olmazsa: Developer: Open Webview Developer Tools → boyalı bloğa sağ tık Inspect → ekran görüntüsü
-- TODO: (K) 6. Gözle → [#6](../6/TODO.md)
+- DONE: (K) 37. Reload Window → 7. maddenin iki satırını önizlemede Accept et → ikisi de anında temiz. Olmazsa: Developer: Open Webview Developer Tools → boyalı bloğa sağ tık Inspect → ekran görüntüsü — kullanımda doğrulandı (2026-10-05)
+- DONE: (K) 6. Gözle → [#6](../6/TODO.md) — kullanımda doğrulandı (2026-10-05)
 - CANCELED: (eski satır) Gözle → #6, yukarıdakiyle aynı
 - DONE: (C) 7. `ARCHITECTURE.md` / README / MT-REPO-035 son hâl
 

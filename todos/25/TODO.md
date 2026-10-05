@@ -4,7 +4,7 @@
 
 ## Durum
 
-Sürüyor: #26 yapıldı (5ffb9ea), sıradaki #27 — 2026-10-05
+Sürüyor: #26 yapıldı (5ffb9ea), sıradaki #29 (bağlam bütçesi, öne alındı) — 2026-10-05
 
 ## Yapılacaklar
 
@@ -12,7 +12,7 @@ Sürüyor: #26 yapıldı (5ffb9ea), sıradaki #27 — 2026-10-05
 - DONE: (K) #26'yı commit edip main'e birleştirme onayı — 5ffb9ea, push edildi (2026-10-05)
 - TODO: (C) [#27 Kaçırılan ajan dosyaları](https://github.com/halilural/imprimatur/issues/27)
 - TODO: (C) [#28 Ne zaman devreye giriyor, bu dosyada ajanı ne etkiliyor](https://github.com/halilural/imprimatur/issues/28)
-- TODO: (C) [#29 Bağlam maliyeti](https://github.com/halilural/imprimatur/issues/29)
+- 👉 TODO: (C) [#29 Bağlam bütçesi: kalem kalem token, kaldırma önerisi](https://github.com/halilural/imprimatur/issues/29)
 - TODO: (C) [#30 Sağlık kontrolleri](https://github.com/halilural/imprimatur/issues/30)
 - TODO: (C) [#31 Repolar arası sapma](https://github.com/halilural/imprimatur/issues/31)
 - TODO: (C) [#32 Geçmiş](https://github.com/halilural/imprimatur/issues/32)
@@ -22,3 +22,4 @@ Sürüyor: #26 yapıldı (5ffb9ea), sıradaki #27 — 2026-10-05
 
 - DECISION: (2026-10-05) Kullanıcı: "projede ajanı etkileyen her şeyi takip etsin; Claude, Cursor felan ne varsa, sonradan eklenenler dahil". İlk adım takip ve görüntüleme, yönetme sonra. Sıra 1 → 2 → 4 → 5 (#27 → #28 → #30 → #31), sonra #29, #32, #33.
 - DECISION: (2026-10-05) Görünüm etkinlik çubuğunda kendi simgesiyle; Agent Change Graph'a oradan da gidilir. Dosyalar araç, sonra tür altında gruplu.
+- DECISION: (2026-10-05) Kullanıcı onayı: #29 pazar araştırmasının F1'i (bağlam bütçesi + kaldırma önerisi) ile genişletildi ve sıranın başına alındı: #29 → #27 → #28 → #30 → #31, sonra #32, #33. Ücretli "Ekip: yönetişim ve iş birliği metrikleri" epic'i kullanıcı görüşmeleri yapılana kadar açılmıyor.

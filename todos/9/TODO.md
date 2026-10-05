@@ -25,7 +25,7 @@ Sürüyor — 2026-10-02
 - ANSWERED: (2026-10-03) Mermaid Chart'ı WSL'den kaldırayım mı (`code-server --uninstall-extension mermaidchart.vscode-mermaid-chart`; geri kurulabilir)? → kullanıcı: "Kaldırmıyorum; agent review tarafını kaldıralım, Mermaid chart'larını etkileyen"
 - DECISION: (2026-10-03) Mermaid diyagram farkı varsayılan KAPALI: ayar `agentReview.mermaidDiff` (false); kapalıyken önizleme Mermaid bloklarına hiçbir satır, açıklama ya da düğme eklemez. Kod kalır (tek Mermaid eklentisiyle açılabilir)
 - DONE: (C) Ayar ve kurulum (0.17.0): `getBase` yalnız `agentReview.mermaidDiff` açıkken; varsayılan kapalı; kuruldu; README, ARCHITECTURE, MT-AR-020/021 — 2026-10-03
-- 👉 TODO: (K) Gözle (varsayılan kapalı): Reload Window, interview HLD diyagramında turuncu MQ ve iki ok
+- DONE: (K) Gözle (varsayılan kapalı): Reload Window, interview HLD diyagramında turuncu MQ ve iki ok — kullanımda doğrulandı (2026-10-05)
 
 ## Sorular (kullanıcıya)
 

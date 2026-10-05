@@ -15,7 +15,7 @@ Sürüyor — 2026-10-02
 - ANSWERED: (kullanıcı sordu, 2026-10-02) "Interview reposuna da kurdun mu?" → evet, makine geneli: interview'un kendi dosyalarına bir şey yazılmadı, hook ve ignore orada da geçerli; ölçüm DONE 3'te (interview `.claude/rules/coding-modules.md`); interview penceresi 12:10'dan beri açık, eklenti için Reload Window gerekli
 - ANSWERED: (kullanıcı sordu, 2026-10-02) "Extension'ı nereden göreceğim, adı ne?" → "Agent Review" (halilural.agent-review 0.2.0); Extensions panelinde (Ctrl+Shift+X) "Agent Review" araması ya da `@installed agent`; komutlar Ctrl+Shift+P → "Agent Review"; durum çubuğunda "N agent changes"
 - NOTE: (2026-10-02) Kullanıcının ekran görüntüsü 8 (interview): eklenti interview'da çalışıyor (kelime farkı, yeşil, soluk katman) → kurulum interview'da doğrulandı; yeni istek [#5](../5/TODO.md) (git'ten bağımsız)
-- 👉 TODO: (K) 4. dirtywork / interview penceresinde Reload Window, Claude bir MD değiştirince renkler
+- DONE: (K) 4. dirtywork / interview penceresinde Reload Window, Claude bir MD değiştirince renkler — kullanımda doğrulandı (2026-10-05)
 
 ## Sorular (kullanıcıya)
 
