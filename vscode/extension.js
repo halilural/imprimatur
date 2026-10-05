@@ -9,6 +9,7 @@ const path = require("node:path");
 const { review, acceptHunk, acceptLines, acceptGroups } = require("./diff.js");
 const { markdownItPlugin, markdownBlocks } = require("./preview.js");
 const { openGraph, refreshGraph } = require("./graphView.js");
+const { WAITING_DIR } = require("./waiting.js");
 const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, historyEdits } = require("./review-state.js");
 
 const color = (id) => new vscode.ThemeColor(id);
@@ -370,8 +371,12 @@ function addFolder(folder, ctx) {
   if (roots.has(norm(found))) return;
   roots.add(norm(found));
   // Copies and history change on every agent edit; re-render on any of them.
+  // The waiting log changes every turn and only feeds the graph: no preview reload.
   const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(found), ".claude/imprimatur/**"));
-  ctx.subscriptions.push(w, w.onDidChange(refreshSoon), w.onDidCreate(refreshSoon), w.onDidDelete(refreshSoon));
+  /** @param {vscode.Uri} uri */
+  const waiting = path.join(found, WAITING_DIR) + path.sep;
+  const changed = (uri) => (uri.fsPath.startsWith(waiting) ? refreshGraph() : refreshSoon());
+  ctx.subscriptions.push(w, w.onDidChange(changed), w.onDidCreate(changed), w.onDidDelete(changed));
 }
 
 /** @param {vscode.ExtensionContext} ctx */

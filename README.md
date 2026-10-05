@@ -27,7 +27,16 @@ staging or committing does not clear the marks.
   or **All changes under review**. It stays after Accept all.
 - **Agent Change Graph** (from that list, or the command palette): every agent
   edit in the repo as a table like Git Graph, one colored lane per Claude
-  session, the user's request that led to each edit, click a row for its diff.
+  session, click a row for its diff. The description is what the agent said it
+  was doing (or the Bash command's description); for older edits, the nearest
+  heading and the first changed line. Your request is in the row's tooltip, the
+  session column shows Claude's title for the conversation.
+  A ✓ marks edits with nothing left under review; hover an unchecked row to
+  see its change.
+- **Waiting on you**, the graph's second tab: everything the agent asked of
+  you (questions, commands waiting for permission, "verify / test this" at the
+  end of a turn), open ones first, with your answer once you reply. Click a row
+  for the full text; the filter works on both tabs.
 
 Setting `imprimatur.showIn`: Markdown files are marked only in the preview by
 default (`preview`); `both` adds the editor marks and its ✓ Accept lenses,
@@ -65,6 +74,12 @@ through where they were.
    same, whichever agent edit made it; the edit history keeps the order.
 3. Accept writes the change at the cursor into the copy; Accept all deletes the
    copy. The history stays.
+4. A second hook ([hooks/waiting.mjs](hooks/waiting.mjs)) appends what the
+   agent waits on you for to `.claude/imprimatur/waiting/<session>.jsonl`:
+   AskUserQuestion, PermissionRequest, input notifications, and the lines of
+   the final message that ask something (a `?`, or phrases like "test et",
+   "please verify", "shall I"). Any later event in the session closes the
+   earlier items; your next prompt is kept as the answer.
 
 ## Install
 
@@ -91,6 +106,11 @@ Requires Node 22+, git and VS Code 1.100+.
      }
    }
    ```
+
+   For the **Waiting on you** tab, also run `hooks/waiting.mjs` (no
+   arguments) on `PreToolUse` and `PostToolUse` with matcher `AskUserQuestion`,
+   on `PermissionRequest`, `Stop` and `UserPromptSubmit`, and on `Notification`
+   with matcher `agent_needs_input|elicitation_dialog|elicitation_url_dialog`.
 
 2. Ignore the copies: add `.claude/imprimatur/` to `.gitignore` (or to your
    global git ignore file).

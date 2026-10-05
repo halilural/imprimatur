@@ -36,6 +36,7 @@ burada yalnız gözle bakılması gerekenler.
   - [MT-AR-021 · Mermaid diyagram farkı (ayar imprimatur.mermaidDiff açıkken)](#mt-ar-021--mermaid-diyagram-farkı-ayar-imprimaturmermaiddiff-açıkken)
   - [MT-AR-022 · todos/ altındaki dosyalarda önizleme ve kaynak birlikte](#mt-ar-022--todos-altındaki-dosyalarda-önizleme-ve-kaynak-birlikte)
   - [MT-AR-023 · Yeni blok tek Accept, değişen hücre tek satır](#mt-ar-023--yeni-blok-tek-accept-değişen-hücre-tek-satır)
+  - [MT-AR-024 · Waiting on you sekmesi](#mt-ar-024--waiting-on-you-sekmesi)
 - [Başka repolar](#başka-repolar)
   - [MT-AR-011 · dirtywork ve interview'da da çalışır](#mt-ar-011--dirtywork-ve-interviewda-da-çalışır)
 - [Bitiş](#bitiş)
@@ -278,6 +279,18 @@ burada yalnız gözle bakılması gerekenler.
   2. Editörde ✓ Accept'lere bak.
 - Beklenen: yeni tablonun (ya da var olan tabloya eklenen satırların) üstünde tek "✓ Accept N lines", alıntıda tek, her liste maddesinde ayrı; değişen hücrenin satırında kendi ✓ Accept'i. Önizlemede tablonun üstünde "✓ Accept table".
 - TODO: MT-AR-023
+
+### MT-AR-024 · Waiting on you sekmesi
+
+- Önkoşul: 0.19.0 kurulu, Reload Window; `hooks/waiting.mjs` `~/.claude/settings.json`'da; yeni bir Claude oturumu (hook'lar oturum başında okunur).
+- Adımlar:
+  1. Claude'a "bana iki seçenekli bir soru sor" de, cevaplama.
+  2. Agent Change Graph → Waiting on you.
+  3. Soruyu cevapla; Claude izin isteyen bir komut çalıştırsın (ör. `git push --dry-run`), izin ver.
+  4. Claude turu "panelde kontrol eder misin?" gibi bir istekle bitirsin.
+  5. Süzgece istekten bir kelime yaz; "show answered"ı aç/kapa; bir satıra tıkla.
+- Beklenen: (2) sekmede rozet 1, ❓ satırı "open". (3) soru "answered: <seçenek>", ⚙ komut satırı görünüp kapanmış. (4) 👀 ya da ❓ yeni açık satır. (5) süzgeç iki sekmede de çalışır; cevaplananlar yalnız kutu açıkken; tıklayınca tam metin, istek ve cevap açılır. Önizleme bu sırada yenilenip zıplamaz.
+- TODO: MT-AR-024
 
 ## Başka repolar
 

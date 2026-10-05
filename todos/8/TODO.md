@@ -14,6 +14,7 @@ Sürüyor: tasarım — 2026-10-02
 - DONE: (C) 4. Webview paneli "Agent Change Graph": SVG şeritler (oturum başına renk), tablo, dosya süzgeci, satıra tıkla → fark; ajan düzenleyince yenile; komut + tarihçe listesinden ve durum çubuğundan açılır
 - DONE: (C) 5. 0.6.0 paketi, kurulum, MT-AR-014, README
 - NOTE: (2026-10-02) Uygulandı 0.6.0: hook `prompt` (test), `graph.js` graphRows (test), `graphView.js` webview (CSP + nonce, SVG şerit, süzgeç, tıkla → `vscode.diff`), komut + tarihçe listesinin başı, ajan düzenleyince yenilenir; testler 33/33; kuruldu; README, ARCHITECTURE, MT-AR-014. Eski tarihçe satırlarında istek yok (açıklama yerine "Edit <dosya>")
+- DONE: (C) 7. Açıklama = ajanın bu turdaki sözü / Bash açıklaması, yoksa başlık + ilk değişen satır; istek tooltip'te; oturum sütunu oturum başlığı (kullanıcı, 2026-10-05: "olur" anlamsız) — 0.19.0, 71/71
 - 👉 TODO: (K) 6. Gözle: panel, şeritler, açıklama, tıklayınca fark
 
 ## Sorular (kullanıcıya)

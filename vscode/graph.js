@@ -49,8 +49,8 @@ function acceptedOf(edits, copy, staged, current) {
 /**
  * @param {string} root repo root
  * @param {(file: string) => string | undefined} [currentText] open-editor text, else read from disk
- * @returns {{rows: Array<{file: string, n: number, t: string, session?: string, tool?: string, prompt?: string, added: number, removed: number, accepted: boolean, preview?: Array<[string, string]>, lane: number}>,
- *            lanes: Array<{session: string, first: number, last: number}>}}
+ * @returns {{rows: Array<{file: string, n: number, t: string, session?: string, tool?: string, prompt?: string, intent?: string, summary: string, title?: string, added: number, removed: number, accepted: boolean, preview?: Array<[string, string]>, lane: number}>,
+ *            lanes: Array<{session: string, title?: string, first: number, last: number}>}}
  */
 function graphRows(root, currentText = () => undefined) {
   const dir = path.join(root, HISTORY_DIR);
@@ -68,8 +68,8 @@ function graphRows(root, currentText = () => undefined) {
     const accepted = acceptedOf(edits, fs.existsSync(copy) ? fs.readFileSync(copy, "utf8") : undefined, latestBefore(log), current);
     for (const e of edits) {
       const ok = accepted(e);
-      rows.push({ file, n: e.n, t: e.t, session: e.session, tool: e.tool, prompt: e.prompt, added: e.added, removed: e.removed, accepted: ok,
-        preview: ok ? undefined : previewOf(e.before, e.after), lane: 0 });
+      rows.push({ file, n: e.n, t: e.t, session: e.session, tool: e.tool, prompt: e.prompt, intent: e.intent, summary: summaryOf(e.before, e.after),
+        title: e.title, added: e.added, removed: e.removed, accepted: ok, preview: ok ? undefined : previewOf(e.before, e.after), lane: 0 });
     }
   }
   rows.sort((a, b) => Date.parse(b.t) - Date.parse(a.t));
@@ -78,11 +78,34 @@ function graphRows(root, currentText = () => undefined) {
   rows.forEach((r, i) => {
     const key = r.session ?? "?";
     let lane = lanes.findIndex((l) => l.session === key);
-    if (lane < 0) lane = lanes.push({ session: key, first: i, last: i }) - 1;
+    // Rows are newest first: the first title seen is the session's latest.
+    if (lane < 0) lane = lanes.push({ session: key, title: r.title, first: i, last: i }) - 1;
+    lanes[lane].title ??= r.title;
     lanes[lane].last = i;
     r.lane = lane;
   });
   return { rows, lanes };
+}
+
+/**
+ * What an edit changed, from the text alone (for edits without the agent's
+ * words): the nearest Markdown heading above the first change, and the first
+ * changed line, list markers and emphasis stripped.
+ * @param {string} before @param {string} after
+ */
+function summaryOf(before, after) {
+  const h = diff(before, after)[0];
+  if (!h) return "No change";
+  const lines = after.split(/\r?\n/);
+  const old = before.split(/\r?\n/);
+  const clean = (s) => s.replace(/^\s*(?:[-*+]|\d+[.)]|>)\s+/, "").replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\*\*|__|`/g, "").trim();
+  const changed = h.newEnd > h.newStart ? lines.slice(h.newStart, h.newEnd) : old.slice(h.oldStart, h.oldEnd);
+  const line = clean(changed.find((l) => l.trim()) ?? "");
+  let heading;
+  for (let i = Math.min(h.newStart, lines.length - 1); i >= 0 && !heading; i--) if (/^#{1,6}\s/.test(lines[i]) && i !== h.newStart) heading = lines[i].trim();
+  const what = h.newEnd > h.newStart ? line : `Removed: ${line}`;
+  const text = [heading, what].filter(Boolean).join(" · ");
+  return text.length > 120 ? `${text.slice(0, 119)}…` : text;
 }
 
 const PREVIEW_LINES = 40;
@@ -103,4 +126,4 @@ function previewOf(before, after) {
   return out.length > PREVIEW_LINES ? [...out.slice(0, PREVIEW_LINES), ["…", `${out.length - PREVIEW_LINES} more lines`]] : out;
 }
 
-module.exports = { graphRows, acceptedOf, previewOf };
+module.exports = { graphRows, acceptedOf, previewOf, summaryOf };
