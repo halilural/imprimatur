@@ -12,6 +12,7 @@ const { graphRows } = require("./graph.js");
 const { WAITING_DIR, waitingSteps, openSteps } = require("./waiting.js");
 const { audit } = require("./audit.js");
 const { scanHistory, scannedBefore } = require("./history.js");
+const { sessionTodos, placeOf } = require("./tasks.js");
 
 const KINDS = { question: ["❓", "Question"], command: ["⚙", "Command"], verify: ["👀", "Verify / test"], input: ["✋", "Input"] };
 
@@ -48,8 +49,10 @@ const STATES = {
  * The Waiting on you list: one row per step, newest first, history kept
  * (like the edits); open ones have a checkbox.
  * @param {ReturnType<typeof waitingSteps>} steps @param {ReturnType<typeof graphRows>["lanes"]} lanes
+ * @param {string} root
  */
-function waitingBody(steps, lanes) {
+function waitingBody(steps, lanes, root) {
+  const todos = sessionTodos(root);
   if (!steps.length) return `<tr><td colspan="7" class="empty">Nothing asked of you yet.</td></tr>`;
   const order = lanes.map((l) => l.session);
   const titles = new Map(lanes.map((l) => [l.session, l.title]));
@@ -62,7 +65,7 @@ function waitingBody(steps, lanes) {
     .map((w) => {
       const [icon, label] = KINDS[w.kind] ?? ["•", w.kind];
       const name = w.title ?? titles.get(w.session) ?? w.session.slice(0, 8);
-      const q = [w.text, w.prompt, w.answer, w.note, w.session, name, label, w.state].join(" ");
+      const q = [w.text, w.why, w.task, w.prompt, w.answer, w.note, w.session, name, label, w.state].join(" ");
       const mine = w.state === "done" && !w.by;
       const box = (on) => `<input type="checkbox" data-tick data-session="${esc(w.session)}" data-item="${esc(w.item)}" data-i="${w.i}"${on ? " checked" : ""} title="${on ? "Ticked by you: untick to reopen" : "Tick when you did or decided it"}">`;
       const status =
@@ -72,7 +75,15 @@ function waitingBody(steps, lanes) {
         : w.state === "replaced" ? `<span class="badge-gone" title="${esc(STATES.replaced[1])}">replaced</span>`
         : `<span class="pill" title="${esc(STATES[w.state]?.[1] ?? "")}">${esc(STATES[w.state]?.[0] ?? w.state)}</span>`;
       const source = mine ? "you" : w.by ?? (w.answer ? esc(w.answer) : "");
+      // The task and where it is written down (vscode/tasks.js): the key opens its issue or Jira page, the file icon its TODO.md line.
+      const place = placeOf(root, w, todos);
+      const open = (cls, attrs, label, title) => `<a href="#" class="task ${cls}" ${attrs} title="${esc(title)}">${label}</a>`;
+      const key = place.task
+        ? open("key", place.url ? `data-url="${esc(place.url)}"` : place.todo ? `data-todo="${esc(place.todo)}" data-line="${place.line ?? 0}"` : "", esc(place.task), place.url ?? (place.todo ? `Open ${place.todo}` : place.task))
+        : "";
+      const file = place.todo ? open("file", `data-todo="${esc(place.todo)}" data-line="${place.line ?? 0}"`, "📄", `${place.todo}${place.line ? `, line ${place.line}` : ""}`) : "";
       const more = [
+        w.why ? `<div class="why">${esc(w.why)}</div>` : "",
         w.detail && w.detail !== w.text ? `<details><summary>Full message</summary><pre>${esc(w.detail)}</pre></details>` : "",
         w.prompt ? `<div class="meta">Request: ${esc(w.prompt)}</div>` : "",
         w.note ? `<div class="meta">${esc(w.by ?? "")}: ${esc(w.note)}</div>` : "",
@@ -83,7 +94,7 @@ function waitingBody(steps, lanes) {
   data-vscode-context="${menu({ webviewSection: w.state === "open" ? "waiting-open" : "waiting-done", session: w.session, t: w.item, i: w.i, text: w.text })}">
   <td class="ok">${status}</td>
   <td class="k" title="${esc(label)}">${icon}</td>
-  <td class="d" title="${esc(w.text)}">${esc(w.text)}</td>
+  <td class="d" title="${esc([w.text, w.why].filter(Boolean).join("\n"))}">${key}${esc(w.text)}${file}</td>
   <td class="d p">${esc(w.prompt ?? "")}</td>
   <td class="t">${esc(time(w.t))}</td>
   <td class="s" style="color:${color(w.session)}" title="${esc(w.session)}">${esc(name)}</td>
@@ -170,6 +181,10 @@ function html(data, root, nonce, waiting = []) {
   .todo li.on span { text-decoration: line-through; opacity: .6; } .more.all { background: var(--vscode-testing-iconPassed, #73c991); }
   .todo pre { white-space: pre-wrap; font-family: var(--vscode-editor-font-family); margin: 4px 0; } .todo summary { cursor: pointer; opacity: .8; }
   .todo .meta { opacity: .75; margin-top: 4px; }
+  .todo .why { margin-bottom: 4px; }
+  a.task { text-decoration: none; } a.task:hover { text-decoration: underline; }
+  a.task.key { font-size: 11px; padding: 0 6px; margin-right: 6px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
+  a.task.file { margin-left: 6px; opacity: .7; } a.task.file:hover { opacity: 1; }
   .todo .chat { font-size: 10px; padding: 0 5px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
 </style></head><body>
 <header><strong>Agent Change Graph</strong>
@@ -180,7 +195,7 @@ function html(data, root, nonce, waiting = []) {
 <tbody>${body}</tbody></table></section>
 <section id="waiting"><div class="legend"><span>☐ open: tick when done</span><span><span class="badge-ok">✓</span> done</span><span><span class="badge-gone">replaced</span> asked again later</span><span><span class="pill">Answered</span> question you answered</span></div>
 <table><thead><tr><th>Status</th><th></th><th>Waiting for</th><th>Request</th><th>Date</th><th>Session</th><th>By</th></tr></thead>
-<tbody>${waitingBody(waiting, data.lanes)}</tbody></table><p class="empty" id="none" hidden>Nothing open right now.</p></section>
+<tbody>${waitingBody(waiting, data.lanes, root)}</tbody></table><p class="empty" id="none" hidden>Nothing open right now.</p></section>
 <div id="pop"></div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
@@ -253,6 +268,11 @@ function html(data, root, nonce, waiting = []) {
   document.querySelectorAll("input[data-tick]").forEach((box) => box.addEventListener("change", () => {
     vscode.postMessage({ type: "check", session: box.dataset.session, t: box.dataset.item, i: Number(box.dataset.i), on: box.checked });
   }));
+  document.querySelectorAll("a.task").forEach((a) => a.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    if (a.dataset.url) vscode.postMessage({ type: "openUrl", url: a.dataset.url });
+    else if (a.dataset.todo) vscode.postMessage({ type: "openTodo", file: a.dataset.todo, line: Number(a.dataset.line) });
+  }));
   document.getElementById("audit").addEventListener("click", (e) => { e.target.disabled = true; e.target.textContent = "Auditing…"; vscode.postMessage({ type: "audit" }); });
   document.getElementById("scan").addEventListener("click", (e) => { e.target.disabled = true; e.target.textContent = "Scanning…"; vscode.postMessage({ type: "scan" }); });
   addEventListener("scroll", hide);
@@ -282,6 +302,8 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
     panel.webview.onDidReceiveMessage((m) => {
       if (m.type === "check") return tick(m);
       if (m.type === "audit") return auditAll();
+      if (m.type === "openUrl" && /^https?:\/\//.test(m.url)) return vscode.env.openExternal(vscode.Uri.parse(m.url));
+      if (m.type === "openTodo" && shown) return openTodo(shown, m.file, m.line);
       if (m.type === "scan") return scanAll();
       return m.type === "accept" ? actions?.acceptEdit(m.file, m.n) : actions?.openDiff(m.file, m.n);
     });
@@ -343,6 +365,18 @@ async function auditAll() {
 
 /** The language model-written steps use: the setting, else the hooks' variable (vscode/history.js, audit.js). */
 const modelLang = () => vscode.workspace.getConfiguration("imprimatur").get("language") || process.env.IMPRIMATUR_LANG || undefined;
+
+/**
+ * Open a TODO.md at a line (1-based; 0: its top). Only files inside the repo.
+ * @param {string} root @param {string} file repo-relative @param {number} line
+ */
+async function openTodo(root, file, line) {
+  const abs = path.resolve(root, file);
+  if (path.relative(root, abs).startsWith("..")) return;
+  const doc = await vscode.workspace.openTextDocument(abs);
+  const at = new vscode.Position(Math.max(0, (line || 1) - 1), 0);
+  await vscode.window.showTextDocument(doc, { selection: new vscode.Range(at, at), preview: false });
+}
 
 /** Projects being scanned now (a second click or panel open waits for the first). */
 const scanning = new Set();

@@ -10,6 +10,24 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { askModel } = require("./model.js");
 const { openSteps, tickStep, labelsIn } = require("./waiting.js");
+const { sessionTodos, keyOfTodo, taskKeyIn } = require("./tasks.js");
+
+/**
+ * The task a turn is about, before the model: a key in the request or the
+ * reply, else the folder of the TODO.md the session edited last.
+ * @param {string} log <root>/.claude/imprimatur/waiting/<session>.jsonl @param {{message?: string, request?: string, session?: string}} turn
+ */
+function taskHint(log, turn) {
+  const key = taskKeyIn(turn.request) ?? taskKeyIn(turn.message);
+  if (key) return key;
+  try {
+    const root = path.resolve(path.dirname(log), "..", "..", "..");
+    const todos = sessionTodos(root).get(turn.session ?? path.basename(log, ".jsonl")) ?? [];
+    return todos.length ? keyOfTodo(todos[todos.length - 1]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Lines of the agent's message it marked for the user (👉 at the line start,
@@ -31,6 +49,7 @@ function pointedAsks(message) {
  */
 function auditPrompt(steps, turn, pointed = []) {
   const extract = !!turn.message && !pointed.length;
+  const rewrite = !!turn.message && pointed.length > 0;
   const out = [
     "You keep the list of what an AI coding agent is waiting on the user for. You are not the agent:",
     "do not answer anyone, only judge the list.",
@@ -54,7 +73,8 @@ function auditPrompt(steps, turn, pointed = []) {
       "</agent_reply>",
       "",
     );
-  if (pointed.length) out.push("<new_asks>", ...pointed.map((a) => `- ${a}`), "</new_asks>", "(The agent's reply asks these now; they are recorded already.)", "");
+  if (turn.task) out.push(`<task_hint>${turn.task}</task_hint> (the task this session works on; use it only for asks about that task)`, "");
+  if (pointed.length) out.push("<new_asks>", ...pointed.map((a) => `- ${a}`), "</new_asks>", "(The agent's reply asks these now.)", "");
   out.push(
     '1. "settled": letters of open steps that no longer wait on the user, each with clear evidence above:',
     "   the user's own words answer or decide it, the agent reports it done, a later step, a new ask or the",
@@ -63,18 +83,35 @@ function auditPrompt(steps, turn, pointed = []) {
     "   an issue, merge) is settled only by the user's explicit answer to that very step, or by the same ask",
     "   coming again. When unsure, keep it open: closing a real request by mistake is the worst outcome.",
   );
+  const lang = turn.lang ?? "the same language as the agent_reply";
+  const clear = [
+    `   Each is {"text", "why"}. Write both in ${lang}, whatever language the reply or the steps are in.`,
+    '   "text" must make sense on its own a week later, without the chat:',
+    "   name the task key, the person, the file or the exact thing (not \"send the follow-up mail\" but",
+    "   \"LATD-13937: send Tim the follow-up mail about the !2690 review\"); one sentence, at most ~25 words.",
+    '   "why": one short sentence of context from the reply (what it unblocks or what was found).',
+  ];
   if (extract)
     out.push(
       '2. "asks": what the agent_reply really needs from the user now: a decision, or something to check, test',
-      `   or do. One short question or instruction each, written in ${turn.lang ?? "the same language as the agent_reply"}.`,
-      "   Leave out reports and explanations. When it asks again what an open step asks, settle that old step",
-      "   and put the new wording here (one entry per decision). Empty if it needs nothing.",
+      "   or do. Leave out reports, explanations and routine steps (reload the window, restart) unless that is",
+      "   all it asks. When it asks again what an open step asks, settle that old step and put the new wording",
+      "   here (one entry per decision). Empty if it needs nothing.",
+      ...clear,
     );
+  if (rewrite)
+    out.push(
+      `2. "asks": the new_asks rewritten: exactly ${pointed.length} entr${pointed.length === 1 ? "y" : "ies"}, in the same order, the same meaning, nothing added.`,
+      '   A routine one (reload the window, restart) next to a real ask gets "text": "" (it is left out).',
+      ...clear,
+    );
+  if (turn.message)
+    out.push('3. "task": the task key this is about (a Jira-style key like ABC-123 or a GitHub #123), from the', "   reply, the request or the task_hint; empty if none.");
   out.push(
     "",
     "Steps are labelled with letters; numbers in the messages refer to something else, never to a step.",
     "First, one line per open step: its letter, open or settled, and the quoted evidence.",
-    `Then, as the very last line, JSON only: {"settled": [letters]${extract ? ', "asks": [strings]' : ""}}`,
+    `Then, as the very last line, JSON only: {"settled": [letters]${turn.message ? ', "asks": [{"text", "why"}], "task": ""' : ""}}`,
   );
   return out.join("\n");
 }
@@ -92,20 +129,42 @@ function overlap(a, b) {
 /** The same decision asked again: a new ask shares half its words with an old step. */
 const ASKED_AGAIN = 0.5;
 
+/**
+ * The last JSON object in the model's answer: its last line starting with "{",
+ * or an object spread over lines (from the last {"settled"), fences stripped.
+ * @param {string} out
+ */
+function lastJson(out) {
+  const text = out.replace(/```(?:json)?/g, "").trim();
+  const line = text.split("\n").reverse().find((l) => l.trim().startsWith("{"));
+  try {
+    return JSON.parse((line ?? "").trim());
+  } catch (e) {
+    const at = text.lastIndexOf('{"settled"') >= 0 ? text.lastIndexOf('{"settled"') : text.search(/\{\s*"settled"/);
+    if (at < 0) throw e;
+    const tail = text.slice(at);
+    return JSON.parse(tail.slice(0, tail.lastIndexOf("}") + 1));
+  }
+}
+
 /** The model's JSON (its last line starting with "{"), checked. @param {string} out @param {ReturnType<typeof openSteps>} steps */
 function parseAudit(out, steps) {
-  const line = out.trim().split("\n").reverse().find((l) => l.trim().startsWith("{"));
-  const r = JSON.parse((line ?? "").trim().replace(/`+$/, ""));
+  const r = lastJson(out);
   const settled = labelsIn((Array.isArray(r.settled) ? r.settled : []).map(String).join(" "), steps);
-  const asks = (Array.isArray(r.asks) ? r.asks : []).map((a) => String(a).trim()).filter(Boolean).slice(0, 8);
-  return { settled, asks };
+  const raw = (Array.isArray(r.asks) ? r.asks : [])
+    .map((a) => (typeof a === "string" ? { text: a } : { text: String(a?.text ?? ""), why: a?.why ? String(a.why).trim() : undefined }))
+    .map((a) => ({ ...a, text: a.text.trim() }));
+  const list = raw.filter((a) => a.text).slice(0, 8);
+  const task = typeof r.task === "string" && r.task.trim() ? r.task.trim() : undefined;
+  // count: the asks the model gave, left-out ones too (a rewrite of 👉 lines keeps their number).
+  return { settled, asks: list.map((a) => a.text), whys: list.map((a) => a.why ?? ""), task, count: raw.length };
 }
 
 /**
  * Review a session's open steps, with the agent's latest turn when there is one.
  * Throws when the model fails (the caller falls back).
  * @param {string} log session log
- * @param {{message?: string, request?: string, title?: string, session?: string, lang?: string, at?: string}} turn at: when the turn ended (a past turn, vscode/history.js)
+ * @param {{message?: string, request?: string, title?: string, session?: string, lang?: string, at?: string, task?: string}} turn at: when the turn ended (a past turn, vscode/history.js); task: a hint (vscode/tasks.js)
  * @param {(prompt: string) => Promise<string>} [ask]
  */
 async function audit(log, turn = {}, ask = askModel) {
@@ -113,8 +172,13 @@ async function audit(log, turn = {}, ask = askModel) {
   const pointed = turn.message ? pointedAsks(turn.message) : [];
   if (!steps.length && !turn.message) return { settled: [], asks: [] };
   // The agent marked its asks: those are the asks; the model only settles old steps.
-  const res = !steps.length && pointed.length ? { settled: [], asks: [] } : parseAudit(await ask(auditPrompt(steps, turn, pointed)), steps);
-  if (pointed.length) res.asks = pointed;
+  const hint = turn.task ?? taskHint(log, turn);
+  const t = { ...turn, task: hint };
+  /** @type {{settled: number[], asks: string[], whys?: string[], task?: string, count?: number}} */
+  const res = parseAudit(await ask(auditPrompt(steps, t, pointed)), steps);
+  // The agent's 👉 lines are the asks: the model's rewrite only when it kept their number.
+  if (pointed.length && res.count !== pointed.length) Object.assign(res, { asks: pointed, whys: [] });
+  delete res.count;
   const note = turn.message ? `agent: ${turn.message.trim().split("\n")[0].slice(0, 160)}` : "review";
   // Asked again in nearly the same words: the new wording replaces the old step.
   const again = steps.filter((s) => res.asks.some((a) => overlap(a, s.text) >= ASKED_AGAIN)).map((s) => s.n);
@@ -123,7 +187,9 @@ async function audit(log, turn = {}, ask = askModel) {
   if (res.asks.length) {
     fs.mkdirSync(path.dirname(log), { recursive: true });
     const item = { t: turn.at ?? new Date().toISOString(), session: turn.session ?? path.basename(log, ".jsonl"), kind: "verify", text: res.asks.join("\n") };
-    fs.appendFileSync(log, JSON.stringify({ ...item, detail: turn.message?.slice(0, 4000), prompt: turn.request, title: turn.title }) + "\n");
+    const task = res.task || hint;
+    const whys = res.whys?.some(Boolean) ? res.whys : undefined;
+    fs.appendFileSync(log, JSON.stringify({ ...item, detail: turn.message?.slice(0, 4000), prompt: turn.request, title: turn.title, task, whys }) + "\n");
   }
   return res;
 }

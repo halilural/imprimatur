@@ -186,7 +186,7 @@ function scanTodos(root) {
   const t = Date.now();
   files.forEach((file, k) => {
     const text = fresh.filter((a) => a.file === file).map((a) => a.text).join("\n");
-    append(log, { t: new Date(t + k).toISOString(), session: FILES_SESSION, kind: "verify", text, prompt: file, title: file });
+    append(log, { t: new Date(t + k).toISOString(), session: FILES_SESSION, kind: "verify", text, prompt: file, title: file, todo: file });
   });
   return { added: fresh.length, ticked };
 }

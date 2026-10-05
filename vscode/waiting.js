@@ -16,8 +16,9 @@ const WAITING_DIR = path.join(".claude", "imprimatur", "waiting");
 const OPENS = ["question", "command", "verify", "input"];
 
 /**
- * @typedef {{t: string, session?: string, kind: string, text?: string, detail?: string, prompt?: string, title?: string, answer?: string, item?: string, i?: number, on?: boolean, by?: string, note?: string, why?: string}} WaitingRecord
- * @typedef {{t: string, session: string, kind: string, text: string, detail?: string, prompt?: string, title?: string,
+ * @typedef {{t: string, session?: string, kind: string, text?: string, detail?: string, prompt?: string, title?: string, answer?: string, item?: string, i?: number, on?: boolean, by?: string, note?: string, why?: string,
+ *            task?: string, whys?: string[], todo?: string}} WaitingRecord
+ * @typedef {{t: string, session: string, kind: string, text: string, detail?: string, prompt?: string, title?: string, task?: string, whys?: string[], todo?: string,
  *            open: boolean, done?: boolean, answer?: string, answeredAt?: string, checked?: number[], notes?: string[], chat?: Record<string, string>,
  *            ticks?: Record<string, {by?: string, note?: string, why?: string, at: string}>}} WaitingItem
  */
@@ -69,7 +70,7 @@ function itemsOf(records, session) {
       if (r.kind === "answer" && r.answer) it.answer = r.answer;
     }
     if (OPENS.includes(r.kind))
-      items.push({ t: r.t, session, kind: r.kind, text: r.text ?? "", detail: r.detail, prompt: r.prompt, title: r.title, open: true });
+      items.push({ t: r.t, session, kind: r.kind, text: r.text ?? "", detail: r.detail, prompt: r.prompt, title: r.title, task: r.task, whys: r.whys, todo: r.todo, open: true });
   }
   return items;
 }
@@ -151,7 +152,8 @@ function tickStep(log, step, by, note, why) {
  * closed by the next event); "closed" (its item marked done).
  * @param {string} root
  * @returns {Array<{session: string, item: string, i: number, t: string, kind: string, text: string, state: string,
- *   by?: string, note?: string, at?: string, prompt?: string, title?: string, detail?: string, answer?: string, notes?: string[]}>}
+ *   by?: string, note?: string, at?: string, prompt?: string, title?: string, detail?: string, answer?: string, notes?: string[],
+ *   why?: string, task?: string, todo?: string}>}
  */
 function waitingSteps(root) {
   const out = [];
@@ -164,6 +166,7 @@ function waitingSteps(root) {
         session: it.session, item: it.t, i, t: it.t, kind: it.kind, text, state,
         by: tick?.by, note: tick?.note, at: tick?.at ?? it.answeredAt,
         prompt: it.prompt, title: it.title, detail: it.detail, answer: it.answer, notes: it.notes,
+        why: it.whys?.[i] || undefined, task: it.task, todo: it.todo,
       });
     });
   }

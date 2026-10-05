@@ -26,7 +26,12 @@ edits right in your editor and keeps a list of what it asked you.
 ![Waiting on you: open steps with a checkbox, steps the audit closed, asks replaced by a later one, and questions you answered](assets/waiting-on-you.png)
 
 - **Waiting on you** collects the agent's questions, permission requests and
-  "test this" steps, across sessions.
+  "test this" steps, across sessions, each written to make sense on its own
+  ("LATD-13937: send Tim the follow-up mail about the !2690 review"), with a
+  line on why.
+- A step shows its task: click the key to open its issue or Jira page (the link
+  in the task's TODO.md, or the repo's GitHub issue), or the 📄 to open the
+  TODO.md at the line that says it.
 - After each turn Haiku keeps the list honest: what you answered, what was done
   or asked again is ticked. **Audit** reviews it on demand.
 - Set up after work began? **Scan history** reads your past Claude sessions and

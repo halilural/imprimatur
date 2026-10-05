@@ -92,7 +92,7 @@ test("history: sessions already logged, scanned, too old or from another project
   assert.deepEqual(waitingSteps(root).map((s) => s.text), ["W?"]);
   // A second scan reads nothing again.
   assert.equal((await scanHistory(root, { home, ask })).sessions, 0);
-  assert.equal(calls, 0); // 👉 asks and no open steps: no model call needed
+  assert.equal(calls, 1); // the fresh session's 👉 ask, written out by the model
 });
 
 test("history: without the model, the final message's 👉 lines are still recorded", async () => {
