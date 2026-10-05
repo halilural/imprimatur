@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mergeHooks } from "../scripts/setup.mjs";
+import { mergeHooks, mergeShowIn } from "../scripts/setup.mjs";
 
 const root = "/home/u/projects/imprimatur";
 
@@ -29,4 +29,12 @@ test("setup: a second run changes nothing; an old path or language is updated in
   assert.ok(changes.includes("updated PostToolUse [Bash] → baseline.mjs"));
   assert.equal(settings.hooks.PostToolUse.filter((e) => e.matcher === "Bash").length, 1);
   assert.equal(settings.hooks.PostToolUse[0].hooks[0].command, `node "${root}/hooks/baseline.mjs" md mdx`);
+});
+
+test("setup: --show-in sets imprimatur.showIn, keeps the rest, rejects other values", () => {
+  const { settings, change } = mergeShowIn({ "editor.fontSize": 14 }, "both");
+  assert.deepEqual(settings, { "editor.fontSize": 14, "imprimatur.showIn": "both" });
+  assert.equal(change, "imprimatur.showIn: (default preview) → both");
+  assert.equal(mergeShowIn(settings, "both").change, undefined);
+  assert.throws(() => mergeShowIn({}, "everywhere"));
 });

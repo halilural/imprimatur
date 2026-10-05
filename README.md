@@ -115,7 +115,8 @@ of the model's descriptions and steps; default English). It backs up
 `~/.claude/settings.json`, adds the hooks below for every repo (updates ours
 in place, leaves others alone), packages and installs the extension, and
 checks for the `claude` CLI. `--dry-run` shows the changes only;
-`--no-extension` skips the extension. Or by hand:
+`--no-extension` skips the extension; `--show-in both` also marks Markdown
+in the editor (VS Code machine settings, `imprimatur.showIn`). Or by hand:
 
 1. Hook, in your project's `.claude/settings.json` (extensions after the
    script name; default `md mdx`):
