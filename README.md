@@ -2,13 +2,47 @@
 
 # Imprimatur
 
-*Imprimatur* (Latin, "let it be printed"): the approval stamp.
+**See every doc edit your AI agent makes as tracked changes, until you accept it.**
+
+Your agent rewrote the spec. What changed, and what is it still waiting on you
+for? Imprimatur, a VS Code extension with Claude Code hooks, marks the agent's
+edits right in your editor and keeps a list of what it asked you.
+*Imprimatur* (Latin, "let it be printed") is the approval stamp.
 
 ![An agent's edits marked in the editor: added lines in green, a changed word next to the old one in a red box, a marker for a deleted block, and Accept above the block](assets/tracked-changes.png)
 
-See what an AI coding agent changed in your docs, right in the editor, like
-tracked changes in a word processor, until you accept it. Git is not involved:
-staging or committing does not clear the marks.
+## See exactly what your agent changed
+
+- Added lines in green, a changed word next to the old one in a red box, a
+  marker where a block was deleted; in the editor and the Markdown preview.
+- **✓ Accept** a block, a file or a whole agent edit, and the mark is gone.
+  The view moves to the next change, like a review queue.
+- Git is not involved: staging or committing does not clear the marks.
+- The **Agent Change Graph** lists every agent edit in the repo, one lane per
+  Claude session, each with a one-sentence description of what it changed.
+
+## Never miss what it asked you
+
+![Waiting on you: open steps with a checkbox, steps the audit closed, asks replaced by a later one, and questions you answered](assets/waiting-on-you.png)
+
+- **Waiting on you** collects the agent's questions, permission requests and
+  "test this" steps, across sessions.
+- After each turn Haiku keeps the list honest: what you answered, what was done
+  or asked again is ticked. **Audit** reviews it on demand.
+- Set up after work began? **Scan history** reads your past Claude sessions and
+  `TODO.md` files for asks you may have missed.
+
+## Quick start
+
+1. Clone this repo; you need Node 22+, git, VS Code 1.100+ and the `claude` CLI.
+2. Run `npm run setup` in it: it adds the Claude Code hooks for every repo and
+   installs the extension.
+3. Ask Claude to edit a Markdown file, then open it: the changes are marked.
+   Click **Agent Graph** in the status bar for the edits and what waits on you.
+
+## Reference
+
+### Features
 
 - Added lines get a green background.
 - A changed line where only one word changed marks that word: the new word
@@ -86,7 +120,7 @@ The Markdown preview shows the same changes per block: changed blocks are
 colored, their old text struck through right above them, deleted lines struck
 through where they were.
 
-## How it works
+### How it works
 
 ![How it works: Claude edits a file, a hook saves a copy, VS Code marks the diff, you accept; when the agent's turn ends, Haiku reads its message and keeps the Waiting on you list honest](assets/how-it-works.png)
 
@@ -121,7 +155,6 @@ through where they were.
    nearly the same words replaces the old step). The **Audit** button in the
    tab runs the same review on demand. Without the model, the rules above.
 
-   ![Waiting on you: open steps with a checkbox, steps the audit closed, asks replaced by a later one, and questions you answered](assets/waiting-on-you.png)
 5. **Scan history** ([vscode/history.js](vscode/history.js)) finds what was
    already waiting on you when Imprimatur was set up after work began. It runs
    once when the panel first opens in a project, and again from the button.
@@ -133,17 +166,15 @@ through where they were.
    It also adds the `TODO: (K)` lines (your own to-dos) of `TODO.md` and
    `todos/*/TODO.md`; on the next scan the ones marked DONE or removed are ticked.
 
-## Install
+### Setup options, or install by hand
 
-Requires Node 22+, git and VS Code 1.100+.
-
-On each machine, from this repo: `npm run setup -- --lang Turkish` (language
-of the model's descriptions and steps; default English). It backs up
-`~/.claude/settings.json`, adds the hooks below for every repo (updates ours
-in place, leaves others alone), packages and installs the extension, and
-checks for the `claude` CLI. `--dry-run` shows the changes only;
-`--no-extension` skips the extension; `--show-in both` also marks Markdown
-in the editor (VS Code machine settings, `imprimatur.showIn`). Or by hand:
+`npm run setup` options: `--lang Turkish` (language of the model's
+descriptions and steps; default English), `--dry-run` shows the changes only,
+`--no-extension` skips the extension, `--show-in both` also marks Markdown in
+the editor (VS Code machine settings, `imprimatur.showIn`). It backs up
+`~/.claude/settings.json`, adds the hooks below for every repo (updates ours in
+place, leaves others alone), packages and installs the extension, and checks
+for the `claude` CLI. Or by hand:
 
 1. Hook, in your project's `.claude/settings.json` (extensions after the
    script name; default `md mdx`):
@@ -177,7 +208,7 @@ in the editor (VS Code machine settings, `imprimatur.showIn`). Or by hand:
 3. Extension: `npm run package`, then install `dist/imprimatur-<version>.vsix`
    (`code --install-extension …`, or Extensions view → Install from VSIX).
 
-## Limits
+### Limits
 
 - No marks in diff tabs (e.g. Working Tree): git already colors those.
 - Bash edits are seen only for files named in the command; a glob
@@ -194,7 +225,7 @@ in the editor (VS Code machine settings, `imprimatur.showIn`). Or by hand:
 - Plain O(n·m) LCS on the part between the common head and tail; fine for
   documents, slow for files with thousands of changed lines.
 
-## Develop
+### Develop
 
 ```sh
 npm install      # markdown-it, for the preview tests only
