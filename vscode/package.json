@@ -2,10 +2,10 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "Review your AI agent's edits like tracked changes: marked in the editor and the Markdown preview until you accept them.",
-  "version": "0.28.2",
+  "version": "0.28.3",
   "publisher": "halilural",
   "icon": "media/icon.png",
-  "galleryBanner": { "color": "#23265c", "theme": "dark" },
+  "galleryBanner": { "color": "#fff1e3", "theme": "light" },
   "license": "MIT",
   "engines": {
     "vscode": "^1.100.0"

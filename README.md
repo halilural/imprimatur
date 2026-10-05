@@ -1,4 +1,4 @@
-![Imprimatur: your agent writes, you approve. A page of tracked changes stamped approved](assets/hero.png)
+![Imprimatur: your agent writes, you approve. A friendly rubber stamp stamps a green check on a page](assets/hero.png)
 
 # Imprimatur
 
