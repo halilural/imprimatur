@@ -25,21 +25,29 @@ const DETAIL_MAX = 4000;
 const cap = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 // Asks in the agent's own words, Turkish and English. Matched lowercase.
-const ASK_PHRASES = [
-  "kontrol et", "kontrol eder misin", "test et", "test eder misin", "doğrula", "dener misin", "deneyebilir misin", "onayla", "onaylar mısın", "bakar mısın",
-  "reload window", "ister misin", "ister misiniz", "söylersen", "haber ver",
-  "should i", "shall i", "want me to", "do you want", "would you like", "can you", "could you",
-  "please verify", "please check", "please test", "please run", "please confirm", "please try", "let me know",
+// Actions are things the user has to go and do (they stay open until done);
+// the rest only want an answer.
+const ACTION_PHRASES = [
+  "kontrol et", "kontrol eder misin", "test et", "test eder misin", "doğrula", "dener misin", "deneyebilir misin", "dene", "bakar mısın",
+  "reload window", "yeniden yükle", "can you", "could you",
+  "please verify", "please check", "please test", "please run", "please try",
 ];
+const ANSWER_PHRASES = [
+  "onayla", "onaylar mısın", "ister misin", "ister misiniz", "söylersen", "haber ver",
+  "should i", "shall i", "want me to", "do you want", "would you like", "please confirm", "let me know",
+];
+/** @param {string} lower @param {string[]} phrases */
+const hasPhrase = (lower, phrases) => phrases.some((p) => new RegExp(`(?<![\\p{L}\\p{N}])${p}(?![\\p{L}\\p{N}])`, "u").test(lower));
 
 /**
  * Lines of a final message that ask the user something, markdown stripped.
  * Code blocks and table rows are skipped. @param {string} message
- * @returns {{lines: string[], question: boolean}}
+ * @returns {{lines: string[], question: boolean, action: boolean}}
  */
 export function asksIn(message) {
   const lines = [];
   let question = false;
+  let action = false;
   let fence = false;
   for (const raw of message.split(/\r?\n/)) {
     if (/^\s*(```|~~~)/.test(raw)) fence = !fence;
@@ -50,12 +58,14 @@ export function asksIn(message) {
     // Quoted text names a phrase, it does not ask; a phrase must end a word
     // ("kontrol et", not "kontrol ettim").
     const lower = ` ${line.replace(/"[^"]*"|“[^”]*”/g, " ").toLocaleLowerCase("tr")} `;
-    if (q || ASK_PHRASES.some((p) => new RegExp(`(?<![\\p{L}\\p{N}])${p}(?![\\p{L}\\p{N}])`, "u").test(lower))) {
+    const act = hasPhrase(lower, ACTION_PHRASES);
+    if (q || act || hasPhrase(lower, ANSWER_PHRASES)) {
       lines.push(line);
       question ||= q;
+      action ||= act;
     }
   }
-  return { lines, question };
+  return { lines, question, action };
 }
 
 /** The user's answers in an AskUserQuestion result, as one line. @param {any} res */
@@ -93,9 +103,10 @@ export function recordOf(data) {
     return { kind: "input", text: String(data.message ?? data.notification_type) };
   if (ev === "Stop") {
     const message = String(data.last_assistant_message ?? "");
-    const { lines, question } = asksIn(message);
+    const { lines, action } = asksIn(message);
     if (!lines.length) return { kind: "step", closeOnly: true };
-    return { kind: question ? "question" : "verify", text: lines.join("\n"), detail: message };
+    // Something to go and do stays open past the next prompt (vscode/waiting.js).
+    return { kind: action ? "verify" : "question", text: lines.join("\n"), detail: message };
   }
   if (ev === "UserPromptSubmit") {
     const prompt = String(data.prompt ?? data.prompt_text ?? "").trim();

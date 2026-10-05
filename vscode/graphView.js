@@ -58,7 +58,7 @@ function waitingBody(items, lanes) {
       const status = w.open ? `<span class="pill open">open</span>` : w.done ? `<span class="pill">done</span>` : `<span class="pill">answered</span>${w.answer ? ` ${esc(w.answer)}` : ""}`;
       const details = w.detail && w.detail !== w.text ? `<details><summary>${w.kind === "verify" || w.kind === "question" ? "Full message" : "Details"}</summary><pre>${esc(w.detail)}</pre></details>` : "";
       return `<tr class="w${w.open ? "" : " done"}" data-key="${esc(`${w.session} ${w.t}`)}" data-q="${esc(q)}"${w.open ? "" : " data-done"}
-  data-vscode-context="${menu({ webviewSection: w.open ? "waiting-open" : "waiting-done", session: w.session, text: w.text })}">
+  data-vscode-context="${menu({ webviewSection: w.open ? "waiting-open" : "waiting-done", session: w.session, t: w.t, text: w.text })}">
   <td class="k" title="${esc(label)}">${icon}</td>
   <td class="d">${esc(head)}${progress}</td>
   <td class="d p">${esc(w.prompt ?? "")}</td>
@@ -70,7 +70,7 @@ function waitingBody(items, lanes) {
   <div class="h">What you need to do</div>
   <ol>${asks.map((a, i) => `<li${checked.has(i) ? ' class="on"' : ""}><label><input type="checkbox" data-step="${i}"${checked.has(i) ? " checked" : ""}> <span>${esc(a)}</span></label></li>`).join("")}</ol>
   ${details}
-  ${w.prompt ? `<div class="meta">Request: ${esc(w.prompt)}</div>` : ""}${w.answer ? `<div class="meta">Your answer: ${esc(w.answer)}</div>` : ""}
+  ${w.prompt ? `<div class="meta">Request: ${esc(w.prompt)}</div>` : ""}${w.answer ? `<div class="meta">Your answer: ${esc(w.answer)}</div>` : ""}${(w.notes ?? []).map((n) => `<div class="meta">You wrote since: ${esc(n)}</div>`).join("")}
 </div></td></tr>`;
     })
     .join("\n");
@@ -87,8 +87,8 @@ function html(data, root, nonce, waiting = []) {
     ? data.rows
         .map(
           (r, i) => `<tr data-file="${esc(r.file)}" data-n="${r.n}" data-i="${i}" data-q="${esc([r.file, r.intent, r.summary, r.prompt, data.lanes[r.lane]?.title].join(" "))}"
-  data-vscode-context="${menu({ webviewSection: r.accepted ? "edit-ok" : "edit-open", file: r.file, n: r.n })}"${r.preview ? "" : ` title="${esc(r.prompt ? `Request: ${r.prompt}` : "")}"`}>
-  <td class="ok">${r.accepted ? `<span class="badge-ok" title="Accepted">✓</span>` : `<span class="badge-open" title="Under review — Accept, or right-click">●</span><button class="acc" title="Accept this edit">Accept</button>`}</td>
+  data-vscode-context="${menu({ webviewSection: r.accepted || r.gone ? "edit-ok" : "edit-open", file: r.file, n: r.n })}"${r.preview ? "" : ` title="${esc(r.prompt ? `Request: ${r.prompt}` : "")}"`}>
+  <td class="ok">${r.gone ? `<span class="badge-gone" title="Replaced by later edits: nothing of it left to accept">↷</span>` : r.accepted ? `<span class="badge-ok" title="Accepted">✓</span>` : `<span class="badge-open" title="Under review — Accept, or right-click">●</span><button class="acc" title="Accept this edit">Accept</button>`}</td>
   <td class="g">${laneSvg(i, r, data.lanes)}</td>
   <td class="d">${esc(r.intent ?? r.summary)}</td>
   <td class="f">${esc(r.file)} <span class="n">#${r.n}</span></td>
@@ -114,6 +114,8 @@ function html(data, root, nonce, waiting = []) {
   td.ok { width: 64px; min-width: 64px; text-align: center; }
   .badge-ok { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
     background: var(--vscode-testing-iconPassed, #73c991); color: var(--vscode-editor-background); }
+  .badge-gone { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; align-items: center; justify-content: center; font-size: 12px;
+    border: 1px solid var(--vscode-disabledForeground, #888); color: var(--vscode-disabledForeground, #888); }
   .badge-open { color: var(--vscode-editorWarning-foreground, #cca700); font-size: 14px; }
   button.acc { display: none; font: inherit; font-size: 11px; padding: 1px 8px; border-radius: 2px; cursor: pointer; border: none;
     background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
@@ -297,7 +299,7 @@ const graphCommands = {
   "imprimatur.graph.markDone": (c) => {
     if (!shown || !/^[\w-]+$/.test(c.session ?? "")) return;
     const log = path.join(shown, WAITING_DIR, `${c.session}.jsonl`);
-    fs.appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), session: c.session, kind: "done" }) + "\n");
+    fs.appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), session: c.session, kind: "done", item: c.t }) + "\n");
     refreshGraph();
   },
   "imprimatur.graph.copyAsk": (c) => vscode.env.clipboard.writeText(c.text ?? ""),
