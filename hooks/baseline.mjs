@@ -4,7 +4,9 @@
 // before, compared after. Before the agent edits a file of a listed type:
 // - if there is no copy yet, copy the file to
 //   <root>/.claude/imprimatur/baseline/<path> (an empty copy for a new file);
-// - append {t, session, tool, prompt, before} to .claude/imprimatur/history/<path>.jsonl.
+// - append {t, session, tool, prompt, intent, title, before} to
+//   .claude/imprimatur/history/<path>.jsonl (prompt: the user's request; intent:
+//   the agent's latest words or the Bash description; title: the session's title).
 // The editor extension diffs the file against the copy until the user accepts.
 // Git state is not consulted: staging or committing does not end a review.
 //
@@ -18,14 +20,18 @@ import { pathToFileURL } from "node:url";
 
 const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore } = createRequire(import.meta.url)("../vscode/review-state.js");
 
+/** First line, at most `max` characters. @param {string} s @param {number} max */
+const firstLine = (s, max) => {
+  const first = s.trim().split("\n")[0];
+  return first.length > max ? `${first.slice(0, max - 1)}…` : first;
+};
+
 /**
- * The user's latest request in a Claude Code transcript: the last
- * {type: "last-prompt", lastPrompt} record in the file's last 512 KB.
- * First line, at most 200 characters; undefined when there is none.
- * @param {string | undefined} transcript
+ * Records in a Claude Code transcript's last 512 KB, oldest first; the
+ * window's cut first line is skipped. @param {string | undefined} transcript
  */
-export function lastPrompt(transcript) {
-  if (!transcript || !fs.existsSync(transcript)) return undefined;
+function tailRecords(transcript) {
+  if (!transcript || !fs.existsSync(transcript)) return [];
   const size = fs.statSync(transcript).size;
   const len = Math.min(size, 512 * 1024);
   const buf = Buffer.alloc(len);
@@ -35,20 +41,56 @@ export function lastPrompt(transcript) {
   } finally {
     fs.closeSync(fd);
   }
-  const lines = buf.toString("utf8").split("\n");
-  for (let i = lines.length - 1; i >= 0; i--) {
-    if (!lines[i].includes('"last-prompt"')) continue;
-    try {
-      const rec = JSON.parse(lines[i]);
-      if (rec.type === "last-prompt" && typeof rec.lastPrompt === "string") {
-        const first = rec.lastPrompt.trim().split("\n")[0];
-        return first.length > 200 ? `${first.slice(0, 199)}…` : first;
+  return buf
+    .toString("utf8")
+    .split("\n")
+    .flatMap((l) => {
+      try {
+        return l ? [JSON.parse(l)] : [];
+      } catch {
+        return []; // first line of the window may be cut in half
       }
-    } catch {
-      // first line of the window may be cut in half
+    });
+}
+
+/**
+ * The user's latest request in a Claude Code transcript: the last
+ * {type: "last-prompt", lastPrompt} record in the file's last 512 KB.
+ * First line, at most 200 characters; undefined when there is none.
+ * @param {string | undefined} transcript
+ */
+export function lastPrompt(transcript) {
+  return transcriptInfo(transcript).prompt;
+}
+
+/** A user record that starts a turn: the user's own message, not a tool result. */
+const isPrompt = (r) =>
+  r.type === "user" && (typeof r.message?.content === "string" || !r.message?.content?.some?.((c) => c.type === "tool_result"));
+
+/**
+ * What a transcript says about the edit being made now: the user's request,
+ * the agent's latest words in this turn (its first sentence, the edit's
+ * "why"), and the session title Claude gave the conversation.
+ * @param {string | undefined} transcript
+ * @returns {{prompt?: string, intent?: string, title?: string}}
+ */
+export function transcriptInfo(transcript) {
+  const recs = tailRecords(transcript);
+  /** @type {{prompt?: string, intent?: string, title?: string}} */
+  const out = {};
+  for (let i = recs.length - 1; i >= 0; i--) {
+    const r = recs[i];
+    if (!out.prompt && r.type === "last-prompt" && typeof r.lastPrompt === "string") out.prompt = firstLine(r.lastPrompt, 200);
+    if (!out.title && r.type === "ai-title" && typeof r.aiTitle === "string") out.title = firstLine(r.aiTitle, 80);
+  }
+  for (let i = recs.length - 1; i >= 0 && !isPrompt(recs[i]); i--) {
+    const text = recs[i].type === "assistant" && recs[i].message?.content?.findLast?.((c) => c.type === "text" && c.text?.trim())?.text;
+    if (text) {
+      out.intent = firstLine(text.trim().split(/(?<=[.!?…])\s/)[0], 120);
+      break;
     }
   }
-  return undefined;
+  return out;
 }
 
 /** True when the log was written in the last 2 s: a second copy of this hook on the same edit. */
@@ -56,7 +98,7 @@ const sameEditWindow = (log) => Date.now() - fs.statSync(log).mtimeMs < 2000;
 
 /**
  * @param {string} project Claude's project dir; files outside it are skipped
- * @param {string} file @param {string[]} [exts] @param {{session?: string, tool?: string, prompt?: string}} [meta]
+ * @param {string} file @param {string[]} [exts] @param {{session?: string, tool?: string, prompt?: string, intent?: string, title?: string}} [meta]
  * @param {string} [knownBefore] text before the edit when the caller already has it (Bash edits)
  */
 export function takeBaseline(project, file, exts = ["md", "mdx"], meta = {}, knownBefore) {
@@ -79,7 +121,8 @@ export function takeBaseline(project, file, exts = ["md", "mdx"], meta = {}, kno
   // The same hook can be installed twice (project and user settings); one line per edit.
   if (latestBefore(log) === before && sameEditWindow(log)) return kept ? "kept" : "written";
   fs.mkdirSync(path.dirname(log), { recursive: true });
-  fs.appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), session: meta.session, tool: meta.tool, prompt: meta.prompt, before }) + "\n");
+  const { session, tool, prompt, intent, title } = meta;
+  fs.appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), session, tool, prompt, intent, title, before }) + "\n");
   return kept ? "kept" : "written";
 }
 
@@ -128,7 +171,10 @@ export function bashEdit(event, data, project, exts) {
   /** @type {Record<string, string>} */
   const before = JSON.parse(fs.readFileSync(pending, "utf8"));
   fs.rmSync(pending, { force: true });
-  const meta = { session: data.session_id, tool: "Bash", prompt: lastPrompt(data.transcript_path) };
+  const info = transcriptInfo(data.transcript_path);
+  // A Bash call says what it does in its own description; prefer that.
+  const description = data.tool_input?.description;
+  const meta = { session: data.session_id, tool: "Bash", ...info, intent: description ? firstLine(String(description), 120) : info.intent };
   for (const [abs, text] of Object.entries(before)) {
     const now = fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "";
     if (now !== text) takeBaseline(project, abs, exts, meta, text);
@@ -147,7 +193,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       const exts = args.length ? args : ["md", "mdx"];
       if (data.tool_name === "Bash") bashEdit(data.hook_event_name, data, project, exts);
       else if (file && data.hook_event_name !== "PostToolUse")
-        takeBaseline(project, file, exts, { session: data.session_id, tool: data.tool_name, prompt: lastPrompt(data.transcript_path) });
+        takeBaseline(project, file, exts, { session: data.session_id, tool: data.tool_name, ...transcriptInfo(data.transcript_path) });
     } catch (e) {
       process.stderr.write(`imprimatur baseline: ${e.message}\n`);
     }

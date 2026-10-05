@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "Review your AI agent's edits like tracked changes: marked in the editor and the Markdown preview until you accept them.",
-  "version": "0.18.1",
+  "version": "0.19.0",
   "publisher": "halilural",
   "license": "MIT",
   "engines": {
@@ -21,6 +21,7 @@
     "preview.css",
     "graph.js",
     "graphView.js",
+    "waiting.js",
     "preview-markers.js",
     "mermaid-diff.js"
   ],

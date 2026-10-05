@@ -174,6 +174,36 @@ test("history row carries the user's latest request from the transcript", () => 
   assert.equal(history(dir, "a.md")[0].prompt, "change cumartesi to pazartesi");
 });
 
+test("history row carries the agent's words in this turn and the session title", () => {
+  const { dir } = repo();
+  const tr = path.join(dir, "t.jsonl");
+  const say = (text) => ({ type: "assistant", message: { content: [{ type: "text", text }] } });
+  const tool = { type: "assistant", message: { content: [{ type: "tool_use", name: "Edit" }] } };
+  const result = { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "x" }] } };
+  const write = (recs) => fs.writeFileSync(tr, recs.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  const edit = () => {
+    const input = JSON.stringify({ session_id: "s1", tool_name: "Edit", transcript_path: tr, tool_input: { file_path: path.join(dir, "a.md") } });
+    spawnSync("node", [hook], { input, env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
+    fs.appendFileSync(path.join(dir, "a.md"), "more\n");
+    return history(dir, "a.md").at(-1);
+  };
+  fs.writeFileSync(path.join(dir, "a.md"), "x\n");
+  write([
+    { type: "ai-title", aiTitle: "Old title" },
+    { type: "user", message: { content: "olur" } },
+    say("Tim'e cevabı TODO'ya yazıyorum. Sonra testler."),
+    tool,
+    result,
+    { type: "ai-title", aiTitle: "Tim'den gelen mail" },
+  ]);
+  const e1 = edit();
+  assert.equal(e1.intent, "Tim'e cevabı TODO'ya yazıyorum.");
+  assert.equal(e1.title, "Tim'den gelen mail");
+  // A new turn without words yet: no intent carried over from the last turn.
+  write([say("Önceki turdan."), { type: "user", message: { content: [{ type: "text", text: "devam" }] } }, tool]);
+  assert.equal(edit().intent, undefined);
+});
+
 function bash(dir, id, command, event) {
   const input = JSON.stringify({ hook_event_name: event, session_id: "s1", tool_name: "Bash", tool_use_id: id, cwd: dir, tool_input: { command } });
   return spawnSync("node", [hook], { input, env: { ...process.env, CLAUDE_PROJECT_DIR: dir } }).status;

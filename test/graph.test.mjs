@@ -5,7 +5,7 @@ import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { graphRows, previewOf } = createRequire(import.meta.url)("../vscode/graph.js");
+const { graphRows, previewOf, summaryOf } = createRequire(import.meta.url)("../vscode/graph.js");
 
 test("graph: all files' edits newest first, one lane per session", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-graph-"));
@@ -27,8 +27,8 @@ test("graph: all files' edits newest first, one lane per session", () => {
     ],
   );
   assert.deepEqual(lanes, [
-    { session: "s2", first: 0, last: 0 },
-    { session: "s1", first: 1, last: 2 },
+    { session: "s2", title: undefined, first: 0, last: 0 },
+    { session: "s1", title: undefined, first: 1, last: 2 },
   ]);
 });
 
@@ -71,6 +71,13 @@ test("graph: hover preview lists removed and added lines, capped", () => {
   const big = previewOf("", Array.from({ length: 50 }, (_, i) => `l${i}`).join("\n"));
   assert.equal(big.length, 41);
   assert.deepEqual(big[40], ["…", "11 more lines"]); // 1 removed empty line + 50 added, 40 shown
+});
+
+test("graph: an edit without the agent's words is summed up from its text", () => {
+  const doc = "# T\n\n## Sorular\n\n- a\n";
+  assert.equal(summaryOf(doc, doc + "- **ANSWERED:** Tim'in maili\n"), "## Sorular · ANSWERED: Tim'in maili");
+  assert.equal(summaryOf("## A\nx\ny\n", "## A\ny\n"), "## A · Removed: x");
+  assert.equal(summaryOf("a\n", "a\n"), "No change");
 });
 
 test("graph: no history, empty graph", () => {
