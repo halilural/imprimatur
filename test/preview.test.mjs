@@ -24,6 +24,14 @@ test("changed paragraph: class on the block, old text struck right above", () =>
   assert.match(html, /<h1>T<\/h1>/); // untouched block stays plain
 });
 
+test("tight list: an added or changed item gets the class on its <li> (its paragraph is not rendered)", () => {
+  const added = render("- a\n- c\n", undefined, "- a\n- c\n- DONE: b\n");
+  assert.match(added, /<li class="imprimatur-added imprimatur-latest">\s*DONE: b<\/li>/);
+  assert.match(added, /<li>a<\/li>/);
+  const changed = render("- a\n- TODO: c\n", undefined, "- a\n- DONE: c\n");
+  assert.match(changed, /<li class="imprimatur-changed imprimatur-latest">\s*<div class="imprimatur-old/);
+});
+
 test("added heading and deleted paragraph", () => {
   const html = render("a\n\ngone\n\nz\n", undefined, "a\n\n## New\n\nz\n");
   assert.match(html, /<h2 class="imprimatur-[a-z]+ imprimatur-latest">New<\/h2>/);

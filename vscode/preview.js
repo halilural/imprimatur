@@ -152,11 +152,20 @@ function annotate(tokens, hunks, opts) {
   idx.forEach((i, k) => {
     const p = plan[k];
     if (p.cls) {
-      const copy = Object.assign(new Token(tokens[i].type, tokens[i].tag, tokens[i].nesting), tokens[i]);
-      copy.attrs = tokens[i].attrs ? tokens[i].attrs.map((a) => [...a]) : null;
-      copy.attrJoin("class", p.cls);
+      // A tight list does not render its items' paragraphs: the class goes on the item.
+      let at = i;
+      if (tokens[i].hidden && tokens[i].type === "paragraph_open") {
+        let li = i - 1;
+        while (li >= 0 && !(tokens[li].type === "list_item_open" && tokens[li].level === tokens[i].level - 1)) li--;
+        if (li >= 0) at = li;
+      }
+      const src = replaced.get(at) ?? tokens[at];
+      const copy = Object.assign(new Token(src.type, src.tag, src.nesting), src);
+      copy.attrs = src.attrs ? src.attrs.map((a) => [...a]) : null;
+      const has = (copy.attrGet("class") ?? "").split(" ");
+      if (!p.cls.split(" ").every((c) => has.includes(c))) copy.attrJoin("class", p.cls);
       copy.attrSet("data-ar", p.id);
-      replaced.set(i, copy);
+      replaced.set(at, copy);
     }
     // A div cannot sit inside a table: rows only get the class.
     if (tokens[i].type === "tr_open") return;
