@@ -70,7 +70,7 @@ function waitingBody(steps, lanes) {
         : w.state === "done" ? `<span class="badge-ok" title="${esc(`${w.by}: ${w.note ?? ""}`)}">✓</span>`
         : w.state === "replaced" ? `<span class="badge-gone" title="${esc(STATES.replaced[1])}">replaced</span>`
         : `<span class="pill" title="${esc(STATES[w.state]?.[1] ?? "")}">${esc(STATES[w.state]?.[0] ?? w.state)}</span>`;
-      const source = mine ? `you${w.unsent ? ` <span class="pill open" title="Not sent to Claude yet">unsent</span>` : ""}` : w.by ?? (w.answer ? esc(w.answer) : "");
+      const source = mine ? "you" : w.by ?? (w.answer ? esc(w.answer) : "");
       const more = [
         w.detail && w.detail !== w.text ? `<details><summary>Full message</summary><pre>${esc(w.detail)}</pre></details>` : "",
         w.prompt ? `<div class="meta">Request: ${esc(w.prompt)}</div>` : "",
@@ -99,7 +99,6 @@ function waitingBody(steps, lanes) {
  */
 function html(data, root, nonce, waiting = []) {
   const open = waiting.filter((w) => w.state === "open").length;
-  const unsent = waiting.filter((w) => w.unsent).length;
   // One session draws one straight line: the lanes only say something with several.
   const lanes = data.lanes.length > 1;
   const time = (t) => new Date(t).toLocaleString();
@@ -169,12 +168,12 @@ function html(data, root, nonce, waiting = []) {
   .todo label { display: inline; cursor: pointer; } .todo input { vertical-align: middle; margin: 0 4px 0 0; }
   .todo li.on span { text-decoration: line-through; opacity: .6; } .more.all { background: var(--vscode-testing-iconPassed, #73c991); }
   .todo pre { white-space: pre-wrap; font-family: var(--vscode-editor-font-family); margin: 4px 0; } .todo summary { cursor: pointer; opacity: .8; }
-  .todo .meta { opacity: .75; margin-top: 4px; } .todo .send { margin: 2px 0 6px; }
+  .todo .meta { opacity: .75; margin-top: 4px; }
   .todo .chat { font-size: 10px; padding: 0 5px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
 </style></head><body>
 <header><strong>Agent Change Graph</strong>
 <nav><button data-tab="edits">Edits ${pending ? `<span class="badge">${pending}</span>` : ""}</button><button data-tab="waiting">Waiting on you ${open ? `<span class="badge">${open}</span>` : ""}</button></nav>
-<input id="filter" placeholder="Filter by file, request or answer"><label id="ans" hidden><input type="checkbox" id="answered"> open only</label><button id="send" class="acc on" hidden${unsent ? "" : " disabled"} title="Copy the steps you ticked (not sent yet) as a message and focus the Claude Code input: paste and press Enter">Send to Claude${unsent ? ` (${unsent})` : ""}</button><button id="audit" class="acc on" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">Audit</button>
+<input id="filter" placeholder="Filter by file, request or answer"><label id="ans" hidden><input type="checkbox" id="answered"> open only</label><button id="audit" class="acc on" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">Audit</button>
 <span class="n" id="count-edits">${data.rows.length} edits · ${pending} under review · ${data.lanes.length} sessions</span><span class="n" id="count-waiting">${open} open · ${waiting.length} steps</span></header>
 <section id="edits"><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
 <tbody>${body}</tbody></table></section>
@@ -238,7 +237,6 @@ function html(data, root, nonce, waiting = []) {
       if (tr.nextElementSibling?.classList.contains("x")) tr.nextElementSibling.hidden = !show || !state.expanded.includes(tr.dataset.key);
     });
     document.getElementById("none").hidden = !state.answered || !!state.q || document.querySelector("tr.w.s-open") !== null;
-    document.getElementById("send").hidden = state.tab !== "waiting";
   };
   document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => { state.tab = b.dataset.tab; apply(); }));
   filter.addEventListener("input", () => { state.q = filter.value; apply(); });
@@ -253,7 +251,6 @@ function html(data, root, nonce, waiting = []) {
   document.querySelectorAll("input[data-tick]").forEach((box) => box.addEventListener("change", () => {
     vscode.postMessage({ type: "check", session: box.dataset.session, t: box.dataset.item, i: Number(box.dataset.i), on: box.checked });
   }));
-  document.getElementById("send").addEventListener("click", () => vscode.postMessage({ type: "send" }));
   document.getElementById("audit").addEventListener("click", (e) => { e.target.disabled = true; e.target.textContent = "Auditing…"; vscode.postMessage({ type: "audit" }); });
   addEventListener("scroll", hide);
   apply();
@@ -282,7 +279,6 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
     panel.webview.onDidReceiveMessage((m) => {
       if (m.type === "check") return tick(m);
       if (m.type === "audit") return auditAll();
-      if (m.type === "send") return sendToClaude();
       return m.type === "accept" ? actions?.acceptEdit(m.file, m.n) : actions?.openDiff(m.file, m.n);
     });
     panel.onDidDispose(() => {
@@ -314,26 +310,6 @@ function tick(m) {
   if (!shown || !/^[\w-]+$/.test(m.session ?? "")) return;
   const log = path.join(shown, WAITING_DIR, `${m.session}.jsonl`);
   fs.appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), session: m.session, kind: "check", item: m.t, i: m.i, on: !!m.on }) + "\n");
-}
-
-/**
- * Send to Claude: the ticked steps go to the clipboard as a message and the
- * Claude Code input gets focus; the user pastes and presses Enter. (Claude
- * Code's vscode://…/open?prompt= does not apply to an open session.)
- * Only steps the user ticked and has not sent yet; they are marked sent.
- */
-async function sendToClaude() {
-  if (!shown) return;
-  const steps = waitingSteps(shown).filter((s) => s.unsent);
-  if (!steps.length) return void vscode.window.showInformationMessage("Tick the steps you decided or did first.");
-  const text = ["Waiting on you, panelden:", ...steps.map((s) => `- ✓ ${s.text}`)].join("\n");
-  await vscode.env.clipboard.writeText(text);
-  for (const s of steps) {
-    const log = path.join(shown, WAITING_DIR, `${s.session}.jsonl`);
-    fs.appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), session: s.session, kind: "sent", item: s.item, i: s.i }) + "\n");
-  }
-  await vscode.commands.executeCommand("claude-vscode.focus").then(undefined, () => {});
-  vscode.window.showInformationMessage("Copied for Claude: paste in the chat (Ctrl+V) and press Enter.");
 }
 
 /** The Audit button: Haiku reviews every session's open steps (vscode/audit.js). */

@@ -14,7 +14,7 @@ Sürüyor: #3 başladı — 2026-10-02
 - 👉 TODO: [#10 Eklentinin adı Imprimatur](../10/TODO.md)
 - NOTE: (kullanıcı, 2026-10-03) "Projesi, issue'ları da ayrı olsun; #1'ü o repoya götürelim, buradan silelim" → #1 [halilural/imprimatur](https://github.com/halilural/imprimatur)'a taşınıyor (private → public aktarım GitHub'da yok: orada yeni issue + kendi panosu, burada silinir); groundwork'teki `modules/imprimatur/` kaldırılır, hook'lar `~/projects/imprimatur`'a
 - TODO: [#8 Agent Change Graph paneli](../8/TODO.md)
-- TODO: [#11 Waiting on you sekmesi](../11/TODO.md)
+- DONE: [#11 Waiting on you sekmesi](../11/TODO.md) — kapandı 2026-10-05
 - TODO: [#7 tarihçe düğmesi, commit listesi gibi](../7/TODO.md)
 - TODO: [#6 elle testler MT-AR-001…012](../6/TODO.md)
 - TODO: [#5 git'ten bağımsız: tarihçe, Accept'e kadar kalıcı renkler](../5/TODO.md)
