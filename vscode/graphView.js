@@ -81,6 +81,9 @@ function waitingBody(steps, lanes, root) {
       const key = place.task
         ? open("key", place.url ? `data-url="${esc(place.url)}"` : place.todo ? `data-todo="${esc(place.todo)}" data-line="${place.line ?? 0}"` : "", esc(place.task), place.url ?? (place.todo ? `Open ${place.todo}` : place.task))
         : "";
+      // The badge names the task: the text need not start with it too ("LATD-13937: …").
+      const stepText = place.task && w.text.startsWith(place.task) ? w.text.slice(place.task.length).replace(/^[\s:–—-]+/, "") || w.text : w.text;
+      // Before the text: a long text is cut at the end of the cell (…), and the icon must stay.
       const file = place.todo ? open("file", `data-todo="${esc(place.todo)}" data-line="${place.line ?? 0}"`, "📄", `${place.todo}${place.line ? `, line ${place.line}` : ""}`) : "";
       const more = [
         w.why ? `<div class="why">${esc(w.why)}</div>` : "",
@@ -94,7 +97,7 @@ function waitingBody(steps, lanes, root) {
   data-vscode-context="${menu({ webviewSection: w.state === "open" ? "waiting-open" : "waiting-done", session: w.session, t: w.item, i: w.i, text: w.text })}">
   <td class="ok">${status}</td>
   <td class="k" title="${esc(label)}">${icon}</td>
-  <td class="d" title="${esc([w.text, w.why].filter(Boolean).join("\n"))}">${key}${esc(w.text)}${file}</td>
+  <td class="d" title="${esc([w.text, w.why].filter(Boolean).join("\n"))}">${key}${file}${esc(stepText)}</td>
   <td class="d p">${esc(w.prompt ?? "")}</td>
   <td class="t">${esc(time(w.t))}</td>
   <td class="s" style="color:${color(w.session)}" title="${esc(w.session)}">${esc(name)}</td>
@@ -184,7 +187,7 @@ function html(data, root, nonce, waiting = []) {
   .todo .why { margin-bottom: 4px; }
   a.task { text-decoration: none; } a.task:hover { text-decoration: underline; }
   a.task.key { font-size: 11px; padding: 0 6px; margin-right: 6px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
-  a.task.file { margin-left: 6px; opacity: .7; } a.task.file:hover { opacity: 1; }
+  a.task.file { margin-right: 6px; opacity: .7; } a.task.file:hover { opacity: 1; }
   .todo .chat { font-size: 10px; padding: 0 5px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
 </style></head><body>
 <header><strong>Agent Change Graph</strong>
