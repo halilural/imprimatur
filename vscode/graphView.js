@@ -282,7 +282,7 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
     panel.webview.onDidReceiveMessage((m) => {
       if (m.type === "check") return tick(m);
       if (m.type === "audit") return auditAll();
-      if (m.type === "scan") return scanAll();
+      if (m.type === "scan") return pickScan();
       return m.type === "accept" ? actions?.acceptEdit(m.file, m.n) : actions?.openDiff(m.file, m.n);
     });
     panel.onDidDispose(() => {
@@ -366,26 +366,21 @@ async function scanAll(again = false) {
   scanning.delete(root);
   refreshGraph();
   if (!res) return;
-  const msg = `Scan history: ${res.sessions} past session${res.sessions === 1 ? "" : "s"} read, ${res.todos.added} to-do${res.todos.added === 1 ? "" : "s"} from TODO.md added${res.todos.ticked ? `, ${res.todos.ticked} ticked (done in TODO.md)` : ""}.`;
-  // Nothing new: sessions read before are skipped. Rescan writes them anew (e.g. after a language change).
-  const pick = res.sessions || again
-    ? await vscode.window.showInformationMessage(msg)
-    : await vscode.window.showInformationMessage(`${msg} Sessions read before are skipped.`, "Rescan past sessions");
-  if (pick === "Rescan past sessions") scanAll(true);
+  vscode.window.showInformationMessage(`Scan history: ${res.sessions} past session${res.sessions === 1 ? "" : "s"} read, ${res.todos.added} to-do${res.todos.added === 1 ? "" : "s"} from TODO.md added${res.todos.ticked ? `, ${res.todos.ticked} ticked (done in TODO.md)` : ""}.`);
 }
 
-/** Re-render the open panel, if any (after an agent edit). */
-const refreshGraph = () => refresh?.();
-
-/** Right-click menu commands of the panel's rows; `c` is the row's data-vscode-context. */
-const graphCommands = {
-  "imprimatur.graph.acceptEdit": (c) => actions?.acceptEdit(c.file, c.n),
-  "imprimatur.graph.openDiff": (c) => actions?.openDiff(c.file, c.n),
-  "imprimatur.graph.goTo": (c) => actions?.goTo(c.file, c.n),
-  /** Close a session's open asks by hand (the user did it, no reply needed). */
-  /** Mark as done: tick that one step, as if its checkbox were ticked. */
-  "imprimatur.graph.markDone": (c) => tick({ session: c.session, t: c.t, i: c.i, on: true }),
-  "imprimatur.graph.copyAsk": (c) => vscode.env.clipboard.writeText(c.text ?? ""),
-};
-
-module.exports = { openGraph, refreshGraph, graphCommands, laneSvg, html };
+/**
+ * The Scan history button. A project scanned before skips the sessions it
+ * read, so the button asks: scan what is new, or rescan them (e.g. after a
+ * language change, vscode/history.js `again`).
+ */
+async function pickScan() {
+  if (!shown || !scannedBefore(shown)) return scanAll();
+  const items = [
+    { label: "Scan new sessions and TODO.md", detail: "Sessions read before are skipped.", again: false },
+    { label: "Rescan past sessions", detail: "Write their steps again (e.g. in the new language). Sessions a hook or you touched stay as they are.", again: true },
+  ];
+  const pick = await vscode.window.showQuickPick(items, { title: "Imprimatur: Scan history" });
+  if (pick) await scanAll(pick.again);
+  else refreshGraph();
+}

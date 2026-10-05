@@ -157,7 +157,9 @@ through where they were.
 
 5. **Scan history** ([vscode/history.js](vscode/history.js)) finds what was
    already waiting on you when Imprimatur was set up after work began. It runs
-   once when the panel first opens in a project, and again from the button.
+   once when the panel first opens in a project, and again from the button,
+   which then asks: scan what is new, or **Rescan past sessions** (write their
+   steps again, e.g. after setting `imprimatur.language`).
    It reads Claude Code's own transcripts of the project
    (`~/.claude/projects/<project>/*.jsonl`, last 30 days): earlier turns' 👉
    lines become steps, your later messages are kept on them, and Haiku audits
