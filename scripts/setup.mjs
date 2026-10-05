@@ -4,7 +4,8 @@
 //   found by their script name, added when missing, updated when the path or
 //   language differs; other hooks are left alone);
 // - the VS Code extension (npm run package + code --install-extension);
-// - with --show-in, where Markdown changes show (preview | editor | both), in
+// - with --lang, imprimatur.language (the extension's model calls use the
+//   hooks' language), and with --show-in, where Markdown changes show (preview | editor | both), in
 //   VS Code's machine settings (~/.vscode-server/data/Machine/settings.json on
 //   a remote/WSL machine, else the user settings);
 // - checks that the `claude` CLI is on PATH (the model features use it).
@@ -63,17 +64,30 @@ export function mergeHooks(settings, { root, lang, exts = ["md", "mdx"] }) {
 }
 
 /**
- * VS Code settings with imprimatur.showIn set. Pure: returns a copy and the change.
- * @param {any} settings @param {string} showIn
+ * VS Code settings with one imprimatur setting set. Pure: returns a copy and the change.
+ * @param {any} settings @param {string} key @param {string} value @param {string} fallback shown when unset
  */
-export function mergeShowIn(settings, showIn) {
-  if (!["preview", "editor", "both"].includes(showIn)) throw new Error(`--show-in: preview, editor or both, not ${showIn}`);
+function mergeSetting(settings, key, value, fallback) {
   const out = structuredClone(settings ?? {});
-  if (out["imprimatur.showIn"] === showIn) return { settings: out, change: undefined };
-  const change = `imprimatur.showIn: ${out["imprimatur.showIn"] ?? "(default preview)"} → ${showIn}`;
-  out["imprimatur.showIn"] = showIn;
+  if (out[key] === value) return { settings: out, change: undefined };
+  const change = `${key}: ${out[key] ?? `(default ${fallback})`} → ${value}`;
+  out[key] = value;
   return { settings: out, change };
 }
+
+/** imprimatur.showIn (--show-in). @param {any} settings @param {string} showIn */
+export function mergeShowIn(settings, showIn) {
+  if (!["preview", "editor", "both"].includes(showIn)) throw new Error(`--show-in: preview, editor or both, not ${showIn}`);
+  return mergeSetting(settings, "imprimatur.showIn", showIn, "preview");
+}
+
+/**
+ * imprimatur.language (--lang): the extension's model calls (Scan history,
+ * Audit) write in the hooks' language. The hooks get it from IMPRIMATUR_LANG
+ * in their command; the extension does not see that variable.
+ * @param {any} settings @param {string} lang
+ */
+export const mergeLanguage = (settings, lang) => mergeSetting(settings, "imprimatur.language", lang, "the agent's language");
 
 /** Where VS Code keeps this machine's settings: the server's machine settings on a remote, else the user's. */
 function vscodeSettingsFile() {
@@ -131,20 +145,28 @@ function main() {
   console.log(changes.length ? changes.map((c) => `  ${c}`).join("\n") : "  all in place");
   if (changes.length && !opts.dry) writeWithBackup(file, settings);
 
-  if (opts.showIn) {
+  if (opts.showIn || opts.lang) {
     const vs = vscodeSettingsFile();
+    const wanted = { ...(opts.showIn && { "imprimatur.showIn": opts.showIn }), ...(opts.lang && { "imprimatur.language": opts.lang }) };
     // VS Code settings may carry comments: those files are left to the user.
     let current = {};
     try {
       current = fs.existsSync(vs) ? JSON.parse(fs.readFileSync(vs, "utf8")) : {};
     } catch {
-      console.log(`VS Code settings ${vs}: not plain JSON (comments?); set "imprimatur.showIn": "${opts.showIn}" there by hand.`);
+      console.log(`VS Code settings ${vs}: not plain JSON (comments?); set ${JSON.stringify(wanted)} there by hand.`);
       current = undefined;
     }
     if (current) {
-      const { settings: next, change } = mergeShowIn(current, opts.showIn);
-      console.log(`VS Code settings ${vs}:\n  ${change ?? "already set"}`);
-      if (change && !opts.dry) writeWithBackup(vs, next);
+      let next = current;
+      const changes = [];
+      for (const [merge, value] of [[mergeShowIn, opts.showIn], [mergeLanguage, opts.lang]]) {
+        if (!value) continue;
+        const r = merge(next, value);
+        next = r.settings;
+        if (r.change) changes.push(r.change);
+      }
+      console.log(`VS Code settings ${vs}:\n  ${changes.join("\n  ") || "already set"}`);
+      if (changes.length && !opts.dry) writeWithBackup(vs, next);
     }
   }
 

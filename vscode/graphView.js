@@ -329,7 +329,7 @@ async function auditAll() {
   await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur: auditing Waiting on you" }, async () => {
     for (const log of withOpen) {
       try {
-        closed += (await audit(log)).settled.length;
+        closed += (await audit(log, { lang: modelLang() })).settled.length;
       } catch {
         failed++;
       }
@@ -340,6 +340,9 @@ async function auditAll() {
     `Audit: ${closed} step${closed === 1 ? "" : "s"} closed${failed ? `, ${failed} session${failed === 1 ? "" : "s"} could not be checked (is the claude CLI on PATH?)` : ""}.`,
   );
 }
+
+/** The language model-written steps use: the setting, else the hooks' variable (vscode/history.js, audit.js). */
+const modelLang = () => vscode.workspace.getConfiguration("imprimatur").get("language") || process.env.IMPRIMATUR_LANG || undefined;
 
 /** Projects being scanned now (a second click or panel open waits for the first). */
 const scanning = new Set();
@@ -355,7 +358,7 @@ async function scanAll() {
   let res;
   await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur: scanning past sessions" }, async (p) => {
     try {
-      res = await scanHistory(root, { lang: process.env.IMPRIMATUR_LANG, progress: (done, total) => p.report({ message: `${done}/${total}` }) });
+      res = await scanHistory(root, { lang: modelLang(), progress: (done, total) => p.report({ message: `${done}/${total}` }) });
     } catch (e) {
       vscode.window.showWarningMessage(`Imprimatur: scan failed: ${e instanceof Error ? e.message : e}`);
     }

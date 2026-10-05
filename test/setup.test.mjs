@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mergeHooks, mergeShowIn } from "../scripts/setup.mjs";
+import { mergeHooks, mergeShowIn, mergeLanguage } from "../scripts/setup.mjs";
 
 const root = "/home/u/projects/imprimatur";
 
@@ -37,4 +37,11 @@ test("setup: --show-in sets imprimatur.showIn, keeps the rest, rejects other val
   assert.equal(change, "imprimatur.showIn: (default preview) → both");
   assert.equal(mergeShowIn(settings, "both").change, undefined);
   assert.throws(() => mergeShowIn({}, "everywhere"));
+});
+
+test("setup: --lang also sets imprimatur.language, so the extension writes in the hooks' language", () => {
+  const { settings, change } = mergeLanguage({ "imprimatur.showIn": "both" }, "Turkish");
+  assert.deepEqual(settings, { "imprimatur.showIn": "both", "imprimatur.language": "Turkish" });
+  assert.equal(change, "imprimatur.language: (default the agent's language) → Turkish");
+  assert.equal(mergeLanguage(settings, "Turkish").change, undefined);
 });

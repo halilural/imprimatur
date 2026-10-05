@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.28.3",
+  "version": "0.28.4",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": { "color": "#fff1e3", "theme": "light" },
@@ -240,6 +240,11 @@
           ],
           "default": "preview",
           "description": "Where agent changes to Markdown files are marked. Other file types are always marked in the editor."
+        },
+        "imprimatur.language": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Language of the steps Scan history and Audit write, e.g. `Turkish`. Empty: the agent's language (the hooks use `IMPRIMATUR_LANG`). `npm run setup -- --lang …` sets both."
         },
         "imprimatur.editorAlsoFor": {
           "type": "array",
