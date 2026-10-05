@@ -6,6 +6,9 @@ import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
+// Hooks spawned below must not call a model (describe.mjs).
+process.env.IMPRIMATUR_DESCRIBE = "off";
+
 const req = createRequire(import.meta.url);
 const { latestBefore } = req("../vscode/review-state.js");
 const { review } = req("../vscode/diff.js");

@@ -149,7 +149,8 @@ export function recordWaiting(data, project) {
   return log;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// IMPRIMATUR_CHILD: a model call started by describe.mjs; nothing to record.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href && !process.env.IMPRIMATUR_CHILD) {
   process.on("uncaughtException", (e) => {
     process.stderr.write(`imprimatur waiting: ${e.message}\n`);
     process.exit(0);

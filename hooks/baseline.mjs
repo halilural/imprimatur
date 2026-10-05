@@ -14,6 +14,7 @@
 //   node baseline.mjs [ext ...]   default extensions: md mdx
 //
 // Never blocks the tool: every path ends in exit 0.
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -115,7 +116,21 @@ export function takeBaseline(project, file, exts = ["md", "mdx"], meta = {}, kno
   const { session, tool, prompt, intent, title, transcript, toolUseId } = meta;
   const row = { t: new Date().toISOString(), session, tool, prompt, intent, title, transcript, toolUseId, before };
   fs.appendFileSync(log, JSON.stringify(row) + "\n");
+  if (toolUseId) describeLater(root, rel, toolUseId);
   return kept ? "kept" : "written";
+}
+
+/**
+ * Start hooks/describe.mjs in the background for this edit (a small model
+ * writes the graph's description); the tool never waits for it.
+ * IMPRIMATUR_DESCRIBE=off turns it off (tests); IMPRIMATUR_LANG picks the language.
+ * @param {string} root @param {string} rel @param {string} toolUseId
+ */
+function describeLater(root, rel, toolUseId) {
+  if (process.env.IMPRIMATUR_DESCRIBE === "off") return;
+  const script = path.join(path.dirname(new URL(import.meta.url).pathname), "describe.mjs");
+  const child = spawn(process.execPath, [script, root, rel, toolUseId, process.env.IMPRIMATUR_LANG || "English"], { detached: true, stdio: "ignore" });
+  child.unref();
 }
 
 /**
@@ -173,7 +188,8 @@ export function bashEdit(event, data, project, exts) {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// IMPRIMATUR_CHILD: a model call started by describe.mjs; nothing to record.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href && !process.env.IMPRIMATUR_CHILD) {
   let input = "";
   process.stdin.on("data", (d) => (input += d));
   process.stdin.on("end", () => {

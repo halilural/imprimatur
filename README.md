@@ -27,9 +27,13 @@ staging or committing does not clear the marks.
   or **All changes under review**. It stays after Accept all.
 - **Agent Change Graph** (from that list, or the command palette): every agent
   edit in the repo as a table like Git Graph, one colored lane per Claude
-  session, click a row for its diff. The description is what the agent said it
-  was doing (or the Bash command's description); for older edits, the nearest
-  heading and the first changed line. Your request is in the row's tooltip, the
+  session, click a row for its diff. The description is one plain sentence on
+  what the edit changed, written a few seconds later by a small model from the
+  edit's diff ([hooks/describe.mjs](hooks/describe.mjs), `claude -p --model
+  haiku`, run in the background; language from `IMPRIMATUR_LANG`, default
+  English; `IMPRIMATUR_DESCRIBE=off` turns it off). Until then, or without it:
+  what the agent said it was doing, else the nearest heading and the first
+  changed line. Hover the description for all of it. Your request is in the row's tooltip, the
   session column shows Claude's title for the conversation.
   A green ✓ marks edits with nothing left under review, an amber dot the rest:
   hover it for an Accept button (or right-click the row: Accept this edit, Go to change, Open
