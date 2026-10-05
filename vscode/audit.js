@@ -105,7 +105,7 @@ function parseAudit(out, steps) {
  * Review a session's open steps, with the agent's latest turn when there is one.
  * Throws when the model fails (the caller falls back).
  * @param {string} log session log
- * @param {{message?: string, request?: string, title?: string, session?: string, lang?: string}} turn
+ * @param {{message?: string, request?: string, title?: string, session?: string, lang?: string, at?: string}} turn at: when the turn ended (a past turn, vscode/history.js)
  * @param {(prompt: string) => Promise<string>} [ask]
  */
 async function audit(log, turn = {}, ask = askModel) {
@@ -122,7 +122,7 @@ async function audit(log, turn = {}, ask = askModel) {
   for (const n of res.settled) tickStep(log, steps[n - 1], "audit", note, again.includes(n) ? "again" : undefined);
   if (res.asks.length) {
     fs.mkdirSync(path.dirname(log), { recursive: true });
-    const item = { t: new Date().toISOString(), session: turn.session ?? path.basename(log, ".jsonl"), kind: "verify", text: res.asks.join("\n") };
+    const item = { t: turn.at ?? new Date().toISOString(), session: turn.session ?? path.basename(log, ".jsonl"), kind: "verify", text: res.asks.join("\n") };
     fs.appendFileSync(log, JSON.stringify({ ...item, detail: turn.message?.slice(0, 4000), prompt: turn.request, title: turn.title }) + "\n");
   }
   return res;

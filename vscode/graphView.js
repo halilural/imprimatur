@@ -11,6 +11,7 @@ const crypto = require("node:crypto");
 const { graphRows } = require("./graph.js");
 const { WAITING_DIR, waitingSteps, openSteps } = require("./waiting.js");
 const { audit } = require("./audit.js");
+const { scanHistory, scannedBefore } = require("./history.js");
 
 const KINDS = { question: ["❓", "Question"], command: ["⚙", "Command"], verify: ["👀", "Verify / test"], input: ["✋", "Input"] };
 
@@ -173,7 +174,7 @@ function html(data, root, nonce, waiting = []) {
 </style></head><body>
 <header><strong>Agent Change Graph</strong>
 <nav><button data-tab="edits">Edits ${pending ? `<span class="badge">${pending}</span>` : ""}</button><button data-tab="waiting">Waiting on you ${open ? `<span class="badge">${open}</span>` : ""}</button></nav>
-<input id="filter" placeholder="Filter by file, request or answer"><label id="ans" hidden><input type="checkbox" id="answered"> open only</label><button id="audit" class="acc on" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">Audit</button>
+<input id="filter" placeholder="Filter by file, request or answer"><label id="ans" hidden><input type="checkbox" id="answered"> open only</label><button id="audit" class="acc on" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">Audit</button><button id="scan" class="acc on" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">Scan history</button>
 <span class="n" id="count-edits">${data.rows.length} edits · ${pending} under review · ${data.lanes.length} sessions</span><span class="n" id="count-waiting">${open} open · ${waiting.length} steps</span></header>
 <section id="edits"><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
 <tbody>${body}</tbody></table></section>
@@ -230,6 +231,7 @@ function html(data, root, nonce, waiting = []) {
     }
     document.getElementById("ans").hidden = state.tab !== "waiting";
     document.getElementById("audit").hidden = state.tab !== "waiting";
+    document.getElementById("scan").hidden = state.tab !== "waiting";
     const q = state.q.toLowerCase();
     document.querySelectorAll("tr[data-q]").forEach((tr) => {
       const show = tr.dataset.q.toLowerCase().includes(q) && (!state.answered || !("done" in tr.dataset));
@@ -252,6 +254,7 @@ function html(data, root, nonce, waiting = []) {
     vscode.postMessage({ type: "check", session: box.dataset.session, t: box.dataset.item, i: Number(box.dataset.i), on: box.checked });
   }));
   document.getElementById("audit").addEventListener("click", (e) => { e.target.disabled = true; e.target.textContent = "Auditing…"; vscode.postMessage({ type: "audit" }); });
+  document.getElementById("scan").addEventListener("click", (e) => { e.target.disabled = true; e.target.textContent = "Scanning…"; vscode.postMessage({ type: "scan" }); });
   addEventListener("scroll", hide);
   apply();
 </script></body></html>`;
@@ -279,6 +282,7 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
     panel.webview.onDidReceiveMessage((m) => {
       if (m.type === "check") return tick(m);
       if (m.type === "audit") return auditAll();
+      if (m.type === "scan") return scanAll();
       return m.type === "accept" ? actions?.acceptEdit(m.file, m.n) : actions?.openDiff(m.file, m.n);
     });
     panel.onDidDispose(() => {
@@ -299,6 +303,8 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
   };
   refresh();
   p.reveal();
+  // Set up after work began: once per project, find what already waited on the user.
+  if (!scannedBefore(root)) scanAll();
 }
 
 /**
@@ -333,6 +339,33 @@ async function auditAll() {
   vscode.window.showInformationMessage(
     `Audit: ${closed} step${closed === 1 ? "" : "s"} closed${failed ? `, ${failed} session${failed === 1 ? "" : "s"} could not be checked (is the claude CLI on PATH?)` : ""}.`,
   );
+}
+
+/** Projects being scanned now (a second click or panel open waits for the first). */
+const scanning = new Set();
+
+/**
+ * Scan history (vscode/history.js): what waited on the user before Imprimatur
+ * was set up. The Scan history button, and once per project on its own.
+ */
+async function scanAll() {
+  const root = shown;
+  if (!root || scanning.has(root)) return;
+  scanning.add(root);
+  let res;
+  await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur: scanning past sessions" }, async (p) => {
+    try {
+      res = await scanHistory(root, { lang: process.env.IMPRIMATUR_LANG, progress: (done, total) => p.report({ message: `${done}/${total}` }) });
+    } catch (e) {
+      vscode.window.showWarningMessage(`Imprimatur: scan failed: ${e instanceof Error ? e.message : e}`);
+    }
+  });
+  scanning.delete(root);
+  refreshGraph();
+  if (res)
+    vscode.window.showInformationMessage(
+      `Scan history: ${res.sessions} past session${res.sessions === 1 ? "" : "s"} read, ${res.todos.added} to-do${res.todos.added === 1 ? "" : "s"} from TODO.md added${res.todos.ticked ? `, ${res.todos.ticked} ticked (done in TODO.md)` : ""}.`,
+    );
 }
 
 /** Re-render the open panel, if any (after an agent edit). */

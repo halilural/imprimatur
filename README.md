@@ -1,6 +1,10 @@
+![Imprimatur: your agent writes, you approve. A page of tracked changes stamped approved](assets/hero.png)
+
 # Imprimatur
 
 *Imprimatur* (Latin, "let it be printed"): the approval stamp.
+
+![An agent's edits marked in the editor: added lines in green, a changed word next to the old one in a red box, a marker for a deleted block, and Accept above the block](assets/tracked-changes.png)
 
 See what an AI coding agent changed in your docs, right in the editor, like
 tracked changes in a word processor, until you accept it. Git is not involved:
@@ -84,6 +88,8 @@ through where they were.
 
 ## How it works
 
+![How it works: Claude edits a file, a hook saves a copy, VS Code marks the diff, you accept; when the agent's turn ends, Haiku reads its message and keeps the Waiting on you list honest](assets/how-it-works.png)
+
 1. A Claude Code hook ([hooks/baseline.mjs](hooks/baseline.mjs)), before each
    agent edit of a listed file type (Edit, Write, or a Bash command that names
    the file, e.g. a python or sed edit; Bash is compared before/after so read-only
@@ -114,6 +120,18 @@ through where they were.
    steps (the agent's 👉 lines verbatim, when it marks its asks; an ask in
    nearly the same words replaces the old step). The **Audit** button in the
    tab runs the same review on demand. Without the model, the rules above.
+
+   ![Waiting on you: open steps with a checkbox, steps the audit closed, asks replaced by a later one, and questions you answered](assets/waiting-on-you.png)
+5. **Scan history** ([vscode/history.js](vscode/history.js)) finds what was
+   already waiting on you when Imprimatur was set up after work began. It runs
+   once when the panel first opens in a project, and again from the button.
+   It reads Claude Code's own transcripts of the project
+   (`~/.claude/projects/<project>/*.jsonl`, last 30 days): earlier turns' 👉
+   lines become steps, your later messages are kept on them, and Haiku audits
+   each session with its final message, as the hook would have. Sessions that
+   already have a log or were scanned before are skipped (`.claude/imprimatur/scanned.json`).
+   It also adds the `TODO: (K)` lines (your own to-dos) of `TODO.md` and
+   `todos/*/TODO.md`; on the next scan the ones marked DONE or removed are ticked.
 
 ## Install
 
