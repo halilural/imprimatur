@@ -54,6 +54,12 @@ export function asksIn(message) {
     if (fence || /^\s*\|/.test(raw)) continue;
     const line = raw.replace(/^\s*(?:[-*+]|\d+[.)]|#+)\s+/, "").replace(/\*\*|__|`/g, "").trim();
     if (!line) continue;
+    // 👉 marks a line the agent means for the user, whatever its wording.
+    if (line.startsWith("👉")) {
+      lines.push(line.replace(/^👉\s*/, ""));
+      action = true;
+      continue;
+    }
     const q = /\?\s*\)?$/.test(line);
     // Quoted text names a phrase, it does not ask; a phrase must end a word
     // ("kontrol et", not "kontrol ettim").
