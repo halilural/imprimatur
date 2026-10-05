@@ -4,9 +4,12 @@
 //   found by their script name, added when missing, updated when the path or
 //   language differs; other hooks are left alone);
 // - the VS Code extension (npm run package + code --install-extension);
+// - with --show-in, where Markdown changes show (preview | editor | both), in
+//   VS Code's machine settings (~/.vscode-server/data/Machine/settings.json on
+//   a remote/WSL machine, else the user settings);
 // - checks that the `claude` CLI is on PATH (the model features use it).
 //
-//   npm run setup -- [--lang Turkish] [--exts md,mdx] [--no-extension] [--dry-run]
+//   npm run setup -- [--lang Turkish] [--show-in both] [--exts md,mdx] [--no-extension] [--dry-run]
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -59,6 +62,39 @@ export function mergeHooks(settings, { root, lang, exts = ["md", "mdx"] }) {
   return { settings: out, changes };
 }
 
+/**
+ * VS Code settings with imprimatur.showIn set. Pure: returns a copy and the change.
+ * @param {any} settings @param {string} showIn
+ */
+export function mergeShowIn(settings, showIn) {
+  if (!["preview", "editor", "both"].includes(showIn)) throw new Error(`--show-in: preview, editor or both, not ${showIn}`);
+  const out = structuredClone(settings ?? {});
+  if (out["imprimatur.showIn"] === showIn) return { settings: out, change: undefined };
+  const change = `imprimatur.showIn: ${out["imprimatur.showIn"] ?? "(default preview)"} → ${showIn}`;
+  out["imprimatur.showIn"] = showIn;
+  return { settings: out, change };
+}
+
+/** Where VS Code keeps this machine's settings: the server's machine settings on a remote, else the user's. */
+function vscodeSettingsFile() {
+  const home = os.homedir();
+  if (fs.existsSync(path.join(home, ".vscode-server"))) return path.join(home, ".vscode-server", "data", "Machine", "settings.json");
+  if (process.platform === "darwin") return path.join(home, "Library", "Application Support", "Code", "User", "settings.json");
+  if (process.platform === "win32") return path.join(process.env.APPDATA ?? home, "Code", "User", "settings.json");
+  return path.join(home, ".config", "Code", "User", "settings.json");
+}
+
+/** Back up a file (if any), then write JSON to it. @param {string} file @param {any} data */
+function writeWithBackup(file, data) {
+  if (fs.existsSync(file)) {
+    const backup = `${file}.bak-${new Date().toISOString().replace(/[:.]/g, "-")}-imprimatur`;
+    fs.copyFileSync(file, backup);
+    console.log(`  backup: ${backup}`);
+  }
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
+}
+
 /** @param {string[]} argv */
 function options(argv) {
   const get = (name) => {
@@ -67,6 +103,7 @@ function options(argv) {
   };
   return {
     lang: get("--lang"),
+    showIn: get("--show-in"),
     exts: get("--exts")?.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
     extension: !argv.includes("--no-extension"),
     dry: argv.includes("--dry-run"),
@@ -92,14 +129,23 @@ function main() {
 
   console.log(`Hooks in ${file}:`);
   console.log(changes.length ? changes.map((c) => `  ${c}`).join("\n") : "  all in place");
-  if (changes.length && !opts.dry) {
-    if (fs.existsSync(file)) {
-      const backup = `${file}.bak-${new Date().toISOString().replace(/[:.]/g, "-")}-imprimatur`;
-      fs.copyFileSync(file, backup);
-      console.log(`  backup: ${backup}`);
+  if (changes.length && !opts.dry) writeWithBackup(file, settings);
+
+  if (opts.showIn) {
+    const vs = vscodeSettingsFile();
+    // VS Code settings may carry comments: those files are left to the user.
+    let current = {};
+    try {
+      current = fs.existsSync(vs) ? JSON.parse(fs.readFileSync(vs, "utf8")) : {};
+    } catch {
+      console.log(`VS Code settings ${vs}: not plain JSON (comments?); set "imprimatur.showIn": "${opts.showIn}" there by hand.`);
+      current = undefined;
     }
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(settings, null, 2) + "\n");
+    if (current) {
+      const { settings: next, change } = mergeShowIn(current, opts.showIn);
+      console.log(`VS Code settings ${vs}:\n  ${change ?? "already set"}`);
+      if (change && !opts.dry) writeWithBackup(vs, next);
+    }
   }
 
   if (opts.extension && !opts.dry) {
