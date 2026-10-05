@@ -2,7 +2,8 @@
 // Waiting on you: what the agent asked of the user, from the hook's per-session
 // logs in .claude/imprimatur/waiting/<session>.jsonl. Every record closes the
 // session's earlier open items (the agent went on, so the user decided); an
-// "answer" record also carries the user's reply.
+// "answer" record also carries the user's reply. A "check" record ticks one
+// step of an item (the user's own to-do list) and closes nothing.
 "use strict";
 const fs = require("node:fs");
 const path = require("node:path");
@@ -13,9 +14,9 @@ const WAITING_DIR = path.join(".claude", "imprimatur", "waiting");
 const OPENS = ["question", "command", "verify", "input"];
 
 /**
- * @typedef {{t: string, session?: string, kind: string, text?: string, detail?: string, prompt?: string, title?: string, answer?: string}} WaitingRecord
+ * @typedef {{t: string, session?: string, kind: string, text?: string, detail?: string, prompt?: string, title?: string, answer?: string, item?: string, i?: number, on?: boolean}} WaitingRecord
  * @typedef {{t: string, session: string, kind: string, text: string, detail?: string, prompt?: string, title?: string,
- *            open: boolean, done?: boolean, answer?: string, answeredAt?: string}} WaitingItem
+ *            open: boolean, done?: boolean, answer?: string, answeredAt?: string, checked?: number[]}} WaitingItem
  */
 
 /**
@@ -26,6 +27,16 @@ function itemsOf(records, session) {
   /** @type {WaitingItem[]} */
   const items = [];
   for (const r of records) {
+    if (r.kind === "check") {
+      const it = items.find((x) => x.t === r.item);
+      if (it && typeof r.i === "number") {
+        const on = new Set(it.checked ?? []);
+        if (r.on) on.add(r.i);
+        else on.delete(r.i);
+        it.checked = [...on].sort((a, b) => a - b);
+      }
+      continue;
+    }
     for (const it of items) {
       if (!it.open) continue;
       it.open = false;

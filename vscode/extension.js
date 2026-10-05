@@ -10,7 +10,7 @@ const { review, acceptHunk, acceptLines, acceptGroups } = require("./diff.js");
 const { markdownItPlugin, markdownBlocks } = require("./preview.js");
 const { openGraph, refreshGraph, graphCommands } = require("./graphView.js");
 const { WAITING_DIR, waitingItems } = require("./waiting.js");
-const { acceptEdit } = require("./graph.js");
+const { acceptEdit, spotsOf } = require("./graph.js");
 const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, historyEdits } = require("./review-state.js");
 
 const color = (id) => new vscode.ThemeColor(id);
@@ -220,6 +220,17 @@ function acceptEditOf(file, n) {
   refreshGraph();
 }
 
+/** Open the file at the first line of an agent edit that is still in it. @param {string} file @param {number} n */
+async function goToEdit(file, n) {
+  const doc = await vscode.workspace.openTextDocument(file);
+  const e = historyEdits(logOf(file) ?? "", doc.getText()).find((x) => x.n === n);
+  const [start, end] = (e && spotsOf(e, doc.getText())[0]) ?? [0, 0];
+  const line = Math.min(start, doc.lineCount - 1);
+  const range = new vscode.Range(line, 0, Math.max(line, Math.min(end, doc.lineCount) - 1), 0);
+  await vscode.window.showTextDocument(doc, { selection: new vscode.Selection(range.start, range.start), preview: false });
+  vscode.window.activeTextEditor?.revealRange(range, vscode.TextEditorRevealType.InCenter);
+}
+
 /** The repo the graph shows: the active file's, else the first folder's. */
 function graphRoot() {
   const active = vscode.window.activeTextEditor?.document.uri;
@@ -229,7 +240,7 @@ function graphRoot() {
 function showGraph() {
   const root = graphRoot();
   if (!root) return void vscode.window.showInformationMessage("Agent Change Graph: no folder open.");
-  openGraph(root, openEditDiff, currentText, acceptEditOf);
+  openGraph(root, openEditDiff, currentText, acceptEditOf, goToEdit);
 }
 
 /** Status bar button, always there like Git Graph's: opens the graph, shows open asks. */

@@ -152,4 +152,4 @@ function previewOf(before, after) {
   return out.length > PREVIEW_LINES ? [...out.slice(0, PREVIEW_LINES), ["…", `${out.length - PREVIEW_LINES} more lines`]] : out;
 }
 
-module.exports = { graphRows, acceptedOf, acceptEdit, previewOf, summaryOf };
+module.exports = { graphRows, acceptedOf, acceptEdit, spotsOf, previewOf, summaryOf };

@@ -51,6 +51,8 @@ function waitingBody(items, lanes) {
       const asks = w.text.split("\n").filter((l) => l.trim());
       // The closing line is usually the actual ask; the rest are its steps.
       const head = asks[asks.length - 1] ?? "";
+      const checked = new Set(w.checked ?? []);
+      const progress = asks.length > 1 ? ` <span class="more${checked.size === asks.length ? " all" : ""}">${checked.size}/${asks.length}</span>` : "";
       const name = w.title ?? titles.get(w.session) ?? w.session.slice(0, 8);
       const q = [w.text, w.prompt, w.answer, w.session, name, label].join(" ");
       const status = w.open ? `<span class="pill open">open</span>` : w.done ? `<span class="pill">done</span>` : `<span class="pill">answered</span>${w.answer ? ` ${esc(w.answer)}` : ""}`;
@@ -58,15 +60,15 @@ function waitingBody(items, lanes) {
       return `<tr class="w${w.open ? "" : " done"}" data-key="${esc(`${w.session} ${w.t}`)}" data-q="${esc(q)}"${w.open ? "" : " data-done"}
   data-vscode-context="${menu({ webviewSection: w.open ? "waiting-open" : "waiting-done", session: w.session, text: w.text })}">
   <td class="k" title="${esc(label)}">${icon}</td>
-  <td class="d">${esc(head)}${asks.length > 1 ? ` <span class="more">+${asks.length - 1}</span>` : ""}</td>
+  <td class="d">${esc(head)}${progress}</td>
   <td class="d p">${esc(w.prompt ?? "")}</td>
   <td class="t">${esc(time(w.t))}</td>
   <td class="s" style="color:${color(w.session)}" title="${esc(w.session)}">${esc(name)}</td>
   <td class="st">${status}</td>
 </tr>
-<tr class="x" hidden><td colspan="6"><div class="todo">
+<tr class="x" hidden><td colspan="6"><div class="todo" data-session="${esc(w.session)}" data-t="${esc(w.t)}">
   <div class="h">What you need to do</div>
-  <ol>${asks.map((a) => `<li>${esc(a)}</li>`).join("")}</ol>
+  <ol>${asks.map((a, i) => `<li${checked.has(i) ? ' class="on"' : ""}><label><input type="checkbox" data-step="${i}"${checked.has(i) ? " checked" : ""}> <span>${esc(a)}</span></label></li>`).join("")}</ol>
   ${details}
   ${w.prompt ? `<div class="meta">Request: ${esc(w.prompt)}</div>` : ""}${w.answer ? `<div class="meta">Your answer: ${esc(w.answer)}</div>` : ""}
 </div></td></tr>`;
@@ -140,6 +142,8 @@ function html(data, root, nonce, waiting = []) {
   tr.x td { height: auto; white-space: normal; max-width: none; }
   .todo { margin: 4px 0 12px 28px; padding: 8px 12px; border-left: 3px solid var(--vscode-editorWarning-foreground, #cca700); background: var(--vscode-textBlockQuote-background); }
   .todo .h { font-weight: 600; margin-bottom: 4px; } .todo ol { margin: 0 0 6px; padding-left: 20px; } .todo li { margin: 2px 0; }
+  .todo label { display: inline; cursor: pointer; } .todo input { vertical-align: middle; margin: 0 4px 0 0; }
+  .todo li.on span { text-decoration: line-through; opacity: .6; } .more.all { background: var(--vscode-testing-iconPassed, #73c991); }
   .todo pre { white-space: pre-wrap; font-family: var(--vscode-editor-font-family); margin: 4px 0; } .todo summary { cursor: pointer; opacity: .8; }
   .todo .meta { opacity: .75; margin-top: 4px; }
 </style></head><body>
@@ -163,10 +167,12 @@ function html(data, root, nonce, waiting = []) {
   pop.addEventListener("mouseenter", () => clearTimeout(hideTimer));
   pop.addEventListener("mouseleave", hideSoon);
   const line = (cls, text) => { const d = document.createElement("div"); d.className = cls; d.textContent = text; return d; };
+  // Only the status cell opens it: the rest of the row stays free to click and read.
   document.querySelectorAll("tr[data-i]").forEach((tr) => {
     const r = rows[Number(tr.dataset.i)];
-    if (!r) return;
-    tr.addEventListener("mouseenter", () => {
+    const cell = tr.querySelector("td.ok");
+    if (!r || !cell) return;
+    cell.addEventListener("mouseenter", () => {
       clearTimeout(hideTimer);
       pop.replaceChildren(...(r.prompt ? [line("p", r.prompt)] : []),
         ...r.preview.map(([k, t]) => line(k === "-" ? "m" : k === "+" ? "a" : "", k === "…" ? "… " + t : k + " " + t)));
@@ -177,7 +183,7 @@ function html(data, root, nonce, waiting = []) {
       pop.style.left = Math.max(4, Math.min(box.left + 40, innerWidth - pop.offsetWidth - 8)) + "px";
       pop.style.top = (below ? box.bottom : Math.max(4, box.top - pop.offsetHeight)) + "px";
     });
-    tr.addEventListener("mouseleave", hideSoon);
+    cell.addEventListener("mouseleave", hideSoon);
   });
   document.querySelectorAll("tr[data-file]").forEach((tr) => {
     const msg = (type) => vscode.postMessage({ type, file: tr.dataset.file, n: Number(tr.dataset.n) });
@@ -215,6 +221,11 @@ function html(data, root, nonce, waiting = []) {
     state.expanded = state.expanded.includes(k) ? state.expanded.filter((x) => x !== k) : [...state.expanded, k];
     apply();
   }));
+  document.querySelectorAll(".todo input[data-step]").forEach((box) => box.addEventListener("change", () => {
+    const todo = box.closest(".todo");
+    box.closest("li").classList.toggle("on", box.checked);
+    vscode.postMessage({ type: "check", session: todo.dataset.session, t: todo.dataset.t, i: Number(box.dataset.step), on: box.checked });
+  }));
   addEventListener("scroll", hide);
   apply();
 </script></body></html>`;
@@ -226,7 +237,7 @@ let panel;
 let refresh;
 /** @type {string | undefined} repo root the open panel shows */
 let shown;
-/** @type {{openDiff: (file: string, n: number) => unknown, acceptEdit: (file: string, n: number) => unknown} | undefined} */
+/** @type {{openDiff: (file: string, n: number) => unknown, acceptEdit: (file: string, n: number) => unknown, goTo: (file: string, n: number) => unknown} | undefined} */
 let actions;
 
 /**
@@ -234,11 +245,15 @@ let actions;
  * @param {(file: string, n: number) => unknown} openDiff
  * @param {(file: string) => string | undefined} currentText
  * @param {(file: string, n: number) => unknown} acceptEdit
+ * @param {(file: string, n: number) => unknown} goTo
  */
-function openGraph(root, openDiff, currentText, acceptEdit) {
+function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
   if (!panel) {
     panel = vscode.window.createWebviewPanel("imprimatur.graph", "Agent Change Graph", vscode.ViewColumn.Active, { enableScripts: true });
-    panel.webview.onDidReceiveMessage((m) => (m.type === "accept" ? actions?.acceptEdit(m.file, m.n) : actions?.openDiff(m.file, m.n)));
+    panel.webview.onDidReceiveMessage((m) => {
+      if (m.type === "check") return tick(m);
+      return m.type === "accept" ? actions?.acceptEdit(m.file, m.n) : actions?.openDiff(m.file, m.n);
+    });
     panel.onDidDispose(() => {
       panel = undefined;
       refresh = undefined;
@@ -247,12 +262,27 @@ function openGraph(root, openDiff, currentText, acceptEdit) {
   }
   const p = panel;
   shown = root;
-  actions = { openDiff: (file, n) => openDiff(path.join(root, file), n), acceptEdit: (file, n) => acceptEdit(path.join(root, file), n) };
+  actions = {
+    openDiff: (file, n) => openDiff(path.join(root, file), n),
+    acceptEdit: (file, n) => acceptEdit(path.join(root, file), n),
+    goTo: (file, n) => goTo(path.join(root, file), n),
+  };
   refresh = () => {
     p.webview.html = html(graphRows(root, currentText), root, crypto.randomBytes(16).toString("hex"), waitingItems(root));
   };
   refresh();
   p.reveal();
+}
+
+/**
+ * Tick or untick one step of a waiting item, in the session's log (kept
+ * across reloads). The page already shows it; the refresh the write causes
+ * redraws the same. @param {{session: string, t: string, i: number, on: boolean}} m
+ */
+function tick(m) {
+  if (!shown || !/^[\w-]+$/.test(m.session ?? "")) return;
+  const log = path.join(shown, WAITING_DIR, `${m.session}.jsonl`);
+  fs.appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), session: m.session, kind: "check", item: m.t, i: m.i, on: !!m.on }) + "\n");
 }
 
 /** Re-render the open panel, if any (after an agent edit). */
@@ -262,6 +292,7 @@ const refreshGraph = () => refresh?.();
 const graphCommands = {
   "imprimatur.graph.acceptEdit": (c) => actions?.acceptEdit(c.file, c.n),
   "imprimatur.graph.openDiff": (c) => actions?.openDiff(c.file, c.n),
+  "imprimatur.graph.goTo": (c) => actions?.goTo(c.file, c.n),
   /** Close a session's open asks by hand (the user did it, no reply needed). */
   "imprimatur.graph.markDone": (c) => {
     if (!shown || !/^[\w-]+$/.test(c.session ?? "")) return;

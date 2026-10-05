@@ -32,14 +32,15 @@ staging or committing does not clear the marks.
   heading and the first changed line. Your request is in the row's tooltip, the
   session column shows Claude's title for the conversation.
   A green ✓ marks edits with nothing left under review, an amber dot the rest:
-  hover it for an Accept button (or right-click the row: Accept this edit, Open
-  diff); hover the row to see its change (the popup stays while you move into
+  hover it for an Accept button (or right-click the row: Accept this edit, Go to change, Open
+  diff); hover the status cell to see its change (the popup stays while you move into
   it, and scrolls). The status bar's **Agent Graph** button opens it and shows
   how many asks wait on you.
 - **Waiting on you**, the graph's second tab: everything the agent asked of
   you (questions, commands waiting for permission, "verify / test this" at the
   end of a turn), open ones first, with your answer once you reply. Click a row
-  for "What you need to do" as a numbered list (full message folded below);
+  for "What you need to do" as a numbered checklist (tick what you tried; kept
+  in the session's log, progress shown on the row; full message folded below);
   right-click: Mark as done, Copy. The filter works on both tabs.
 
 Setting `imprimatur.showIn`: Markdown files are marked only in the preview by
