@@ -218,13 +218,17 @@ function codeLines(text) {
  * range come in, deleted lines at the range go out, everything else stays as
  * it was. Blank lines right next to the range go with it, so a paragraph's
  * surrounding blank lines do not linger as a change. One pass, no cascade.
+ * `only` limits it to the range's lines or to the deletions after them.
  * @param {string} oldText @param {string} newText @param {number} start @param {number} end
+ * @param {"lines" | "deletions"} [only]
  */
-function acceptLines(oldText, newText, start, end) {
+function acceptLines(oldText, newText, start, end, only) {
   const a = lines(oldText);
   const b = lines(newText);
   const blank = (l) => l.trim() === "";
-  const take = (j, l) => (j >= start && j < end) || (blank(l) && (j === start - 1 || j === end));
+  const inRange = (j, l) => (j >= start && j < end) || (blank(l) && (j === start - 1 || j === end));
+  const take = only === "deletions" ? () => false : inRange;
+  const takeDel = only === "lines" ? () => false : inRange;
   const out = [];
   /** @type {number[]} */ let dels = [];
   /** @type {number[]} */ let adds = [];
@@ -237,7 +241,7 @@ function acceptLines(oldText, newText, start, end) {
     // Extra deletions sit after the last new line of the run.
     const at = pairs ? adds[pairs - 1] : ni - 1;
     for (let k = pairs; k < dels.length; k++) {
-      const gone = take(at, b[at] ?? "") || take(at + 1, a[dels[k]]);
+      const gone = takeDel(at, b[at] ?? "") || takeDel(at + 1, a[dels[k]]);
       if (!gone) out.push(a[dels[k]]);
     }
     dels = [];

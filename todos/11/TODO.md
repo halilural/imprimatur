@@ -12,6 +12,7 @@ Sürüyor: elle test (MT-AR-024) — 2026-10-05
 - DONE: (C) 2. `waitingItems()` saf fonksiyon: olaylar → maddeler (açık/cevaplandı, cevap metni); test
 - DONE: (C) 3. Graph paneli: Edits | Waiting on you (N) sekmeleri, ortak filtre, "cevaplananları göster", tıklayınca tam metin
 - DONE: (C) 4. `~/.claude/settings.json`'a hook (yedekli), paket + kurulum, README, ARCHITECTURE, MT testi
+- DONE: (C) 6. Kullanıcı geri bildirimi (2026-10-05): durum rozetleri + Accept düğmesi, kalıcı ve kaydırılır hover, durum çubuğunda Agent Graph, sağ tık (Accept / Open diff / Mark as done / Copy), "What you need to do" listesi; açıklama `message.id` ile; çift soru kaydı ve geçmiş zaman gürültüsü düzeltildi — 0.20.0, 73/73
 - 👉 TODO: (K) 5. Gözle → MT-AR-024: bir soru, bir komut izni, bir "kontrol et" isteği sekmede görünüyor, cevaplayınca "answered"
 
 ## Sorular (kullanıcıya)

@@ -20,13 +20,13 @@ import { pathToFileURL } from "node:url";
 // Loaded on use, inside the caller's try: a missing module must not fail the hook.
 const require = createRequire(import.meta.url);
 
-const TEXT_MAX = 600;
+const TEXT_MAX = 1500;
 const DETAIL_MAX = 4000;
 const cap = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 // Asks in the agent's own words, Turkish and English. Matched lowercase.
 const ASK_PHRASES = [
-  "kontrol et", "test et", "doğrula", "dener misin", "deneyebilir misin", "onayla", "onaylar mısın", "bakar mısın",
+  "kontrol et", "kontrol eder misin", "test et", "test eder misin", "doğrula", "dener misin", "deneyebilir misin", "onayla", "onaylar mısın", "bakar mısın",
   "reload window", "ister misin", "ister misiniz", "söylersen", "haber ver",
   "should i", "shall i", "want me to", "do you want", "would you like", "can you", "could you",
   "please verify", "please check", "please test", "please run", "please confirm", "please try", "let me know",
@@ -47,8 +47,10 @@ export function asksIn(message) {
     const line = raw.replace(/^\s*(?:[-*+]|\d+[.)]|#+)\s+/, "").replace(/\*\*|__|`/g, "").trim();
     if (!line) continue;
     const q = /\?\s*\)?$/.test(line);
-    const lower = line.toLocaleLowerCase("tr");
-    if (q || ASK_PHRASES.some((p) => lower.includes(p))) {
+    // Quoted text names a phrase, it does not ask; a phrase must end a word
+    // ("kontrol et", not "kontrol ettim").
+    const lower = ` ${line.replace(/"[^"]*"|“[^”]*”/g, " ").toLocaleLowerCase("tr")} `;
+    if (q || ASK_PHRASES.some((p) => new RegExp(`(?<![\\p{L}\\p{N}])${p}(?![\\p{L}\\p{N}])`, "u").test(lower))) {
       lines.push(line);
       question ||= q;
     }
@@ -81,7 +83,8 @@ export function recordOf(data) {
   }
   if (ev === "PostToolUse" && data.tool_name === "AskUserQuestion")
     return { kind: "answer", answer: answerText(data.tool_response ?? data.tool_output), closeOnly: true };
-  if (ev === "PermissionRequest") {
+  // AskUserQuestion also asks permission to show itself: already a question.
+  if (ev === "PermissionRequest" && data.tool_name !== "AskUserQuestion") {
     const input = data.tool_input ?? {};
     const what = input.command ?? input.file_path ?? input.url ?? input.pattern ?? JSON.stringify(input);
     return { kind: "command", text: `${data.tool_name}: ${String(what).split("\n")[0]}`, detail: input.description ? `${input.description}\n\n${what}` : String(what) };

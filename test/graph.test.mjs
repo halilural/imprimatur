@@ -5,7 +5,7 @@ import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { graphRows, previewOf, summaryOf } = createRequire(import.meta.url)("../vscode/graph.js");
+const { graphRows, previewOf, summaryOf, acceptEdit } = createRequire(import.meta.url)("../vscode/graph.js");
 
 test("graph: all files' edits newest first, one lane per session", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-graph-"));
@@ -68,9 +68,9 @@ test("graph: an edit whose line a later edit rewrote follows the later edit", ()
 
 test("graph: hover preview lists removed and added lines, capped", () => {
   assert.deepEqual(previewOf("a\nb\nc\n", "a\nB\nc\nd\n"), [["-", "b"], ["+", "B"], ["…", ""], ["+", "d"]]);
-  const big = previewOf("", Array.from({ length: 50 }, (_, i) => `l${i}`).join("\n"));
-  assert.equal(big.length, 41);
-  assert.deepEqual(big[40], ["…", "11 more lines"]); // 1 removed empty line + 50 added, 40 shown
+  const big = previewOf("", Array.from({ length: 310 }, (_, i) => `l${i}`).join("\n"));
+  assert.equal(big.length, 301);
+  assert.deepEqual(big[300], ["…", "11 more lines"]); // 1 removed empty line + 310 added, 300 shown
 });
 
 test("graph: an edit without the agent's words is summed up from its text", () => {
@@ -78,6 +78,17 @@ test("graph: an edit without the agent's words is summed up from its text", () =
   assert.equal(summaryOf(doc, doc + "- **ANSWERED:** Tim'in maili\n"), "## Sorular · ANSWERED: Tim'in maili");
   assert.equal(summaryOf("## A\nx\ny\n", "## A\ny\n"), "## A · Removed: x");
   assert.equal(summaryOf("a\n", "a\n"), "No change");
+});
+
+test("graph: accepting one edit takes in its lines only, the other edit stays open", () => {
+  // #1 added "x" after a, #2 changed "m" to "M" and deleted "z".
+  const copy = "a\nb\nm\nz\n";
+  const e1 = { before: copy, after: "a\nx\nb\nm\nz\n" };
+  const e2 = { before: e1.after, after: "a\nx\nb\nM\n" };
+  const current = e2.after;
+  assert.equal(acceptEdit(copy, e1, current), e1.after);
+  assert.equal(acceptEdit(copy, e2, current), "a\nb\nM\n");
+  assert.equal(acceptEdit(acceptEdit(copy, e1, current), e2, current), current);
 });
 
 test("graph: no history, empty graph", () => {

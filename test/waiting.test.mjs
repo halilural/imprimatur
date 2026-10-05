@@ -21,6 +21,10 @@ test("waiting: asks in a final message, code and tables skipped", () => {
   ].join("\n");
   assert.deepEqual(asksIn(msg), { lines: ["Gözle: Reload Window yap, panel açılıyor mu kontrol et.", "Başlayayım mı?"], question: true });
   assert.deepEqual(asksIn("Done. Nothing committed yet."), { lines: [], question: false });
+  // Past tense and quoted phrases are not asks.
+  assert.deepEqual(asksIn('Silmeden önce kontrol ettim, testler doğrulandı.\nTür: "kontrol et / test et" gibi istekler.'), { lines: [], question: false });
+  assert.deepEqual(asksIn("Panelde kontrol eder misin."), { lines: ["Panelde kontrol eder misin."], question: false });
+  assert.equal(asksIn("Graph'ta kontrol eder misin, README'yi de.").lines.length, 1);
   assert.deepEqual(asksIn("Please verify the panel in VS Code."), { lines: ["Please verify the panel in VS Code."], question: false });
 });
 
@@ -48,6 +52,7 @@ test("waiting: hook events to records", () => {
   assert.equal(recordOf({ hook_event_name: "Notification", notification_type: "idle_prompt" }), undefined);
   assert.equal(recordOf({ hook_event_name: "Notification", notification_type: "agent_needs_input", message: "Pick one" }).kind, "input");
   assert.equal(recordOf({ hook_event_name: "PreToolUse", tool_name: "Edit" }), undefined);
+  assert.equal(recordOf({ hook_event_name: "PermissionRequest", tool_name: "AskUserQuestion", tool_input: { questions: [] } }), undefined);
 });
 
 test("waiting: each record closes the session's earlier open items, answers carry the reply", () => {
