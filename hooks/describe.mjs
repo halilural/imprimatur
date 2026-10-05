@@ -10,10 +10,8 @@
 // again), and appends {toolUseId, file, text} to
 // <root>/.claude/imprimatur/descriptions.jsonl. Any failure leaves no line;
 // the graph then falls back to the agent's words or the changed line.
-import { execFile } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
-import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -23,7 +21,6 @@ export const DESCRIPTIONS = path.join(".claude", "imprimatur", "descriptions.jso
 const DIFF_LINES = 120;
 const WAIT_MS = 1000;
 const LAND_MS = 120_000; // an edit waiting for the user's permission lands late
-const TIMEOUT_MS = 60_000;
 
 /**
  * The edit as unified-ish diff lines ("- old", "+ new", "@@" between hunks), capped.
@@ -88,15 +85,7 @@ export function editTexts(root, file, toolUseId) {
   return { before: rows[i].before, after };
 }
 
-/** @param {string} prompt @returns {Promise<string>} */
-function askModel(prompt) {
-  const args = ["-p", "--model", "haiku", "--setting-sources", "", "--strict-mcp-config", "--tools", "", "--no-session-persistence", "--disable-slash-commands", prompt];
-  return new Promise((resolve, reject) =>
-    execFile("claude", args, { cwd: os.tmpdir(), timeout: TIMEOUT_MS, env: { ...process.env, IMPRIMATUR_CHILD: "1" } }, (err, stdout) =>
-      err ? reject(err) : resolve(stdout),
-    ),
-  );
-}
+export const { askModel } = require("../vscode/model.js");
 
 /**
  * Describe one edit and append it to the repo's descriptions.

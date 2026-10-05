@@ -16,6 +16,9 @@ Sürüyor: elle test (MT-AR-024) — 2026-10-05
 - DONE: (C) 7. Geri bildirim 2 (2026-10-05): hover yalnız durum hücresinden; "What you need to do" onay kutuları (günlükte `check`, satırda k/n); sağ tık Go to change; kısa giriş cümlesine sonraki cümle eklenir — 0.20.0, 74/74
 - DONE: (C) 8. Geri bildirim 3 (2026-10-05): yapılacak işler (verify) sonraki prompt'ta kapanmaz, Mark as done ya da bütün adımlar işaretlenince kapanır; tek düzenleme Accept'i başka düzenlemelerin satırını almaz (içerik eşleşmesi); dosyada hiçbir şeyi kalmayan düzenleme gri ↷ — 0.21.0, 76/76
 - DONE: (C) 9. Model açıklaması (2026-10-05, kullanıcı: "değişikliği hâlâ anlamıyorum, hook olmalı"): `hooks/describe.mjs` her düzenlemeden sonra arka planda Haiku ile tek cümle, `descriptions.jsonl`; bu repodaki 25 düzenleme dolduruldu; açıklama tooltip'i tam metin — 0.22.0, 79/79
+- DONE: (C) 10. Chat senkronu (2026-10-05, kullanıcı: "chatte karar veriyorum, oraya senklemen lazım"): `hooks/resolve.mjs` her mesajdan sonra açık adımları Haiku ile cevaba eşler, `check` + "chat" etiketi; "replaced" etiketi ve durum açıklaması — 0.23.0, 81/81
+- DONE: (C) 11. Haiku denetimi (2026-10-05, kullanıcı: "Haiku genel olarak kontrol etsin burayı"): tur sonunda `hooks/audit.mjs` → `vscode/audit.js` (gerekçe + JSON, 👉 satırları esas, aynı soru yeniden gelince eski adım kapanır), paneldeki Audit düğmesi; IDE etiketleri ayıklanır; "N agent edits" düğmesi kaldırıldı — 0.24.0, 85/85
+- DONE: (C) 12. Düz adım listesi (2026-10-05, kullanıcı: "kaybolmasın, geçmişi dursun, liste hâlinde, aynıları elemek ya da geçersiz demek lazım"): Waiting satır başına bir adım, durum open/✓/replaced/answered, open only; Send to Claude üstte, gönderilmeyenler bir kez; adımlar modele harfle; tek oturumda Graph sütunu gizli — 0.24.0, 85/85
 - 👉 TODO: (K) 5. Gözle → MT-AR-024: bir soru, bir komut izni, bir "kontrol et" isteği sekmede görünüyor, cevaplayınca "answered"
 
 ## Sorular (kullanıcıya)

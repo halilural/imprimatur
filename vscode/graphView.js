@@ -9,7 +9,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { graphRows } = require("./graph.js");
-const { WAITING_DIR, waitingItems } = require("./waiting.js");
+const { WAITING_DIR, waitingSteps, openSteps } = require("./waiting.js");
+const { audit } = require("./audit.js");
 
 const KINDS = { question: ["❓", "Question"], command: ["⚙", "Command"], verify: ["👀", "Verify / test"], input: ["✋", "Input"] };
 
@@ -35,9 +36,20 @@ function laneSvg(i, row, lanes) {
   return `<svg width="${w}" height="${ROW}">${parts.join("")}</svg>`;
 }
 
-/** @param {ReturnType<typeof waitingItems>} items @param {ReturnType<typeof graphRows>["lanes"]} lanes */
-function waitingBody(items, lanes) {
-  if (!items.length) return `<tr><td colspan="6" class="empty">Nothing asked of you yet.</td></tr>`;
+const STATES = {
+  done: ["Done", "you ticked it, your reply settled it, or the agent reported it done"],
+  replaced: ["Replaced", "asked again later in other words: see the newer step"],
+  answered: ["Answered", "a question your next message answered"],
+  closed: ["Closed", "its item was marked done"],
+};
+
+/**
+ * The Waiting on you list: one row per step, newest first, history kept
+ * (like the edits); open ones have a checkbox.
+ * @param {ReturnType<typeof waitingSteps>} steps @param {ReturnType<typeof graphRows>["lanes"]} lanes
+ */
+function waitingBody(steps, lanes) {
+  if (!steps.length) return `<tr><td colspan="7" class="empty">Nothing asked of you yet.</td></tr>`;
   const order = lanes.map((l) => l.session);
   const titles = new Map(lanes.map((l) => [l.session, l.title]));
   const color = (s) => {
@@ -45,43 +57,51 @@ function waitingBody(items, lanes) {
     return COLORS[order.indexOf(s) % COLORS.length];
   };
   const time = (t) => new Date(t).toLocaleString();
-  return items
+  return steps
     .map((w) => {
       const [icon, label] = KINDS[w.kind] ?? ["•", w.kind];
-      const asks = w.text.split("\n").filter((l) => l.trim());
-      // The closing line is usually the actual ask; the rest are its steps.
-      const head = asks[asks.length - 1] ?? "";
-      const checked = new Set(w.checked ?? []);
-      const progress = asks.length > 1 ? ` <span class="more${checked.size === asks.length ? " all" : ""}">${checked.size}/${asks.length}</span>` : "";
       const name = w.title ?? titles.get(w.session) ?? w.session.slice(0, 8);
-      const q = [w.text, w.prompt, w.answer, w.session, name, label].join(" ");
-      const status = w.open ? `<span class="pill open">open</span>` : w.done ? `<span class="pill">done</span>` : `<span class="pill">answered</span>${w.answer ? ` ${esc(w.answer)}` : ""}`;
-      const details = w.detail && w.detail !== w.text ? `<details><summary>${w.kind === "verify" || w.kind === "question" ? "Full message" : "Details"}</summary><pre>${esc(w.detail)}</pre></details>` : "";
-      return `<tr class="w${w.open ? "" : " done"}" data-key="${esc(`${w.session} ${w.t}`)}" data-q="${esc(q)}"${w.open ? "" : " data-done"}
-  data-vscode-context="${menu({ webviewSection: w.open ? "waiting-open" : "waiting-done", session: w.session, t: w.t, text: w.text })}">
+      const q = [w.text, w.prompt, w.answer, w.note, w.session, name, label, w.state].join(" ");
+      const mine = w.state === "done" && !w.by;
+      const box = (on) => `<input type="checkbox" data-tick data-session="${esc(w.session)}" data-item="${esc(w.item)}" data-i="${w.i}"${on ? " checked" : ""} title="${on ? "Ticked by you: untick to reopen" : "Tick when you did or decided it"}">`;
+      const status =
+        w.state === "open" ? box(false)
+        : mine ? box(true)
+        : w.state === "done" ? `<span class="badge-ok" title="${esc(`${w.by}: ${w.note ?? ""}`)}">✓</span>`
+        : w.state === "replaced" ? `<span class="badge-gone" title="${esc(STATES.replaced[1])}">replaced</span>`
+        : `<span class="pill" title="${esc(STATES[w.state]?.[1] ?? "")}">${esc(STATES[w.state]?.[0] ?? w.state)}</span>`;
+      const source = mine ? `you${w.unsent ? ` <span class="pill open" title="Not sent to Claude yet">unsent</span>` : ""}` : w.by ?? (w.answer ? esc(w.answer) : "");
+      const more = [
+        w.detail && w.detail !== w.text ? `<details><summary>Full message</summary><pre>${esc(w.detail)}</pre></details>` : "",
+        w.prompt ? `<div class="meta">Request: ${esc(w.prompt)}</div>` : "",
+        w.note ? `<div class="meta">${esc(w.by ?? "")}: ${esc(w.note)}</div>` : "",
+        w.answer ? `<div class="meta">Your answer: ${esc(w.answer)}</div>` : "",
+        ...(w.notes ?? []).map((n) => `<div class="meta">You wrote since: ${esc(n)}</div>`),
+      ].join("");
+      return `<tr class="w s-${w.state}" data-key="${esc(`${w.item} ${w.i}`)}" data-q="${esc(q)}"${w.state === "open" ? "" : " data-done"}
+  data-vscode-context="${menu({ webviewSection: w.state === "open" ? "waiting-open" : "waiting-done", session: w.session, t: w.item, i: w.i, text: w.text })}">
+  <td class="ok">${status}</td>
   <td class="k" title="${esc(label)}">${icon}</td>
-  <td class="d">${esc(head)}${progress}</td>
+  <td class="d" title="${esc(w.text)}">${esc(w.text)}</td>
   <td class="d p">${esc(w.prompt ?? "")}</td>
   <td class="t">${esc(time(w.t))}</td>
   <td class="s" style="color:${color(w.session)}" title="${esc(w.session)}">${esc(name)}</td>
-  <td class="st">${status}</td>
+  <td class="st">${source}</td>
 </tr>
-<tr class="x" hidden><td colspan="6"><div class="todo" data-session="${esc(w.session)}" data-t="${esc(w.t)}">
-  <div class="h">What you need to do</div>
-  <ol>${asks.map((a, i) => `<li${checked.has(i) ? ' class="on"' : ""}><label><input type="checkbox" data-step="${i}"${checked.has(i) ? " checked" : ""}> <span>${esc(a)}</span></label></li>`).join("")}</ol>
-  ${details}
-  ${w.prompt ? `<div class="meta">Request: ${esc(w.prompt)}</div>` : ""}${w.answer ? `<div class="meta">Your answer: ${esc(w.answer)}</div>` : ""}${(w.notes ?? []).map((n) => `<div class="meta">You wrote since: ${esc(n)}</div>`).join("")}
-</div></td></tr>`;
+<tr class="x" hidden><td colspan="7"><div class="todo">${more || '<div class="meta">No more details.</div>'}</div></td></tr>`;
     })
     .join("\n");
 }
 
 /**
  * @param {ReturnType<typeof graphRows>} data @param {string} root @param {string} nonce
- * @param {ReturnType<typeof waitingItems>} [waiting]
+ * @param {ReturnType<typeof waitingSteps>} [waiting]
  */
 function html(data, root, nonce, waiting = []) {
-  const open = waiting.filter((w) => w.open).length;
+  const open = waiting.filter((w) => w.state === "open").length;
+  const unsent = waiting.filter((w) => w.unsent).length;
+  // One session draws one straight line: the lanes only say something with several.
+  const lanes = data.lanes.length > 1;
   const time = (t) => new Date(t).toLocaleString();
   const body = data.rows.length
     ? data.rows
@@ -89,7 +109,7 @@ function html(data, root, nonce, waiting = []) {
           (r, i) => `<tr${r.gone ? ' class="gone"' : ""} data-file="${esc(r.file)}" data-n="${r.n}" data-i="${i}" data-q="${esc([r.file, r.intent, r.summary, r.prompt, data.lanes[r.lane]?.title].join(" "))}"
   data-vscode-context="${menu({ webviewSection: r.accepted || r.gone ? "edit-ok" : "edit-open", file: r.file, n: r.n })}"${r.preview ? "" : ` title="${esc(r.prompt ? `Request: ${r.prompt}` : "")}"`}>
   <td class="ok">${r.gone ? `<span class="badge-gone" title="Later edits rewrote or removed all of it: nothing left to accept">replaced</span>` : r.accepted ? `<span class="badge-ok" title="Accepted">✓</span>` : `<span class="badge-open" title="Under review — Accept, or right-click">●</span><button class="acc" title="Accept this edit">Accept</button>`}</td>
-  <td class="g">${laneSvg(i, r, data.lanes)}</td>
+  ${lanes ? `<td class="g">${laneSvg(i, r, data.lanes)}</td>` : ""}
   <td class="d" title="${esc([r.intent ?? r.summary, r.prompt && `Request: ${r.prompt}`].filter(Boolean).join("\n\n"))}">${esc(r.intent ?? r.summary)}</td>
   <td class="f">${esc(r.file)} <span class="n">#${r.n}</span></td>
   <td class="t">${esc(time(r.t))}</td>
@@ -121,6 +141,7 @@ function html(data, root, nonce, waiting = []) {
   button.acc { display: none; font: inherit; font-size: 11px; padding: 1px 8px; border-radius: 2px; cursor: pointer; border: none;
     background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
   button.acc:hover { background: var(--vscode-button-hoverBackground); }
+  button.acc.on { display: inline-block; font-size: 12px; padding: 2px 10px; } button.acc.on[hidden] { display: none; }
   tr:hover button.acc { display: inline-block; } tr:hover .badge-open { display: none; }
   td.g { padding: 0; width: 1px; } td.g svg { display: block; }
   tr[data-file] { cursor: pointer; } tr[data-file]:hover, tr.w:hover { background: var(--vscode-list-hoverBackground); }
@@ -148,16 +169,18 @@ function html(data, root, nonce, waiting = []) {
   .todo label { display: inline; cursor: pointer; } .todo input { vertical-align: middle; margin: 0 4px 0 0; }
   .todo li.on span { text-decoration: line-through; opacity: .6; } .more.all { background: var(--vscode-testing-iconPassed, #73c991); }
   .todo pre { white-space: pre-wrap; font-family: var(--vscode-editor-font-family); margin: 4px 0; } .todo summary { cursor: pointer; opacity: .8; }
-  .todo .meta { opacity: .75; margin-top: 4px; }
+  .todo .meta { opacity: .75; margin-top: 4px; } .todo .send { margin: 2px 0 6px; }
+  .todo .chat { font-size: 10px; padding: 0 5px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
 </style></head><body>
 <header><strong>Agent Change Graph</strong>
 <nav><button data-tab="edits">Edits ${pending ? `<span class="badge">${pending}</span>` : ""}</button><button data-tab="waiting">Waiting on you ${open ? `<span class="badge">${open}</span>` : ""}</button></nav>
-<input id="filter" placeholder="Filter by file, request or answer"><label id="ans" hidden><input type="checkbox" id="answered"> show answered</label>
-<span class="n" id="count-edits">${data.rows.length} edits · ${pending} under review · ${data.lanes.length} sessions</span><span class="n" id="count-waiting">${open} open · ${waiting.length - open} answered</span></header>
-<section id="edits"><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th><th>Graph</th><th>Description</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
+<input id="filter" placeholder="Filter by file, request or answer"><label id="ans" hidden><input type="checkbox" id="answered"> open only</label><button id="send" class="acc on" hidden${unsent ? "" : " disabled"} title="Copy the steps you ticked (not sent yet) as a message and focus the Claude Code input: paste and press Enter">Send to Claude${unsent ? ` (${unsent})` : ""}</button><button id="audit" class="acc on" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">Audit</button>
+<span class="n" id="count-edits">${data.rows.length} edits · ${pending} under review · ${data.lanes.length} sessions</span><span class="n" id="count-waiting">${open} open · ${waiting.length} steps</span></header>
+<section id="edits"><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
 <tbody>${body}</tbody></table></section>
-<section id="waiting"><table><thead><tr><th></th><th>Waiting for</th><th>Request</th><th>Date</th><th>Session</th><th>Status</th></tr></thead>
-<tbody>${waitingBody(waiting, data.lanes)}</tbody></table><p class="empty" id="none" hidden>Nothing open. Tick "show answered" for the rest.</p></section>
+<section id="waiting"><div class="legend"><span>☐ open: tick when done</span><span><span class="badge-ok">✓</span> done</span><span><span class="badge-gone">replaced</span> asked again later</span><span><span class="pill">Answered</span> question you answered</span></div>
+<table><thead><tr><th>Status</th><th></th><th>Waiting for</th><th>Request</th><th>Date</th><th>Session</th><th>By</th></tr></thead>
+<tbody>${waitingBody(waiting, data.lanes)}</tbody></table><p class="empty" id="none" hidden>Nothing open right now.</p></section>
 <div id="pop"></div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
@@ -207,28 +230,31 @@ function html(data, root, nonce, waiting = []) {
       document.querySelector('nav [data-tab="' + t + '"]').classList.toggle("on", state.tab === t);
     }
     document.getElementById("ans").hidden = state.tab !== "waiting";
+    document.getElementById("audit").hidden = state.tab !== "waiting";
     const q = state.q.toLowerCase();
     document.querySelectorAll("tr[data-q]").forEach((tr) => {
-      const show = tr.dataset.q.toLowerCase().includes(q) && (state.answered || !("done" in tr.dataset));
+      const show = tr.dataset.q.toLowerCase().includes(q) && (!state.answered || !("done" in tr.dataset));
       tr.style.display = show ? "" : "none";
       if (tr.nextElementSibling?.classList.contains("x")) tr.nextElementSibling.hidden = !show || !state.expanded.includes(tr.dataset.key);
     });
-    document.getElementById("none").hidden = !${waiting.length > 0 ? "true" : "false"} || state.answered || !!state.q ||
-      document.querySelector("tr.w:not(.done)") !== null;
+    document.getElementById("none").hidden = !state.answered || !!state.q || document.querySelector("tr.w.s-open") !== null;
+    document.getElementById("send").hidden = state.tab !== "waiting";
   };
   document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => { state.tab = b.dataset.tab; apply(); }));
   filter.addEventListener("input", () => { state.q = filter.value; apply(); });
   answered.addEventListener("change", () => { state.answered = answered.checked; apply(); });
-  document.querySelectorAll("tr.w").forEach((tr) => tr.addEventListener("click", () => {
+  document.querySelectorAll("tr.w").forEach((tr) => tr.addEventListener("click", (e) => {
+    if (e.target.closest("input, a, button, details")) return;
     const k = tr.dataset.key;
     state.expanded = state.expanded.includes(k) ? state.expanded.filter((x) => x !== k) : [...state.expanded, k];
     apply();
   }));
-  document.querySelectorAll(".todo input[data-step]").forEach((box) => box.addEventListener("change", () => {
-    const todo = box.closest(".todo");
-    box.closest("li").classList.toggle("on", box.checked);
-    vscode.postMessage({ type: "check", session: todo.dataset.session, t: todo.dataset.t, i: Number(box.dataset.step), on: box.checked });
+  // Tick a step right in its row; the log keeps it, the refresh redraws it.
+  document.querySelectorAll("input[data-tick]").forEach((box) => box.addEventListener("change", () => {
+    vscode.postMessage({ type: "check", session: box.dataset.session, t: box.dataset.item, i: Number(box.dataset.i), on: box.checked });
   }));
+  document.getElementById("send").addEventListener("click", () => vscode.postMessage({ type: "send" }));
+  document.getElementById("audit").addEventListener("click", (e) => { e.target.disabled = true; e.target.textContent = "Auditing…"; vscode.postMessage({ type: "audit" }); });
   addEventListener("scroll", hide);
   apply();
 </script></body></html>`;
@@ -255,6 +281,8 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
     panel = vscode.window.createWebviewPanel("imprimatur.graph", "Agent Change Graph", vscode.ViewColumn.Active, { enableScripts: true });
     panel.webview.onDidReceiveMessage((m) => {
       if (m.type === "check") return tick(m);
+      if (m.type === "audit") return auditAll();
+      if (m.type === "send") return sendToClaude();
       return m.type === "accept" ? actions?.acceptEdit(m.file, m.n) : actions?.openDiff(m.file, m.n);
     });
     panel.onDidDispose(() => {
@@ -271,7 +299,7 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
     goTo: (file, n) => goTo(path.join(root, file), n),
   };
   refresh = () => {
-    p.webview.html = html(graphRows(root, currentText), root, crypto.randomBytes(16).toString("hex"), waitingItems(root));
+    p.webview.html = html(graphRows(root, currentText), root, crypto.randomBytes(16).toString("hex"), waitingSteps(root));
   };
   refresh();
   p.reveal();
@@ -288,6 +316,49 @@ function tick(m) {
   fs.appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), session: m.session, kind: "check", item: m.t, i: m.i, on: !!m.on }) + "\n");
 }
 
+/**
+ * Send to Claude: the ticked steps go to the clipboard as a message and the
+ * Claude Code input gets focus; the user pastes and presses Enter. (Claude
+ * Code's vscode://…/open?prompt= does not apply to an open session.)
+ * Only steps the user ticked and has not sent yet; they are marked sent.
+ */
+async function sendToClaude() {
+  if (!shown) return;
+  const steps = waitingSteps(shown).filter((s) => s.unsent);
+  if (!steps.length) return void vscode.window.showInformationMessage("Tick the steps you decided or did first.");
+  const text = ["Waiting on you, panelden:", ...steps.map((s) => `- ✓ ${s.text}`)].join("\n");
+  await vscode.env.clipboard.writeText(text);
+  for (const s of steps) {
+    const log = path.join(shown, WAITING_DIR, `${s.session}.jsonl`);
+    fs.appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), session: s.session, kind: "sent", item: s.item, i: s.i }) + "\n");
+  }
+  await vscode.commands.executeCommand("claude-vscode.focus").then(undefined, () => {});
+  vscode.window.showInformationMessage("Copied for Claude: paste in the chat (Ctrl+V) and press Enter.");
+}
+
+/** The Audit button: Haiku reviews every session's open steps (vscode/audit.js). */
+async function auditAll() {
+  if (!shown) return;
+  const dir = path.join(shown, WAITING_DIR);
+  const logs = fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => n.endsWith(".jsonl")).map((n) => path.join(dir, n)) : [];
+  const withOpen = logs.filter((l) => openSteps(l).length);
+  let closed = 0;
+  let failed = 0;
+  await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur: auditing Waiting on you" }, async () => {
+    for (const log of withOpen) {
+      try {
+        closed += (await audit(log)).settled.length;
+      } catch {
+        failed++;
+      }
+    }
+  });
+  refreshGraph();
+  vscode.window.showInformationMessage(
+    `Audit: ${closed} step${closed === 1 ? "" : "s"} closed${failed ? `, ${failed} session${failed === 1 ? "" : "s"} could not be checked (is the claude CLI on PATH?)` : ""}.`,
+  );
+}
+
 /** Re-render the open panel, if any (after an agent edit). */
 const refreshGraph = () => refresh?.();
 
@@ -297,12 +368,8 @@ const graphCommands = {
   "imprimatur.graph.openDiff": (c) => actions?.openDiff(c.file, c.n),
   "imprimatur.graph.goTo": (c) => actions?.goTo(c.file, c.n),
   /** Close a session's open asks by hand (the user did it, no reply needed). */
-  "imprimatur.graph.markDone": (c) => {
-    if (!shown || !/^[\w-]+$/.test(c.session ?? "")) return;
-    const log = path.join(shown, WAITING_DIR, `${c.session}.jsonl`);
-    fs.appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), session: c.session, kind: "done", item: c.t }) + "\n");
-    refreshGraph();
-  },
+  /** Mark as done: tick that one step, as if its checkbox were ticked. */
+  "imprimatur.graph.markDone": (c) => tick({ session: c.session, t: c.t, i: c.i, on: true }),
   "imprimatur.graph.copyAsk": (c) => vscode.env.clipboard.writeText(c.text ?? ""),
 };
 

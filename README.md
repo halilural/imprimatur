@@ -22,10 +22,10 @@ staging or committing does not clear the marks.
   next change, like a review queue.
 - Old text is shown as plain text in a red box (no strike line, so it stays
   readable); in the preview it is rendered as Markdown.
-- A status bar button, **N agent edits**, lists the agent's edits to the file
-  newest first, like a commit log; pick one to open its diff (before / after),
-  or **All changes under review**. It stays after Accept all.
-- **Agent Change Graph** (from that list, or the command palette): every agent
+- **Imprimatur: Show Agent Edit History** (command palette) lists the
+  agent's edits to the file newest first, like a commit log; pick one to open
+  its diff (before / after), or **All changes under review**.
+- **Agent Change Graph** (status bar **Agent Graph**, or the command palette): every agent
   edit in the repo as a table like Git Graph, one colored lane per Claude
   session, click a row for its diff. The description is one plain sentence on
   what the edit changed, written a few seconds later by a small model from the
@@ -44,10 +44,15 @@ staging or committing does not clear the marks.
   you (questions, commands waiting for permission, "verify / test this" at the
   end of a turn), open ones first. Questions close once you reply; things to go
   and do ("test this", "Reload Window") stay open until you Mark as done or
-  tick every step, your later replies kept on them as notes. Click a row
-  for "What you need to do" as a numbered checklist (tick what you tried; kept
-  in the session's log, progress shown on the row; full message folded below);
-  right-click: Mark as done, Copy. The filter works on both tabs.
+  tick every step, your later replies kept on them as notes. The tab is a flat
+  list like the edits: one row per step, newest first, history kept. A row's
+  status is a checkbox while open (tick it when done), then ✓ done (by you, a
+  chat reply or the audit), "replaced" (asked again later), or Answered;
+  "open only" hides the rest. Click a row for the full message; right-click:
+  Mark as done, Copy. **Send to Claude** copies the steps you ticked and have
+  not sent yet as a message and focuses the Claude Code input (paste, Enter):
+  Claude Code offers no way to send into an open chat. The Graph column shows
+  only with more than one session. The filter works on both tabs.
 
 Setting `imprimatur.showIn`: Markdown files are marked only in the preview by
 default (`preview`); `both` adds the editor marks and its ✓ Accept lenses,
@@ -91,7 +96,17 @@ through where they were.
    the final message that ask something (a `?`, phrases like "test et",
    "please verify", "shall I", or any line starting with 👉). A later event in
    the session closes earlier questions, your next prompt kept as the answer;
-   things to go and do stay open until you mark them done.
+   things to go and do stay open until you mark them done. After each of your
+   messages, [hooks/resolve.mjs](hooks/resolve.mjs) asks a small model which
+   open steps the message settled ("tamam birleştir" settles "shall I merge?")
+   and ticks them, tagged "chat"; the agent's next message does the same for
+   steps it reports done or asks again. An item closes when all its steps are
+   ticked. After each agent turn, Haiku audits the list with the agent's final
+   message ([vscode/audit.js](vscode/audit.js)): it closes steps that are done,
+   answered or only reports, and writes what the message really asks as short
+   steps (the agent's 👉 lines verbatim, when it marks its asks; an ask in
+   nearly the same words replaces the old step). The **Audit** button in the
+   tab runs the same review on demand. Without the model, the rules above.
 
 ## Install
 
