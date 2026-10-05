@@ -5,6 +5,6 @@ burayı değiştirir. Test bitince Claude'a "deneme dosyasını eski hâline get
 denir.
 
 Sprint pazartesi başlar, cuma biter.
-Ajan bu satırı baştan yazacak ve yeni bir cümle olacak.
-Bu satır silinecek.
+Ajan bu satırı baştan yazdı; artık Accept denemesi için yeni bir cümle.
 Son satır.
+Sağ tıkla kabul denemesi için eklenen satır.
