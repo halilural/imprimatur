@@ -25,6 +25,12 @@ test("waiting: asks in a final message, code and tables skipped", () => {
   assert.deepEqual(asksIn('Silmeden önce kontrol ettim, testler doğrulandı.\nTür: "kontrol et / test et" gibi istekler.'), { lines: [], question: false, action: false });
   assert.deepEqual(asksIn("Panelde kontrol eder misin."), { lines: ["Panelde kontrol eder misin."], question: false, action: true });
   assert.equal(asksIn("Graph'ta kontrol eder misin, README'yi de.").lines.length, 1);
+  // 👉 always counts, as something to do.
+  assert.deepEqual(asksIn("Bitti.\n- 👉 package-lock.json: commit'lemek senin kararın."), {
+    lines: ["package-lock.json: commit'lemek senin kararın."],
+    question: false,
+    action: true,
+  });
   assert.deepEqual(asksIn("Please verify the panel in VS Code."), { lines: ["Please verify the panel in VS Code."], question: false, action: true });
 });
 

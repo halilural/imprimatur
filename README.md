@@ -84,9 +84,10 @@ through where they were.
 4. A second hook ([hooks/waiting.mjs](hooks/waiting.mjs)) appends what the
    agent waits on you for to `.claude/imprimatur/waiting/<session>.jsonl`:
    AskUserQuestion, PermissionRequest, input notifications, and the lines of
-   the final message that ask something (a `?`, or phrases like "test et",
-   "please verify", "shall I"). Any later event in the session closes the
-   earlier items; your next prompt is kept as the answer.
+   the final message that ask something (a `?`, phrases like "test et",
+   "please verify", "shall I", or any line starting with 👉). A later event in
+   the session closes earlier questions, your next prompt kept as the answer;
+   things to go and do stay open until you mark them done.
 
 ## Install
 
