@@ -19,13 +19,13 @@ test("waiting: asks in a final message, code and tables skipped", () => {
     "- **Gözle:** Reload Window yap, panel açılıyor mu kontrol et.",
     "Başlayayım mı?",
   ].join("\n");
-  assert.deepEqual(asksIn(msg), { lines: ["Gözle: Reload Window yap, panel açılıyor mu kontrol et.", "Başlayayım mı?"], question: true });
-  assert.deepEqual(asksIn("Done. Nothing committed yet."), { lines: [], question: false });
+  assert.deepEqual(asksIn(msg), { lines: ["Gözle: Reload Window yap, panel açılıyor mu kontrol et.", "Başlayayım mı?"], question: true, action: true });
+  assert.deepEqual(asksIn("Done. Nothing committed yet."), { lines: [], question: false, action: false });
   // Past tense and quoted phrases are not asks.
-  assert.deepEqual(asksIn('Silmeden önce kontrol ettim, testler doğrulandı.\nTür: "kontrol et / test et" gibi istekler.'), { lines: [], question: false });
-  assert.deepEqual(asksIn("Panelde kontrol eder misin."), { lines: ["Panelde kontrol eder misin."], question: false });
+  assert.deepEqual(asksIn('Silmeden önce kontrol ettim, testler doğrulandı.\nTür: "kontrol et / test et" gibi istekler.'), { lines: [], question: false, action: false });
+  assert.deepEqual(asksIn("Panelde kontrol eder misin."), { lines: ["Panelde kontrol eder misin."], question: false, action: true });
   assert.equal(asksIn("Graph'ta kontrol eder misin, README'yi de.").lines.length, 1);
-  assert.deepEqual(asksIn("Please verify the panel in VS Code."), { lines: ["Please verify the panel in VS Code."], question: false });
+  assert.deepEqual(asksIn("Please verify the panel in VS Code."), { lines: ["Please verify the panel in VS Code."], question: false, action: true });
 });
 
 test("waiting: hook events to records", () => {
@@ -73,6 +73,32 @@ test("waiting: each record closes the session's earlier open items, answers carr
       ["verify", true, undefined],
     ],
   );
+});
+
+test("waiting: things to do stay open past the next prompt, until done or all ticked", () => {
+  const items = itemsOf(
+    [
+      { t: "T1", kind: "verify", text: "Reload Window yap\nPaneli kontrol et" },
+      { t: "T2", kind: "answer", answer: "tamam bakarım" },
+      { t: "T3", kind: "question", text: "Commit edeyim mi?" },
+      { t: "T4", kind: "answer", answer: "evet" },
+      { t: "T5", kind: "verify", text: "Testi dene" },
+      { t: "T6", kind: "check", item: "T1", i: 0, on: true },
+      { t: "T7", kind: "check", item: "T1", i: 1, on: true },
+      { t: "T8", kind: "done", item: "T5" },
+    ],
+    "s1",
+  );
+  assert.deepEqual(
+    items.map((i) => [i.t, i.open, !!i.done, i.answer ?? null, i.notes ?? null]),
+    [
+      ["T1", false, true, null, ["tamam bakarım", "evet"]],
+      ["T3", false, false, "evet", null],
+      ["T5", false, true, null, null],
+    ],
+  );
+  assert.equal(recordOf({ hook_event_name: "Stop", last_assistant_message: "Commit edip birleştireyim mi?" }).kind, "question");
+  assert.equal(recordOf({ hook_event_name: "Stop", last_assistant_message: "Reload Window yapıp dener misin?" }).kind, "verify");
 });
 
 test("waiting: ticked steps are kept per item and close nothing", () => {

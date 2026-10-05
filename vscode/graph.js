@@ -40,11 +40,15 @@ function acceptedOf(edits, copy, staged, current) {
 /**
  * The edit's lines in `current`, as [start, end) line ranges: lines it wrote
  * (one range each), or [p, p) where it deleted some. Lines a later edit
- * rewrote belong to that edit and are left out.
+ * rewrote belong to that edit and are left out: a line counts only where it
+ * still reads as this edit wrote it (a position alone can be another edit's
+ * line put where this one's was deleted).
  * @param {{before: string, after: string}} e @param {string} current @returns {Array<[number, number]>}
  */
 function spotsOf(e, current) {
   const later = diff(e.after, current);
+  const wrote = e.after.split(/\r?\n/);
+  const now = current.split(/\r?\n/);
   /** @type {Array<[number, number]>} */
   const out = [];
   for (const h of diff(e.before, e.after)) {
@@ -53,7 +57,7 @@ function spotsOf(e, current) {
     if (h.oldEnd - h.oldStart > h.newEnd - h.newStart) spots.push([h.newEnd, h.newEnd]);
     for (const [s, t] of spots) {
       const [ms, mt] = [mapBoundary(s, later), mapBoundary(t, later)];
-      if (ms === undefined || mt === undefined || (t > s && mt - ms !== t - s)) continue;
+      if (ms === undefined || mt === undefined || (t > s && (mt - ms !== t - s || now[ms] !== wrote[s]))) continue;
       out.push([ms, mt]);
     }
   }
@@ -75,7 +79,7 @@ function acceptEdit(copy, e, current) {
 /**
  * @param {string} root repo root
  * @param {(file: string) => string | undefined} [currentText] open-editor text, else read from disk
- * @returns {{rows: Array<{file: string, n: number, t: string, session?: string, tool?: string, prompt?: string, intent?: string, summary: string, title?: string, added: number, removed: number, accepted: boolean, preview?: Array<[string, string]>, lane: number}>,
+ * @returns {{rows: Array<{file: string, n: number, t: string, session?: string, tool?: string, prompt?: string, intent?: string, summary: string, title?: string, added: number, removed: number, accepted: boolean, gone: boolean, preview?: Array<[string, string]>, lane: number}>,
  *            lanes: Array<{session: string, title?: string, first: number, last: number}>}}
  */
 function graphRows(root, currentText = () => undefined) {
@@ -94,8 +98,10 @@ function graphRows(root, currentText = () => undefined) {
     const accepted = acceptedOf(edits, fs.existsSync(copy) ? fs.readFileSync(copy, "utf8") : undefined, latestBefore(log), current);
     for (const e of edits) {
       const ok = accepted(e);
+      // Nothing of it left in the file (later edits replaced it all): neither open nor accepted.
+      const gone = spotsOf(e, current).length === 0;
       rows.push({ file, n: e.n, t: e.t, session: e.session, tool: e.tool, prompt: e.prompt, intent: e.intent ?? narrationOf(e.transcript, e.toolUseId), summary: summaryOf(e.before, e.after),
-        title: e.title, added: e.added, removed: e.removed, accepted: ok, preview: ok ? undefined : previewOf(e.before, e.after), lane: 0 });
+        title: e.title, added: e.added, removed: e.removed, accepted: ok, gone, preview: ok ? undefined : previewOf(e.before, e.after), lane: 0 });
     }
   }
   rows.sort((a, b) => Date.parse(b.t) - Date.parse(a.t));

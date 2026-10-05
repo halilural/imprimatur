@@ -5,7 +5,7 @@ import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { graphRows, previewOf, summaryOf, acceptEdit } = createRequire(import.meta.url)("../vscode/graph.js");
+const { graphRows, previewOf, summaryOf, acceptEdit, spotsOf } = createRequire(import.meta.url)("../vscode/graph.js");
 
 test("graph: all files' edits newest first, one lane per session", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-graph-"));
@@ -89,6 +89,13 @@ test("graph: accepting one edit takes in its lines only, the other edit stays op
   assert.equal(acceptEdit(copy, e1, current), e1.after);
   assert.equal(acceptEdit(copy, e2, current), "a\nb\nM\n");
   assert.equal(acceptEdit(acceptEdit(copy, e1, current), e2, current), current);
+});
+
+test("graph: a line put where an edit's line was deleted is not that edit's", () => {
+  const e1 = { before: "a\nz\n", after: "a\nz\nold\n" };
+  const current = "a\nz\nnew\n"; // "old" removed by hand, "new" written by a later edit
+  assert.deepEqual(spotsOf(e1, current), []);
+  assert.equal(acceptEdit("a\nz\n", e1, current), "a\nz\n");
 });
 
 test("graph: no history, empty graph", () => {

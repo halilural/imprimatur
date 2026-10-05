@@ -38,7 +38,9 @@ staging or committing does not clear the marks.
   how many asks wait on you.
 - **Waiting on you**, the graph's second tab: everything the agent asked of
   you (questions, commands waiting for permission, "verify / test this" at the
-  end of a turn), open ones first, with your answer once you reply. Click a row
+  end of a turn), open ones first. Questions close once you reply; things to go
+  and do ("test this", "Reload Window") stay open until you Mark as done or
+  tick every step, your later replies kept on them as notes. Click a row
   for "What you need to do" as a numbered checklist (tick what you tried; kept
   in the session's log, progress shown on the row; full message folded below);
   right-click: Mark as done, Copy. The filter works on both tabs.
