@@ -4,7 +4,7 @@
 
 ## Durum
 
-Sürüyor: elle test (MT-AR-024) — 2026-10-05
+Kapandı — 2026-10-05
 
 ## Yapılacaklar
 
@@ -19,7 +19,8 @@ Sürüyor: elle test (MT-AR-024) — 2026-10-05
 - DONE: (C) 10. Chat senkronu (2026-10-05, kullanıcı: "chatte karar veriyorum, oraya senklemen lazım"): `hooks/resolve.mjs` her mesajdan sonra açık adımları Haiku ile cevaba eşler, `check` + "chat" etiketi; "replaced" etiketi ve durum açıklaması — 0.23.0, 81/81
 - DONE: (C) 11. Haiku denetimi (2026-10-05, kullanıcı: "Haiku genel olarak kontrol etsin burayı"): tur sonunda `hooks/audit.mjs` → `vscode/audit.js` (gerekçe + JSON, 👉 satırları esas, aynı soru yeniden gelince eski adım kapanır), paneldeki Audit düğmesi; IDE etiketleri ayıklanır; "N agent edits" düğmesi kaldırıldı — 0.24.0, 85/85
 - DONE: (C) 12. Düz adım listesi (2026-10-05, kullanıcı: "kaybolmasın, geçmişi dursun, liste hâlinde, aynıları elemek ya da geçersiz demek lazım"): Waiting satır başına bir adım, durum open/✓/replaced/answered, open only; Send to Claude üstte, gönderilmeyenler bir kez; adımlar modele harfle; tek oturumda Graph sütunu gizli — 0.24.0, 85/85
-- 👉 TODO: (K) 5. Gözle → MT-AR-024: bir soru, bir komut izni, bir "kontrol et" isteği sekmede görünüyor, cevaplayınca "answered"
+- DONE: (C) 13. Send to Claude kaldırıldı (kullanıcı 2026-10-05: "kullanışsız") — 0.24.0, 85/85
+- DONE: (K) 5. Gözle → MT-AR-024 (kullanıcı 2026-10-05: panelde işaretledi, "11'i kapa"): bir soru, bir komut izni, bir "kontrol et" isteği sekmede görünüyor, cevaplayınca "answered"
 
 ## Sorular (kullanıcıya)
 

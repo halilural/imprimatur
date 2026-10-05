@@ -49,9 +49,7 @@ staging or committing does not clear the marks.
   status is a checkbox while open (tick it when done), then ✓ done (by you, a
   chat reply or the audit), "replaced" (asked again later), or Answered;
   "open only" hides the rest. Click a row for the full message; right-click:
-  Mark as done, Copy. **Send to Claude** copies the steps you ticked and have
-  not sent yet as a message and focuses the Claude Code input (paste, Enter):
-  Claude Code offers no way to send into an open chat. The Graph column shows
+  Mark as done, Copy. The Graph column shows
   only with more than one session. The filter works on both tabs.
 
 Setting `imprimatur.showIn`: Markdown files are marked only in the preview by

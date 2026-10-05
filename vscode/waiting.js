@@ -19,7 +19,7 @@ const OPENS = ["question", "command", "verify", "input"];
  * @typedef {{t: string, session?: string, kind: string, text?: string, detail?: string, prompt?: string, title?: string, answer?: string, item?: string, i?: number, on?: boolean, by?: string, note?: string, why?: string}} WaitingRecord
  * @typedef {{t: string, session: string, kind: string, text: string, detail?: string, prompt?: string, title?: string,
  *            open: boolean, done?: boolean, answer?: string, answeredAt?: string, checked?: number[], notes?: string[], chat?: Record<string, string>,
- *            ticks?: Record<string, {by?: string, note?: string, why?: string, at: string}>, sent?: number[]}} WaitingItem
+ *            ticks?: Record<string, {by?: string, note?: string, why?: string, at: string}>}} WaitingItem
  */
 
 /**
@@ -30,12 +30,6 @@ function itemsOf(records, session) {
   /** @type {WaitingItem[]} */
   const items = [];
   for (const r of records) {
-    if (r.kind === "sent") {
-      // Send to Claude: these ticks went to the chat once; not again.
-      const it = items.find((x) => x.t === r.item);
-      if (it && typeof r.i === "number") it.sent = [...new Set([...(it.sent ?? []), r.i])];
-      continue;
-    }
     if (r.kind === "check") {
       const it = items.find((x) => x.t === r.item);
       if (it && typeof r.i === "number") {
@@ -157,7 +151,7 @@ function tickStep(log, step, by, note, why) {
  * closed by the next event); "closed" (its item marked done).
  * @param {string} root
  * @returns {Array<{session: string, item: string, i: number, t: string, kind: string, text: string, state: string,
- *   by?: string, note?: string, at?: string, unsent?: boolean, prompt?: string, title?: string, detail?: string, answer?: string, notes?: string[]}>}
+ *   by?: string, note?: string, at?: string, prompt?: string, title?: string, detail?: string, answer?: string, notes?: string[]}>}
  */
 function waitingSteps(root) {
   const out = [];
@@ -169,8 +163,6 @@ function waitingSteps(root) {
       out.push({
         session: it.session, item: it.t, i, t: it.t, kind: it.kind, text, state,
         by: tick?.by, note: tick?.note, at: tick?.at ?? it.answeredAt,
-        // Ticked in the panel by the user and not sent to the chat yet.
-        unsent: !!tick && !tick.by && !(it.sent ?? []).includes(i),
         prompt: it.prompt, title: it.title, detail: it.detail, answer: it.answer, notes: it.notes,
       });
     });
