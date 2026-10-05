@@ -4,12 +4,12 @@
 
 ## Durum
 
-Sürüyor: #26 yapıldı (commit bekliyor), sıradaki #27 — 2026-10-05
+Sürüyor: #26 yapıldı (5ffb9ea), sıradaki #27 — 2026-10-05
 
 ## Yapılacaklar
 
 - DONE: (C) [#26 Agent setup görünümü](https://github.com/halilural/imprimatur/issues/26): etkinlik çubuğu, araç ve tür grupları, yeni/değişen/silinen, graph'a geçiş — 0.27.0–0.27.3, 11 repoda denendi
-- 👉 TODO: (K) #26'yı commit edip main'e birleştirme onayı
+- DONE: (K) #26'yı commit edip main'e birleştirme onayı — 5ffb9ea, push edildi (2026-10-05)
 - TODO: (C) [#27 Kaçırılan ajan dosyaları](https://github.com/halilural/imprimatur/issues/27)
 - TODO: (C) [#28 Ne zaman devreye giriyor, bu dosyada ajanı ne etkiliyor](https://github.com/halilural/imprimatur/issues/28)
 - TODO: (C) [#29 Bağlam maliyeti](https://github.com/halilural/imprimatur/issues/29)
