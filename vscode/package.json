@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "Review your AI agent's edits like tracked changes: marked in the editor and the Markdown preview until you accept them.",
-  "version": "0.22.0",
+  "version": "0.24.0",
   "publisher": "halilural",
   "license": "MIT",
   "engines": {
@@ -24,7 +24,9 @@
     "waiting.js",
     "narration.js",
     "preview-markers.js",
-    "mermaid-diff.js"
+    "mermaid-diff.js",
+    "model.js",
+    "audit.js"
   ],
   "activationEvents": [
     "onStartupFinished"

@@ -5,13 +5,18 @@
 // - PreToolUse AskUserQuestion: a question (and its options);
 // - PermissionRequest: a command or tool waiting for the user's OK;
 // - Notification agent_needs_input / elicitation_dialog: other input;
-// - Stop: lines of the final message that ask something ("?", "test et", "shall I");
-// - UserPromptSubmit, PostToolUse AskUserQuestion: the user's answer.
-// Every record closes the session's earlier open items (see vscode/waiting.js).
+// - Stop: Haiku reads the final message (audit.mjs, in the background): what it
+//   asks becomes an item, steps it settles are ticked. Without the model
+//   (IMPRIMATUR_DESCRIBE=off, or a failed call): lines that ask ("?", "test et",
+//   "shall I", 👉);
+// - UserPromptSubmit, PostToolUse AskUserQuestion: the user's answer; Haiku
+//   ticks the steps it settles (resolve.mjs).
+// Every record closes the session's earlier open questions (see vscode/waiting.js).
 //
 //   node waiting.mjs
 //
 // Never blocks: every path ends in exit 0.
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -46,6 +51,8 @@ const hasPhrase = (lower, phrases) => phrases.some((p) => new RegExp(`(?<![\\p{L
  */
 export function asksIn(message) {
   const lines = [];
+  /** @type {string[]} */
+  const pointed = [];
   let question = false;
   let action = false;
   let fence = false;
@@ -54,10 +61,10 @@ export function asksIn(message) {
     if (fence || /^\s*\|/.test(raw)) continue;
     const line = raw.replace(/^\s*(?:[-*+]|\d+[.)]|#+)\s+/, "").replace(/\*\*|__|`/g, "").trim();
     if (!line) continue;
-    // 👉 marks a line the agent means for the user, whatever its wording.
-    if (line.startsWith("👉")) {
-      lines.push(line.replace(/^👉\s*/, ""));
-      action = true;
+    // 👉 at the very start (not inside bold, where it names the feature) marks
+    // a line the agent means for the user, whatever its wording.
+    if (/^👉\s/u.test(raw.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, ""))) {
+      pointed.push(line.replace(/^👉\s*/, ""));
       continue;
     }
     const q = /\?\s*\)?$/.test(line);
@@ -71,8 +78,20 @@ export function asksIn(message) {
       action ||= act;
     }
   }
+  // The agent marked its asks: only those, the rest of the message is report.
+  if (pointed.length) return { lines: pointed, question: pointed.some((l) => /\?\s*\)?$/.test(l)), action: true };
   return { lines, question, action };
 }
+
+/**
+ * The user's own words in a prompt: tags the IDE or harness adds
+ * (<ide_opened_file>…</ide_opened_file>, <system-reminder>…) are not theirs.
+ * @param {any} data
+ */
+export const userText = (data) =>
+  String(data.prompt ?? data.prompt_text ?? "")
+    .replace(/<([a-z][\w-]*)\b[^>]*>[\s\S]*?<\/\1>/g, "")
+    .trim();
 
 /** The user's answers in an AskUserQuestion result, as one line. @param {any} res */
 function answerText(res) {
@@ -115,7 +134,7 @@ export function recordOf(data) {
     return { kind: action ? "verify" : "question", text: lines.join("\n"), detail: message };
   }
   if (ev === "UserPromptSubmit") {
-    const prompt = String(data.prompt ?? data.prompt_text ?? "").trim();
+    const prompt = userText(data);
     return { kind: "answer", answer: prompt.split("\n")[0], closeOnly: true };
   }
   return undefined;
@@ -127,7 +146,10 @@ export function recordOf(data) {
  * @param {any} data @param {string} project @returns {string | undefined} the log written
  */
 export function recordWaiting(data, project) {
-  const rec = recordOf(data);
+  const models = process.env.IMPRIMATUR_DESCRIBE !== "off";
+  // With the model, the turn end only closes questions here; Haiku reads the
+  // message and writes what it asks (audit.mjs, below).
+  const rec = models && data.hook_event_name === "Stop" ? { kind: "step", closeOnly: true } : recordOf(data);
   const session = String(data.session_id ?? "").replace(/[^\w-]/g, "");
   if (!rec || !session) return undefined;
   const { repoRoot } = require("../vscode/review-state.js");
@@ -135,6 +157,13 @@ export function recordWaiting(data, project) {
   const { transcriptInfo } = require("./baseline.mjs");
   const root = repoRoot(path.resolve(project)) ?? path.resolve(project);
   const log = path.join(root, WAITING_DIR, `${session}.jsonl`);
+  const here = path.dirname(new URL(import.meta.url).pathname);
+  const start = (script, ...args) => spawn(process.execPath, [path.join(here, script), log, ...args], { detached: true, stdio: "ignore" }).unref();
+  if (models && data.hook_event_name === "Stop") {
+    const message = String(data.last_assistant_message ?? "").slice(0, 6000);
+    const { prompt, title } = transcriptInfo(data.transcript_path);
+    if (message) start("audit.mjs", message, prompt ?? "", title ?? "");
+  }
   if (rec.closeOnly && !fs.existsSync(log)) return undefined;
   const row = { t: new Date().toISOString(), session: data.session_id, kind: rec.kind };
   if (rec.text) row.text = cap(rec.text, TEXT_MAX);
@@ -146,6 +175,11 @@ export function recordWaiting(data, project) {
   }
   fs.mkdirSync(path.dirname(log), { recursive: true });
   fs.appendFileSync(log, JSON.stringify(row) + "\n");
+  // The user's message settles the steps it decides (resolve.mjs, in the background).
+  if (models && data.hook_event_name === "UserPromptSubmit") {
+    const text = userText(data).slice(0, 4000);
+    if (text) start("resolve.mjs", text);
+  }
   return log;
 }
 

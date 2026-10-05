@@ -60,7 +60,6 @@ let status = /** @type {vscode.StatusBarItem} */ (/** @type {unknown} */ (undefi
 let markdownIt;
 /** "Imprimatur" output channel: what Accept links did, for troubleshooting. */
 let log = /** @type {vscode.LogOutputChannel} */ (/** @type {unknown} */ (undefined));
-let historyButton = /** @type {vscode.StatusBarItem} */ (/** @type {unknown} */ (undefined));
 let graphButton = /** @type {vscode.StatusBarItem} */ (/** @type {unknown} */ (undefined));
 
 const norm = (p) => (process.platform === "win32" ? path.resolve(p).toLowerCase() : path.resolve(p));
@@ -100,17 +99,6 @@ function hunksOf(file, text) {
 function logOf(file) {
   const root = rootOf(file);
   return root && path.join(root, HISTORY_DIR, `${path.relative(root, norm(file))}.jsonl`);
-}
-
-/** Status bar button: shown whenever the active file has an agent history. */
-function updateHistoryButton() {
-  const doc = vscode.window.activeTextEditor?.document;
-  const log = doc?.uri.scheme === "file" ? logOf(doc.uri.fsPath) : undefined;
-  const edits = log ? historyEdits(log, doc.getText()).length : 0;
-  if (!edits) return historyButton.hide();
-  historyButton.text = `$(history) ${edits} agent edit${edits === 1 ? "" : "s"}`;
-  historyButton.tooltip = "Show the agent's edits to this file, newest first";
-  historyButton.show();
 }
 
 // Read-only documents for the diff view: imprimatur:/<name>?<file, edit, side>
@@ -389,7 +377,6 @@ function refreshPreview() {
 
 function refreshEverything() {
   renderAll();
-  updateHistoryButton();
   updateGraphButton();
   refreshGraph();
   codeLensChanged.fire();
@@ -434,13 +421,10 @@ function activate(ctx) {
   log = vscode.window.createOutputChannel("Imprimatur", { log: true });
   ctx.subscriptions.push(log);
   status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
-  historyButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 49);
-  historyButton.command = "imprimatur.showHistory";
   graphButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 48);
   graphButton.command = "imprimatur.openGraph";
   ctx.subscriptions.push(
     status,
-    historyButton,
     graphButton,
     ...Object.entries(graphCommands).map(([id, fn]) => vscode.commands.registerCommand(id, fn)),
     ...Object.values(types),
@@ -482,7 +466,6 @@ function activate(ctx) {
     vscode.window.onDidChangeActiveTextEditor((e) => {
       if (e) updateStatus(hunksByFile.get(e.document.uri.fsPath) ?? []);
       else status.hide();
-      updateHistoryButton();
       updateGraphButton();
     }),
     vscode.workspace.onDidSaveTextDocument(renderAll),
@@ -495,7 +478,6 @@ function activate(ctx) {
         // The preview re-renders a changed document by itself; no extra refresh here.
         if (copy && fs.existsSync(copy)) {
           codeLensChanged.fire();
-          updateHistoryButton();
           refreshGraph();
         }
       }, 150);
@@ -521,7 +503,6 @@ function activate(ctx) {
   );
   renderAll();
   updateGraphButton();
-  updateHistoryButton();
   // Load the markdown extension's plugins now, so Accept units use its parser before any preview opens.
   vscode.commands.executeCommand("markdown.api.render", "").then(undefined, () => {});
   // Markdown preview: the built-in markdown extension calls this with its markdown-it.

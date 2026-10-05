@@ -4,7 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { asksIn, recordOf, recordWaiting } from "../hooks/waiting.mjs";
+import { asksIn, recordOf, recordWaiting, userText } from "../hooks/waiting.mjs";
+
+// recordWaiting must not start a model call (resolve.mjs) here.
+process.env.IMPRIMATUR_DESCRIBE = "off";
 
 const { itemsOf, waitingItems } = createRequire(import.meta.url)("../vscode/waiting.js");
 
@@ -25,6 +28,10 @@ test("waiting: asks in a final message, code and tables skipped", () => {
   assert.deepEqual(asksIn('Silmeden önce kontrol ettim, testler doğrulandı.\nTür: "kontrol et / test et" gibi istekler.'), { lines: [], question: false, action: false });
   assert.deepEqual(asksIn("Panelde kontrol eder misin."), { lines: ["Panelde kontrol eder misin."], question: false, action: true });
   assert.equal(asksIn("Graph'ta kontrol eder misin, README'yi de.").lines.length, 1);
+  assert.deepEqual(asksIn("- **👉 satırları:** artık yakalanıyor.").lines, []);
+  // With 👉 lines, only those: the rest of the message is report, even with ask phrases.
+  assert.deepEqual(asksIn("Eklenti kuruldu; görmek için Reload Window yap.\n👉 Birleştireyim mi?"), { lines: ["Birleştireyim mi?"], question: true, action: true });
+  assert.equal(userText({ prompt: "<ide_opened_file>The user opened x.md</ide_opened_file>olur yapalım" }), "olur yapalım");
   // 👉 always counts, as something to do.
   assert.deepEqual(asksIn("Bitti.\n- 👉 package-lock.json: commit'lemek senin kararın."), {
     lines: ["package-lock.json: commit'lemek senin kararın."],
