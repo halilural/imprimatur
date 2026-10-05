@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "Review your AI agent's edits like tracked changes: marked in the editor and the Markdown preview until you accept them.",
-  "version": "0.26.0",
+  "version": "0.27.3",
   "publisher": "halilural",
   "license": "MIT",
   "engines": {
@@ -26,7 +26,10 @@
     "preview-markers.js",
     "mermaid-diff.js",
     "model.js",
-    "audit.js"
+    "audit.js",
+    "agent-setup.js",
+    "setupView.js",
+    "media/imprimatur.svg"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -84,6 +87,18 @@
         "command": "imprimatur.graph.goTo",
         "title": "Go to change",
         "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.setup.refresh",
+        "title": "Refresh",
+        "category": "Imprimatur",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "imprimatur.setup.markSeen",
+        "title": "Mark all as seen",
+        "category": "Imprimatur",
+        "icon": "$(check-all)"
       }
     ],
     "colors": [
@@ -185,6 +200,23 @@
           "when": "webviewId == 'imprimatur.graph' && webviewSection =~ /^waiting-/",
           "group": "1_review@2"
         }
+      ],
+      "view/title": [
+        {
+          "command": "imprimatur.openGraph",
+          "when": "view == imprimatur.setup",
+          "group": "navigation@1"
+        },
+        {
+          "command": "imprimatur.setup.markSeen",
+          "when": "view == imprimatur.setup",
+          "group": "navigation@2"
+        },
+        {
+          "command": "imprimatur.setup.refresh",
+          "when": "view == imprimatur.setup",
+          "group": "navigation@3"
+        }
       ]
     },
     "configuration": {
@@ -222,6 +254,24 @@
     },
     "markdown.previewScripts": [
       "./preview-markers.js"
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "imprimatur",
+          "title": "Imprimatur",
+          "icon": "media/imprimatur.svg"
+        }
+      ]
+    },
+    "views": {
+      "imprimatur": [
+        {
+          "id": "imprimatur.setup",
+          "name": "Agent setup",
+          "contextualTitle": "Imprimatur"
+        }
+      ]
+    }
   }
 }

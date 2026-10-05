@@ -40,6 +40,15 @@ staging or committing does not clear the marks.
   diff); hover the status cell to see its change (the popup stays while you move into
   it, and scrolls). The status bar's **Agent Graph** button opens it and shows
   how many asks wait on you.
+- **Imprimatur side bar** (its own icon in the activity bar): a row that opens
+  the Agent Change Graph (with edits under review and asks waiting on you),
+  then **Agent setup**: every file in the repo, and in your home folder, that
+  shapes a coding agent, whatever the tool: Claude Code (CLAUDE.md, settings
+  hooks and permissions, hook scripts, skills, commands, agents, MCP), Cursor
+  rules, Copilot instructions, AGENTS.md, GEMINI.md, Windsurf, Cline, Aider,
+  and the git hooks commits run through. Grouped by tool, each with a one-line
+  summary (a settings file lists its hooks); files new, changed or removed
+  since you last looked are marked until you Mark all as seen. Read only.
 - **Waiting on you**, the graph's second tab: everything the agent asked of
   you (questions, commands waiting for permission, "verify / test this" at the
   end of a turn), open ones first. Questions close once you reply; things to go

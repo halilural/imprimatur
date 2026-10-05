@@ -9,8 +9,12 @@ const path = require("node:path");
 const { review, acceptHunk, acceptLines, acceptGroups } = require("./diff.js");
 const { markdownItPlugin, markdownBlocks } = require("./preview.js");
 const { openGraph, refreshGraph, graphCommands } = require("./graphView.js");
-const { WAITING_DIR, waitingItems } = require("./waiting.js");
-const { acceptEdit, spotsOf } = require("./graph.js");
+const { WAITING_DIR, waitingSteps } = require("./waiting.js");
+const { acceptEdit, spotsOf, graphRows } = require("./graph.js");
+const { registerSetupView } = require("./setupView.js");
+
+/** @type {ReturnType<typeof registerSetupView> | undefined} */
+let setupView;
 const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, historyEdits } = require("./review-state.js");
 
 const color = (id) => new vscode.ThemeColor(id);
@@ -235,7 +239,8 @@ function showGraph() {
 function updateGraphButton() {
   const root = graphRoot();
   if (!root) return graphButton.hide();
-  const open = waitingItems(root).filter((w) => w.open).length;
+  const open = waitingSteps(root).filter((w) => w.state === "open").length;
+  setupView?.refreshCounts();
   graphButton.text = open ? `$(git-merge) Agent Graph $(bell-dot) ${open}` : "$(git-merge) Agent Graph";
   graphButton.tooltip = open ? `Open the Agent Change Graph · ${open} waiting on you` : "Open the Agent Change Graph";
   graphButton.show();
@@ -501,6 +506,15 @@ function activate(ctx) {
       render(editor);
     }),
   );
+  // The side bar: a way to the graph, and every file that shapes the agent.
+  setupView = registerSetupView(ctx, () => [...roots], () => {
+    const root = graphRoot();
+    if (!root) return { edits: 0, waiting: 0 };
+    return {
+      edits: graphRows(root, currentText).rows.filter((r) => !r.accepted && !r.gone).length,
+      waiting: waitingSteps(root).filter((w) => w.state === "open").length,
+    };
+  });
   renderAll();
   updateGraphButton();
   // Load the markdown extension's plugins now, so Accept units use its parser before any preview opens.
