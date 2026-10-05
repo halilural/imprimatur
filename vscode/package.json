@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "Review your AI agent's edits like tracked changes: marked in the editor and the Markdown preview until you accept them.",
-  "version": "0.24.0",
+  "version": "0.25.0",
   "publisher": "halilural",
   "license": "MIT",
   "engines": {
