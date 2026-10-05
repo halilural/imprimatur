@@ -40,6 +40,10 @@ test("tasks: a step's place from the TODO.md its session edited", () => {
     task: "LATD-13937", url: "https://acme.atlassian.net/browse/LATD-13937", todo, line: 5,
   });
   assert.deepEqual(placeOf(root, { session: "other", text: "x" }, todos), { task: undefined });
+  // An old (scanned) session that never edited it still finds the task's own TODO.md.
+  assert.deepEqual(placeOf(root, { session: "old", text: "LATD-13937: Tim'e yaz" }, todos).todo, todo);
+  // A Jira key without a TODO.md of its own: the address learned from another TODO.md.
+  assert.deepEqual(placeOf(root, { session: "old", text: "LATD-13931: Tim'e özet mail gönder" }, todos), { task: "LATD-13931", url: "https://acme.atlassian.net/browse/LATD-13931" });
   // The same session asks something its TODO.md does not say: no task from the file.
   assert.deepEqual(placeOf(root, { session: "s1", text: "Jira adresi ne?" }, todos), { task: undefined });
 });

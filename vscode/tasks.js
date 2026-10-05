@@ -100,20 +100,49 @@ function githubOf(root) {
   }
 }
 
+/** The task's own TODO.md by the usual layout (todos/<key>/TODO.md, todos/<n>/TODO.md for #n), if it exists. @param {string} root @param {string} key */
+function todoOfKey(root, key) {
+  const rel = path.join("todos", key.replace(/^#/, ""), "TODO.md");
+  return fs.existsSync(path.join(root, rel)) ? rel : undefined;
+}
+
+/**
+ * Where a Jira project's pages live, learned from links in the repo's TODO.md
+ * files (…/browse/LATD-123): LATD-13931 gets one without a TODO.md of its own.
+ * @param {string} root @param {string} key @param {Map<string, any>} [cache]
+ */
+function jiraBase(root, key, cache = new Map()) {
+  if (!cache.has("jira")) {
+    /** @type {Map<string, string>} project → address up to and with /browse/ */
+    const bases = new Map();
+    const todos = path.join(root, "todos");
+    const files = ["TODO.md", ...(fs.existsSync(todos) ? fs.readdirSync(todos).map((d) => path.join("todos", d, "TODO.md")) : [])];
+    for (const f of files) {
+      if (!fs.existsSync(path.join(root, f))) continue;
+      for (const m of fs.readFileSync(path.join(root, f), "utf8").matchAll(/(https?:\/\/[^\s)\]]+\/browse\/)([A-Z][A-Z0-9]+)-\d+/g)) if (!bases.has(m[2])) bases.set(m[2], m[1]);
+    }
+    cache.set("jira", bases);
+  }
+  const base = cache.get("jira").get(key.split("-")[0]);
+  return base ? `${base}${key}` : undefined;
+}
+
 /**
  * Task and place of a waiting step.
  * @param {string} root
  * @param {{session: string, text: string, task?: string, todo?: string, prompt?: string, detail?: string}} step
  * @param {Map<string, string[]>} todos from sessionTodos
+ * @param {Map<string, any>} [cache] shared across the steps of one render
  * @returns {{task?: string, url?: string, todo?: string, line?: number}}
  */
-function placeOf(root, step, todos) {
+function placeOf(root, step, todos, cache = new Map()) {
   const edited = todos.get(step.session) ?? [];
   const named = step.task || taskKeyIn(step.text) || taskKeyIn(step.prompt);
   // The TODO.md: the step's own (Scan history), else one the session edited that names its task
   // or says the step. A session on several things does not tag every step with its last TODO.md.
   const read = (f) => (fs.existsSync(path.join(root, f)) ? fs.readFileSync(path.join(root, f), "utf8") : undefined);
-  let todo = step.todo ?? (named ? edited.find((f) => keyOfTodo(f) === named) : undefined);
+  // The task's own TODO.md counts even when this session did not edit it (a scanned old session).
+  let todo = step.todo ?? (named ? edited.find((f) => keyOfTodo(f) === named) ?? todoOfKey(root, named) : undefined);
   let text = todo ? read(todo) : undefined;
   let line = text ? lineFor(text, step.text) : 0;
   if (!todo)
@@ -125,9 +154,9 @@ function placeOf(root, step, todos) {
     }
   const task = named ?? (todo ? keyOfTodo(todo) : undefined);
   const gh = task?.startsWith("#") ? githubOf(root) : undefined;
-  const fallback = gh ? `${gh}/issues/${task.slice(1)}` : undefined;
+  const fallback = gh ? `${gh}/issues/${task.slice(1)}` : task && !task.startsWith("#") ? jiraBase(root, task, cache) : undefined;
   if (!todo || text === undefined) return task ? { task, ...(fallback && { url: fallback }) } : { task };
   return { task, url: (task ? linkFor(text, task) : undefined) ?? fallback, todo, line };
 }
 
-module.exports = { taskKeyIn, keyOfTodo, sessionTodos, lineFor, linkFor, placeOf };
+module.exports = { taskKeyIn, keyOfTodo, sessionTodos, lineFor, linkFor, placeOf, jiraBase };

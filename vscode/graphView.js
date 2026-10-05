@@ -53,6 +53,7 @@ const STATES = {
  */
 function waitingBody(steps, lanes, root) {
   const todos = sessionTodos(root);
+  const cache = new Map();
   if (!steps.length) return `<tr><td colspan="7" class="empty">Nothing asked of you yet.</td></tr>`;
   const order = lanes.map((l) => l.session);
   const titles = new Map(lanes.map((l) => [l.session, l.title]));
@@ -76,9 +77,12 @@ function waitingBody(steps, lanes, root) {
         : `<span class="pill" title="${esc(STATES[w.state]?.[1] ?? "")}">${esc(STATES[w.state]?.[0] ?? w.state)}</span>`;
       const source = mine ? "you" : w.by ?? (w.answer ? esc(w.answer) : "");
       // The task and where it is written down (vscode/tasks.js): the key opens its issue or Jira page, the file icon its TODO.md line.
-      const place = placeOf(root, w, todos);
+      const place = placeOf(root, w, todos, cache);
       const open = (cls, attrs, label, title) => `<a href="#" class="task ${cls}" ${attrs} title="${esc(title)}">${label}</a>`;
-      const key = place.task
+      // No page and no TODO.md: the key is a plain label, not a link that does nothing.
+      const key = place.task && !place.url && !place.todo
+        ? `<span class="task key" title="${esc(`${place.task}: no TODO.md or link found`)}">${esc(place.task)}</span>`
+        : place.task
         ? open("key", place.url ? `data-url="${esc(place.url)}"` : place.todo ? `data-todo="${esc(place.todo)}" data-line="${place.line ?? 0}"` : "", esc(place.task), place.url ?? (place.todo ? `Open ${place.todo}` : place.task))
         : "";
       // The badge names the task: the text need not start with it too ("LATD-13937: …").
@@ -186,8 +190,9 @@ function html(data, root, nonce, waiting = []) {
   .todo .meta { opacity: .75; margin-top: 4px; }
   .todo .why { margin-bottom: 4px; }
   a.task { text-decoration: none; } a.task:hover { text-decoration: underline; }
-  a.task.key { font-size: 11px; padding: 0 6px; margin-right: 6px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
-  a.task.file { margin-right: 6px; opacity: .7; } a.task.file:hover { opacity: 1; }
+  span.task.key { cursor: default; opacity: .75; }
+  .task.key { font-size: 11px; padding: 0 6px; margin-right: 6px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
+  .task.file { margin-right: 6px; opacity: .7; } a.task.file:hover { opacity: 1; }
   .todo .chat { font-size: 10px; padding: 0 5px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
 </style></head><body>
 <header><strong>Agent Change Graph</strong>
