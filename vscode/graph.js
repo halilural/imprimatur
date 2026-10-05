@@ -9,6 +9,27 @@ const { BASELINE_DIR, HISTORY_DIR, historyEdits, latestBefore } = require("./rev
 const { diff, review, acceptLines } = require("./diff.js");
 const { narrationOf } = require("./narration.js");
 
+const DESCRIPTIONS = path.join(".claude", "imprimatur", "descriptions.jsonl");
+
+/**
+ * A small model's one-sentence description per edit (hooks/describe.mjs),
+ * keyed "<toolUseId> <file>". @param {string} root @returns {Map<string, string>}
+ */
+function descriptionsOf(root) {
+  const f = path.join(root, DESCRIPTIONS);
+  const out = new Map();
+  if (!fs.existsSync(f)) return out;
+  for (const l of fs.readFileSync(f, "utf8").split("\n")) {
+    try {
+      const d = l && JSON.parse(l);
+      if (d?.toolUseId && d.file && d.text) out.set(`${d.toolUseId} ${d.file}`, d.text);
+    } catch {
+      // a line being written
+    }
+  }
+  return out;
+}
+
 /**
  * Where a line boundary of `a` lands in `b` (hunks = diff(a, b)); undefined when
  * a later change replaced it. @param {number} p @param {import("./diff.js").Hunk[]} hunks
@@ -87,6 +108,7 @@ function graphRows(root, currentText = () => undefined) {
   if (!fs.existsSync(dir)) return { rows: [], lanes: [] };
   /** @type {ReturnType<typeof graphRows>["rows"]} */
   const rows = [];
+  const described = descriptionsOf(root);
   for (const ent of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
     if (!ent.isFile() || !ent.name.endsWith(".jsonl")) continue;
     const log = path.join(ent.parentPath, ent.name);
@@ -100,7 +122,7 @@ function graphRows(root, currentText = () => undefined) {
       const ok = accepted(e);
       // Nothing of it left in the file (later edits replaced it all): neither open nor accepted.
       const gone = spotsOf(e, current).length === 0;
-      rows.push({ file, n: e.n, t: e.t, session: e.session, tool: e.tool, prompt: e.prompt, intent: e.intent ?? narrationOf(e.transcript, e.toolUseId), summary: summaryOf(e.before, e.after),
+      rows.push({ file, n: e.n, t: e.t, session: e.session, tool: e.tool, prompt: e.prompt, intent: (e.toolUseId && described.get(`${e.toolUseId} ${file}`)) ?? described.get(`#${e.n} ${file}`) ?? e.intent ?? narrationOf(e.transcript, e.toolUseId), summary: summaryOf(e.before, e.after),
         title: e.title, added: e.added, removed: e.removed, accepted: ok, gone, preview: ok ? undefined : previewOf(e.before, e.after), lane: 0 });
     }
   }

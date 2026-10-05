@@ -15,6 +15,7 @@ Sürüyor: elle test (MT-AR-024) — 2026-10-05
 - DONE: (C) 6. Kullanıcı geri bildirimi (2026-10-05): durum rozetleri + Accept düğmesi, kalıcı ve kaydırılır hover, durum çubuğunda Agent Graph, sağ tık (Accept / Open diff / Mark as done / Copy), "What you need to do" listesi; açıklama `message.id` ile; çift soru kaydı ve geçmiş zaman gürültüsü düzeltildi — 0.20.0, 73/73
 - DONE: (C) 7. Geri bildirim 2 (2026-10-05): hover yalnız durum hücresinden; "What you need to do" onay kutuları (günlükte `check`, satırda k/n); sağ tık Go to change; kısa giriş cümlesine sonraki cümle eklenir — 0.20.0, 74/74
 - DONE: (C) 8. Geri bildirim 3 (2026-10-05): yapılacak işler (verify) sonraki prompt'ta kapanmaz, Mark as done ya da bütün adımlar işaretlenince kapanır; tek düzenleme Accept'i başka düzenlemelerin satırını almaz (içerik eşleşmesi); dosyada hiçbir şeyi kalmayan düzenleme gri ↷ — 0.21.0, 76/76
+- DONE: (C) 9. Model açıklaması (2026-10-05, kullanıcı: "değişikliği hâlâ anlamıyorum, hook olmalı"): `hooks/describe.mjs` her düzenlemeden sonra arka planda Haiku ile tek cümle, `descriptions.jsonl`; bu repodaki 25 düzenleme dolduruldu; açıklama tooltip'i tam metin — 0.22.0, 79/79
 - 👉 TODO: (K) 5. Gözle → MT-AR-024: bir soru, bir komut izni, bir "kontrol et" isteği sekmede görünüyor, cevaplayınca "answered"
 
 ## Sorular (kullanıcıya)

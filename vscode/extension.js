@@ -418,9 +418,11 @@ function addFolder(folder, ctx) {
   // The waiting log changes every turn and only feeds the graph: no preview reload.
   const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(found), ".claude/imprimatur/**"));
   /** @param {vscode.Uri} uri */
+  // So does the descriptions file the describe hook writes a few seconds after an edit.
   const waiting = path.join(found, WAITING_DIR) + path.sep;
+  const descriptions = path.join(found, ".claude", "imprimatur", "descriptions.jsonl");
   const changed = (uri) => {
-    if (!uri.fsPath.startsWith(waiting)) return refreshSoon();
+    if (!uri.fsPath.startsWith(waiting) && uri.fsPath !== descriptions) return refreshSoon();
     refreshGraph();
     updateGraphButton();
   };

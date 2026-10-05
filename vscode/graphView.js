@@ -86,11 +86,11 @@ function html(data, root, nonce, waiting = []) {
   const body = data.rows.length
     ? data.rows
         .map(
-          (r, i) => `<tr data-file="${esc(r.file)}" data-n="${r.n}" data-i="${i}" data-q="${esc([r.file, r.intent, r.summary, r.prompt, data.lanes[r.lane]?.title].join(" "))}"
+          (r, i) => `<tr${r.gone ? ' class="gone"' : ""} data-file="${esc(r.file)}" data-n="${r.n}" data-i="${i}" data-q="${esc([r.file, r.intent, r.summary, r.prompt, data.lanes[r.lane]?.title].join(" "))}"
   data-vscode-context="${menu({ webviewSection: r.accepted || r.gone ? "edit-ok" : "edit-open", file: r.file, n: r.n })}"${r.preview ? "" : ` title="${esc(r.prompt ? `Request: ${r.prompt}` : "")}"`}>
-  <td class="ok">${r.gone ? `<span class="badge-gone" title="Replaced by later edits: nothing of it left to accept">↷</span>` : r.accepted ? `<span class="badge-ok" title="Accepted">✓</span>` : `<span class="badge-open" title="Under review — Accept, or right-click">●</span><button class="acc" title="Accept this edit">Accept</button>`}</td>
+  <td class="ok">${r.gone ? `<span class="badge-gone" title="Later edits rewrote or removed all of it: nothing left to accept">replaced</span>` : r.accepted ? `<span class="badge-ok" title="Accepted">✓</span>` : `<span class="badge-open" title="Under review — Accept, or right-click">●</span><button class="acc" title="Accept this edit">Accept</button>`}</td>
   <td class="g">${laneSvg(i, r, data.lanes)}</td>
-  <td class="d">${esc(r.intent ?? r.summary)}</td>
+  <td class="d" title="${esc([r.intent ?? r.summary, r.prompt && `Request: ${r.prompt}`].filter(Boolean).join("\n\n"))}">${esc(r.intent ?? r.summary)}</td>
   <td class="f">${esc(r.file)} <span class="n">#${r.n}</span></td>
   <td class="t">${esc(time(r.t))}</td>
   <td class="s" style="color:${COLORS[r.lane % COLORS.length]}" title="${esc(r.session ?? "")}">${esc(data.lanes[r.lane]?.title ?? (r.session ?? "?").slice(0, 8))}</td>
@@ -114,8 +114,9 @@ function html(data, root, nonce, waiting = []) {
   td.ok { width: 64px; min-width: 64px; text-align: center; }
   .badge-ok { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
     background: var(--vscode-testing-iconPassed, #73c991); color: var(--vscode-editor-background); }
-  .badge-gone { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; align-items: center; justify-content: center; font-size: 12px;
-    border: 1px solid var(--vscode-disabledForeground, #888); color: var(--vscode-disabledForeground, #888); }
+  .badge-gone { font-size: 10px; padding: 0 5px; border-radius: 8px; border: 1px solid var(--vscode-disabledForeground, #888); color: var(--vscode-disabledForeground, #888); }
+  tr.gone td.d, tr.gone td.f { opacity: .55; }
+  .legend { display: flex; gap: 14px; align-items: center; opacity: .8; font-size: 12px; padding: 0 0 6px; }
   .badge-open { color: var(--vscode-editorWarning-foreground, #cca700); font-size: 14px; }
   button.acc { display: none; font: inherit; font-size: 11px; padding: 1px 8px; border-radius: 2px; cursor: pointer; border: none;
     background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
@@ -153,7 +154,7 @@ function html(data, root, nonce, waiting = []) {
 <nav><button data-tab="edits">Edits ${pending ? `<span class="badge">${pending}</span>` : ""}</button><button data-tab="waiting">Waiting on you ${open ? `<span class="badge">${open}</span>` : ""}</button></nav>
 <input id="filter" placeholder="Filter by file, request or answer"><label id="ans" hidden><input type="checkbox" id="answered"> show answered</label>
 <span class="n" id="count-edits">${data.rows.length} edits · ${pending} under review · ${data.lanes.length} sessions</span><span class="n" id="count-waiting">${open} open · ${waiting.length - open} answered</span></header>
-<section id="edits"><table><thead><tr><th>Status</th><th>Graph</th><th>Description</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
+<section id="edits"><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th><th>Graph</th><th>Description</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
 <tbody>${body}</tbody></table></section>
 <section id="waiting"><table><thead><tr><th></th><th>Waiting for</th><th>Request</th><th>Date</th><th>Session</th><th>Status</th></tr></thead>
 <tbody>${waitingBody(waiting, data.lanes)}</tbody></table><p class="empty" id="none" hidden>Nothing open. Tick "show answered" for the rest.</p></section>
