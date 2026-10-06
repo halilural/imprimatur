@@ -150,6 +150,7 @@ function html(data, root, nonce, waiting = []) {
   th { text-align: left; font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--vscode-panel-border); }
   td { padding: 0 8px; height: ${ROW}px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 520px; }
   td.ok { width: 64px; min-width: 64px; text-align: center; }
+  tr.w td.ok:has(input[data-tick]) { cursor: pointer; } td.ok input[data-tick] { width: 16px; height: 16px; margin: 0; cursor: pointer; vertical-align: middle; }
   .badge-ok { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
     background: var(--vscode-testing-iconPassed, #73c991); color: var(--vscode-editor-background); }
   .badge-gone { font-size: 10px; padding: 0 5px; border-radius: 8px; border: 1px solid var(--vscode-disabledForeground, #888); color: var(--vscode-disabledForeground, #888); }
@@ -200,14 +201,18 @@ function html(data, root, nonce, waiting = []) {
 <input id="filter" placeholder="Filter by file, request or answer"><label id="ans" hidden><input type="checkbox" id="answered"> open only</label><button id="audit" class="acc on" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">Audit</button><button id="scan" class="acc on" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">Scan history</button>
 <span class="n" id="count-edits">${data.rows.length} edits · ${pending} under review · ${data.lanes.length} sessions</span><span class="n" id="count-waiting">${open} open · ${waiting.length} steps</span></header>
 <section id="edits"><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
-<tbody>${body}</tbody></table></section>
+<tbody>${body}</tbody></table>
+<script type="application/json" id="rows">${JSON.stringify(data.rows.map((r) => (r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview } : null))).replace(/</g, "\\u003c")}</script></section>
 <section id="waiting"><div class="legend"><span>☐ open: tick when done</span><span><span class="badge-ok">✓</span> done</span><span><span class="badge-gone">replaced</span> asked again later</span><span><span class="pill">Answered</span> question you answered</span></div>
 <table><thead><tr><th>Status</th><th></th><th>Waiting for</th><th>Request</th><th>Date</th><th>Session</th><th>By</th></tr></thead>
 <tbody>${waitingBody(waiting, data.lanes, root)}</tbody></table><p class="empty" id="none" hidden>Nothing open right now.</p></section>
 <div id="pop"></div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
-  const rows = ${JSON.stringify(data.rows.map((r) => (r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview } : null))).replace(/</g, "\\u003c")};
+  // The page is updated in place (a "render" message), not reloaded: a reload
+  // on every agent edit swallowed clicks made while it ran. So every handler
+  // is on the document, and the rows below are re-read after each update.
+  let rows = JSON.parse(document.getElementById("rows").textContent);
   // Hover diff: stays while the pointer is on the row or the popup itself.
   const pop = document.getElementById("pop");
   let hideTimer;
@@ -217,29 +222,28 @@ function html(data, root, nonce, waiting = []) {
   pop.addEventListener("mouseleave", hideSoon);
   const line = (cls, text) => { const d = document.createElement("div"); d.className = cls; d.textContent = text; return d; };
   // Only the status cell opens it: the rest of the row stays free to click and read.
-  document.querySelectorAll("tr[data-i]").forEach((tr) => {
+  const statusCell = (e) => e.target.closest?.("tr[data-i] > td.ok");
+  document.addEventListener("mouseover", (e) => {
+    const cell = statusCell(e);
+    if (!cell || cell.contains(e.relatedTarget)) return;
+    const tr = cell.parentElement;
     const r = rows[Number(tr.dataset.i)];
-    const cell = tr.querySelector("td.ok");
-    if (!r || !cell) return;
-    cell.addEventListener("mouseenter", () => {
-      clearTimeout(hideTimer);
-      pop.replaceChildren(...(r.prompt ? [line("p", r.prompt)] : []),
-        ...r.preview.map(([k, t]) => line(k === "-" ? "m" : k === "+" ? "a" : "", k === "…" ? "… " + t : k + " " + t)));
-      pop.scrollTop = 0;
-      pop.style.display = "block";
-      const box = tr.getBoundingClientRect();
-      const below = box.bottom + pop.offsetHeight < innerHeight;
-      pop.style.left = Math.max(4, Math.min(box.left + 40, innerWidth - pop.offsetWidth - 8)) + "px";
-      pop.style.top = (below ? box.bottom : Math.max(4, box.top - pop.offsetHeight)) + "px";
-    });
-    cell.addEventListener("mouseleave", hideSoon);
+    if (!r) return;
+    clearTimeout(hideTimer);
+    pop.replaceChildren(...(r.prompt ? [line("p", r.prompt)] : []),
+      ...r.preview.map(([k, t]) => line(k === "-" ? "m" : k === "+" ? "a" : "", k === "…" ? "… " + t : k + " " + t)));
+    pop.scrollTop = 0;
+    pop.style.display = "block";
+    const box = tr.getBoundingClientRect();
+    const below = box.bottom + pop.offsetHeight < innerHeight;
+    pop.style.left = Math.max(4, Math.min(box.left + 40, innerWidth - pop.offsetWidth - 8)) + "px";
+    pop.style.top = (below ? box.bottom : Math.max(4, box.top - pop.offsetHeight)) + "px";
   });
-  document.querySelectorAll("tr[data-file]").forEach((tr) => {
-    const msg = (type) => vscode.postMessage({ type, file: tr.dataset.file, n: Number(tr.dataset.n) });
-    tr.addEventListener("click", () => msg("open"));
-    tr.querySelector("button.acc")?.addEventListener("click", (e) => { e.stopPropagation(); hide(); msg("accept"); });
+  document.addEventListener("mouseout", (e) => {
+    const cell = statusCell(e);
+    if (cell && !cell.contains(e.relatedTarget)) hideSoon();
   });
-  // Tab, filter, the answered toggle and opened rows survive a refresh (the page is rebuilt on every agent edit).
+  // Tab, filter, the answered toggle and opened rows survive an update.
   const state = Object.assign({ tab: "edits", q: "", answered: false, expanded: [] }, vscode.getState());
   const filter = document.getElementById("filter");
   const answered = document.getElementById("answered");
@@ -263,26 +267,70 @@ function html(data, root, nonce, waiting = []) {
     });
     document.getElementById("none").hidden = !state.answered || !!state.q || document.querySelector("tr.w.s-open") !== null;
   };
-  document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => { state.tab = b.dataset.tab; apply(); }));
   filter.addEventListener("input", () => { state.q = filter.value; apply(); });
-  answered.addEventListener("change", () => { state.answered = answered.checked; apply(); });
-  document.querySelectorAll("tr.w").forEach((tr) => tr.addEventListener("click", (e) => {
-    if (e.target.closest("input, a, button, details")) return;
-    const k = tr.dataset.key;
+  document.addEventListener("click", (e) => {
+    const t = e.target;
+    const tab = t.closest("nav button");
+    if (tab) { state.tab = tab.dataset.tab; return apply(); }
+    const task = t.closest("a.task");
+    if (task) {
+      e.preventDefault();
+      if (task.dataset.url) vscode.postMessage({ type: "openUrl", url: task.dataset.url });
+      else if (task.dataset.todo) vscode.postMessage({ type: "openTodo", file: task.dataset.todo, line: Number(task.dataset.line) });
+      return;
+    }
+    const run = t.closest("#audit, #scan");
+    if (run) {
+      run.disabled = true;
+      run.textContent = run.id === "audit" ? "Auditing…" : "Scanning…";
+      return vscode.postMessage({ type: run.id });
+    }
+    const edit = t.closest("tr[data-file]");
+    if (edit) {
+      const accept = !!t.closest("button.acc");
+      if (accept) hide();
+      return vscode.postMessage({ type: accept ? "accept" : "open", file: edit.dataset.file, n: Number(edit.dataset.n) });
+    }
+    const w = t.closest("tr.w");
+    if (!w || t.closest("input, a, button, details")) return;
+    // The whole status cell ticks: a click beside the small box is not lost to the row.
+    const box = t.closest("td.ok")?.querySelector("input[data-tick]");
+    if (box) return box.click();
+    const k = w.dataset.key;
     state.expanded = state.expanded.includes(k) ? state.expanded.filter((x) => x !== k) : [...state.expanded, k];
     apply();
-  }));
-  // Tick a step right in its row; the log keeps it, the refresh redraws it.
-  document.querySelectorAll("input[data-tick]").forEach((box) => box.addEventListener("change", () => {
-    vscode.postMessage({ type: "check", session: box.dataset.session, t: box.dataset.item, i: Number(box.dataset.i), on: box.checked });
-  }));
-  document.querySelectorAll("a.task").forEach((a) => a.addEventListener("click", (e) => {
-    e.preventDefault(); e.stopPropagation();
-    if (a.dataset.url) vscode.postMessage({ type: "openUrl", url: a.dataset.url });
-    else if (a.dataset.todo) vscode.postMessage({ type: "openTodo", file: a.dataset.todo, line: Number(a.dataset.line) });
-  }));
-  document.getElementById("audit").addEventListener("click", (e) => { e.target.disabled = true; e.target.textContent = "Auditing…"; vscode.postMessage({ type: "audit" }); });
-  document.getElementById("scan").addEventListener("click", (e) => { e.target.disabled = true; e.target.textContent = "Scanning…"; vscode.postMessage({ type: "scan" }); });
+  });
+  document.addEventListener("change", (e) => {
+    const t = e.target;
+    if (t === answered) { state.answered = answered.checked; return apply(); }
+    // Tick a step right in its row; the log keeps it, the next update redraws it.
+    if (t.matches("input[data-tick]")) vscode.postMessage({ type: "check", session: t.dataset.session, t: t.dataset.item, i: Number(t.dataset.i), on: t.checked });
+  });
+  // An update waits while a click is under way, so it never lands between press and release.
+  let next;
+  let pressed = false;
+  let calmAt = 0;
+  const update = () => {
+    if (next === undefined || pressed || Date.now() < calmAt) return;
+    const doc = new DOMParser().parseFromString(next, "text/html");
+    next = undefined;
+    for (const sel of ["nav", "#audit", "#scan", "#count-edits", "#count-waiting", "#edits", "#waiting"]) {
+      const fresh = doc.querySelector(sel);
+      if (fresh) document.querySelector(sel)?.replaceWith(document.adoptNode(fresh));
+    }
+    rows = JSON.parse(document.getElementById("rows").textContent);
+    hide();
+    apply();
+  };
+  addEventListener("pointerdown", () => { pressed = true; }, true);
+  const release = () => { pressed = false; calmAt = Date.now() + 300; setTimeout(update, 320); };
+  addEventListener("pointerup", release, true);
+  addEventListener("pointercancel", release, true);
+  addEventListener("message", (e) => {
+    if (e.data?.type !== "render") return;
+    next = e.data.html;
+    update();
+  });
   addEventListener("scroll", hide);
   apply();
 </script></body></html>`;
@@ -290,8 +338,10 @@ function html(data, root, nonce, waiting = []) {
 
 /** @type {vscode.WebviewPanel | undefined} */
 let panel;
-/** @type {(() => void) | undefined} */
+/** @type {(() => void) | undefined} update the open page in place */
 let refresh;
+/** @type {(() => void) | undefined} load the page anew */
+let reload;
 /** @type {string | undefined} repo root the open panel shows */
 let shown;
 /** @type {{openDiff: (file: string, n: number) => unknown, acceptEdit: (file: string, n: number) => unknown, goTo: (file: string, n: number) => unknown} | undefined} */
@@ -315,9 +365,19 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
       if (m.type === "scan") return scanAll();
       return m.type === "accept" ? actions?.acceptEdit(m.file, m.n) : actions?.openDiff(m.file, m.n);
     });
+    // A hidden webview is torn down and gets no messages: shown again, it reloads from the html, so make that current.
+    let hidden = false;
+    panel.onDidChangeViewState(({ webviewPanel }) => {
+      if (!webviewPanel.visible) hidden = true;
+      else if (hidden) {
+        hidden = false;
+        reload?.();
+      }
+    });
     panel.onDidDispose(() => {
       panel = undefined;
       refresh = undefined;
+      reload = undefined;
       shown = undefined;
     });
   }
@@ -328,10 +388,21 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
     acceptEdit: (file, n) => acceptEdit(path.join(root, file), n),
     goTo: (file, n) => goTo(path.join(root, file), n),
   };
-  refresh = () => {
-    p.webview.html = html(graphRows(root, currentText), root, crypto.randomBytes(16).toString("hex"), waitingSteps(root));
+  const page = (nonce = crypto.randomBytes(16).toString("hex")) => html(graphRows(root, currentText), root, nonce, waitingSteps(root));
+  // An edit refreshes three times (extension.js refreshSoon): send only what changed.
+  let sent = "";
+  // Load once; after that the page updates in place (its "render" message):
+  // setting the html reloads it, and a click during a reload is lost.
+  reload = () => {
+    sent = "";
+    p.webview.html = page();
   };
-  refresh();
+  reload();
+  refresh = () => {
+    if (!p.visible) return;
+    const next = page("");
+    if (next !== sent) p.webview.postMessage({ type: "render", html: (sent = next) });
+  };
   p.reveal();
   // Set up after work began: once per project, find what already waited on the user.
   if (!scannedBefore(root)) scanAll();
