@@ -49,8 +49,9 @@ function itemsOf(records, session) {
         it.chat = Object.fromEntries(chat);
         it.checked = [...on].sort((a, b) => a - b);
         const steps = it.text.split("\n").filter((l) => l.trim()).length;
-        if (it.kind === "verify" && it.checked.length >= steps) Object.assign(it, { open: false, done: true, answeredAt: r.t });
-        else if (it.kind === "verify" && it.done && !r.on) Object.assign(it, { open: true, done: false });
+        // Every step ticked closes any item: a question asked in another session gets no next record there (#43).
+        if (it.open && it.checked.length >= steps) Object.assign(it, { open: false, done: true, answeredAt: r.t });
+        else if (it.done && !r.on) Object.assign(it, { open: true, done: false });
       }
       continue;
     }
@@ -120,7 +121,8 @@ const labelsIn = (text, steps) => steps.filter((s) => new RegExp(`(^|[^A-Za-z])$
 
 /**
  * A session's open, unticked steps, numbered from 1, labelled A, B, … (for the model).
- * @param {string} log @returns {Array<{n: number, label: string, item: string, i: number, text: string, request?: string, since?: string[]}>}
+ * @param {string} log
+ * @returns {Array<{n: number, label: string, item: string, i: number, text: string, request?: string, since?: string[], task?: string, todo?: string, log: string}>}
  */
 function openSteps(log) {
   const out = [];
@@ -130,7 +132,10 @@ function openSteps(log) {
     it.text
       .split("\n")
       .filter((l) => l.trim())
-      .forEach((text, i) => ticked.has(i) || out.push({ n: out.length + 1, label: stepLabel(out.length + 1), item: it.t, i, text, request: it.prompt, since: it.notes }));
+      .forEach((text, i) => {
+        const n = out.length + 1;
+        if (!ticked.has(i)) out.push({ n, label: stepLabel(n), item: it.t, i, text, request: it.prompt, since: it.notes, task: it.task, todo: it.todo, log });
+      });
   }
   return out;
 }

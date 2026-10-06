@@ -148,3 +148,14 @@ test("waiting: the hook writes per-session logs; quiet events start none", () =>
 test("waiting: no logs, no items", () => {
   assert.deepEqual(waitingItems(fs.mkdtempSync(path.join(os.tmpdir(), "agent-waiting-"))), []);
 });
+
+test("waiting: a turn end closes the asks of a task its TODO.md says done, in other sessions too (#43)", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-waiting-"));
+  const dir = path.join(root, ".claude/imprimatur/waiting");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "old.jsonl"), JSON.stringify({ t: "2020-01-01T00:00:00Z", session: "old", kind: "question", text: "#7 birleşsin mi?", task: "#7" }) + "\n");
+  fs.mkdirSync(path.join(root, "todos/7"), { recursive: true });
+  fs.writeFileSync(path.join(root, "todos/7/TODO.md"), "# #7\n\n## Durum\n\nBitti\n");
+  recordWaiting({ hook_event_name: "Stop", session_id: "now", last_assistant_message: "Kapattım." }, root);
+  assert.deepEqual(waitingItems(root).map((i) => [i.session, i.open]), [["old", false]]);
+});

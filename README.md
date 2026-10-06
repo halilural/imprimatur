@@ -152,8 +152,12 @@ through where they were.
    messages, [hooks/resolve.mjs](hooks/resolve.mjs) asks a small model which
    open steps the message settled ("tamam birleştir" settles "shall I merge?")
    and ticks them, tagged "chat"; the agent's next message does the same for
-   steps it reports done or asks again. An item closes when all its steps are
-   ticked. After each agent turn, Haiku audits the list with the agent's final
+   steps it reports done or asks again. A message that names a task
+   (`LATD-13977`, or `13977` alone) also settles that task's steps asked in
+   other sessions. An item closes when all its steps are ticked. When a task's
+   `todos/<task>/TODO.md` says done (its `## Durum` / `## Status` starts with
+   Bitti or Done), the next turn end ticks the task's steps in every session,
+   except ones asked after the TODO.md last changed. After each agent turn, Haiku audits the list with the agent's final
    message ([vscode/audit.js](vscode/audit.js)): it closes steps that are done,
    answered or only reports, and writes what the message really asks as short
    steps (the agent's 👉 lines verbatim, when it marks its asks; an ask in

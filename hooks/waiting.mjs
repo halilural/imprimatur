@@ -8,7 +8,8 @@
 // - Stop: Haiku reads the final message (audit.mjs, in the background): what it
 //   asks becomes an item, steps it settles are ticked. Without the model
 //   (IMPRIMATUR_DESCRIBE=off, or a failed call): lines that ask ("?", "test et",
-//   "shall I", 👉);
+//   "shall I", 👉). A task whose TODO.md says done closes its asks in every
+//   session (vscode/todo-done.js);
 // - UserPromptSubmit, PostToolUse AskUserQuestion: the user's answer; Haiku
 //   ticks the steps it settles (resolve.mjs).
 // Every record closes the session's earlier open questions (see vscode/waiting.js).
@@ -157,6 +158,14 @@ export function recordWaiting(data, project) {
   const { transcriptInfo } = require("./baseline.mjs");
   const root = repoRoot(path.resolve(project)) ?? path.resolve(project);
   const log = path.join(root, WAITING_DIR, `${session}.jsonl`);
+  // A task marked done in its TODO.md closes its asks in every session (#43).
+  if (data.hook_event_name === "Stop") {
+    try {
+      require("../vscode/todo-done.js").closeDoneTasks(root);
+    } catch (e) {
+      process.stderr.write(`imprimatur todo-done: ${e.message}\n`);
+    }
+  }
   const here = path.dirname(new URL(import.meta.url).pathname);
   const start = (script, ...args) => spawn(process.execPath, [path.join(here, script), log, ...args], { detached: true, stdio: "ignore" }).unref();
   if (models && data.hook_event_name === "Stop") {
@@ -164,7 +173,16 @@ export function recordWaiting(data, project) {
     const { prompt, title } = transcriptInfo(data.transcript_path);
     if (message) start("audit.mjs", message, prompt ?? "", title ?? "");
   }
-  if (rec.closeOnly && !fs.existsSync(log)) return undefined;
+  // The user's message settles the steps it decides (resolve.mjs, in the background),
+  // here or, when it names their task, in other sessions: also without a log of its own.
+  const settle = () => {
+    const text = userText(data).slice(0, 4000);
+    if (models && data.hook_event_name === "UserPromptSubmit" && text) start("resolve.mjs", text);
+  };
+  if (rec.closeOnly && !fs.existsSync(log)) {
+    settle();
+    return undefined;
+  }
   const row = { t: new Date().toISOString(), session: data.session_id, kind: rec.kind };
   if (rec.text) row.text = cap(rec.text, TEXT_MAX);
   if (rec.detail && rec.detail !== rec.text) row.detail = cap(rec.detail, DETAIL_MAX);
@@ -175,11 +193,7 @@ export function recordWaiting(data, project) {
   }
   fs.mkdirSync(path.dirname(log), { recursive: true });
   fs.appendFileSync(log, JSON.stringify(row) + "\n");
-  // The user's message settles the steps it decides (resolve.mjs, in the background).
-  if (models && data.hook_event_name === "UserPromptSubmit") {
-    const text = userText(data).slice(0, 4000);
-    if (text) start("resolve.mjs", text);
-  }
+  settle();
   return log;
 }
 

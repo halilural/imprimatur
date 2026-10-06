@@ -8,21 +8,26 @@
 // A small model (vscode/model.js) picks the step numbers; if it fails, steps
 // ending in "?" count as answered. Each settled step gets a "check" record
 // with by: "chat"; an item closes when all its steps are ticked
-// (vscode/waiting.js). The agent's side is hooks/audit.mjs.
+// (vscode/waiting.js). A message that names a task (LATD-13977, or 13977
+// alone) also weighs that task's open steps from other sessions, each ticked
+// in its own log (#43). The agent's side is hooks/audit.mjs.
+import fs from "node:fs";
 import { createRequire } from "node:module";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const require = createRequire(import.meta.url);
 const { askModel } = require("../vscode/model.js");
-const { openSteps, tickStep, labelsIn } = require("../vscode/waiting.js");
+const { openSteps, tickStep, labelsIn, stepLabel } = require("../vscode/waiting.js");
+const { taskOf, namesTask } = require("../vscode/tasks.js");
 
 export { openSteps };
 
-/** @param {ReturnType<typeof openSteps>} steps @param {string} text */
+/** @param {Array<ReturnType<typeof openSteps>[number] & {elsewhere?: boolean}>} steps @param {string} text */
 export function resolvePrompt(steps, text) {
   return [
     "An AI agent left these open steps for the user (questions to decide, things to do):",
-    ...steps.map((s) => `${s.label}. ${s.text}`),
+    ...steps.map((s) => `${s.label}. ${s.elsewhere ? `(${s.task}, asked in another session) ` : ""}${s.text}`),
     "",
     "The user then wrote:",
     text,
@@ -39,6 +44,24 @@ export function resolvePrompt(steps, text) {
   ].join("\n");
 }
 
+/**
+ * The session's open steps, then the open steps of other sessions whose task
+ * the message names, numbered on. @param {string} log @param {string} text
+ */
+export function stepsFor(log, text) {
+  const own = openSteps(log);
+  const dir = path.dirname(log);
+  const others = fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => n.endsWith(".jsonl") && path.join(dir, n) !== log) : [];
+  const elsewhere = others
+    .flatMap((n) => openSteps(path.join(dir, n)))
+    .map((s) => ({ ...s, task: taskOf({ ...s, prompt: s.request }) }))
+    .filter((s) => s.task && namesTask(text, s.task));
+  return [
+    ...own,
+    ...elsewhere.map((s, k) => ({ ...s, n: own.length + k + 1, label: stepLabel(own.length + k + 1), elsewhere: true })),
+  ];
+}
+
 /** The steps the model settled: the letters on its last line. @param {string} out @param {ReturnType<typeof openSteps>} steps */
 export const settledIn = (out, steps) => labelsIn(out.trim().split("\n").pop() ?? "", steps);
 
@@ -47,16 +70,17 @@ export const settledIn = (out, steps) => labelsIn(out.trim().split("\n").pop() ?
  * @param {(prompt: string) => Promise<string>} [ask] @returns {Promise<number[]>} ticked step numbers
  */
 export async function resolve(log, reply, ask = askModel) {
-  const steps = openSteps(log);
+  const steps = stepsFor(log, reply);
   if (!steps.length || !reply.trim()) return [];
   let picked;
   try {
     picked = settledIn(await ask(resolvePrompt(steps, reply)), steps);
   } catch {
-    picked = steps.filter((s) => /\?\s*\)?$/.test(s.text)).map((s) => s.n); // no model: a reply answers the questions
+    // No model: a reply answers this session's questions; another session's steps need the model.
+    picked = steps.filter((s) => !s.elsewhere && /\?\s*\)?$/.test(s.text)).map((s) => s.n);
   }
   const note = reply.trim().split("\n")[0].slice(0, 200);
-  for (const n of picked) tickStep(log, steps[n - 1], "chat", note);
+  for (const n of picked) tickStep(steps[n - 1].log, steps[n - 1], "chat", note);
   return picked;
 }
 

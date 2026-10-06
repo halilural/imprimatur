@@ -47,3 +47,25 @@ test("resolve: without the model, a reply answers the question steps", async () 
   assert.deepEqual(settledIn("2", steps), []); // a number is never a step
   assert.deepEqual(settledIn("none", steps), []);
 });
+
+test("resolve: a message naming a task weighs its steps from other sessions, ticked in their own log (#43)", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-resolve-"));
+  const dir = path.join(root, ".claude/imprimatur/waiting");
+  fs.mkdirSync(dir, { recursive: true });
+  const write = (s, ...rs) => fs.writeFileSync(path.join(dir, `${s}.jsonl`), rs.map((r) => JSON.stringify({ session: s, ...r }) + "\n").join(""));
+  write("a", { t: "2026-10-06T08:00:00Z", kind: "question", text: "LATD-13977 kapatılsın mı?", task: "LATD-13977" });
+  write("b", { t: "2026-10-06T08:10:00Z", kind: "verify", text: "A/B düzeltmesini yap", task: "LATD-13977" });
+  write("c", { t: "2026-10-06T08:20:00Z", kind: "verify", text: "Tim'e mail at", task: "LATD-13937" });
+  const here = path.join(dir, "here.jsonl"); // the session the user writes in: no log yet
+  let asked = "";
+  const ticked = await resolve(here, "13977 kapatıldı", async (p) => ((asked = p), "A. settled\nB. settled\nA, B"));
+  assert.deepEqual(ticked, [1, 2]);
+  assert.match(asked, /A\. \(LATD-13977, asked in another session\) LATD-13977 kapatılsın mı\?/);
+  assert.doesNotMatch(asked, /Tim/); // another task: not shown
+  assert.equal(fs.existsSync(here), false);
+  const items = waitingItems(root);
+  assert.deepEqual(items.filter((i) => i.open).map((i) => i.session), ["c"]); // the question closes too, once ticked
+  // Without the model, another session's steps are never guessed.
+  write("d", { t: "2026-10-06T08:30:00Z", kind: "question", text: "LATD-13990 için onay?", task: "LATD-13990" });
+  assert.deepEqual(await resolve(here, "LATD-13990 tamam", async () => { throw new Error("offline"); }), []);
+});

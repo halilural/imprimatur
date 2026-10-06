@@ -20,6 +20,23 @@ function taskKeyIn(text) {
   return gh ? `#${gh[1]}` : undefined;
 }
 
+/**
+ * The task a waiting item or step is about: the model's, its TODO.md's, else a
+ * key in its text or request. @param {{task?: string, todo?: string, text?: string, prompt?: string}} it
+ */
+const taskOf = (it) => it.task || (it.todo ? keyOfTodo(it.todo) : undefined) || taskKeyIn(it.text) || taskKeyIn(it.prompt);
+
+/**
+ * Does a message name the task: the key itself, or a Jira key's number alone
+ * ("13977 kapatıldı" names LATD-13977)? @param {string} text @param {string} key
+ */
+function namesTask(text, key) {
+  const esc = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (new RegExp(`(?<![\\w-])${esc}(?![\\w-])`, "i").test(text)) return true;
+  const num = /^[A-Z][A-Z0-9]*-(\d{3,})$/.exec(key)?.[1];
+  return !!num && new RegExp(`(?<![\\w-])${num}(?![\\w-])`).test(text);
+}
+
 /** The key a TODO.md's folder names: todos/LATD-13937/TODO.md → LATD-13937, todos/25/TODO.md → #25. @param {string} todo */
 function keyOfTodo(todo) {
   const dir = path.basename(path.dirname(todo));
@@ -159,4 +176,4 @@ function placeOf(root, step, todos, cache = new Map()) {
   return { task, url: (task ? linkFor(text, task) : undefined) ?? fallback, todo, line };
 }
 
-module.exports = { taskKeyIn, keyOfTodo, sessionTodos, lineFor, linkFor, placeOf, jiraBase };
+module.exports = { taskKeyIn, keyOfTodo, taskOf, namesTask, sessionTodos, lineFor, linkFor, placeOf, jiraBase };
