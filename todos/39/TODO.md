@@ -4,7 +4,7 @@
 
 ## Durum
 
-Yapıldı (0.30.0, bu makineye kuruldu), kullanıcının bakması bekleniyor — 2026-10-06
+Bitti — 2026-10-06 (PR #40, 0.30.0; kullanıcı birleştirip kapattı)
 
 ## Yapılacaklar
 
@@ -15,7 +15,7 @@ Yapıldı (0.30.0, bu makineye kuruldu), kullanıcının bakması bekleniyor —
 - DONE: (C) Testler 106/106: tek oturumda iki görev iki şerit, iki oturumda tek görev tek şerit, dal, Jira, tur, No task, hook dal kaydı
 - DONE: (C) Gerçek veri: investment 1 oturum → 7 görev + 3 No task düzenlemesi; imprimatur 82 düzenleme, 7 görev, 40 No task (TODO.md tutulmayan eski turlar: README, market-research); Chromium'da çizim ve rozet tıklaması hatasız
 - DONE: (C) `ARCHITECTURE.md` son hâl: yapılanla eşleşiyor (sütun paylaşımı eklendi)
-- 👉 TODO: (K) Paneli aç: şeritler görevlere göre doğru ayrılıyor mu
+- DONE: (K) Kullanıcı birleştirip kapattı (2026-10-06)
 
 ## Sorular (kullanıcıya)
 
@@ -28,4 +28,4 @@ Yapıldı (0.30.0, bu makineye kuruldu), kullanıcının bakması bekleniyor —
 
 ## Notlar / engeller
 
-- NOTE: Dal `feat/39-task-lanes`, `fix/37-tick-reliable` üstünde (o da #36 üstünde)
+- NOTE: PR #36, #38, #40 birlikte main'e birleşti (merge commit, 2026-10-06)
