@@ -4,14 +4,16 @@
 
 ## Durum
 
-Yapıldı (0.29.3, bu makineye kuruldu), kullanıcının denemesi bekleniyor — 2026-10-06
+Gecikme düzeltmesi yapıldı (0.29.4, bu makineye kuruldu), ölçüm bekleniyor — 2026-10-06
 
 ## Yapılacaklar
 
 - DONE: (C) Sebep: her ajan düzenlemesinde panel 3 kez sıfırdan yükleniyordu (`webview.html`), yükleme sırasındaki tık kayboluyordu; kutunun yanına tık satırı açıyordu
 - DONE: (C) Panel bir kez yüklenir, sonra yerinde güncellenir; tık sürerken güncelleme bekler; durum hücresinin tamamı tikler
 - DONE: (C) npm test 103/103; jsdom ile tık + güncelleme senaryoları hatasız
-- 👉 TODO: (K) Reload Window, ajan çalışırken Waiting on you'da birkaç kutuyu tikle: her tık tek seferde tutuyor mu
+- DONE: (C) Gecikme: tık dosya izleyicisini bekliyordu, sonra 369 KB sayfa (293 KB'ı waiting detayları) baştan çiziliyordu; tıktan önceki güncelleme kutuyu bir an boşaltabiliyordu. Şimdi tık anında yeniden çizer (edits listesi önbellekten), yalnız değişen satırlar değişir, kutu log onu gösterene kadar işaretli kalır (0.29.4)
+- 👉 TODO: (K) Ajan çalışırken Waiting on you'da 4-5 kutuyu tikle: anında işaretleniyor mu
+- TODO: (C) `/tmp/imprimatur-perf.log`'daki ölçümleri oku (tık → çizildi ms); 300 ms üstü varsa nedenini bul
 - TODO: (K) İş makinesinde de aynı deneme (kurulum: pull + `npm run setup`)
 
 ## Sorular (kullanıcıya)
