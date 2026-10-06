@@ -1,0 +1,19 @@
+{
+  // Trees show only titles by default; commits and todos/<N>/ refer to numbers.
+  "githubIssues.showIssueNumberInTree": true,
+  "githubPullRequests.showPullRequestNumberInTree": true,
+  // Sprints are milestones. The first two queries group by milestone and name
+  // no sprint, so they never need editing when a sprint changes; open issues
+  // oldest first puts the current sprint's group on top (#35).
+  "githubIssues.queries": [
+    { "label": "Sprint'ler · açık", "query": "state:open repo:${owner}/${repository} -no:milestone sort:created-asc", "groupBy": ["milestone"] },
+    { "label": "Sprint'ler · kapanan", "query": "state:closed repo:${owner}/${repository} -no:milestone sort:updated-desc", "groupBy": ["milestone"] },
+    { "label": "Epic'ler", "query": "state:open label:epic repo:${owner}/${repository} sort:updated-desc" },
+    { "label": "Bana atanan", "query": "state:open assignee:${user} repo:${owner}/${repository} sort:updated-desc" },
+    { "label": "Bitenler", "query": "state:closed repo:${owner}/${repository} sort:updated-desc" }
+  ],
+  // The Issues tree has no auto refresh; cron-tasks calls its refresh command
+  // every 10 minutes (once a minute used up the GitHub API limit together with
+  // Claude's gh calls, investment #17).
+  "cronTasks.tasks": [{ "at": "*/10 * * * *", "run": "issue.refresh" }]
+}

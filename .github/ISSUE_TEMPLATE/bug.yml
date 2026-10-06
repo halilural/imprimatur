@@ -1,0 +1,23 @@
+name: Hata
+description: Bir şey çalışmıyor
+labels: [bug]
+body:
+  - type: textarea
+    id: happened
+    attributes: { label: Ne oldu }
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes: { label: Ne beklenmişti }
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes: { label: Nasıl tekrarlanır, description: "1., 2., 3.: her adım tek eylem" }
+    validations: { required: true }
+  - type: input
+    id: env
+    attributes: { label: Sürüm / ortam }
+  - type: input
+    id: epic
+    attributes: { label: Epic, placeholder: "Part of #2" }
+    validations: { required: true }

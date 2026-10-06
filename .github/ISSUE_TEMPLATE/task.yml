@@ -1,0 +1,19 @@
+name: Görev
+description: Yapılacak bir iş (özellik, araştırma, altyapı)
+body:
+  - type: textarea
+    id: what
+    attributes: { label: Ne, description: Ne yapılacak, tek paragraf. }
+    validations: { required: true }
+  - type: textarea
+    id: why
+    attributes: { label: Neden, description: Kullanıcıya ya da projeye ne kazandırır. }
+    validations: { required: true }
+  - type: textarea
+    id: done
+    attributes: { label: Bitti ölçütü, description: Neyi görünce bitmiş sayılır (ölçülebilir). }
+    validations: { required: true }
+  - type: input
+    id: epic
+    attributes: { label: Epic, description: Her issue bir epic'in altındadır, placeholder: "Part of #2" }
+    validations: { required: true }
