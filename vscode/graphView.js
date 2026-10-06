@@ -8,6 +8,7 @@ const vscode = require("vscode");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const os = require("node:os");
 const { graphRows } = require("./graph.js");
 const { WAITING_DIR, waitingSteps, openSteps } = require("./waiting.js");
 const { audit } = require("./audit.js");
@@ -300,30 +301,82 @@ function html(data, root, nonce, waiting = []) {
     state.expanded = state.expanded.includes(k) ? state.expanded.filter((x) => x !== k) : [...state.expanded, k];
     apply();
   });
+  // A tick shows at once and stays shown: an update made before the log had it
+  // must not untick it. Each is timed, click to confirmed, for the perf log.
+  const ticks = new Map();
+  const tickKey = (b) => b.dataset.session + " " + b.dataset.item + " " + b.dataset.i;
   document.addEventListener("change", (e) => {
     const t = e.target;
     if (t === answered) { state.answered = answered.checked; return apply(); }
     // Tick a step right in its row; the log keeps it, the next update redraws it.
-    if (t.matches("input[data-tick]")) vscode.postMessage({ type: "check", session: t.dataset.session, t: t.dataset.item, i: Number(t.dataset.i), on: t.checked });
+    if (t.matches("input[data-tick]")) {
+      ticks.set(tickKey(t), { on: t.checked, at: performance.now() });
+      vscode.postMessage({ type: "check", session: t.dataset.session, t: t.dataset.item, i: Number(t.dataset.i), on: t.checked });
+    }
   });
   // An update waits while a click is under way, so it never lands between press and release.
   let next;
   let pressed = false;
   let calmAt = 0;
+  // What was drawn last, as strings: an update swaps only what differs from it.
+  const html = (el) => el.outerHTML;
+  const drawn = new Map();
+  const remember = () => {
+    for (const sel of ["nav", "#audit", "#scan", "#count-edits", "#count-waiting", "#edits thead", "#waiting thead"]) drawn.set(sel, html(document.querySelector(sel)));
+    for (const id of ["edits", "waiting"]) drawn.set(id, [...document.querySelectorAll("#" + id + " tbody > tr")].map(html));
+  };
+  remember();
+  // Rows: keep the unchanged run at the start and at the end (a new step or
+  // edit comes in at the top), swap the rest.
+  const patchRows = (id, fresh) => {
+    const body = document.querySelector("#" + id + " tbody");
+    const old = [...body.children];
+    const now = [...fresh.querySelectorAll("#" + id + " tbody > tr")];
+    const was = drawn.get(id);
+    const is = now.map(html);
+    drawn.set(id, is);
+    if (was.length !== old.length) return body.replaceChildren(...now);
+    let a = 0;
+    while (a < was.length && a < is.length && was[a] === is[a]) a++;
+    let z = 0;
+    while (z < was.length - a && z < is.length - a && was[was.length - 1 - z] === is[is.length - 1 - z]) z++;
+    const gone = old.slice(a, old.length - z);
+    const come = now.slice(a, now.length - z);
+    if (!gone.length && !come.length) return;
+    const after = old[old.length - z] ?? null;
+    gone.forEach((r) => r.remove());
+    for (const r of come) body.insertBefore(document.adoptNode(r), after);
+  };
   const update = () => {
     if (next === undefined || pressed || Date.now() < calmAt) return;
+    const t0 = performance.now();
     const doc = new DOMParser().parseFromString(next, "text/html");
     next = undefined;
-    for (const sel of ["nav", "#audit", "#scan", "#count-edits", "#count-waiting", "#edits", "#waiting"]) {
+    const t1 = performance.now();
+    for (const sel of ["nav", "#audit", "#scan", "#count-edits", "#count-waiting", "#edits thead", "#waiting thead"]) {
       const fresh = doc.querySelector(sel);
-      if (fresh) document.querySelector(sel)?.replaceWith(document.adoptNode(fresh));
+      if (fresh && html(fresh) !== drawn.get(sel)) {
+        drawn.set(sel, html(fresh));
+        document.querySelector(sel)?.replaceWith(document.adoptNode(fresh));
+      }
     }
-    rows = JSON.parse(document.getElementById("rows").textContent);
+    patchRows("edits", doc);
+    patchRows("waiting", doc);
+    const data = doc.getElementById("rows")?.textContent;
+    if (data) { document.getElementById("rows").textContent = data; rows = JSON.parse(data); }
+    // Drawn from the log (the attribute) as ticked: confirmed. Not yet: keep the click's state.
+    const boxes = new Map([...document.querySelectorAll("input[data-tick]")].map((b) => [tickKey(b), b]));
+    for (const [k, t] of ticks) {
+      const b = boxes.get(k);
+      if (b && b.hasAttribute("checked") !== t.on) { b.checked = t.on; continue; }
+      ticks.delete(k);
+      vscode.postMessage({ type: "perf", ms: Math.round(performance.now() - t.at), parse: Math.round(t1 - t0), patch: Math.round(performance.now() - t1) });
+    }
     hide();
     apply();
   };
   addEventListener("pointerdown", () => { pressed = true; }, true);
-  const release = () => { pressed = false; calmAt = Date.now() + 300; setTimeout(update, 320); };
+  const release = () => { pressed = false; calmAt = Date.now() + 120; setTimeout(update, 130); };
   addEventListener("pointerup", release, true);
   addEventListener("pointercancel", release, true);
   addEventListener("message", (e) => {
@@ -338,7 +391,7 @@ function html(data, root, nonce, waiting = []) {
 
 /** @type {vscode.WebviewPanel | undefined} */
 let panel;
-/** @type {(() => void) | undefined} update the open page in place */
+/** @type {((waitingOnly?: boolean) => void) | undefined} update the open page in place */
 let refresh;
 /** @type {(() => void) | undefined} load the page anew */
 let reload;
@@ -359,6 +412,7 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
     panel = vscode.window.createWebviewPanel("imprimatur.graph", "Agent Change Graph", vscode.ViewColumn.Active, { enableScripts: true });
     panel.webview.onDidReceiveMessage((m) => {
       if (m.type === "check") return tick(m);
+      if (m.type === "perf") return perfLog(m);
       if (m.type === "audit") return auditAll();
       if (m.type === "openUrl" && /^https?:\/\//.test(m.url)) return vscode.env.openExternal(vscode.Uri.parse(m.url));
       if (m.type === "openTodo" && shown) return openTodo(shown, m.file, m.line);
@@ -388,7 +442,11 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
     acceptEdit: (file, n) => acceptEdit(path.join(root, file), n),
     goTo: (file, n) => goTo(path.join(root, file), n),
   };
-  const page = (nonce = crypto.randomBytes(16).toString("hex")) => html(graphRows(root, currentText), root, nonce, waitingSteps(root));
+  // A tick changes only the waiting list: it reuses the edits, the costly half (graphRows).
+  /** @type {ReturnType<typeof graphRows> | undefined} */
+  let edits;
+  const page = (nonce = crypto.randomBytes(16).toString("hex"), waitingOnly = false) =>
+    html((edits = waitingOnly && edits ? edits : graphRows(root, currentText)), root, nonce, waitingSteps(root));
   // An edit refreshes three times (extension.js refreshSoon): send only what changed.
   let sent = "";
   // Load once; after that the page updates in place (its "render" message):
@@ -398,9 +456,9 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
     p.webview.html = page();
   };
   reload();
-  refresh = () => {
+  refresh = (waitingOnly = false) => {
     if (!p.visible) return;
-    const next = page("");
+    const next = page("", waitingOnly);
     if (next !== sent) p.webview.postMessage({ type: "render", html: (sent = next) });
   };
   p.reveal();
@@ -417,6 +475,18 @@ function tick(m) {
   if (!shown || !/^[\w-]+$/.test(m.session ?? "")) return;
   const log = path.join(shown, WAITING_DIR, `${m.session}.jsonl`);
   fs.appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), session: m.session, kind: "check", item: m.t, i: m.i, on: !!m.on }) + "\n");
+  // Redraw now: the file watcher reports the write late (its refresh then finds nothing new).
+  refresh?.(true);
+}
+
+/**
+ * One tick's time from click to drawn as ticked, kept outside the repo (a
+ * write under .claude/imprimatur would itself refresh the panel).
+ * @param {{ms: number, parse: number, patch: number}} m
+ */
+function perfLog(m) {
+  const line = `${new Date().toISOString()} tick ${m.ms}ms (parse ${m.parse}ms, patch ${m.patch}ms) ${shown ?? ""}\n`;
+  fs.appendFile(path.join(os.tmpdir(), "imprimatur-perf.log"), line, () => {});
 }
 
 /** The Audit button: Haiku reviews every session's open steps (vscode/audit.js). */
