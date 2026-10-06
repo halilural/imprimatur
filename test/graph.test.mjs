@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 
 const { graphRows, previewOf, summaryOf, acceptEdit, spotsOf } = createRequire(import.meta.url)("../vscode/graph.js");
 
-test("graph: all files' edits newest first, one lane per session", () => {
+test("graph: all files' edits newest first; no task named, one No task lane", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-graph-"));
   const h = path.join(root, ".claude/imprimatur/history");
   fs.mkdirSync(path.join(h, "docs"), { recursive: true });
@@ -22,14 +22,11 @@ test("graph: all files' edits newest first, one lane per session", () => {
     rows.map((r) => [r.file, r.n, r.prompt, r.lane, r.added]),
     [
       ["a.md", 2, "third", 0, 1],
-      [path.join("docs", "b.md"), 1, "second", 1, 1],
-      ["a.md", 1, "first", 1, 1],
+      [path.join("docs", "b.md"), 1, "second", 0, 1],
+      ["a.md", 1, "first", 0, 1],
     ],
   );
-  assert.deepEqual(lanes, [
-    { session: "s2", title: undefined, first: 0, last: 0 },
-    { session: "s1", title: undefined, first: 1, last: 2 },
-  ]);
+  assert.deepEqual(lanes, [{ first: 0, last: 2 }]);
 });
 
 test("graph: edits whose lines are still under review are not accepted", () => {
@@ -100,5 +97,54 @@ test("graph: a line put where an edit's line was deleted is not that edit's", ()
 
 test("graph: no history, empty graph", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-graph-"));
-  assert.deepEqual(graphRows(root), { rows: [], lanes: [] });
+  assert.deepEqual(graphRows(root), { rows: [], lanes: [], sessions: [] });
+});
+
+test("graph: one lane per task, not per session (#39)", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-graph-"));
+  const h = path.join(root, ".claude/imprimatur/history");
+  const write = (file, rows) => {
+    fs.mkdirSync(path.dirname(path.join(h, file)), { recursive: true });
+    fs.writeFileSync(path.join(h, `${file}.jsonl`), rows.map((r) => JSON.stringify({ tool: "Edit", before: "", ...r }) + "\n").join(""));
+    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    fs.writeFileSync(path.join(root, file), "x\n");
+  };
+  fs.mkdirSync(path.join(root, "todos/25"), { recursive: true });
+  // Session s1 works on #25 (its TODO.md and, in the same turn, the README), then on #37 on its branch.
+  write("todos/25/TODO.md", [{ t: "2026-10-06T10:00:00Z", session: "s1", prompt: "do 25" }]);
+  fs.writeFileSync(path.join(root, "todos/25/TODO.md"), "# #25 · Agent setup\n");
+  write("README.md", [
+    { t: "2026-10-06T10:01:00Z", session: "s1", prompt: "do 25" },
+    { t: "2026-10-06T11:00:00Z", session: "s1", prompt: "now the tick", branch: "fix/37-tick" },
+    // Session s2, later, on #25 again: the same lane as s1's #25.
+    { t: "2026-10-06T12:00:00Z", session: "s2", prompt: "more on #25" },
+    // A turn with no clue at all.
+    { t: "2026-10-06T13:00:00Z", session: "s2", prompt: "tidy up", branch: "main" },
+  ]);
+  const { rows, lanes, sessions } = graphRows(root);
+  assert.deepEqual(rows.map((r) => [r.file, r.session, r.task, r.lane]), [
+    ["README.md", "s2", undefined, 0],
+    ["README.md", "s2", "#25", 1],
+    ["README.md", "s1", "#37", 2],
+    ["README.md", "s1", "#25", 1],
+    [path.join("todos", "25", "TODO.md"), "s1", "#25", 1],
+  ]);
+  assert.deepEqual(lanes, [{ first: 0, last: 0 }, { task: "#25", title: "Agent setup", first: 1, last: 4 }, { task: "#37", title: undefined, first: 2, last: 2 }]);
+  assert.deepEqual(sessions.map((s) => s.session), ["s2", "s1"]);
+});
+
+test("graph: a task from its branch, a Jira key, or the Bash description (#39)", async () => {
+  const { tasksOf, taskOfBranch } = createRequire(import.meta.url)("../vscode/graph.js");
+  assert.equal(taskOfBranch("feat/39-task-lanes"), "#39");
+  assert.equal(taskOfBranch("feature/LATD-13937-sync"), "LATD-13937");
+  assert.equal(taskOfBranch("main"), undefined);
+  assert.deepEqual(
+    tasksOf([
+      { file: "todos/LATD-12/TODO.md" },
+      { file: "a.md", said: "Update notes for #41" },
+      { file: "a.md", branch: "fix/37-x", prompt: "see #41" },
+      { file: "todos/README.md" },
+    ]),
+    ["LATD-12", "#41", "#37", undefined],
+  );
 });

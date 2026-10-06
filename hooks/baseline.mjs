@@ -4,17 +4,18 @@
 // before, compared after. Before the agent edits a file of a listed type:
 // - if there is no copy yet, copy the file to
 //   <root>/.claude/imprimatur/baseline/<path> (an empty copy for a new file);
-// - append {t, session, tool, prompt, intent, title, transcript, toolUseId, before} to
+// - append {t, session, tool, prompt, intent, title, transcript, toolUseId, branch, before} to
 //   .claude/imprimatur/history/<path>.jsonl (prompt: the user's request; intent:
 //   the Bash description; title: the session's title; transcript + toolUseId:
-//   where the extension later finds the agent's words for this call).
+//   where the extension later finds the agent's words for this call; branch:
+//   the git branch at the edit, which names its task in <type>/<n>-name).
 // The editor extension diffs the file against the copy until the user accepts.
 // Git state is not consulted: staging or committing does not end a review.
 //
 //   node baseline.mjs [ext ...]   default extensions: md mdx
 //
 // Never blocks the tool: every path ends in exit 0.
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -85,6 +86,15 @@ export function transcriptInfo(transcript) {
   return out;
 }
 
+/** The checked-out branch at the repo root; undefined when detached or not git. @param {string} root */
+function branchAt(root) {
+  try {
+    return execFileSync("git", ["branch", "--show-current"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** True when the log was written in the last 2 s: a second copy of this hook on the same edit. */
 const sameEditWindow = (log) => Date.now() - fs.statSync(log).mtimeMs < 2000;
 
@@ -114,7 +124,7 @@ export function takeBaseline(project, file, exts = ["md", "mdx"], meta = {}, kno
   if (latestBefore(log) === before && sameEditWindow(log)) return kept ? "kept" : "written";
   fs.mkdirSync(path.dirname(log), { recursive: true });
   const { session, tool, prompt, intent, title, transcript, toolUseId } = meta;
-  const row = { t: new Date().toISOString(), session, tool, prompt, intent, title, transcript, toolUseId, before };
+  const row = { t: new Date().toISOString(), session, tool, prompt, intent, title, transcript, toolUseId, branch: branchAt(root), before };
   fs.appendFileSync(log, JSON.stringify(row) + "\n");
   if (toolUseId) describeLater(root, rel, toolUseId);
   return kept ? "kept" : "written";

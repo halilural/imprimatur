@@ -228,3 +228,15 @@ test("bash edit: relative paths follow the command's own cd", () => {
   spawnSync("node", [hook], { input: input("PostToolUse"), env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
   assert.equal(history(dir, "a.md")[0].before, "one\n");
 });
+
+test("baseline: each edit records the branch it was made on (#39)", () => {
+  const { dir, git } = repo();
+  fs.writeFileSync(path.join(dir, "a.md"), "one\n");
+  git("add", "a.md");
+  git("commit", "-qm", "x");
+  run(dir, "a.md");
+  git("switch", "-qc", "fix/37-tick");
+  fs.writeFileSync(path.join(dir, "a.md"), "two\n");
+  run(dir, "a.md");
+  assert.deepEqual(history(dir, "a.md").map((h) => h.branch), ["main", "fix/37-tick"]);
+});
