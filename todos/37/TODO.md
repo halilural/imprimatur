@@ -4,7 +4,7 @@
 
 ## Durum
 
-Gecikme düzeltmesi yapıldı (0.29.4, bu makineye kuruldu), ölçüm bekleniyor — 2026-10-06
+Gecikme ölçüldü ve düzeltildi (0.29.5, bu makineye kuruldu), gerçek panelde deneme bekleniyor — 2026-10-06
 
 ## Yapılacaklar
 
@@ -13,7 +13,9 @@ Gecikme düzeltmesi yapıldı (0.29.4, bu makineye kuruldu), ölçüm bekleniyor
 - DONE: (C) npm test 103/103; jsdom ile tık + güncelleme senaryoları hatasız
 - DONE: (C) Gecikme: tık dosya izleyicisini bekliyordu, sonra 369 KB sayfa (293 KB'ı waiting detayları) baştan çiziliyordu; tıktan önceki güncelleme kutuyu bir an boşaltabiliyordu. Şimdi tık anında yeniden çizer (edits listesi önbellekten), yalnız değişen satırlar değişir, kutu log onu gösterene kadar işaretli kalır (0.29.4)
 - 👉 TODO: (K) Ajan çalışırken Waiting on you'da 4-5 kutuyu tikle: anında işaretleniyor mu
-- TODO: (C) `/tmp/imprimatur-perf.log`'daki ölçümleri oku (tık → çizildi ms); 300 ms üstü varsa nedenini bul
+- DONE: (C) Ölçüm (Chromium, investment verisi): eski yol tam yükleme 66-184 ms; tık → çizildi ~150 ms (120'si tık sonrası bekleme), bekleme kaldırılınca 57-80 ms; panelde parse 5-20 ms + yama 2-7 ms; eklentide sayfa üretimi 38-53 ms (önbellekli edits), tam sayfa 71-165 ms (0.29.5)
+- DONE: (C) VS Code belgeleri: `webview.html` sayfayı ve script durumunu sıfırlar, güncelleme postMessage ile; durum için getState/setState (retainContextWhenHidden pahalı); kendi yazdığın dosya için izleyiciyi bekleme (belgede gecikme sayısı yok)
+- TODO: (C) Gerçek panel ölçümü: kullanıcı tikleyince `/tmp/imprimatur-perf.log` oku; 300 ms üstü varsa nedenini bul
 - TODO: (K) İş makinesinde de aynı deneme (kurulum: pull + `npm run setup`)
 
 ## Sorular (kullanıcıya)
@@ -21,5 +23,7 @@ Gecikme düzeltmesi yapıldı (0.29.4, bu makineye kuruldu), ölçüm bekleniyor
 ## Kararlar
 
 ## Notlar / engeller
+
+- NOTE: Belgeler: https://code.visualstudio.com/api/extension-guides/webview (html reset, getState/setState), vscode.d.ts (postMessage yalnız görünür webview'e ulaşır; FileSystemWatcher olayları birleştirilebilir)
 
 - NOTE: PR #38, PR #36'nın üstünde; önce #36 birleşmeli
