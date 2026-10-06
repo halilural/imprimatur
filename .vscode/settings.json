@@ -2,14 +2,15 @@
   // Trees show only titles by default; commits and todos/<N>/ refer to numbers.
   "githubIssues.showIssueNumberInTree": true,
   "githubPullRequests.showPullRequestNumberInTree": true,
-  // Sprints are milestones. The first two queries group by milestone and name
-  // no sprint, so they never need editing when a sprint changes; open issues
-  // oldest first puts the current sprint's group on top (#35).
+  // Current sprint first, open and closed as separate queries (open oldest
+  // first, closed most recently updated first), then epics, every open issue
+  // and everything closed. The first two carry the sprint milestone title and
+  // are renamed at every sprint planning (#35).
   "githubIssues.queries": [
-    { "label": "Sprint'ler · açık", "query": "state:open repo:${owner}/${repository} -no:milestone sort:created-asc", "groupBy": ["milestone"] },
-    { "label": "Sprint'ler · kapanan", "query": "state:closed repo:${owner}/${repository} -no:milestone sort:updated-desc", "groupBy": ["milestone"] },
+    { "label": "Current Sprint · Açık", "query": "state:open repo:${owner}/${repository} milestone:\"Sprint 1 · 3–9 Eki · Waiting on you ve sprint düzeni\" sort:created-asc" },
+    { "label": "Current Sprint · Kapalı", "query": "state:closed repo:${owner}/${repository} milestone:\"Sprint 1 · 3–9 Eki · Waiting on you ve sprint düzeni\" sort:updated-desc" },
     { "label": "Epic'ler", "query": "state:open label:epic repo:${owner}/${repository} sort:updated-desc" },
-    { "label": "Bana atanan", "query": "state:open assignee:${user} repo:${owner}/${repository} sort:updated-desc" },
+    { "label": "Açık işler", "query": "state:open -label:epic repo:${owner}/${repository} sort:updated-desc" },
     { "label": "Bitenler", "query": "state:closed repo:${owner}/${repository} sort:updated-desc" }
   ],
   // The Issues tree has no auto refresh; cron-tasks calls its refresh command
