@@ -8,6 +8,7 @@ const vscode = require("vscode");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const os = require("node:os");
 const { graphRows } = require("./graph.js");
 const { WAITING_DIR, waitingSteps, openSteps } = require("./waiting.js");
 const { audit } = require("./audit.js");
@@ -23,17 +24,33 @@ const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").
 /** A row's right-click menu context (webview/context `when` clauses read it). */
 const menu = (o) => esc(JSON.stringify({ ...o, preventDefaultContextMenuItems: true }));
 
+/**
+ * Each lane's column: a lane takes the first column free by its first row, as
+ * in git graphs, so tasks that never overlap share one and the graph stays narrow.
+ * @param {Array<{first: number, last: number}>} lanes @returns {number[]}
+ */
+function columnsOf(lanes) {
+  /** @type {number[]} last row of the lane now in each column */
+  const busy = [];
+  return lanes.map((l) => {
+    let c = busy.findIndex((last) => last < l.first);
+    if (c < 0) c = busy.push(0) - 1;
+    busy[c] = l.last;
+    return c;
+  });
+}
+
 /** One row's piece of the graph: lane lines passing through, a dot on its own lane. */
-function laneSvg(i, row, lanes) {
-  const w = Math.max(1, lanes.length) * LANE;
+function laneSvg(i, row, lanes, cols = columnsOf(lanes)) {
+  const w = Math.max(1, ...cols.map((c) => c + 1)) * LANE;
   const parts = lanes.map((l, k) => {
     if (i < l.first || i > l.last) return "";
-    const x = k * LANE + LANE / 2;
+    const x = cols[k] * LANE + LANE / 2;
     const top = i === l.first ? ROW / 2 : 0;
     const bottom = i === l.last ? ROW / 2 : ROW;
     return top === bottom ? "" : `<line x1="${x}" y1="${top}" x2="${x}" y2="${bottom}" stroke="${COLORS[k % COLORS.length]}" stroke-width="2"/>`;
   });
-  const cx = row.lane * LANE + LANE / 2;
+  const cx = cols[row.lane] * LANE + LANE / 2;
   parts.push(`<circle cx="${cx}" cy="${ROW / 2}" r="4.5" fill="${COLORS[row.lane % COLORS.length]}"/>`);
   return `<svg width="${w}" height="${ROW}">${parts.join("")}</svg>`;
 }
@@ -48,15 +65,15 @@ const STATES = {
 /**
  * The Waiting on you list: one row per step, newest first, history kept
  * (like the edits); open ones have a checkbox.
- * @param {ReturnType<typeof waitingSteps>} steps @param {ReturnType<typeof graphRows>["lanes"]} lanes
+ * @param {ReturnType<typeof waitingSteps>} steps @param {ReturnType<typeof graphRows>["sessions"]} sessions
  * @param {string} root
  */
-function waitingBody(steps, lanes, root) {
+function waitingBody(steps, sessions, root) {
   const todos = sessionTodos(root);
   const cache = new Map();
   if (!steps.length) return `<tr><td colspan="7" class="empty">Nothing asked of you yet.</td></tr>`;
-  const order = lanes.map((l) => l.session);
-  const titles = new Map(lanes.map((l) => [l.session, l.title]));
+  const order = sessions.map((l) => l.session);
+  const titles = new Map(sessions.map((l) => [l.session, l.title]));
   const color = (s) => {
     if (!order.includes(s)) order.push(s);
     return COLORS[order.indexOf(s) % COLORS.length];
@@ -118,25 +135,40 @@ function waitingBody(steps, lanes, root) {
  */
 function html(data, root, nonce, waiting = []) {
   const open = waiting.filter((w) => w.state === "open").length;
-  // One session draws one straight line: the lanes only say something with several.
+  // One task draws one straight line: the lanes only say something with several.
   const lanes = data.lanes.length > 1;
+  const cols = columnsOf(data.lanes);
   const time = (t) => new Date(t).toLocaleString();
+  const sessionTitle = new Map(data.sessions.map((s) => [s.session, s.title]));
+  // Each lane's task, as in Waiting on you: the key opens its issue or Jira page (else its TODO.md), then the TODO.md's title.
+  const cache = new Map();
+  const taskCell = data.lanes.map((l, k) => {
+    const color = `style="color:${COLORS[k % COLORS.length]}"`;
+    if (!l.task) return `<span class="none" ${color} title="No todos/ file, branch or key names its task">No task</span>`;
+    const place = placeOf(root, { session: "", text: "", task: l.task }, new Map(), cache);
+    const target = place.url ? `data-url="${esc(place.url)}"` : place.todo ? `data-todo="${esc(place.todo)}" data-line="0"` : "";
+    const key = target
+      ? `<a href="#" class="task key" ${target} title="${esc(place.url ?? `Open ${place.todo}`)}">${esc(l.task)}</a>`
+      : `<span class="task key">${esc(l.task)}</span>`;
+    return `${key}<span ${color}>${esc(l.title ?? "")}</span>`;
+  });
   const body = data.rows.length
     ? data.rows
         .map(
-          (r, i) => `<tr${r.gone ? ' class="gone"' : ""} data-file="${esc(r.file)}" data-n="${r.n}" data-i="${i}" data-q="${esc([r.file, r.intent, r.summary, r.prompt, data.lanes[r.lane]?.title].join(" "))}"
+          (r, i) => `<tr${r.gone ? ' class="gone"' : ""} data-file="${esc(r.file)}" data-n="${r.n}" data-i="${i}" data-q="${esc([r.file, r.intent, r.summary, r.prompt, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}"
   data-vscode-context="${menu({ webviewSection: r.accepted || r.gone ? "edit-ok" : "edit-open", file: r.file, n: r.n })}"${r.preview ? "" : ` title="${esc(r.prompt ? `Request: ${r.prompt}` : "")}"`}>
   <td class="ok">${r.gone ? `<span class="badge-gone" title="Later edits rewrote or removed all of it: nothing left to accept">replaced</span>` : r.accepted ? `<span class="badge-ok" title="Accepted">✓</span>` : `<span class="badge-open" title="Under review — Accept, or right-click">●</span><button class="acc" title="Accept this edit">Accept</button>`}</td>
-  ${lanes ? `<td class="g">${laneSvg(i, r, data.lanes)}</td>` : ""}
+  ${lanes ? `<td class="g">${laneSvg(i, r, data.lanes, cols)}</td>` : ""}
   <td class="d" title="${esc([r.intent ?? r.summary, r.prompt && `Request: ${r.prompt}`].filter(Boolean).join("\n\n"))}">${esc(r.intent ?? r.summary)}</td>
+  <td class="tk" title="${esc([r.task, data.lanes[r.lane]?.title].filter(Boolean).join(" · ") || "No task")}">${taskCell[r.lane]}</td>
   <td class="f">${esc(r.file)} <span class="n">#${r.n}</span></td>
   <td class="t">${esc(time(r.t))}</td>
-  <td class="s" style="color:${COLORS[r.lane % COLORS.length]}" title="${esc(r.session ?? "")}">${esc(data.lanes[r.lane]?.title ?? (r.session ?? "?").slice(0, 8))}</td>
+  <td class="s" title="${esc(r.session ?? "")}">${esc(sessionTitle.get(r.session ?? "?") ?? r.title ?? (r.session ?? "?").slice(0, 8))}</td>
   <td class="c"><span class="a">+${r.added}</span> <span class="r">−${r.removed}</span></td>
 </tr>`,
         )
         .join("\n")
-    : `<tr><td colspan="7" class="empty">No agent edits recorded in ${esc(root)} yet.</td></tr>`;
+    : `<tr><td colspan="8" class="empty">No agent edits recorded in ${esc(root)} yet.</td></tr>`;
   const pending = data.rows.filter((r) => !r.accepted).length;
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
@@ -150,6 +182,7 @@ function html(data, root, nonce, waiting = []) {
   th { text-align: left; font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--vscode-panel-border); }
   td { padding: 0 8px; height: ${ROW}px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 520px; }
   td.ok { width: 64px; min-width: 64px; text-align: center; }
+  tr.w td.ok:has(input[data-tick]) { cursor: pointer; } td.ok input[data-tick] { width: 16px; height: 16px; margin: 0; cursor: pointer; vertical-align: middle; }
   .badge-ok { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
     background: var(--vscode-testing-iconPassed, #73c991); color: var(--vscode-editor-background); }
   .badge-gone { font-size: 10px; padding: 0 5px; border-radius: 8px; border: 1px solid var(--vscode-disabledForeground, #888); color: var(--vscode-disabledForeground, #888); }
@@ -177,6 +210,7 @@ function html(data, root, nonce, waiting = []) {
   .badge { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); border-radius: 8px; padding: 0 6px; font-size: 90%; }
   section[hidden] { display: none; }
   tr.w { cursor: pointer; } tr.w.done { opacity: .6; }
+  td.tk { max-width: 260px; } td.tk .none { opacity: .7; font-style: italic; } td.s { opacity: .8; }
   td.k { width: 1px; text-align: center; } td.p { opacity: .75; max-width: 320px; } td.s { max-width: 200px; }
   .more { font-size: 11px; opacity: .7; padding: 0 5px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
   .pill { font-size: 11px; padding: 1px 7px; border-radius: 9px; border: 1px solid var(--vscode-panel-border); }
@@ -198,16 +232,20 @@ function html(data, root, nonce, waiting = []) {
 <header><strong>Agent Change Graph</strong>
 <nav><button data-tab="edits">Edits ${pending ? `<span class="badge">${pending}</span>` : ""}</button><button data-tab="waiting">Waiting on you ${open ? `<span class="badge">${open}</span>` : ""}</button></nav>
 <input id="filter" placeholder="Filter by file, request or answer"><label id="ans" hidden><input type="checkbox" id="answered"> open only</label><button id="audit" class="acc on" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">Audit</button><button id="scan" class="acc on" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">Scan history</button>
-<span class="n" id="count-edits">${data.rows.length} edits · ${pending} under review · ${data.lanes.length} sessions</span><span class="n" id="count-waiting">${open} open · ${waiting.length} steps</span></header>
-<section id="edits"><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
-<tbody>${body}</tbody></table></section>
+<span class="n" id="count-edits">${data.rows.length} edits · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span><span class="n" id="count-waiting">${open} open · ${waiting.length} steps</span></header>
+<section id="edits"><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
+<tbody>${body}</tbody></table>
+<script type="application/json" id="rows">${JSON.stringify(data.rows.map((r) => (r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview } : null))).replace(/</g, "\\u003c")}</script></section>
 <section id="waiting"><div class="legend"><span>☐ open: tick when done</span><span><span class="badge-ok">✓</span> done</span><span><span class="badge-gone">replaced</span> asked again later</span><span><span class="pill">Answered</span> question you answered</span></div>
 <table><thead><tr><th>Status</th><th></th><th>Waiting for</th><th>Request</th><th>Date</th><th>Session</th><th>By</th></tr></thead>
-<tbody>${waitingBody(waiting, data.lanes, root)}</tbody></table><p class="empty" id="none" hidden>Nothing open right now.</p></section>
+<tbody>${waitingBody(waiting, data.sessions, root)}</tbody></table><p class="empty" id="none" hidden>Nothing open right now.</p></section>
 <div id="pop"></div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
-  const rows = ${JSON.stringify(data.rows.map((r) => (r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview } : null))).replace(/</g, "\\u003c")};
+  // The page is updated in place (a "render" message), not reloaded: a reload
+  // on every agent edit swallowed clicks made while it ran. So every handler
+  // is on the document, and the rows below are re-read after each update.
+  let rows = JSON.parse(document.getElementById("rows").textContent);
   // Hover diff: stays while the pointer is on the row or the popup itself.
   const pop = document.getElementById("pop");
   let hideTimer;
@@ -217,29 +255,28 @@ function html(data, root, nonce, waiting = []) {
   pop.addEventListener("mouseleave", hideSoon);
   const line = (cls, text) => { const d = document.createElement("div"); d.className = cls; d.textContent = text; return d; };
   // Only the status cell opens it: the rest of the row stays free to click and read.
-  document.querySelectorAll("tr[data-i]").forEach((tr) => {
+  const statusCell = (e) => e.target.closest?.("tr[data-i] > td.ok");
+  document.addEventListener("mouseover", (e) => {
+    const cell = statusCell(e);
+    if (!cell || cell.contains(e.relatedTarget)) return;
+    const tr = cell.parentElement;
     const r = rows[Number(tr.dataset.i)];
-    const cell = tr.querySelector("td.ok");
-    if (!r || !cell) return;
-    cell.addEventListener("mouseenter", () => {
-      clearTimeout(hideTimer);
-      pop.replaceChildren(...(r.prompt ? [line("p", r.prompt)] : []),
-        ...r.preview.map(([k, t]) => line(k === "-" ? "m" : k === "+" ? "a" : "", k === "…" ? "… " + t : k + " " + t)));
-      pop.scrollTop = 0;
-      pop.style.display = "block";
-      const box = tr.getBoundingClientRect();
-      const below = box.bottom + pop.offsetHeight < innerHeight;
-      pop.style.left = Math.max(4, Math.min(box.left + 40, innerWidth - pop.offsetWidth - 8)) + "px";
-      pop.style.top = (below ? box.bottom : Math.max(4, box.top - pop.offsetHeight)) + "px";
-    });
-    cell.addEventListener("mouseleave", hideSoon);
+    if (!r) return;
+    clearTimeout(hideTimer);
+    pop.replaceChildren(...(r.prompt ? [line("p", r.prompt)] : []),
+      ...r.preview.map(([k, t]) => line(k === "-" ? "m" : k === "+" ? "a" : "", k === "…" ? "… " + t : k + " " + t)));
+    pop.scrollTop = 0;
+    pop.style.display = "block";
+    const box = tr.getBoundingClientRect();
+    const below = box.bottom + pop.offsetHeight < innerHeight;
+    pop.style.left = Math.max(4, Math.min(box.left + 40, innerWidth - pop.offsetWidth - 8)) + "px";
+    pop.style.top = (below ? box.bottom : Math.max(4, box.top - pop.offsetHeight)) + "px";
   });
-  document.querySelectorAll("tr[data-file]").forEach((tr) => {
-    const msg = (type) => vscode.postMessage({ type, file: tr.dataset.file, n: Number(tr.dataset.n) });
-    tr.addEventListener("click", () => msg("open"));
-    tr.querySelector("button.acc")?.addEventListener("click", (e) => { e.stopPropagation(); hide(); msg("accept"); });
+  document.addEventListener("mouseout", (e) => {
+    const cell = statusCell(e);
+    if (cell && !cell.contains(e.relatedTarget)) hideSoon();
   });
-  // Tab, filter, the answered toggle and opened rows survive a refresh (the page is rebuilt on every agent edit).
+  // Tab, filter, the answered toggle and opened rows survive an update.
   const state = Object.assign({ tab: "edits", q: "", answered: false, expanded: [] }, vscode.getState());
   const filter = document.getElementById("filter");
   const answered = document.getElementById("answered");
@@ -263,26 +300,141 @@ function html(data, root, nonce, waiting = []) {
     });
     document.getElementById("none").hidden = !state.answered || !!state.q || document.querySelector("tr.w.s-open") !== null;
   };
-  document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => { state.tab = b.dataset.tab; apply(); }));
   filter.addEventListener("input", () => { state.q = filter.value; apply(); });
-  answered.addEventListener("change", () => { state.answered = answered.checked; apply(); });
-  document.querySelectorAll("tr.w").forEach((tr) => tr.addEventListener("click", (e) => {
-    if (e.target.closest("input, a, button, details")) return;
-    const k = tr.dataset.key;
+  document.addEventListener("click", (e) => {
+    const t = e.target;
+    const tab = t.closest("nav button");
+    if (tab) { state.tab = tab.dataset.tab; return apply(); }
+    const task = t.closest("a.task");
+    if (task) {
+      e.preventDefault();
+      if (task.dataset.url) vscode.postMessage({ type: "openUrl", url: task.dataset.url });
+      else if (task.dataset.todo) vscode.postMessage({ type: "openTodo", file: task.dataset.todo, line: Number(task.dataset.line) });
+      return;
+    }
+    const run = t.closest("#audit, #scan");
+    if (run) {
+      run.disabled = true;
+      run.textContent = run.id === "audit" ? "Auditing…" : "Scanning…";
+      return vscode.postMessage({ type: run.id });
+    }
+    const edit = t.closest("tr[data-file]");
+    if (edit) {
+      const accept = !!t.closest("button.acc");
+      if (accept) {
+        hide();
+        // Shown accepted at once, like a ticked box; the update that follows confirms it.
+        edit.querySelector("td.ok").innerHTML = '<span class="badge-ok mine" title="Accepted">✓</span>';
+        accepts.set(edit.dataset.file + "#" + edit.dataset.n, performance.now());
+      }
+      return vscode.postMessage({ type: accept ? "accept" : "open", file: edit.dataset.file, n: Number(edit.dataset.n), at: Date.now() });
+    }
+    const w = t.closest("tr.w");
+    if (!w || t.closest("input, a, button, details")) return;
+    // The whole status cell ticks: a click beside the small box is not lost to the row.
+    const box = t.closest("td.ok")?.querySelector("input[data-tick]");
+    if (box) return box.click();
+    const k = w.dataset.key;
     state.expanded = state.expanded.includes(k) ? state.expanded.filter((x) => x !== k) : [...state.expanded, k];
     apply();
-  }));
-  // Tick a step right in its row; the log keeps it, the refresh redraws it.
-  document.querySelectorAll("input[data-tick]").forEach((box) => box.addEventListener("change", () => {
-    vscode.postMessage({ type: "check", session: box.dataset.session, t: box.dataset.item, i: Number(box.dataset.i), on: box.checked });
-  }));
-  document.querySelectorAll("a.task").forEach((a) => a.addEventListener("click", (e) => {
-    e.preventDefault(); e.stopPropagation();
-    if (a.dataset.url) vscode.postMessage({ type: "openUrl", url: a.dataset.url });
-    else if (a.dataset.todo) vscode.postMessage({ type: "openTodo", file: a.dataset.todo, line: Number(a.dataset.line) });
-  }));
-  document.getElementById("audit").addEventListener("click", (e) => { e.target.disabled = true; e.target.textContent = "Auditing…"; vscode.postMessage({ type: "audit" }); });
-  document.getElementById("scan").addEventListener("click", (e) => { e.target.disabled = true; e.target.textContent = "Scanning…"; vscode.postMessage({ type: "scan" }); });
+  });
+  // A tick shows at once and stays shown: an update made before the log had it
+  // must not untick it. Each is timed, click to confirmed, for the perf log.
+  const ticks = new Map();
+  /** Accepted edits not yet drawn so by an update: "file#n" → click time. */
+  const accepts = new Map();
+  const tickKey = (b) => b.dataset.session + " " + b.dataset.item + " " + b.dataset.i;
+  document.addEventListener("change", (e) => {
+    const t = e.target;
+    if (t === answered) { state.answered = answered.checked; return apply(); }
+    // Tick a step right in its row; the log keeps it, the next update redraws it.
+    if (t.matches("input[data-tick]")) {
+      ticks.set(tickKey(t), { on: t.checked, at: performance.now() });
+      vscode.postMessage({ type: "check", session: t.dataset.session, t: t.dataset.item, i: Number(t.dataset.i), on: t.checked, at: Date.now() });
+    }
+  });
+  // An update waits while a click is under way, so it never lands between press
+  // and release; it only swaps changed rows, so it need not wait any longer. A
+  // release the page never sees (pointer let go outside it) holds it 300 ms at most.
+  let next;
+  let pressed = false;
+  let pressedAt = 0;
+  // What was drawn last, as strings: an update swaps only what differs from it.
+  const html = (el) => el.outerHTML;
+  const drawn = new Map();
+  const remember = () => {
+    for (const sel of ["nav", "#audit", "#scan", "#count-edits", "#count-waiting", "#edits thead", "#waiting thead"]) drawn.set(sel, html(document.querySelector(sel)));
+    for (const id of ["edits", "waiting"]) drawn.set(id, [...document.querySelectorAll("#" + id + " tbody > tr")].map(html));
+  };
+  remember();
+  // Rows: keep the unchanged run at the start and at the end (a new step or
+  // edit comes in at the top), swap the rest.
+  const patchRows = (id, fresh) => {
+    const body = document.querySelector("#" + id + " tbody");
+    const old = [...body.children];
+    const now = [...fresh.querySelectorAll("#" + id + " tbody > tr")];
+    const was = drawn.get(id);
+    const is = now.map(html);
+    drawn.set(id, is);
+    if (was.length !== old.length) return body.replaceChildren(...now);
+    let a = 0;
+    while (a < was.length && a < is.length && was[a] === is[a]) a++;
+    let z = 0;
+    while (z < was.length - a && z < is.length - a && was[was.length - 1 - z] === is[is.length - 1 - z]) z++;
+    const gone = old.slice(a, old.length - z);
+    const come = now.slice(a, now.length - z);
+    if (!gone.length && !come.length) return;
+    const after = old[old.length - z] ?? null;
+    gone.forEach((r) => r.remove());
+    for (const r of come) body.insertBefore(document.adoptNode(r), after);
+  };
+  const update = () => {
+    if (next === undefined || (pressed && performance.now() - pressedAt < 300)) return;
+    const t0 = performance.now();
+    const doc = new DOMParser().parseFromString(next, "text/html");
+    next = undefined;
+    const t1 = performance.now();
+    for (const sel of ["nav", "#audit", "#scan", "#count-edits", "#count-waiting", "#edits thead", "#waiting thead"]) {
+      const fresh = doc.querySelector(sel);
+      if (fresh && html(fresh) !== drawn.get(sel)) {
+        drawn.set(sel, html(fresh));
+        document.querySelector(sel)?.replaceWith(document.adoptNode(fresh));
+      }
+    }
+    patchRows("edits", doc);
+    patchRows("waiting", doc);
+    const data = doc.getElementById("rows")?.textContent;
+    if (data) { document.getElementById("rows").textContent = data; rows = JSON.parse(data); }
+    // Drawn from the log (the attribute) as ticked: confirmed. Not yet: keep the click's state.
+    const boxes = new Map([...document.querySelectorAll("input[data-tick]")].map((b) => [tickKey(b), b]));
+    for (const [k, t] of ticks) {
+      const b = boxes.get(k);
+      if (b && b.hasAttribute("checked") !== t.on) { b.checked = t.on; continue; }
+      ticks.delete(k);
+      vscode.postMessage({ type: "perf", ms: Math.round(performance.now() - t.at), parse: Math.round(t1 - t0), patch: Math.round(performance.now() - t1) });
+    }
+    for (const [k, at] of accepts) {
+      const tr = [...document.querySelectorAll("tr[data-file]")].find((r) => r.dataset.file + "#" + r.dataset.n === k);
+      // "mine": the badge the click drew, not yet one an update drew.
+      if (tr && !tr.querySelector("td.ok .badge-ok:not(.mine), td.ok .badge-gone")) {
+        tr.querySelector("td.ok").innerHTML = '<span class="badge-ok mine" title="Accepted">✓</span>';
+        continue;
+      }
+      accepts.delete(k);
+      vscode.postMessage({ type: "perf", what: "accept", ms: Math.round(performance.now() - at), parse: Math.round(t1 - t0), patch: Math.round(performance.now() - t1) });
+    }
+    hide();
+    apply();
+  };
+  addEventListener("pointerdown", () => { pressed = true; pressedAt = performance.now(); setTimeout(update, 310); }, true);
+  const release = () => { pressed = false; setTimeout(update); };
+  addEventListener("pointerup", release, true);
+  addEventListener("pointercancel", release, true);
+  addEventListener("message", (e) => {
+    if (e.data?.type !== "render") return;
+    next = e.data.html;
+    update();
+  });
   addEventListener("scroll", hide);
   apply();
 </script></body></html>`;
@@ -290,8 +442,10 @@ function html(data, root, nonce, waiting = []) {
 
 /** @type {vscode.WebviewPanel | undefined} */
 let panel;
-/** @type {(() => void) | undefined} */
+/** @type {((waitingOnly?: boolean) => void) | undefined} update the open page in place */
 let refresh;
+/** @type {(() => void) | undefined} load the page anew */
+let reload;
 /** @type {string | undefined} repo root the open panel shows */
 let shown;
 /** @type {{openDiff: (file: string, n: number) => unknown, acceptEdit: (file: string, n: number) => unknown, goTo: (file: string, n: number) => unknown} | undefined} */
@@ -308,16 +462,27 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
   if (!panel) {
     panel = vscode.window.createWebviewPanel("imprimatur.graph", "Agent Change Graph", vscode.ViewColumn.Active, { enableScripts: true });
     panel.webview.onDidReceiveMessage((m) => {
-      if (m.type === "check") return tick(m);
+      if (m.type === "check") return timed("tick", m, () => tick(m));
+      if (m.type === "perf") return perfLog(m);
       if (m.type === "audit") return auditAll();
       if (m.type === "openUrl" && /^https?:\/\//.test(m.url)) return vscode.env.openExternal(vscode.Uri.parse(m.url));
       if (m.type === "openTodo" && shown) return openTodo(shown, m.file, m.line);
       if (m.type === "scan") return scanAll();
-      return m.type === "accept" ? actions?.acceptEdit(m.file, m.n) : actions?.openDiff(m.file, m.n);
+      return m.type === "accept" ? timed("accept", m, () => actions?.acceptEdit(m.file, m.n)) : actions?.openDiff(m.file, m.n);
+    });
+    // A hidden webview is torn down and gets no messages: shown again, it reloads from the html, so make that current.
+    let hidden = false;
+    panel.onDidChangeViewState(({ webviewPanel }) => {
+      if (!webviewPanel.visible) hidden = true;
+      else if (hidden) {
+        hidden = false;
+        reload?.();
+      }
     });
     panel.onDidDispose(() => {
       panel = undefined;
       refresh = undefined;
+      reload = undefined;
       shown = undefined;
     });
   }
@@ -328,10 +493,25 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
     acceptEdit: (file, n) => acceptEdit(path.join(root, file), n),
     goTo: (file, n) => goTo(path.join(root, file), n),
   };
-  refresh = () => {
-    p.webview.html = html(graphRows(root, currentText), root, crypto.randomBytes(16).toString("hex"), waitingSteps(root));
+  // A tick changes only the waiting list: it reuses the edits, the costly half (graphRows).
+  /** @type {ReturnType<typeof graphRows> | undefined} */
+  let edits;
+  const page = (nonce = crypto.randomBytes(16).toString("hex"), waitingOnly = false) =>
+    html((edits = waitingOnly && edits ? edits : graphRows(root, currentText)), root, nonce, waitingSteps(root));
+  // An edit refreshes three times (extension.js refreshSoon): send only what changed.
+  let sent = "";
+  // Load once; after that the page updates in place (its "render" message):
+  // setting the html reloads it, and a click during a reload is lost.
+  reload = () => {
+    sent = "";
+    p.webview.html = page();
   };
-  refresh();
+  reload();
+  refresh = (waitingOnly = false) => {
+    if (!p.visible) return;
+    const next = page("", waitingOnly);
+    if (next !== sent) p.webview.postMessage({ type: "render", html: (sent = next) });
+  };
   p.reveal();
   // Set up after work began: once per project, find what already waited on the user.
   if (!scannedBefore(root)) scanAll();
@@ -346,6 +526,31 @@ function tick(m) {
   if (!shown || !/^[\w-]+$/.test(m.session ?? "")) return;
   const log = path.join(shown, WAITING_DIR, `${m.session}.jsonl`);
   fs.appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), session: m.session, kind: "check", item: m.t, i: m.i, on: !!m.on }) + "\n");
+  // Redraw now: the file watcher reports the write late (its refresh then finds nothing new).
+  refresh?.(true);
+}
+
+/**
+ * Run a click's work, logging how long its message waited for the extension
+ * host (busy with other refreshes) and how long the work took.
+ * @param {string} what @param {{at?: number}} m @param {() => unknown} work
+ */
+function timed(what, m, work) {
+  const start = Date.now();
+  const out = work();
+  appendPerf(`${what} host: waited ${m.at ? start - m.at : "?"}ms, work ${Date.now() - start}ms`);
+  return out;
+}
+
+const appendPerf = (text) => fs.appendFile(path.join(os.tmpdir(), "imprimatur-perf.log"), `${new Date().toISOString()} ${text} ${shown ?? ""}\n`, () => {});
+
+/**
+ * One tick's time from click to drawn as ticked, kept outside the repo (a
+ * write under .claude/imprimatur would itself refresh the panel).
+ * @param {{what?: string, ms: number, parse: number, patch: number}} m
+ */
+function perfLog(m) {
+  appendPerf(`${m.what === "accept" ? "accept" : "tick"} drawn: ${m.ms}ms after the click (parse ${m.parse}ms, patch ${m.patch}ms)`);
 }
 
 /** The Audit button: Haiku reviews every session's open steps (vscode/audit.js). */

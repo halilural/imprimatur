@@ -1,0 +1,20 @@
+{
+  // Trees show only titles by default; commits and todos/<N>/ refer to numbers.
+  "githubIssues.showIssueNumberInTree": true,
+  "githubPullRequests.showPullRequestNumberInTree": true,
+  // Current sprint first, open and closed as separate queries (open oldest
+  // first, closed most recently updated first), then epics, every open issue
+  // and everything closed. The first two carry the sprint milestone title and
+  // are renamed at every sprint planning (#35).
+  "githubIssues.queries": [
+    { "label": "Current Sprint · Açık", "query": "state:open repo:${owner}/${repository} milestone:\"Sprint 1 · 3–9 Eki · Waiting on you ve sprint düzeni\" sort:created-asc" },
+    { "label": "Current Sprint · Kapalı", "query": "state:closed repo:${owner}/${repository} milestone:\"Sprint 1 · 3–9 Eki · Waiting on you ve sprint düzeni\" sort:updated-desc" },
+    { "label": "Epic'ler", "query": "state:open label:epic repo:${owner}/${repository} sort:updated-desc" },
+    { "label": "Açık işler", "query": "state:open -label:epic repo:${owner}/${repository} sort:updated-desc" },
+    { "label": "Bitenler", "query": "state:closed repo:${owner}/${repository} sort:updated-desc" }
+  ],
+  // The Issues tree has no auto refresh; cron-tasks calls its refresh command
+  // every 10 minutes (once a minute used up the GitHub API limit together with
+  // Claude's gh calls, investment #17).
+  "cronTasks.tasks": [{ "at": "*/10 * * * *", "run": "issue.refresh" }]
+}
