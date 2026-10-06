@@ -314,10 +314,10 @@ function html(data, root, nonce, waiting = []) {
       vscode.postMessage({ type: "check", session: t.dataset.session, t: t.dataset.item, i: Number(t.dataset.i), on: t.checked });
     }
   });
-  // An update waits while a click is under way, so it never lands between press and release.
+  // An update waits while a click is under way, so it never lands between press
+  // and release; it only swaps changed rows, so it need not wait any longer.
   let next;
   let pressed = false;
-  let calmAt = 0;
   // What was drawn last, as strings: an update swaps only what differs from it.
   const html = (el) => el.outerHTML;
   const drawn = new Map();
@@ -348,7 +348,7 @@ function html(data, root, nonce, waiting = []) {
     for (const r of come) body.insertBefore(document.adoptNode(r), after);
   };
   const update = () => {
-    if (next === undefined || pressed || Date.now() < calmAt) return;
+    if (next === undefined || pressed) return;
     const t0 = performance.now();
     const doc = new DOMParser().parseFromString(next, "text/html");
     next = undefined;
@@ -376,7 +376,7 @@ function html(data, root, nonce, waiting = []) {
     apply();
   };
   addEventListener("pointerdown", () => { pressed = true; }, true);
-  const release = () => { pressed = false; calmAt = Date.now() + 120; setTimeout(update, 130); };
+  const release = () => { pressed = false; setTimeout(update); };
   addEventListener("pointerup", release, true);
   addEventListener("pointercancel", release, true);
   addEventListener("message", (e) => {
