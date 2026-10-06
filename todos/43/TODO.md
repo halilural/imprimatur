@@ -4,7 +4,7 @@
 
 ## Durum
 
-İncelemede — 2026-10-06 (0.30.2, PR açık)
+Bitti — 2026-10-06 (0.30.2, main'e birleşti)
 
 ## Yapılacaklar
 
@@ -16,13 +16,15 @@
 
 - DONE: (C) Oturumun kendi log'u yoksa da resolve başlıyor (LATD örneğinde 01259035'in log'u yoktu, resolve hiç çalışmamış olabilir)
 - DONE: (C) README, `ARCHITECTURE.md`, 0.30.2
-- 👉 TODO: (K) PR'ı birleştir; iş makinesinde pull + eklentiyi kur; LATD reposunda bir sonraki tur sonunda LATD-13977 maddeleri kendiliğinden kapanıyor mu bak
+- DONE: (C) main'e birleşti (2026-10-06)
+- 👉 TODO: (K) İş makinesinde pull + eklentiyi kur; LATD reposunda bir sonraki tur sonunda LATD-13977 maddeleri kendiliğinden kapanıyor mu bak
 
 ## Kararlar
 
 - DECISION: (2026-10-06) TODO kapanışı Stop'ta: yeni hook kaydı yok, iş makinesinde yalnızca pull yeter
 - DECISION: (2026-10-06) Yalnızca TODO.md'nin son değişikliğinden önce açılan maddeler kapanır: bitişten sonra sorulan şey açık kalır
 - DECISION: (2026-10-06) `imprimatur done --task` CLI kapsam dışı
+- DECISION: (2026-10-06) PR yok: iş bitince dal doğrudan main'e birleşir ve main'e dönülür (kullanıcı)
 
 ## Notlar / engeller
 
