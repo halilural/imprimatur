@@ -321,8 +321,13 @@ function html(data, root, nonce, waiting = []) {
     const edit = t.closest("tr[data-file]");
     if (edit) {
       const accept = !!t.closest("button.acc");
-      if (accept) hide();
-      return vscode.postMessage({ type: accept ? "accept" : "open", file: edit.dataset.file, n: Number(edit.dataset.n) });
+      if (accept) {
+        hide();
+        // Shown accepted at once, like a ticked box; the update that follows confirms it.
+        edit.querySelector("td.ok").innerHTML = '<span class="badge-ok mine" title="Accepted">✓</span>';
+        accepts.set(edit.dataset.file + "#" + edit.dataset.n, performance.now());
+      }
+      return vscode.postMessage({ type: accept ? "accept" : "open", file: edit.dataset.file, n: Number(edit.dataset.n), at: Date.now() });
     }
     const w = t.closest("tr.w");
     if (!w || t.closest("input, a, button, details")) return;
@@ -336,6 +341,8 @@ function html(data, root, nonce, waiting = []) {
   // A tick shows at once and stays shown: an update made before the log had it
   // must not untick it. Each is timed, click to confirmed, for the perf log.
   const ticks = new Map();
+  /** Accepted edits not yet drawn so by an update: "file#n" → click time. */
+  const accepts = new Map();
   const tickKey = (b) => b.dataset.session + " " + b.dataset.item + " " + b.dataset.i;
   document.addEventListener("change", (e) => {
     const t = e.target;
@@ -343,13 +350,15 @@ function html(data, root, nonce, waiting = []) {
     // Tick a step right in its row; the log keeps it, the next update redraws it.
     if (t.matches("input[data-tick]")) {
       ticks.set(tickKey(t), { on: t.checked, at: performance.now() });
-      vscode.postMessage({ type: "check", session: t.dataset.session, t: t.dataset.item, i: Number(t.dataset.i), on: t.checked });
+      vscode.postMessage({ type: "check", session: t.dataset.session, t: t.dataset.item, i: Number(t.dataset.i), on: t.checked, at: Date.now() });
     }
   });
   // An update waits while a click is under way, so it never lands between press
-  // and release; it only swaps changed rows, so it need not wait any longer.
+  // and release; it only swaps changed rows, so it need not wait any longer. A
+  // release the page never sees (pointer let go outside it) holds it 300 ms at most.
   let next;
   let pressed = false;
+  let pressedAt = 0;
   // What was drawn last, as strings: an update swaps only what differs from it.
   const html = (el) => el.outerHTML;
   const drawn = new Map();
@@ -380,7 +389,7 @@ function html(data, root, nonce, waiting = []) {
     for (const r of come) body.insertBefore(document.adoptNode(r), after);
   };
   const update = () => {
-    if (next === undefined || pressed) return;
+    if (next === undefined || (pressed && performance.now() - pressedAt < 300)) return;
     const t0 = performance.now();
     const doc = new DOMParser().parseFromString(next, "text/html");
     next = undefined;
@@ -404,10 +413,20 @@ function html(data, root, nonce, waiting = []) {
       ticks.delete(k);
       vscode.postMessage({ type: "perf", ms: Math.round(performance.now() - t.at), parse: Math.round(t1 - t0), patch: Math.round(performance.now() - t1) });
     }
+    for (const [k, at] of accepts) {
+      const tr = [...document.querySelectorAll("tr[data-file]")].find((r) => r.dataset.file + "#" + r.dataset.n === k);
+      // "mine": the badge the click drew, not yet one an update drew.
+      if (tr && !tr.querySelector("td.ok .badge-ok:not(.mine), td.ok .badge-gone")) {
+        tr.querySelector("td.ok").innerHTML = '<span class="badge-ok mine" title="Accepted">✓</span>';
+        continue;
+      }
+      accepts.delete(k);
+      vscode.postMessage({ type: "perf", what: "accept", ms: Math.round(performance.now() - at), parse: Math.round(t1 - t0), patch: Math.round(performance.now() - t1) });
+    }
     hide();
     apply();
   };
-  addEventListener("pointerdown", () => { pressed = true; }, true);
+  addEventListener("pointerdown", () => { pressed = true; pressedAt = performance.now(); setTimeout(update, 310); }, true);
   const release = () => { pressed = false; setTimeout(update); };
   addEventListener("pointerup", release, true);
   addEventListener("pointercancel", release, true);
@@ -443,13 +462,13 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
   if (!panel) {
     panel = vscode.window.createWebviewPanel("imprimatur.graph", "Agent Change Graph", vscode.ViewColumn.Active, { enableScripts: true });
     panel.webview.onDidReceiveMessage((m) => {
-      if (m.type === "check") return tick(m);
+      if (m.type === "check") return timed("tick", m, () => tick(m));
       if (m.type === "perf") return perfLog(m);
       if (m.type === "audit") return auditAll();
       if (m.type === "openUrl" && /^https?:\/\//.test(m.url)) return vscode.env.openExternal(vscode.Uri.parse(m.url));
       if (m.type === "openTodo" && shown) return openTodo(shown, m.file, m.line);
       if (m.type === "scan") return scanAll();
-      return m.type === "accept" ? actions?.acceptEdit(m.file, m.n) : actions?.openDiff(m.file, m.n);
+      return m.type === "accept" ? timed("accept", m, () => actions?.acceptEdit(m.file, m.n)) : actions?.openDiff(m.file, m.n);
     });
     // A hidden webview is torn down and gets no messages: shown again, it reloads from the html, so make that current.
     let hidden = false;
@@ -512,13 +531,26 @@ function tick(m) {
 }
 
 /**
+ * Run a click's work, logging how long its message waited for the extension
+ * host (busy with other refreshes) and how long the work took.
+ * @param {string} what @param {{at?: number}} m @param {() => unknown} work
+ */
+function timed(what, m, work) {
+  const start = Date.now();
+  const out = work();
+  appendPerf(`${what} host: waited ${m.at ? start - m.at : "?"}ms, work ${Date.now() - start}ms`);
+  return out;
+}
+
+const appendPerf = (text) => fs.appendFile(path.join(os.tmpdir(), "imprimatur-perf.log"), `${new Date().toISOString()} ${text} ${shown ?? ""}\n`, () => {});
+
+/**
  * One tick's time from click to drawn as ticked, kept outside the repo (a
  * write under .claude/imprimatur would itself refresh the panel).
- * @param {{ms: number, parse: number, patch: number}} m
+ * @param {{what?: string, ms: number, parse: number, patch: number}} m
  */
 function perfLog(m) {
-  const line = `${new Date().toISOString()} tick ${m.ms}ms (parse ${m.parse}ms, patch ${m.patch}ms) ${shown ?? ""}\n`;
-  fs.appendFile(path.join(os.tmpdir(), "imprimatur-perf.log"), line, () => {});
+  appendPerf(`${m.what === "accept" ? "accept" : "tick"} drawn: ${m.ms}ms after the click (parse ${m.parse}ms, patch ${m.patch}ms)`);
 }
 
 /** The Audit button: Haiku reviews every session's open steps (vscode/audit.js). */
