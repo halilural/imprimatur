@@ -12,7 +12,7 @@ Yapıldı (0.29.3, bu makineye kuruldu), kullanıcının denemesi bekleniyor —
 - DONE: (C) Panel bir kez yüklenir, sonra yerinde güncellenir; tık sürerken güncelleme bekler; durum hücresinin tamamı tikler
 - DONE: (C) npm test 103/103; jsdom ile tık + güncelleme senaryoları hatasız
 - 👉 TODO: (K) Reload Window, ajan çalışırken Waiting on you'da birkaç kutuyu tikle: her tık tek seferde tutuyor mu
-- TODO: (K) Mac makinede de aynı deneme (kurulum: pull + `npm run setup`)
+- TODO: (K) İş makinesinde de aynı deneme (kurulum: pull + `npm run setup`)
 
 ## Sorular (kullanıcıya)
 
