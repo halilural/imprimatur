@@ -155,15 +155,15 @@ function html(data, root, nonce, waiting = []) {
   const body = data.rows.length
     ? data.rows
         .map(
-          (r, i) => `<tr${r.gone ? ' class="gone"' : ""} data-file="${esc(r.file)}" data-n="${r.n}" data-i="${i}" data-q="${esc([r.file, r.intent, r.summary, r.prompt, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}"
+          (r, i) => `<tr${r.gone || r.outside ? ` class="${[r.gone && "gone", r.outside && "outside"].filter(Boolean).join(" ")}"` : ""} data-file="${esc(r.file)}" data-n="${r.n}" data-i="${i}" data-q="${esc([r.file, r.intent, r.summary, r.prompt, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}"
   data-vscode-context="${menu({ webviewSection: r.accepted || r.gone ? "edit-ok" : "edit-open", file: r.file, n: r.n })}"${r.preview ? "" : ` title="${esc(r.prompt ? `Request: ${r.prompt}` : "")}"`}>
   <td class="ok">${r.gone ? `<span class="badge-gone" title="Later edits rewrote or removed all of it: nothing left to accept">replaced</span>` : r.accepted ? `<span class="badge-ok" title="Accepted">✓</span>` : `<span class="badge-open" title="Under review — Accept, or right-click">●</span><button class="acc" title="Accept this edit">Accept</button>`}</td>
   ${lanes ? `<td class="g">${laneSvg(i, r, data.lanes, cols)}</td>` : ""}
   <td class="d" title="${esc([r.intent ?? r.summary, r.prompt && `Request: ${r.prompt}`].filter(Boolean).join("\n\n"))}">${esc(r.intent ?? r.summary)}</td>
   <td class="tk" title="${esc([r.task, data.lanes[r.lane]?.title].filter(Boolean).join(" · ") || "No task")}">${taskCell[r.lane]}</td>
-  <td class="f">${esc(r.file)} <span class="n">#${r.n}</span></td>
+  <td class="f">${esc(r.file)} <span class="n">${r.outside ? `after #${Math.floor(r.n)}` : `#${r.n}`}</span></td>
   <td class="t">${esc(time(r.t))}</td>
-  <td class="s" title="${esc(r.session ?? "")}">${esc(sessionTitle.get(r.session ?? "?") ?? r.title ?? (r.session ?? "?").slice(0, 8))}</td>
+  <td class="s" title="${esc(r.session ?? "")}">${r.outside ? "outside" : esc(sessionTitle.get(r.session ?? "?") ?? r.title ?? (r.session ?? "?").slice(0, 8))}</td>
   <td class="c"><span class="a">+${r.added}</span> <span class="r">−${r.removed}</span></td>
 </tr>`,
         )
@@ -187,6 +187,7 @@ function html(data, root, nonce, waiting = []) {
     background: var(--vscode-testing-iconPassed, #73c991); color: var(--vscode-editor-background); }
   .badge-gone { font-size: 10px; padding: 0 5px; border-radius: 8px; border: 1px solid var(--vscode-disabledForeground, #888); color: var(--vscode-disabledForeground, #888); }
   tr.gone td.d, tr.gone td.f { opacity: .55; }
+  tr.outside td.d, tr.outside td.s { font-style: italic; opacity: .75; }
   .legend { display: flex; gap: 14px; align-items: center; opacity: .8; font-size: 12px; padding: 0 0 6px; }
   .badge-open { color: var(--vscode-editorWarning-foreground, #cca700); font-size: 14px; }
   button.acc { display: none; font: inherit; font-size: 11px; padding: 1px 8px; border-radius: 2px; cursor: pointer; border: none;
