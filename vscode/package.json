@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.30.5",
+  "version": "0.30.6",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": { "color": "#fff1e3", "theme": "light" },
@@ -33,6 +33,8 @@
     "tasks.js",
     "agent-setup.js",
     "setupView.js",
+    "calls.js",
+    "todo-done.js",
     "media/imprimatur.svg",
     "media/icon.png"
   ],
