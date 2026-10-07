@@ -10,7 +10,7 @@
 "use strict";
 const fs = require("node:fs");
 
-/** @type {Map<string, {offset: number, texts: Map<string, string>, byTool: Map<string, string>, calls: Map<string, [number, number]>, failed: Set<string>, done: Set<string>, branch: Map<string, string>}>} */
+/** @type {Map<string, {offset: number, texts: Map<string, string>, byTool: Map<string, string>, calls: Map<string, [number, number]>, failed: Set<string>, done: Set<string>, branch: Map<string, string>, uses: Array<{id: string, name: string, at: number, file?: string, command?: string, cwd?: string, said?: string}>, title?: string}>} */
 const cache = new Map();
 
 /**
@@ -32,7 +32,7 @@ function sentence(text) {
 function update(transcript) {
   let c = cache.get(transcript);
   const size = fs.statSync(transcript).size;
-  if (!c || size < c.offset) cache.set(transcript, (c = { offset: 0, texts: new Map(), byTool: new Map(), calls: new Map(), failed: new Set(), done: new Set(), branch: new Map() }));
+  if (!c || size < c.offset) cache.set(transcript, (c = { offset: 0, texts: new Map(), byTool: new Map(), calls: new Map(), failed: new Set(), done: new Set(), branch: new Map(), uses: [] }));
   if (size === c.offset) return c;
   const buf = Buffer.alloc(size - c.offset);
   const fd = fs.openSync(transcript, "r");
@@ -56,11 +56,16 @@ function update(transcript) {
     // Calls with a result (finished): their ids, without parsing big tool outputs.
     if (line.includes('"tool_result"')) for (const m of line.matchAll(/"tool_use_id":"([^"]+)"/g)) c.done.add(m[1]);
     const failure = line.includes('"is_error":true');
-    if (!line.includes('"assistant"') && !failure) continue;
+    const titled = line.includes('"ai-title"');
+    if (!line.includes('"assistant"') && !failure && !titled) continue;
     let r;
     try {
       r = JSON.parse(line);
     } catch {
+      continue;
+    }
+    if (r.type === "ai-title" && typeof r.aiTitle === "string") {
+      c.title = r.aiTitle.trim().split("\n")[0].slice(0, 80);
       continue;
     }
     if (r.type === "user" && Array.isArray(r.message?.content)) {
@@ -73,6 +78,10 @@ function update(transcript) {
       if (b.type === "text" && b.text?.trim()) c.texts.set(id, sentence(b.text));
       if (b.type === "tool_use" && b.id) c.byTool.set(b.id, id);
       if (b.type === "tool_use" && b.id && typeof r.gitBranch === "string" && r.gitBranch) c.branch.set(b.id, r.gitBranch);
+      // Edits' calls with their time and target: older history rows are matched to them (calls.js).
+      if (b.type === "tool_use" && b.id && ["Edit", "Write", "Bash"].includes(b.name))
+        c.uses.push({ id: b.id, name: b.name, at: Date.parse(r.timestamp), file: b.input?.file_path, command: typeof b.input?.command === "string" ? b.input.command.slice(0, 4000) : undefined, cwd: r.cwd,
+          said: typeof b.input?.description === "string" ? b.input.description.trim().split("\n")[0].slice(0, 120) : undefined });
       if (b.type === "tool_use" && b.id && (b.name === "Edit" || b.name === "Write")) c.calls.set(b.id, [base + from, stop - from]);
     }
   }
@@ -125,7 +134,7 @@ function toolCallOf(transcript, toolUseId) {
  * What the transcript knows of a call: whether it finished (has a result),
  * the branch it was made on, and for Edit / Write what it asked for.
  * @param {string | undefined} transcript @param {string | undefined} toolUseId
- * @returns {{done: boolean, branch?: string, name?: string, input?: any, failed: boolean} | undefined}
+ * @returns {{done: boolean, branch?: string, name?: string, input?: any, failed: boolean, said?: string} | undefined}
  */
 function callInfo(transcript, toolUseId) {
   if (!transcript || !toolUseId) return undefined;
@@ -133,10 +142,35 @@ function callInfo(transcript, toolUseId) {
     const c = update(transcript);
     if (!c.byTool.has(toolUseId)) return undefined;
     const call = toolCallOf(transcript, toolUseId);
-    return { done: c.done.has(toolUseId), branch: c.branch.get(toolUseId), failed: c.failed.has(toolUseId), ...(call && { name: call.name, input: call.input }) };
+    const said = c.uses.find((u) => u.id === toolUseId)?.said;
+    return { done: c.done.has(toolUseId), branch: c.branch.get(toolUseId), failed: c.failed.has(toolUseId), ...(said && { said }), ...(call && { name: call.name, input: call.input }) };
   } catch {
     return undefined;
   }
 }
 
-module.exports = { narrationOf, toolCallOf, callInfo };
+/**
+ * The transcript's Edit, Write and Bash calls, oldest first: id, time, the
+ * file an Edit / Write names, a Bash command (cut at 4000 characters), the cwd.
+ * @param {string | undefined} transcript
+ */
+function usesOf(transcript) {
+  if (!transcript) return [];
+  try {
+    return update(transcript).uses;
+  } catch {
+    return [];
+  }
+}
+
+/** The session's title Claude gave it (its latest). @param {string | undefined} transcript */
+function titleOf(transcript) {
+  if (!transcript) return undefined;
+  try {
+    return update(transcript).title;
+  } catch {
+    return undefined;
+  }
+}
+
+module.exports = { narrationOf, toolCallOf, callInfo, usesOf, titleOf };
