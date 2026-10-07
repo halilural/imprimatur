@@ -81,7 +81,8 @@ edits right in your editor and keeps a list of what it asked you.
   A green ✓ marks edits with nothing left under review, an amber dot the rest:
   hover it for an Accept button (or right-click the row: Accept this edit, Go to change, Open
   diff); hover the status cell to see its change (the popup stays while you move into
-  it, and scrolls). The status bar's **Agent Graph** button opens it and shows
+  it, and scrolls). A Markdown edit shows rendered, as the preview's review: its added
+  and changed blocks marked, old text in red boxes, one block of context around each. The status bar's **Agent Graph** button opens it and shows
   how many asks wait on you.
 - **Imprimatur side bar** (its own icon in the activity bar): a row that opens
   the Agent Change Graph (with edits under review and asks waiting on you),

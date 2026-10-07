@@ -197,4 +197,37 @@ function markdownBlocks(md, text) {
     .map((t) => ({ start: t.map[0], end: t.map[1] }));
 }
 
-module.exports = { planBlocks, markdownItPlugin, annotate, markdownBlocks };
+/**
+ * One edit as the preview shows a review: `after` rendered, the blocks it added
+ * or changed marked, its old text in red boxes (the same marks as the preview,
+ * no Accept buttons). undefined when the edit marks nothing (changes inside
+ * code blocks only). For the graph's hover (#50).
+ * @param {any} md the preview's markdown-it @param {string} before @param {string} after
+ */
+function reviewHtml(md, before, after) {
+  const { review } = require("./diff.js");
+  const hunks = review(before, undefined, after);
+  if (!hunks.length) return undefined;
+  // imprimaturInline: our plugin's render wrapper leaves this render alone.
+  const env = { imprimaturInline: true };
+  const marked = annotate(md.parse(after, env), hunks, { fmt: (line) => md.renderInline(line, env), base: before });
+  return md.renderer.render(marked, md.options, env);
+}
+
+/**
+ * A stylesheet's rules, each selector put under `scope` (the preview's marks
+ * inside the graph's hover). @param {string} css @param {string} scope
+ */
+function scopeCss(css, scope) {
+  return css
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("}")
+    .filter((r) => r.includes("{"))
+    .map((r) => {
+      const [sel, body] = r.split("{");
+      return `${sel.split(",").map((x) => `${scope} ${x.trim()}`).join(", ")} {${body}}`;
+    })
+    .join("\n");
+}
+
+module.exports = { planBlocks, markdownItPlugin, annotate, markdownBlocks, reviewHtml, scopeCss };

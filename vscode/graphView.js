@@ -15,6 +15,17 @@ const { audit } = require("./audit.js");
 const { scanHistory, scannedBefore } = require("./history.js");
 const { sessionTodos, placeOf } = require("./tasks.js");
 const { closeDoneTasks } = require("./todo-done.js");
+const { scopeCss } = require("./preview.js");
+
+/** The preview's marks (preview.css), for the hover's rendered review (#50); read once. */
+let reviewCss;
+const reviewStyle = () => (reviewCss ??= (() => {
+  try {
+    return scopeCss(fs.readFileSync(path.join(__dirname, "preview.css"), "utf8"), "#pop .review");
+  } catch {
+    return "";
+  }
+})());
 
 const KINDS = { question: ["❓", "Question"], command: ["⚙", "Command"], verify: ["👀", "Verify / test"], input: ["✋", "Input"] };
 
@@ -172,7 +183,7 @@ function html(data, root, nonce, waiting = []) {
     : `<tr><td colspan="8" class="empty">No agent edits recorded in ${esc(root)} yet.</td></tr>`;
   const pending = data.rows.filter((r) => !r.accepted).length;
   return `<!doctype html><html><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; form-action 'none'; base-uri 'none';">
 <style>
   body { font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); padding: 0 12px; }
   header { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 0; }
@@ -207,6 +218,17 @@ function html(data, root, nonce, waiting = []) {
   #pop div { white-space: pre-wrap; word-break: break-word; padding: 0 8px; } #pop .p { font-family: var(--vscode-font-family); opacity: .8; padding-bottom: 4px; }
   #pop .m { background: var(--vscode-diffEditor-removedLineBackground, rgba(255,0,0,.2)); }
   #pop .a { background: var(--vscode-diffEditor-insertedLineBackground, rgba(0,255,0,.15)); color: inherit; }
+  /* Rendered review (#50): Markdown as the preview shows it, with its marks. */
+  #pop .review { white-space: normal; font-family: var(--vscode-markdown-font-family, var(--vscode-font-family)); font-size: 13px; line-height: 1.5; padding: 2px 14px; }
+  #pop .review div { white-space: normal; padding: 0; }
+  #pop .review pre, #pop .review code { white-space: pre-wrap; font-family: var(--vscode-editor-font-family); }
+  #pop .review pre { padding: 6px 8px; background: var(--vscode-textCodeBlock-background, rgba(127,127,127,.12)); }
+  #pop .review table { border-collapse: collapse; } #pop .review th, #pop .review td { border: 1px solid var(--vscode-panel-border, #8884); padding: 2px 6px; }
+  #pop .review h1, #pop .review h2, #pop .review h3, #pop .review h4 { margin: .5em 0 .3em; }
+  #pop .review p, #pop .review ul, #pop .review ol { margin: .35em 0; }
+  #pop .review .gap { text-align: center; opacity: .5; padding: 0; }
+  #pop .review .imprimatur-old { padding: 4px 9px; }
+  ${reviewStyle()}
   nav { display: flex; gap: 4px; } nav button { background: none; color: var(--vscode-foreground); border: none; border-bottom: 2px solid transparent; padding: 4px 8px; cursor: pointer; opacity: .75; font: inherit; }
   nav button.on { border-bottom-color: var(--vscode-focusBorder); opacity: 1; font-weight: 600; }
   .badge { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); border-radius: 8px; padding: 0 6px; font-size: 90%; }
@@ -237,7 +259,7 @@ function html(data, root, nonce, waiting = []) {
 <span class="n" id="count-edits">${data.rows.length} edits · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span><span class="n" id="count-waiting">${open} open · ${waiting.length} steps</span></header>
 <section id="edits"><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
 <tbody>${body}</tbody></table>
-<script type="application/json" id="rows">${JSON.stringify(data.rows.map((r) => (r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview } : null))).replace(/</g, "\\u003c")}</script></section>
+<script type="application/json" id="rows">${JSON.stringify(data.rows.map((r) => (r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview, file: r.file, n: r.n, md: /\.mdx?$/i.test(r.file) } : null))).replace(/</g, "\\u003c")}</script></section>
 <section id="waiting"><div class="legend"><span>☐ open: tick when done</span><span><span class="badge-ok">✓</span> done</span><span><span class="badge-gone">replaced</span> asked again later</span><span><span class="pill">Answered</span> question you answered</span></div>
 <table><thead><tr><th>Status</th><th></th><th>Waiting for</th><th>Request</th><th>Date</th><th>Session</th><th>By</th></tr></thead>
 <tbody>${waitingBody(waiting, data.sessions, root)}</tbody></table><p class="empty" id="none" hidden>Nothing open right now.</p></section>
@@ -267,16 +289,23 @@ function html(data, root, nonce, waiting = []) {
     clearTimeout(hideTimer);
     pop.replaceChildren(...(r.prompt ? [line("p", r.prompt)] : []),
       ...r.preview.map(([k, t]) => line(k === "-" ? "m" : k === "+" ? "a" : "", k === "…" ? "… " + t : k + " " + t)));
+    // The line diff stays until the rendered review comes (or if there is none).
+    pop.dataset.key = r.file + "#" + r.n;
+    hoveredRow = tr;
     pop.scrollTop = 0;
     pop.style.display = "block";
-    const box = tr.getBoundingClientRect();
-    const below = box.bottom + pop.offsetHeight < innerHeight;
-    pop.style.left = Math.max(4, Math.min(box.left + 40, innerWidth - pop.offsetWidth - 8)) + "px";
-    pop.style.top = (below ? box.bottom : Math.max(4, box.top - pop.offsetHeight)) + "px";
+    place(tr);
+    // Markdown: the rendered review, from the cache or asked for once the pointer rests.
+    clearTimeout(askTimer);
+    if (r.md && reviews.has(pop.dataset.key)) showReview({ file: r.file, n: r.n, html: reviews.get(pop.dataset.key) });
+    else if (r.md) askTimer = setTimeout(() => vscode.postMessage({ type: "preview", file: r.file, n: r.n }), 150);
   });
   document.addEventListener("mouseout", (e) => {
     const cell = statusCell(e);
-    if (cell && !cell.contains(e.relatedTarget)) hideSoon();
+    if (cell && !cell.contains(e.relatedTarget)) {
+      clearTimeout(askTimer);
+      hideSoon();
+    }
   });
   // Tab, filter, the answered toggle and opened rows survive an update.
   const state = Object.assign({ tab: "edits", q: "", answered: false, expanded: [] }, vscode.getState());
@@ -432,8 +461,57 @@ function html(data, root, nonce, waiting = []) {
   const release = () => { pressed = false; setTimeout(update); };
   addEventListener("pointerup", release, true);
   addEventListener("pointercancel", release, true);
+  // The rendered review, cut to the marked blocks with one block around each.
+  const MARK = ".imprimatur-added, .imprimatur-changed, .imprimatur-old, .imprimatur-diagram";
+  const marked = (el) => el.matches?.(MARK) || !!el.querySelector?.(MARK);
+  const cut = (box) => {
+    const kids = [...box.children];
+    const keep = new Set();
+    kids.forEach((el, i) => { if (marked(el)) for (const j of [i - 1, i, i + 1]) if (kids[j]) keep.add(j); });
+    let last = -1;
+    kids.forEach((el, i) => {
+      if (!keep.has(i)) return el.remove();
+      if (last >= 0 && i > last + 1) { const g = document.createElement("div"); g.className = "gap"; g.textContent = "⋯"; box.insertBefore(g, el); }
+      last = i;
+      // A long list: the same cut over its items.
+      if ((el.tagName === "UL" || el.tagName === "OL") && el.children.length > 3 && marked(el)) cut(el);
+    });
+  };
+  /** Rendered reviews by file#n, until the page updates. */
+  const reviews = new Map();
+  let askTimer;
+  let hoveredRow;
+  // Next to the row, below it when it fits, else above; again when the content changes size.
+  const place = (tr) => {
+    const box = tr.getBoundingClientRect();
+    const below = box.bottom + pop.offsetHeight < innerHeight;
+    pop.style.left = Math.max(4, Math.min(box.left + 40, innerWidth - pop.offsetWidth - 8)) + "px";
+    pop.style.top = (below ? box.bottom : Math.max(4, box.top - pop.offsetHeight)) + "px";
+  };
+  const showReview = (m) => {
+    reviews.set(m.file + "#" + m.n, m.html);
+    if (!m.html || pop.style.display !== "block" || pop.dataset.key !== m.file + "#" + m.n) return;
+    // The agent's Markdown may hold raw HTML: parsed inert, then only safe parts kept
+    // (the CSP already stops scripts; this also stops styles and forms reaching the page).
+    const doc = new DOMParser().parseFromString(m.html, "text/html");
+    doc.querySelectorAll("script, style, link, meta, base, iframe, frame, object, embed, form, input, button, textarea, select, svg, math, template").forEach((el) => el.remove());
+    for (const el of doc.body.querySelectorAll("*"))
+      for (const a of [...el.attributes])
+        if (/^on/i.test(a.name) || a.name === "style" || ((a.name === "href" || a.name === "src") && !/^(https?:|#)/i.test(a.value.trim()))) el.removeAttribute(a.name);
+    const box = document.createElement("div");
+    box.className = "review";
+    box.replaceChildren(...doc.body.childNodes);
+    cut(box);
+    if (!box.querySelector(MARK)) return;
+    const prompt = pop.querySelector(".p");
+    pop.replaceChildren(...(prompt ? [prompt] : []), box);
+    pop.scrollTop = 0;
+    if (hoveredRow?.isConnected) place(hoveredRow);
+  };
   addEventListener("message", (e) => {
+    if (e.data?.type === "preview") return showReview(e.data);
     if (e.data?.type !== "render") return;
+    reviews.clear(); // edits changed: their rendered reviews may have too
     next = e.data.html;
     update();
   });
@@ -459,8 +537,9 @@ let actions;
  * @param {(file: string) => string | undefined} currentText
  * @param {(file: string, n: number) => unknown} acceptEdit
  * @param {(file: string, n: number) => unknown} goTo
+ * @param {(file: string, n: number) => string | undefined} [renderEdit] an edit as a rendered Markdown review (#50)
  */
-function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
+function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = () => undefined) {
   if (!panel) {
     panel = vscode.window.createWebviewPanel("imprimatur.graph", "Agent Change Graph", vscode.ViewColumn.Active, { enableScripts: true });
     panel.webview.onDidReceiveMessage((m) => {
@@ -470,6 +549,15 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
       if (m.type === "openUrl" && /^https?:\/\//.test(m.url)) return vscode.env.openExternal(vscode.Uri.parse(m.url));
       if (m.type === "openTodo" && shown) return openTodo(shown, m.file, m.line);
       if (m.type === "scan") return scanAll();
+      if (m.type === "preview" && shown) {
+        let html;
+        try {
+          html = renderEdit(path.join(shown, m.file), m.n);
+        } catch {
+          // the line diff stays
+        }
+        return void panel?.webview.postMessage({ type: "preview", file: m.file, n: m.n, html });
+      }
       return m.type === "accept" ? timed("accept", m, () => actions?.acceptEdit(m.file, m.n)) : actions?.openDiff(m.file, m.n);
     });
     // A hidden webview is torn down and gets no messages: shown again, it reloads from the html, so make that current.
