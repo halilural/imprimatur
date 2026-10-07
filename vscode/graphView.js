@@ -14,6 +14,7 @@ const { WAITING_DIR, waitingSteps, openSteps } = require("./waiting.js");
 const { audit } = require("./audit.js");
 const { scanHistory, scannedBefore } = require("./history.js");
 const { sessionTodos, placeOf } = require("./tasks.js");
+const { closeDoneTasks } = require("./todo-done.js");
 
 const KINDS = { question: ["❓", "Question"], command: ["⚙", "Command"], verify: ["👀", "Verify / test"], input: ["✋", "Input"] };
 
@@ -494,6 +495,12 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo) {
     acceptEdit: (file, n) => acceptEdit(path.join(root, file), n),
     goTo: (file, n) => goTo(path.join(root, file), n),
   };
+  // Tasks whose TODO.md says done close their asks now, not only at the next turn end in this repo.
+  try {
+    closeDoneTasks(root);
+  } catch {
+    // a waiting log being written: the next turn end closes them
+  }
   // A tick changes only the waiting list: it reuses the edits, the costly half (graphRows).
   /** @type {ReturnType<typeof graphRows> | undefined} */
   let edits;

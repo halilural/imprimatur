@@ -16,7 +16,7 @@ const { registerSetupView } = require("./setupView.js");
 /** @type {ReturnType<typeof registerSetupView> | undefined} */
 let setupView;
 const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, historyEdits } = require("./review-state.js");
-const { toolCallOf } = require("./narration.js");
+const { toolCallIn } = require("./calls.js");
 
 const color = (id) => new vscode.ThemeColor(id);
 const ruler = { overviewRulerLane: vscode.OverviewRulerLane.Left };
@@ -104,7 +104,10 @@ function hunksOf(file, text) {
  * One file's agent edits as the graph shows them: what each Edit / Write call
  * wrote, other changes as outside edits (review-state.js). @param {string} file @param {string} text
  */
-const editsOf = (file, text) => historyEdits(logOf(file) ?? "", text, { toolCall: toolCallOf });
+const editsOf = (file, text) => {
+  const root = rootOf(file);
+  return historyEdits(logOf(file) ?? "", text, root ? { toolCall: toolCallIn(root) } : {});
+};
 
 /** @param {string} file */
 function logOf(file) {
