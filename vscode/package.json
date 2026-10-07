@@ -2,10 +2,13 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.31.1",
+  "version": "0.32.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
-  "galleryBanner": { "color": "#fff1e3", "theme": "light" },
+  "galleryBanner": {
+    "color": "#fff1e3",
+    "theme": "light"
+  },
   "license": "MIT",
   "engines": {
     "vscode": "^1.100.0"
@@ -34,6 +37,7 @@
     "agent-setup.js",
     "setupView.js",
     "calls.js",
+    "archive.js",
     "todo-done.js",
     "media/imprimatur.svg",
     "media/icon.png"
@@ -106,6 +110,11 @@
         "title": "Mark all as seen",
         "category": "Imprimatur",
         "icon": "$(check-all)"
+      },
+      {
+        "command": "imprimatur.archiveNow",
+        "title": "Archive Old Agent Edits and Asks Now",
+        "category": "Imprimatur"
       }
     ],
     "colors": [
@@ -261,6 +270,12 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "Color what the agent changed inside Mermaid flowcharts in the preview (adds style lines to the rendered diagram). Off by default: with two Mermaid preview extensions installed (e.g. Mermaid Chart and Markdown Mermaid Zoom) the diagrams can fail to render."
+        },
+        "imprimatur.archive.afterDays": {
+          "type": "number",
+          "default": 7,
+          "minimum": 0,
+          "markdownDescription": "After this many days an agent edit counts as accepted and leaves review; its history, and waiting logs with nothing open, move to `.claude/imprimatur/archive/<date>/` (gzipped, read with `zcat`). Runs once a day per repo; **Imprimatur: Archive Old Agent Edits and Asks Now** runs it at once. `0`: never."
         }
       }
     },

@@ -126,6 +126,13 @@ The Markdown preview shows the same changes per block: changed blocks are
 colored, their old text struck through right above them, deleted lines struck
 through where they were.
 
+**Archive.** Once a day per repo, what is older than `imprimatur.archive.afterDays`
+(7 by default, `0` = never) leaves the graph and the waiting list: an older
+agent edit counts as accepted, its history row moves to
+`.claude/imprimatur/archive/<date>/` (gzipped, same layout, read with `zcat`),
+and so do waiting logs with nothing open. Open asks stay until you do them.
+**Imprimatur: Archive Old Agent Edits and Asks Now** runs it at once.
+
 ### How it works
 
 ![How it works: Claude edits a file, a hook saves a copy, VS Code marks the diff, you accept; when the agent's turn ends, Haiku reads its message and keeps the Waiting on you list honest](assets/how-it-works.png)
