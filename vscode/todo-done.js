@@ -8,7 +8,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { WAITING_DIR, readLog, itemsOf, tickStep } = require("./waiting.js");
-const { keyOfTodo, taskOf } = require("./tasks.js");
+const { keyOfTodo, stepTask } = require("./tasks.js");
 
 const SEEN = path.join(".claude", "imprimatur", "todo-done.json");
 
@@ -66,15 +66,16 @@ function closeDoneTasks(root) {
     for (const name of fs.readdirSync(dir).filter((n) => n.endsWith(".jsonl"))) {
       const log = path.join(dir, name);
       for (const it of itemsOf(readLog(log), name.slice(0, -".jsonl".length))) {
-        const task = it.open ? taskOf(it) : undefined;
-        const hit = task ? done.get(task) : undefined;
-        if (!hit || Date.parse(it.t) >= hit.at) continue;
+        if (!it.open) continue;
         const checked = new Set(it.checked ?? []);
+        // Per step: one turn's asks can be about several tasks.
         it.text
           .split("\n")
           .filter((l) => l.trim())
-          .forEach((_, i) => {
-            if (checked.has(i)) return;
+          .forEach((text, i) => {
+            const task = stepTask(it, text);
+            const hit = task ? done.get(task) : undefined;
+            if (!hit || Date.parse(it.t) >= hit.at || checked.has(i)) return;
             tickStep(log, { item: it.t, i }, "file", `${task} done in ${hit.file}`);
             ticked++;
           });
