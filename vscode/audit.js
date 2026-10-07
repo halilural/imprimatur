@@ -10,7 +10,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { askModel } = require("./model.js");
 const { openSteps, tickStep, labelsIn } = require("./waiting.js");
-const { sessionTodos, keyOfTodo, taskKeyIn } = require("./tasks.js");
+const { sessionTodos, keyOfTodo, taskKeyIn, normKey, leadKey } = require("./tasks.js");
 
 /**
  * The task a turn is about, before the model: a key in the request or the
@@ -155,7 +155,7 @@ function parseAudit(out, steps) {
     .map((a) => (typeof a === "string" ? { text: a } : { text: String(a?.text ?? ""), why: a?.why ? String(a.why).trim() : undefined }))
     .map((a) => ({ ...a, text: a.text.trim() }));
   const list = raw.filter((a) => a.text).slice(0, 8);
-  const task = typeof r.task === "string" && r.task.trim() ? r.task.trim() : undefined;
+  const task = typeof r.task === "string" || typeof r.task === "number" ? normKey(String(r.task)) : undefined;
   // count: the asks the model gave, left-out ones too (a rewrite of 👉 lines keeps their number).
   return { settled, asks: list.map((a) => a.text), whys: list.map((a) => a.why ?? ""), task, count: raw.length };
 }
@@ -187,7 +187,9 @@ async function audit(log, turn = {}, ask = askModel) {
   if (res.asks.length) {
     fs.mkdirSync(path.dirname(log), { recursive: true });
     const item = { t: turn.at ?? new Date().toISOString(), session: turn.session ?? path.basename(log, ".jsonl"), kind: "verify", text: res.asks.join("\n") };
-    const task = res.task || hint;
+    // Every ask starts with the same key: that is the task, whatever the session works on.
+    const leads = [...new Set(res.asks.map(leadKey))];
+    const task = (leads.length === 1 && leads[0]) || res.task || hint;
     const whys = res.whys?.some(Boolean) ? res.whys : undefined;
     fs.appendFileSync(log, JSON.stringify({ ...item, detail: turn.message?.slice(0, 4000), prompt: turn.request, title: turn.title, task, whys }) + "\n");
   }

@@ -26,6 +26,7 @@ const ASK = "AskUserQuestion";
 const wanted = (exts) => [
   ["PreToolUse", "Edit|Write|Bash", "baseline.mjs", ` ${exts.join(" ")}`],
   ["PostToolUse", "Bash", "baseline.mjs", ` ${exts.join(" ")}`],
+  ["PostToolUseFailure", "Bash", "baseline.mjs", ` ${exts.join(" ")}`],
   ["PreToolUse", ASK, "waiting.mjs", ""],
   ["PostToolUse", ASK, "waiting.mjs", ""],
   ["PermissionRequest", "*", "waiting.mjs", ""],

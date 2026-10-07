@@ -20,11 +20,33 @@ function taskKeyIn(text) {
   return gh ? `#${gh[1]}` : undefined;
 }
 
+/** A key as written by a model or a person, in the form the TODO.md folders give: "80" → "#80". @param {string} [key] */
+function normKey(key) {
+  const k = String(key ?? "").trim();
+  if (/^#?\d+$/.test(k)) return `#${k.replace(/^#/, "")}`;
+  return taskKeyIn(k);
+}
+
+/**
+ * The key a step's text starts with ("#88: check the board" is about #88). A
+ * Jira-style key only before a colon: "UTF-8 dosyası…" names no task. @param {string} [text]
+ */
+function leadKey(text) {
+  const m = /^\s*(?:(#\d+)(?![\w-])|([A-Z][A-Z0-9]{1,9}-\d+)\s*:)/.exec(text ?? "");
+  return m ? m[1] ?? m[2] : undefined;
+}
+
 /**
  * The task a waiting item or step is about: the model's, its TODO.md's, else a
  * key in its text or request. @param {{task?: string, todo?: string, text?: string, prompt?: string}} it
  */
-const taskOf = (it) => it.task || (it.todo ? keyOfTodo(it.todo) : undefined) || taskKeyIn(it.text) || taskKeyIn(it.prompt);
+const taskOf = (it) => normKey(it.task) || (it.todo ? keyOfTodo(it.todo) : undefined) || taskKeyIn(it.text) || taskKeyIn(it.prompt);
+
+/**
+ * One step's task: the key its own text starts with, else its item's. One turn's
+ * asks can be about several tasks; the item carries one. @param {Parameters<typeof taskOf>[0]} it @param {string} text the step
+ */
+const stepTask = (it, text) => leadKey(text) ?? taskOf(it);
 
 /**
  * Does a message name the task: the key itself, or a Jira key's number alone
@@ -176,4 +198,4 @@ function placeOf(root, step, todos, cache = new Map()) {
   return { task, url: (task ? linkFor(text, task) : undefined) ?? fallback, todo, line };
 }
 
-module.exports = { taskKeyIn, keyOfTodo, taskOf, namesTask, sessionTodos, lineFor, linkFor, placeOf, jiraBase };
+module.exports = { taskKeyIn, normKey, leadKey, keyOfTodo, taskOf, stepTask, namesTask, sessionTodos, lineFor, linkFor, placeOf, jiraBase };

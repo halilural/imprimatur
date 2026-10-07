@@ -26,16 +26,43 @@ function repoRoot(p) {
 
 /**
  * Text before the agent's latest edit: the `before` of the last history line.
- * ponytail: reads the whole log; fine for documents, tail-read if logs grow large.
+ * Read from the end, a chunk at a time: logs keep every edit's full text and grow large.
  * @param {string} log path of the .jsonl history @returns {string | undefined}
  */
 function latestBefore(log) {
   if (!fs.existsSync(log)) return undefined;
-  const lines = fs.readFileSync(log, "utf8").trimEnd().split("\n");
+  const fd = fs.openSync(log, "r");
   try {
-    return JSON.parse(lines[lines.length - 1]).before;
-  } catch {
+    const size = fs.fstatSync(fd).size;
+    /** @type {Buffer[]} */
+    const chunks = [];
+    let pos = size;
+    let len = 0;
+    while (pos > 0) {
+      const n = Math.min(64 * 1024, pos);
+      pos -= n;
+      const buf = Buffer.alloc(n);
+      fs.readSync(fd, buf, 0, n, pos);
+      chunks.unshift(buf);
+      len += n;
+      const all = Buffer.concat(chunks, len);
+      // Past the trailing blank lines, a newline before the last line's text bounds it.
+      let end = all.length;
+      while (end > 0 && (all[end - 1] === 10 || all[end - 1] === 13 || all[end - 1] === 32)) end--;
+      if (end === 0 && pos > 0) continue;
+      const nl = all.subarray(0, end).lastIndexOf(10);
+      if (nl >= 0 || pos === 0) {
+        const line = all.subarray(nl + 1, end).toString("utf8");
+        try {
+          return JSON.parse(line).before;
+        } catch {
+          return undefined;
+        }
+      }
+    }
     return undefined;
+  } finally {
+    fs.closeSync(fd);
   }
 }
 

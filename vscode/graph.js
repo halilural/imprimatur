@@ -166,7 +166,10 @@ function graphRows(root, currentText = () => undefined) {
     const log = path.join(ent.parentPath, ent.name);
     const file = path.relative(dir, log).slice(0, -".jsonl".length);
     const abs = path.join(root, file);
-    const current = currentText(abs) ?? (fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "");
+    const open = currentText(abs);
+    // A file gone from the repo (deleted, renamed) has nothing left to review.
+    if (open === undefined && !fs.existsSync(abs)) continue;
+    const current = open ?? fs.readFileSync(abs, "utf8");
     const copy = path.join(root, BASELINE_DIR, file);
     const edits = historyEdits(log, current);
     const accepted = acceptedOf(edits, fs.existsSync(copy) ? fs.readFileSync(copy, "utf8") : undefined, latestBefore(log), current);

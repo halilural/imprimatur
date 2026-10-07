@@ -202,10 +202,19 @@ for the `claude` CLI. Or by hand:
            "matcher": "Bash",
            "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/path/to/imprimatur/hooks/baseline.mjs md mdx" }]
          }
+       ],
+       "PostToolUseFailure": [
+         {
+           "matcher": "Bash",
+           "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/path/to/imprimatur/hooks/baseline.mjs md mdx" }]
+         }
        ]
      }
    }
    ```
+
+   `PostToolUseFailure` records a Bash command that edited a file and then
+   failed (without it, that edit is lost).
 
    For the **Waiting on you** tab, also run `hooks/waiting.mjs` (no
    arguments) on `PreToolUse` and `PostToolUse` with matcher `AskUserQuestion`,

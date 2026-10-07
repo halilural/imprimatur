@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Claude Code hook: PreToolUse for Edit|Write|Bash, PostToolUse for Bash.
-// Bash edits (python, sed) are caught by the paths named in the command: text
-// before, compared after. Before the agent edits a file of a listed type:
+// Claude Code hook: PreToolUse for Edit|Write|Bash, PostToolUse and
+// PostToolUseFailure for Bash. Bash edits (python, sed) are caught by the paths
+// named in the command: text before, compared after (also when the command
+// fails: what it changed before failing is an edit too). Before the agent edits a file of a listed type:
 // - if there is no copy yet, copy the file to
 //   <root>/.claude/imprimatur/baseline/<path> (an empty copy for a new file);
 // - append {t, session, tool, prompt, intent, title, transcript, toolUseId, branch, before} to
@@ -149,16 +150,32 @@ function describeLater(root, rel, toolUseId) {
  * @param {string} command @param {string[]} exts
  */
 export function pathsInCommand(command, exts) {
-  const re = new RegExp(String.raw`[\w./~@+-]+\.(?:${exts.join("|")})\b`, "gi");
+  // Not inside a longer token: `$R/x.md` is a variable's path, not `R/x.md`.
+  const re = new RegExp(String.raw`(?<![\w./~@+$-])[\w./~@+-]+\.(?:${exts.join("|")})\b`, "gi");
   return [...new Set(command.match(re) ?? [])];
 }
 
 const PENDING_DIR = path.join(".claude", "imprimatur", "pending");
+/** A pending file this old lost its after event (a crash, a killed session): no command runs this long. */
+const PENDING_STALE_MS = 6 * 3600_000;
+
+/** Remove pending files whose after event never came. @param {string} dir */
+function sweepPending(dir) {
+  for (const name of fs.readdirSync(dir)) {
+    const p = path.join(dir, name);
+    try {
+      if (Date.now() - fs.statSync(p).mtimeMs > PENDING_STALE_MS) fs.rmSync(p, { force: true });
+    } catch {
+      // removed by a parallel hook
+    }
+  }
+}
 
 /**
- * Bash, before: remember the text of the named files. After: record the ones
- * whose text changed, like an Edit; read-only commands (cat, grep) leave no trace.
- * @param {"PreToolUse" | "PostToolUse"} event @param {any} data @param {string} project @param {string[]} exts
+ * Bash, before: remember the text of the named files. After (done or failed):
+ * record the ones whose text changed, like an Edit; read-only commands (cat,
+ * grep) leave no trace.
+ * @param {"PreToolUse" | "PostToolUse" | "PostToolUseFailure"} event @param {any} data @param {string} project @param {string[]} exts
  */
 export function bashEdit(event, data, project, exts) {
   const id = String(data.tool_use_id ?? "").replace(/[^\w-]/g, "");
@@ -181,6 +198,7 @@ export function bashEdit(event, data, project, exts) {
     }
     if (!Object.keys(before).length) return;
     fs.mkdirSync(path.dirname(pending), { recursive: true });
+    sweepPending(path.dirname(pending));
     fs.writeFileSync(pending, JSON.stringify(before));
     return;
   }
@@ -210,7 +228,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href &
       const args = process.argv.slice(2).map((e) => e.toLowerCase());
       const exts = args.length ? args : ["md", "mdx"];
       if (data.tool_name === "Bash") bashEdit(data.hook_event_name, data, project, exts);
-      else if (file && data.hook_event_name !== "PostToolUse")
+      else if (file && !String(data.hook_event_name ?? "").startsWith("PostToolUse"))
         takeBaseline(project, file, exts, { session: data.session_id, tool: data.tool_name, ...transcriptInfo(data.transcript_path),
           transcript: data.transcript_path, toolUseId: data.tool_use_id });
     } catch (e) {

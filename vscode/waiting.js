@@ -10,10 +10,14 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
+const { stepTask } = require("./tasks.js");
+
 const WAITING_DIR = path.join(".claude", "imprimatur", "waiting");
 
 /** Kinds that open an item; "answer", "step" and "done" (closed by hand) only close; "check" ticks a step. */
 const OPENS = ["question", "command", "verify", "input"];
+/** Records that close the session's open questions. Other kinds (old or unknown ones) change nothing. */
+const CLOSES = [...OPENS, "answer", "step"];
 
 /**
  * @typedef {{t: string, session?: string, kind: string, text?: string, detail?: string, prompt?: string, title?: string, answer?: string, item?: string, i?: number, on?: boolean, by?: string, note?: string, why?: string,
@@ -60,6 +64,7 @@ function itemsOf(records, session) {
       for (const it of items) if (it.open && (!r.item || it.t === r.item)) Object.assign(it, { open: false, done: true, answeredAt: r.t });
       continue;
     }
+    if (!CLOSES.includes(r.kind)) continue;
     for (const it of items) {
       if (!it.open) continue;
       if (it.kind === "verify") {
@@ -134,7 +139,7 @@ function openSteps(log) {
       .filter((l) => l.trim())
       .forEach((text, i) => {
         const n = out.length + 1;
-        if (!ticked.has(i)) out.push({ n, label: stepLabel(n), item: it.t, i, text, request: it.prompt, since: it.notes, task: it.task, todo: it.todo, log });
+        if (!ticked.has(i)) out.push({ n, label: stepLabel(n), item: it.t, i, text, request: it.prompt, since: it.notes, task: stepTask(it, text), todo: it.todo, log });
       });
   }
   return out;
@@ -171,7 +176,7 @@ function waitingSteps(root) {
         session: it.session, item: it.t, i, t: it.t, kind: it.kind, text, state,
         by: tick?.by, note: tick?.note, at: tick?.at ?? it.answeredAt,
         prompt: it.prompt, title: it.title, detail: it.detail, answer: it.answer, notes: it.notes,
-        why: it.whys?.[i] || undefined, task: it.task, todo: it.todo,
+        why: it.whys?.[i] || undefined, task: stepTask(it, text), todo: it.todo,
       });
     });
   }
