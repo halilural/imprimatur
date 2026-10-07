@@ -16,6 +16,7 @@ const { registerSetupView } = require("./setupView.js");
 /** @type {ReturnType<typeof registerSetupView> | undefined} */
 let setupView;
 const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, historyEdits } = require("./review-state.js");
+const { toolCallOf } = require("./narration.js");
 
 const color = (id) => new vscode.ThemeColor(id);
 const ruler = { overviewRulerLane: vscode.OverviewRulerLane.Left };
@@ -99,6 +100,12 @@ function hunksOf(file, text) {
   return review(fs.readFileSync(copy, "utf8"), latestBefore(log), text);
 }
 
+/**
+ * One file's agent edits as the graph shows them: what each Edit / Write call
+ * wrote, other changes as outside edits (review-state.js). @param {string} file @param {string} text
+ */
+const editsOf = (file, text) => historyEdits(logOf(file) ?? "", text, { toolCall: toolCallOf });
+
 /** @param {string} file */
 function logOf(file) {
   const root = rootOf(file);
@@ -116,7 +123,7 @@ function historyContent(uri) {
   const { file, n, side } = JSON.parse(uri.query);
   if (n === "base") return fs.readFileSync(copyPath(file) ?? "", "utf8");
   const current = vscode.workspace.textDocuments.find((d) => d.uri.fsPath === file)?.getText() ?? fs.readFileSync(file, "utf8");
-  const edit = historyEdits(logOf(file) ?? "", current).find((e) => e.n === n);
+  const edit = editsOf(file, current).find((e) => e.n === n);
   return edit ? edit[side === "before" ? "before" : "after"] : "";
 }
 
@@ -188,7 +195,7 @@ const codeLenses = {
 
 /** @param {string} file @param {number} n */
 function openEditDiff(file, n) {
-  const e = historyEdits(logOf(file) ?? "", currentText(file) ?? "").find((x) => x.n === n);
+  const e = editsOf(file, currentText(file) ?? "").find((x) => x.n === n);
   const time = e ? new Date(e.t).toLocaleString() : "";
   return vscode.commands.executeCommand("vscode.diff", historyUri(file, n, "before"), historyUri(file, n, "after"),
     `${path.basename(file)} · agent edit #${n} (${time})`);
@@ -202,7 +209,7 @@ function acceptEditOf(file, n) {
   const copy = copyPath(file);
   if (!copy || !fs.existsSync(copy)) return;
   const text = currentText(file) ?? fs.readFileSync(file, "utf8");
-  const e = historyEdits(logOf(file) ?? "", text).find((x) => x.n === n);
+  const e = editsOf(file, text).find((x) => x.n === n);
   if (!e) return;
   log.info(`accept edit #${n} of ${file}`);
   fs.writeFileSync(copy, acceptEdit(fs.readFileSync(copy, "utf8"), e, text));
@@ -215,7 +222,7 @@ function acceptEditOf(file, n) {
 /** Open the file at the first line of an agent edit that is still in it. @param {string} file @param {number} n */
 async function goToEdit(file, n) {
   const doc = await vscode.workspace.openTextDocument(file);
-  const e = historyEdits(logOf(file) ?? "", doc.getText()).find((x) => x.n === n);
+  const e = editsOf(file, doc.getText()).find((x) => x.n === n);
   const [start, end] = (e && spotsOf(e, doc.getText())[0]) ?? [0, 0];
   const line = Math.min(start, doc.lineCount - 1);
   const range = new vscode.Range(line, 0, Math.max(line, Math.min(end, doc.lineCount) - 1), 0);
@@ -250,12 +257,12 @@ async function showHistory() {
   const doc = vscode.window.activeTextEditor?.document;
   if (!doc || doc.uri.scheme !== "file") return;
   const file = doc.uri.fsPath;
-  const edits = historyEdits(logOf(file) ?? "", doc.getText());
+  const edits = editsOf(file, doc.getText()).filter((e) => e.added || e.removed);
   if (!edits.length) return void vscode.window.showInformationMessage("No agent edits recorded for this file.");
   const time = (t) => new Date(t).toLocaleString();
   /** @type {Array<vscode.QuickPickItem & {open: () => Thenable<unknown>}>} */
   const items = edits.map((e) => ({
-    label: `$(git-commit) #${e.n}  ${time(e.t)}`,
+    label: e.outside ? `$(question) after #${Math.floor(e.n)}  ${time(e.t)}` : `$(git-commit) #${e.n}  ${time(e.t)}`,
     description: `${e.tool ?? "edit"} · +${e.added} −${e.removed}`,
     detail: [e.prompt, e.session && `session ${e.session.slice(0, 8)}`].filter(Boolean).join(" · ") || undefined,
     open: () => openEditDiff(file, e.n),

@@ -115,11 +115,11 @@ test("graph: one lane per task, not per session (#39)", () => {
   fs.writeFileSync(path.join(root, "todos/25/TODO.md"), "# #25 · Agent setup\n");
   write("README.md", [
     { t: "2026-10-06T10:01:00Z", session: "s1", prompt: "do 25" },
-    { t: "2026-10-06T11:00:00Z", session: "s1", prompt: "now the tick", branch: "fix/37-tick" },
+    { t: "2026-10-06T11:00:00Z", session: "s1", prompt: "now the tick", branch: "fix/37-tick", before: "a\n" },
     // Session s2, later, on #25 again: the same lane as s1's #25.
-    { t: "2026-10-06T12:00:00Z", session: "s2", prompt: "more on #25" },
+    { t: "2026-10-06T12:00:00Z", session: "s2", prompt: "more on #25", before: "b\n" },
     // A turn with no clue at all.
-    { t: "2026-10-06T13:00:00Z", session: "s2", prompt: "tidy up", branch: "main" },
+    { t: "2026-10-06T13:00:00Z", session: "s2", prompt: "tidy up", branch: "main", before: "c\n" },
   ]);
   const { rows, lanes, sessions } = graphRows(root);
   assert.deepEqual(rows.map((r) => [r.file, r.session, r.task, r.lane]), [

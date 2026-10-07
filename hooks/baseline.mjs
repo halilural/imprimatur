@@ -96,12 +96,26 @@ function branchAt(root) {
   }
 }
 
+/**
+ * The branch an edit belongs to. A Bash command can switch branches around its
+ * edit (`git switch -c feat/1-x && sed …`, `sed … && git commit && git switch main`):
+ * when the branch before and after differ, the one that is not the default
+ * (both task branches: the one after).
+ * @param {string | undefined} before @param {string | undefined} after
+ */
+export function editBranch(before, after) {
+  if (!before || before === after) return after;
+  const main = (b) => !b || ["main", "master"].includes(b);
+  // Two task branches: the command moved to the second one for its work.
+  return main(after) ? before : after;
+}
+
 /** True when the log was written in the last 2 s: a second copy of this hook on the same edit. */
 const sameEditWindow = (log) => Date.now() - fs.statSync(log).mtimeMs < 2000;
 
 /**
  * @param {string} project Claude's project dir; files outside it are skipped
- * @param {string} file @param {string[]} [exts] @param {{session?: string, tool?: string, prompt?: string, intent?: string, title?: string, transcript?: string, toolUseId?: string}} [meta]
+ * @param {string} file @param {string[]} [exts] @param {{session?: string, tool?: string, prompt?: string, intent?: string, title?: string, transcript?: string, toolUseId?: string, branchBefore?: string}} [meta]
  * @param {string} [knownBefore] text before the edit when the caller already has it (Bash edits)
  */
 export function takeBaseline(project, file, exts = ["md", "mdx"], meta = {}, knownBefore) {
@@ -124,8 +138,8 @@ export function takeBaseline(project, file, exts = ["md", "mdx"], meta = {}, kno
   // The same hook can be installed twice (project and user settings); one line per edit.
   if (latestBefore(log) === before && sameEditWindow(log)) return kept ? "kept" : "written";
   fs.mkdirSync(path.dirname(log), { recursive: true });
-  const { session, tool, prompt, intent, title, transcript, toolUseId } = meta;
-  const row = { t: new Date().toISOString(), session, tool, prompt, intent, title, transcript, toolUseId, branch: branchAt(root), before };
+  const { session, tool, prompt, intent, title, transcript, toolUseId, branchBefore } = meta;
+  const row = { t: new Date().toISOString(), session, tool, prompt, intent, title, transcript, toolUseId, branch: editBranch(branchBefore, branchAt(root)), before };
   fs.appendFileSync(log, JSON.stringify(row) + "\n");
   if (toolUseId) describeLater(root, rel, toolUseId);
   return kept ? "kept" : "written";
@@ -199,17 +213,20 @@ export function bashEdit(event, data, project, exts) {
     if (!Object.keys(before).length) return;
     fs.mkdirSync(path.dirname(pending), { recursive: true });
     sweepPending(path.dirname(pending));
-    fs.writeFileSync(pending, JSON.stringify(before));
+    // The branch now too: the command may switch it before or after its edit.
+    fs.writeFileSync(pending, JSON.stringify({ files: before, branch: branchAt(repoRoot(path.resolve(project)) ?? path.resolve(project)) }));
     return;
   }
   if (!fs.existsSync(pending)) return;
-  /** @type {Record<string, string>} */
-  const before = JSON.parse(fs.readFileSync(pending, "utf8"));
+  const saved = JSON.parse(fs.readFileSync(pending, "utf8"));
   fs.rmSync(pending, { force: true });
+  // Older pending files are the map of files alone.
+  /** @type {Record<string, string>} */
+  const before = saved.files && typeof saved.files === "object" ? saved.files : saved;
   // A Bash call says what it does in its own description.
   const description = data.tool_input?.description;
   const meta = { session: data.session_id, tool: "Bash", ...transcriptInfo(data.transcript_path), intent: description ? firstLine(String(description), 120) : undefined,
-    transcript: data.transcript_path, toolUseId: data.tool_use_id };
+    transcript: data.transcript_path, toolUseId: data.tool_use_id, branchBefore: typeof saved.branch === "string" ? saved.branch : undefined };
   for (const [abs, text] of Object.entries(before)) {
     const now = fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "";
     if (now !== text) takeBaseline(project, abs, exts, meta, text);

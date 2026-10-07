@@ -7,10 +7,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { BASELINE_DIR, HISTORY_DIR, historyEdits, latestBefore } = require("./review-state.js");
 const { diff, review, acceptLines } = require("./diff.js");
-const { narrationOf } = require("./narration.js");
+const { narrationOf, toolCallOf } = require("./narration.js");
 const { taskKeyIn } = require("./tasks.js");
 
 const DESCRIPTIONS = path.join(".claude", "imprimatur", "descriptions.jsonl");
+
+/** What the graph says for a change that is not the agent's recorded edit. */
+const OUTSIDE = "Outside change: not in the agent's recorded edit (by hand, git, a hook, or a failed command)";
 
 /**
  * A small model's one-sentence description per edit (hooks/describe.mjs),
@@ -149,7 +152,7 @@ function taskTitle(root, task) {
 /**
  * @param {string} root repo root
  * @param {(file: string) => string | undefined} [currentText] open-editor text, else read from disk
- * @returns {{rows: Array<{file: string, n: number, t: string, session?: string, tool?: string, prompt?: string, intent?: string, summary: string, title?: string, added: number, removed: number, accepted: boolean, gone: boolean, preview?: Array<[string, string]>, task?: string, lane: number}>,
+ * @returns {{rows: Array<{file: string, n: number, t: string, session?: string, tool?: string, prompt?: string, intent?: string, summary: string, title?: string, added: number, removed: number, accepted: boolean, gone: boolean, preview?: Array<[string, string]>, task?: string, lane: number, outside?: boolean}>,
  *            lanes: Array<{task?: string, title?: string, first: number, last: number}>,
  *            sessions: Array<{session: string, title?: string}>}}
  */
@@ -171,15 +174,20 @@ function graphRows(root, currentText = () => undefined) {
     if (open === undefined && !fs.existsSync(abs)) continue;
     const current = open ?? fs.readFileSync(abs, "utf8");
     const copy = path.join(root, BASELINE_DIR, file);
-    const edits = historyEdits(log, current);
+    const edits = historyEdits(log, current, { toolCall: toolCallOf });
     const accepted = acceptedOf(edits, fs.existsSync(copy) ? fs.readFileSync(copy, "utf8") : undefined, latestBefore(log), current);
     for (const e of edits) {
+      // An edit that changed nothing (an Edit call denied, a Bash command that left the text) is no row.
+      if (!e.added && !e.removed) continue;
       const ok = accepted(e);
       // Nothing of it left in the file (later edits replaced it all): neither open nor accepted.
       const gone = spotsOf(e, current).length === 0;
-      rows.push({ file, n: e.n, t: e.t, session: e.session, tool: e.tool, prompt: e.prompt, intent: (e.toolUseId && described.get(`${e.toolUseId} ${file}`)) ?? described.get(`#${e.n} ${file}`) ?? e.intent ?? narrationOf(e.transcript, e.toolUseId), summary: summaryOf(e.before, e.after),
-        title: e.title, added: e.added, removed: e.removed, accepted: ok, gone, preview: ok ? undefined : previewOf(e.before, e.after), lane: 0 });
-      clues.set(rows.at(-1), { branch: e.branch, said: e.intent });
+      const intent = e.outside ? OUTSIDE : (e.toolUseId && described.get(`${e.toolUseId} ${file}`)) ?? described.get(`#${e.n} ${file}`) ?? e.intent ?? narrationOf(e.transcript, e.toolUseId);
+      rows.push({ file, n: e.n, t: e.t, session: e.session, tool: e.tool, prompt: e.prompt, intent, summary: summaryOf(e.before, e.after),
+        title: e.title, added: e.added, removed: e.removed, accepted: ok, gone, preview: ok ? undefined : previewOf(e.before, e.after), lane: 0, ...(e.outside && { outside: true }) });
+      // An outside change goes in its edit's lane: the edit's own clues.
+      const own = e.outside ? edits.find((x) => x.n === e.n - 0.5) : e;
+      clues.set(rows.at(-1), { branch: own?.branch, said: own?.intent, ...(e.outside && { session: own?.session, prompt: own?.prompt }) });
     }
   }
   rows.sort((a, b) => Date.parse(b.t) - Date.parse(a.t));
