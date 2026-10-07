@@ -22,7 +22,9 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore } = createRequire(import.meta.url)("../vscode/review-state.js");
+const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, editBranch } = createRequire(import.meta.url)("../vscode/review-state.js");
+
+export { editBranch };
 
 /** First line, at most `max` characters. @param {string} s @param {number} max */
 const firstLine = (s, max) => {
@@ -94,20 +96,6 @@ function branchAt(root) {
   } catch {
     return undefined;
   }
-}
-
-/**
- * The branch an edit belongs to. A Bash command can switch branches around its
- * edit (`git switch -c feat/1-x && sed …`, `sed … && git commit && git switch main`):
- * when the branch before and after differ, the one that is not the default
- * (both task branches: the one after).
- * @param {string | undefined} before @param {string | undefined} after
- */
-export function editBranch(before, after) {
-  if (!before || before === after) return after;
-  const main = (b) => !b || ["main", "master"].includes(b);
-  // Two task branches: the command moved to the second one for its work.
-  return main(after) ? before : after;
 }
 
 /** True when the log was written in the last 2 s: a second copy of this hook on the same edit. */

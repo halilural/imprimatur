@@ -11,6 +11,11 @@ const { WAITING_DIR, readLog, itemsOf, tickStep } = require("./waiting.js");
 const { keyOfTodo, stepTask } = require("./tasks.js");
 
 const SEEN = path.join(".claude", "imprimatur", "todo-done.json");
+/**
+ * The closing rules' version: a cache written under other rules is read again
+ * from scratch, so what they missed closes by itself (2: a step's own task, #45).
+ */
+const RULES = 2;
 
 /**
  * Is the TODO.md's task done? Its "## Durum" / "## Status" section starts with
@@ -45,7 +50,8 @@ function closeDoneTasks(root) {
   /** @type {Record<string, number>} */
   let seen = {};
   try {
-    seen = JSON.parse(fs.readFileSync(path.join(root, SEEN), "utf8"));
+    const kept = JSON.parse(fs.readFileSync(path.join(root, SEEN), "utf8"));
+    if (kept?.rules === RULES && kept.files) seen = kept.files;
   } catch {
     // first run, or a file being written
   }
@@ -83,7 +89,7 @@ function closeDoneTasks(root) {
     }
   if (!changed) return 0;
   fs.mkdirSync(path.dirname(path.join(root, SEEN)), { recursive: true });
-  fs.writeFileSync(path.join(root, SEEN), JSON.stringify(seen, null, 2) + "\n");
+  fs.writeFileSync(path.join(root, SEEN), JSON.stringify({ rules: RULES, files: seen }, null, 2) + "\n");
   return ticked;
 }
 

@@ -4,11 +4,13 @@
 // read them (the transcript gets them only after the call starts), so the
 // graph looks them up here, by the call's tool_use id, when it renders. The
 // same read keeps what Edit and Write calls asked for and which calls failed:
-// the graph rebuilds an edit's real result from them (review-state.js).
+// the graph rebuilds an edit's real result from them (review-state.js), and
+// the branch each call was made on (the transcript's gitBranch); calls.js keeps
+// them past the transcript's lifetime.
 "use strict";
 const fs = require("node:fs");
 
-/** @type {Map<string, {offset: number, texts: Map<string, string>, byTool: Map<string, string>, calls: Map<string, [number, number]>, failed: Set<string>}>} */
+/** @type {Map<string, {offset: number, texts: Map<string, string>, byTool: Map<string, string>, calls: Map<string, [number, number]>, failed: Set<string>, done: Set<string>, branch: Map<string, string>}>} */
 const cache = new Map();
 
 /**
@@ -30,7 +32,7 @@ function sentence(text) {
 function update(transcript) {
   let c = cache.get(transcript);
   const size = fs.statSync(transcript).size;
-  if (!c || size < c.offset) cache.set(transcript, (c = { offset: 0, texts: new Map(), byTool: new Map(), calls: new Map(), failed: new Set() }));
+  if (!c || size < c.offset) cache.set(transcript, (c = { offset: 0, texts: new Map(), byTool: new Map(), calls: new Map(), failed: new Set(), done: new Set(), branch: new Map() }));
   if (size === c.offset) return c;
   const buf = Buffer.alloc(size - c.offset);
   const fd = fs.openSync(transcript, "r");
@@ -51,6 +53,8 @@ function update(transcript) {
     const from = at;
     at = stop + 1;
     const line = buf.subarray(from, stop).toString("utf8");
+    // Calls with a result (finished): their ids, without parsing big tool outputs.
+    if (line.includes('"tool_result"')) for (const m of line.matchAll(/"tool_use_id":"([^"]+)"/g)) c.done.add(m[1]);
     const failure = line.includes('"is_error":true');
     if (!line.includes('"assistant"') && !failure) continue;
     let r;
@@ -68,6 +72,7 @@ function update(transcript) {
     for (const b of r.message.content) {
       if (b.type === "text" && b.text?.trim()) c.texts.set(id, sentence(b.text));
       if (b.type === "tool_use" && b.id) c.byTool.set(b.id, id);
+      if (b.type === "tool_use" && b.id && typeof r.gitBranch === "string" && r.gitBranch) c.branch.set(b.id, r.gitBranch);
       if (b.type === "tool_use" && b.id && (b.name === "Edit" || b.name === "Write")) c.calls.set(b.id, [base + from, stop - from]);
     }
   }
@@ -116,4 +121,22 @@ function toolCallOf(transcript, toolUseId) {
   }
 }
 
-module.exports = { narrationOf, toolCallOf };
+/**
+ * What the transcript knows of a call: whether it finished (has a result),
+ * the branch it was made on, and for Edit / Write what it asked for.
+ * @param {string | undefined} transcript @param {string | undefined} toolUseId
+ * @returns {{done: boolean, branch?: string, name?: string, input?: any, failed: boolean} | undefined}
+ */
+function callInfo(transcript, toolUseId) {
+  if (!transcript || !toolUseId) return undefined;
+  try {
+    const c = update(transcript);
+    if (!c.byTool.has(toolUseId)) return undefined;
+    const call = toolCallOf(transcript, toolUseId);
+    return { done: c.done.has(toolUseId), branch: c.branch.get(toolUseId), failed: c.failed.has(toolUseId), ...(call && { name: call.name, input: call.input }) };
+  } catch {
+    return undefined;
+  }
+}
+
+module.exports = { narrationOf, toolCallOf, callInfo };
