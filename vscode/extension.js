@@ -17,6 +17,7 @@ const { registerSetupView } = require("./setupView.js");
 let setupView;
 const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, historyEdits } = require("./review-state.js");
 const { toolCallIn, linkIn } = require("./calls.js");
+const { archiveRepo, archiveDue } = require("./archive.js");
 
 const color = (id) => new vscode.ThemeColor(id);
 const ruler = { overviewRulerLane: vscode.OverviewRulerLane.Left };
@@ -422,6 +423,30 @@ function refreshSoon() {
   refreshPreview();
 }
 
+/**
+ * Archive what is older than imprimatur.archive.afterDays (0: never) in every
+ * repo, when a day has passed since the last run, or now (the command).
+ * @param {boolean} [now] the command: run whatever the last run
+ */
+function archiveAll(now = false) {
+  const days = vscode.workspace.getConfiguration("imprimatur").get("archive.afterDays", 7);
+  /** @type {string[]} */
+  const done = [];
+  if (!(days > 0)) return done;
+  for (const root of roots) {
+    if (!now && !archiveDue(root)) continue;
+    try {
+      const r = archiveRepo(root, { days });
+      log.info(`archive ${root}: ${r.edits} edits (${r.files} files), ${r.sessions} waiting logs, ${r.calls} calls, ${r.descriptions} descriptions`);
+      if (r.edits || r.sessions) done.push(`${path.basename(root)}: ${r.edits} edits, ${r.sessions} waiting logs`);
+    } catch (e) {
+      log.error(`archive ${root}: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+  if (done.length) refreshEverything();
+  return done;
+}
+
 /** @type {NodeJS.Timeout | undefined} */
 let waitingTimer;
 /** When the first of the waiting writes not refreshed yet came (0: none). */
@@ -473,6 +498,15 @@ function activate(ctx) {
     vscode.commands.registerCommand("imprimatur.showHistory", showHistory),
     vscode.commands.registerCommand("imprimatur.openGraph", showGraph),
     vscode.commands.registerCommand("imprimatur.acceptRange", acceptRange),
+    vscode.commands.registerCommand("imprimatur.archiveNow", () => {
+      const done = archiveAll(true);
+      const days = vscode.workspace.getConfiguration("imprimatur").get("archive.afterDays", 7);
+      vscode.window.showInformationMessage(
+        !(days > 0) ? "Imprimatur archive is off (imprimatur.archive.afterDays = 0)."
+        : done.length ? `Archived (older than ${days} days): ${done.join("; ")}. In .claude/imprimatur/archive/.`
+        : `Nothing older than ${days} days to archive.`,
+      );
+    }),
     vscode.languages.registerCodeLensProvider({ scheme: "file" }, codeLenses),
     // Accept buttons in the Markdown preview: vscode://<this extension>/accept?file&start&end
     vscode.window.registerUriHandler({
@@ -489,6 +523,10 @@ function activate(ctx) {
     }),
   );
   for (const f of vscode.workspace.workspaceFolders ?? []) addFolder(f, ctx);
+  // Once a day per repo: at start (after things settle), then checked hourly.
+  const archiveTimer = setTimeout(() => archiveAll(), 30_000);
+  const archiveHourly = setInterval(() => archiveAll(), 3_600_000);
+  ctx.subscriptions.push({ dispose: () => (clearTimeout(archiveTimer), clearInterval(archiveHourly)) });
 
   /** @type {NodeJS.Timeout | undefined} */
   let timer;
