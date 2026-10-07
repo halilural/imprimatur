@@ -110,8 +110,14 @@ const listKey = (line) => line.replace(/^(\s*)\d+([.)])(?=\s)/, "$11$2");
 /** @param {string} text */
 const lines = (text) => text.split(/\r?\n/);
 
-/** @param {string} oldText @param {string} newText @returns {Hunk[]} */
-function diff(oldText, newText) {
+/**
+ * @param {string} oldText @param {string} newText
+ * @param {{words?: boolean}} [opts] words: false leaves out the word diff of changed
+ *   lines (their `inserted` / `deleted` are empty): for callers that need only line ranges
+ * @returns {Hunk[]}
+ */
+function diff(oldText, newText, opts = {}) {
+  const words = opts.words !== false;
   const a = lines(oldText);
   const b = lines(newText);
   /** @type {Hunk[]} */
@@ -126,7 +132,7 @@ function diff(oldText, newText) {
     const pairs = Math.min(dels.length, adds.length);
     for (let k = 0; k < pairs; k++) {
       const o = a[dels[k]], nw = b[adds[k]];
-      marks.push({ kind: "changed", line: adds[k], oldText: o, ...lineOrWordDiff(o, nw) });
+      marks.push({ kind: "changed", line: adds[k], oldText: o, ...(words ? lineOrWordDiff(o, nw) : { inserted: [], deleted: [] }) });
     }
     for (let k = pairs; k < adds.length; k++) marks.push({ kind: "added", line: adds[k] });
     if (dels.length > pairs) {
@@ -165,13 +171,14 @@ function acceptHunk(oldText, newText, hunk) {
  * @param {string} base copy taken before the agent's first edit
  * @param {string | undefined} staged index text
  * @param {string} current editor text
+ * @param {{words?: boolean}} [opts] as diff: words: false for line ranges only
  * @returns {Array<Hunk & {fresh: boolean, marks: Array<Mark & {fresh: boolean}>}>}
  */
-function review(base, staged, current) {
+function review(base, staged, current, opts = {}) {
   const freshLines = new Set();
   const freshDeletes = new Set();
   if (staged !== undefined)
-    for (const h of diff(staged, current))
+    for (const h of diff(staged, current, opts))
       for (const m of h.marks) (m.kind === "deleted" ? freshDeletes.add(m.afterLine) : freshLines.add(m.line));
   // Changes inside fenced code blocks are not marked (user, #28).
   const codeNew = codeLines(current);
@@ -180,7 +187,7 @@ function review(base, staged, current) {
     m.kind === "deleted"
       ? m.oldLines.every((_, k) => codeOld.has(h.oldEnd - m.oldLines.length + k))
       : codeNew.has(m.line);
-  return diff(base, current).flatMap((h) => {
+  return diff(base, current, opts).flatMap((h) => {
     const marks = h.marks
       .filter((m) => !inCode(h, m))
       .map((m) => ({

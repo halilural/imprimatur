@@ -133,7 +133,7 @@ function historyEdits(log, current, opts = {}) {
   const counted = (e) => {
     let added = 0;
     let removed = 0;
-    for (const h of diff(e.before, e.after)) {
+    for (const h of diff(e.before, e.after, { words: false })) {
       added += h.newEnd - h.newStart;
       removed += h.oldEnd - h.oldStart;
     }

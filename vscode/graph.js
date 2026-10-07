@@ -8,7 +8,7 @@ const path = require("node:path");
 const { BASELINE_DIR, HISTORY_DIR, historyEdits, latestBefore, editBranch } = require("./review-state.js");
 const { diff, review, acceptLines } = require("./diff.js");
 const { narrationOf, titleOf } = require("./narration.js");
-const { callOf, toolCallIn, linkIn } = require("./calls.js");
+const { CALLS, callOf, toolCallIn, linkIn } = require("./calls.js");
 const { taskKeyIn } = require("./tasks.js");
 
 const DESCRIPTIONS = path.join(".claude", "imprimatur", "descriptions.jsonl");
@@ -20,10 +20,18 @@ const OUTSIDE = "Outside change: not in the agent's recorded edit (by hand, git,
  * A small model's one-sentence description per edit (hooks/describe.mjs),
  * keyed "<toolUseId> <file>". @param {string} root @returns {Map<string, string>}
  */
+/** @type {Map<string, {key: string, map: Map<string, string>}>} */
+const describedCache = new Map();
+
 function descriptionsOf(root) {
   const f = path.join(root, DESCRIPTIONS);
+  // Read again only when the describe hook appended.
+  const key = statKey(f);
+  const hit = describedCache.get(root);
+  if (hit && hit.key === key) return hit.map;
   const out = new Map();
-  if (!fs.existsSync(f)) return out;
+  describedCache.set(root, { key, map: out });
+  if (!key) return out;
   for (const l of fs.readFileSync(f, "utf8").split("\n")) {
     try {
       const d = l && JSON.parse(l);
@@ -57,7 +65,7 @@ function mapBoundary(p, hunks) {
  */
 function acceptedOf(edits, copy, staged, current) {
   // No copy: Accept all removed it, nothing is under review.
-  const open = copy === undefined ? [] : review(copy, staged, current);
+  const open = copy === undefined ? [] : review(copy, staged, current, { words: false });
   if (!open.length) return () => true;
   return (e) =>
     spotsOf(e, current).every(([ms, mt]) => !open.some((o) => (mt > ms ? ms < o.newEnd && mt > o.newStart : ms >= o.newStart && ms <= o.newEnd)));
@@ -72,12 +80,12 @@ function acceptedOf(edits, copy, staged, current) {
  * @param {{before: string, after: string}} e @param {string} current @returns {Array<[number, number]>}
  */
 function spotsOf(e, current) {
-  const later = diff(e.after, current);
+  const later = diff(e.after, current, { words: false });
   const wrote = e.after.split(/\r?\n/);
   const now = current.split(/\r?\n/);
   /** @type {Array<[number, number]>} */
   const out = [];
-  for (const h of diff(e.before, e.after)) {
+  for (const h of diff(e.before, e.after, { words: false })) {
     const spots = Array.from({ length: h.newEnd - h.newStart }, (_, k) => [h.newStart + k, h.newStart + k + 1]);
     // More lines gone than written: the rest is a deletion after the last one.
     if (h.oldEnd - h.oldStart > h.newEnd - h.newStart) spots.push([h.newEnd, h.newEnd]);
@@ -150,6 +158,52 @@ function taskTitle(root, task) {
   return head?.replace(task, "").replace(/^[\s·:–—-]+/, "").trim() || undefined;
 }
 
+/** A file's size and change time, "" when it is missing: a cache key part. @param {string} f */
+function statKey(f) {
+  try {
+    const st = fs.statSync(f);
+    return `${st.size}:${st.mtimeMs}`;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * One file's edits as graph rows need them, before the per-render parts
+ * (descriptions, the agent's words, lanes). The costly half (diffs of every
+ * edit's full text): cached per history log until the log, the review copy,
+ * the file (its text when open in an editor) or the kept calls change.
+ * @type {Map<string, {key: string, text?: string, edits: Array<any>}>}
+ */
+const fileCache = new Map();
+
+/**
+ * @param {string} root @param {string} file repo-relative @param {string} log @param {string} abs
+ * @param {string | undefined} open the editor's text, if open @param {string} callsAt the kept calls' statKey
+ */
+function fileEdits(root, file, log, abs, open, callsAt) {
+  const copy = path.join(root, BASELINE_DIR, file);
+  const key = [statKey(log), statKey(copy), open === undefined ? statKey(abs) : "open", callsAt].join("|");
+  const hit = fileCache.get(log);
+  if (hit && hit.key === key && hit.text === open) return hit.edits;
+  const current = open ?? fs.readFileSync(abs, "utf8");
+  const all = historyEdits(log, current, { toolCall: toolCallIn(root), link: linkIn(root, file) });
+  const accepted = acceptedOf(all, fs.existsSync(copy) ? fs.readFileSync(copy, "utf8") : undefined, latestBefore(log), current);
+  const edits = all
+    // An edit that changed nothing (an Edit call denied, a Bash command that left the text) is no row.
+    .filter((e) => e.added || e.removed)
+    .map(({ before, after, ...e }) => {
+      const ok = accepted({ before, after });
+      // Nothing of it left in the file (later edits replaced it all): neither open nor accepted.
+      const gone = spotsOf({ before, after }, current).length === 0;
+      return { ...e, accepted: ok, gone, summary: summaryOf(before, after), preview: ok ? undefined : previewOf(before, after) };
+    });
+  // An outside change's own edit can be one that changed nothing: keep its clues.
+  for (const e of all) if (!e.added && !e.removed && all.some((x) => x.outside && x.n === e.n + 0.5)) edits.push({ ...e, before: undefined, after: undefined, hidden: true });
+  fileCache.set(log, { key, text: open, edits });
+  return edits;
+}
+
 /**
  * @param {string} root repo root
  * @param {(file: string) => string | undefined} [currentText] open-editor text, else read from disk
@@ -165,6 +219,7 @@ function graphRows(root, currentText = () => undefined) {
   /** The clues tasksOf reads that the rows do not keep (the branch, the Bash description). */
   const clues = new Map();
   const described = descriptionsOf(root);
+  const callsAt = statKey(path.join(root, CALLS));
   for (const ent of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
     if (!ent.isFile() || !ent.name.endsWith(".jsonl")) continue;
     const log = path.join(ent.parentPath, ent.name);
@@ -173,20 +228,13 @@ function graphRows(root, currentText = () => undefined) {
     const open = currentText(abs);
     // A file gone from the repo (deleted, renamed) has nothing left to review.
     if (open === undefined && !fs.existsSync(abs)) continue;
-    const current = open ?? fs.readFileSync(abs, "utf8");
-    const copy = path.join(root, BASELINE_DIR, file);
-    const edits = historyEdits(log, current, { toolCall: toolCallIn(root), link: linkIn(root, file) });
-    const accepted = acceptedOf(edits, fs.existsSync(copy) ? fs.readFileSync(copy, "utf8") : undefined, latestBefore(log), current);
+    const edits = fileEdits(root, file, log, abs, open, callsAt);
     for (const e of edits) {
-      // An edit that changed nothing (an Edit call denied, a Bash command that left the text) is no row.
-      if (!e.added && !e.removed) continue;
-      const ok = accepted(e);
-      // Nothing of it left in the file (later edits replaced it all): neither open nor accepted.
-      const gone = spotsOf(e, current).length === 0;
+      if (e.hidden) continue;
       const call = e.outside ? undefined : callOf(root, e.transcript, e.toolUseId);
       const intent = e.outside ? OUTSIDE : (e.toolUseId && described.get(`${e.toolUseId} ${file}`)) ?? described.get(`#${e.n} ${file}`) ?? e.intent ?? narrationOf(e.transcript, e.toolUseId) ?? call?.said;
-      rows.push({ file, n: e.n, t: e.t, session: e.session, tool: e.tool, prompt: e.prompt, intent, summary: summaryOf(e.before, e.after),
-        title: e.title ?? titleOf(e.transcript), added: e.added, removed: e.removed, accepted: ok, gone, preview: ok ? undefined : previewOf(e.before, e.after), lane: 0, ...(e.outside && { outside: true }) });
+      rows.push({ file, n: e.n, t: e.t, session: e.session, tool: e.tool, prompt: e.prompt, intent, summary: e.summary,
+        title: e.title ?? titleOf(e.transcript), added: e.added, removed: e.removed, accepted: e.accepted, gone: e.gone, preview: e.preview, lane: 0, ...(e.outside && { outside: true }) });
       // An outside change goes in its edit's lane: the edit's own clues.
       const own = e.outside ? edits.find((x) => x.n === e.n - 0.5) : e;
       // The branch the call was made on (the transcript's) next to the recorded one: older
@@ -224,7 +272,7 @@ function graphRows(root, currentText = () => undefined) {
  * @param {string} before @param {string} after
  */
 function summaryOf(before, after) {
-  const h = diff(before, after)[0];
+  const h = diff(before, after, { words: false })[0];
   if (!h) return "No change";
   const lines = after.split(/\r?\n/);
   const old = before.split(/\r?\n/);
@@ -248,7 +296,7 @@ function previewOf(before, after) {
   const [a, b] = [before.split(/\r?\n/), after.split(/\r?\n/)];
   /** @type {Array<[string, string]>} */
   const out = [];
-  for (const h of diff(before, after)) {
+  for (const h of diff(before, after, { words: false })) {
     if (out.length) out.push(["…", ""]);
     for (let i = h.oldStart; i < h.oldEnd; i++) out.push(["-", a[i]]);
     for (let i = h.newStart; i < h.newEnd; i++) out.push(["+", b[i]]);

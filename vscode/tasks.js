@@ -71,29 +71,64 @@ function keyOfTodo(todo) {
  * @param {string} root @returns {Map<string, string[]>} session → repo-relative paths
  */
 function sessionTodos(root) {
-  /** @type {Map<string, Array<{t: string, file: string}>>} */
-  const found = new Map();
+  /** @type {Array<{p: string, file: string, key: string}>} */
+  const logs = [];
   const base = path.join(root, HISTORY_DIR);
   const walk = (dir) => {
     if (!fs.existsSync(dir)) return;
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const p = path.join(dir, e.name);
       if (e.isDirectory()) walk(p);
-      else if (/(^|[/\\])TODO\.md\.jsonl$/i.test(p)) {
-        const file = path.relative(base, p).slice(0, -".jsonl".length);
-        for (const line of fs.readFileSync(p, "utf8").split("\n")) {
-          try {
-            const r = JSON.parse(line);
-            if (r.session) found.set(r.session, [...(found.get(r.session) ?? []), { t: r.t, file }]);
-          } catch {
-            // a line being written
-          }
-        }
-      }
+      else if (/(^|[/\\])TODO\.md\.jsonl$/i.test(p)) logs.push({ p, file: path.relative(base, p).slice(0, -".jsonl".length), key: statKey(p) });
     }
   };
   walk(base);
-  return new Map([...found].map(([s, edits]) => [s, [...new Set(edits.sort((a, b) => a.t.localeCompare(b.t)).map((e) => e.file))]]));
+  // The logs hold every edit's whole text: parsed again only when one changed.
+  const key = logs.map((l) => `${l.file}:${l.key}`).join("|");
+  const hit = sessionTodosCache.get(root);
+  if (hit && hit.key === key) return hit.map;
+  /** @type {Map<string, Array<{t: string, file: string}>>} */
+  const found = new Map();
+  for (const { p, file } of logs)
+    for (const line of fs.readFileSync(p, "utf8").split("\n")) {
+      // Only the session and time are needed: not the whole line's text.
+      const session = /"session":"([^"]+)"/.exec(line.slice(0, 400))?.[1];
+      const t = /"t":"([^"]+)"/.exec(line.slice(0, 200))?.[1];
+      if (session && t) found.set(session, [...(found.get(session) ?? []), { t, file }]);
+    }
+  const map = new Map([...found].map(([s, edits]) => [s, [...new Set(edits.sort((a, b) => a.t.localeCompare(b.t)).map((e) => e.file))]]));
+  sessionTodosCache.set(root, { key, map });
+  return map;
+}
+
+/** @type {Map<string, {key: string, map: Map<string, string[]>}>} */
+const sessionTodosCache = new Map();
+
+/** A file's size and change time, "" when missing. @param {string} f */
+function statKey(f) {
+  try {
+    const st = fs.statSync(f);
+    return `${st.size}:${st.mtimeMs}`;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * A repo file's text and its lines' words, read again only when it changed.
+ * @type {Map<string, {key: string, text: string, lines: Array<Set<string>>}>}
+ */
+const textCache = new Map();
+/** @param {string} abs */
+function textOf(abs) {
+  const key = statKey(abs);
+  if (!key) return undefined;
+  const hit = textCache.get(abs);
+  if (hit && hit.key === key) return hit;
+  const text = fs.readFileSync(abs, "utf8");
+  const entry = { key, text, lines: text.split("\n").map(words) };
+  textCache.set(abs, entry);
+  return entry;
 }
 
 /** Words of a line, for matching a step to it. @param {string} s */
@@ -104,13 +139,12 @@ const words = (s) => new Set((s.toLocaleLowerCase("tr").match(/[\p{L}\p{N}#-]{3,
  * overlap, at least 40% of the step's words), else 0.
  * @param {string} text the TODO.md's content @param {string} step
  */
-function lineFor(text, step) {
+function lineFor(text, step, lineWords) {
   const want = words(step);
   if (!want.size) return 0;
   let best = 0;
   let line = 0;
-  text.split("\n").forEach((l, i) => {
-    const have = words(l);
+  (lineWords ?? text.split("\n").map(words)).forEach((have, i) => {
     const share = [...want].filter((w) => have.has(w)).length / want.size;
     if (share > best) [best, line] = [share, i + 1];
   });
@@ -157,8 +191,9 @@ function jiraBase(root, key, cache = new Map()) {
     const todos = path.join(root, "todos");
     const files = ["TODO.md", ...(fs.existsSync(todos) ? fs.readdirSync(todos).map((d) => path.join("todos", d, "TODO.md")) : [])];
     for (const f of files) {
-      if (!fs.existsSync(path.join(root, f))) continue;
-      for (const m of fs.readFileSync(path.join(root, f), "utf8").matchAll(/(https?:\/\/[^\s)\]]+\/browse\/)([A-Z][A-Z0-9]+)-\d+/g)) if (!bases.has(m[2])) bases.set(m[2], m[1]);
+      const t = textOf(path.join(root, f));
+      if (!t) continue;
+      for (const m of t.text.matchAll(/(https?:\/\/[^\s)\]]+\/browse\/)([A-Z][A-Z0-9]+)-\d+/g)) if (!bases.has(m[2])) bases.set(m[2], m[1]);
     }
     cache.set("jira", bases);
   }
@@ -179,16 +214,17 @@ function placeOf(root, step, todos, cache = new Map()) {
   const named = step.task || taskKeyIn(step.text) || taskKeyIn(step.prompt);
   // The TODO.md: the step's own (Scan history), else one the session edited that names its task
   // or says the step. A session on several things does not tag every step with its last TODO.md.
-  const read = (f) => (fs.existsSync(path.join(root, f)) ? fs.readFileSync(path.join(root, f), "utf8") : undefined);
+  const read = (f) => textOf(path.join(root, f));
   // The task's own TODO.md counts even when this session did not edit it (a scanned old session).
   let todo = step.todo ?? (named ? edited.find((f) => keyOfTodo(f) === named) ?? todoOfKey(root, named) : undefined);
-  let text = todo ? read(todo) : undefined;
-  let line = text ? lineFor(text, step.text) : 0;
+  const own = todo ? read(todo) : undefined;
+  let text = own?.text;
+  let line = own ? lineFor(own.text, step.text, own.lines) : 0;
   if (!todo)
     for (const f of [...edited].reverse()) {
       const t = read(f);
-      const l = t ? lineFor(t, step.text) : 0;
-      if (l) [todo, text, line] = [f, t, l];
+      const l = t ? lineFor(t.text, step.text, t.lines) : 0;
+      if (l) [todo, text, line] = [f, t.text, l];
       if (l) break;
     }
   const task = named ?? (todo ? keyOfTodo(todo) : undefined);

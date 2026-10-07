@@ -422,6 +422,11 @@ function refreshSoon() {
   refreshPreview();
 }
 
+/** @type {NodeJS.Timeout | undefined} */
+let waitingTimer;
+/** When the first of the waiting writes not refreshed yet came (0: none). */
+let waitingFirst = 0;
+
 /** @param {vscode.WorkspaceFolder} folder @param {vscode.ExtensionContext} ctx */
 function addFolder(folder, ctx) {
   const found = repoRoot(folder.uri.fsPath) ?? folder.uri.fsPath;
@@ -436,8 +441,18 @@ function addFolder(folder, ctx) {
   const descriptions = path.join(found, ".claude", "imprimatur", "descriptions.jsonl");
   const changed = (uri) => {
     if (!uri.fsPath.startsWith(waiting) && uri.fsPath !== descriptions) return refreshSoon();
-    refreshGraph();
-    updateGraphButton();
+    // The hooks write waiting/ on every tool call: one refresh a second after the
+    // last write, and at least every 3 s while they keep coming. Cheap: the graph's
+    // costly half is cached per file (graph.js fileEdits).
+    clearTimeout(waitingTimer);
+    const flush = () => {
+      clearTimeout(waitingTimer);
+      waitingFirst = 0;
+      refreshGraph();
+      updateGraphButton();
+    };
+    waitingFirst ||= Date.now();
+    waitingTimer = setTimeout(flush, Math.max(0, Math.min(1000, waitingFirst + 3000 - Date.now())));
   };
   ctx.subscriptions.push(w, w.onDidChange(changed), w.onDidCreate(changed), w.onDidDelete(changed));
 }

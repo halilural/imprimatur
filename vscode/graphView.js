@@ -718,7 +718,8 @@ async function scanAll(again = false) {
 }
 
 /** Re-render the open panel, if any (after an agent edit). */
-const refreshGraph = () => refresh?.();
+/** @param {boolean} [waitingOnly] only the waiting list changed: reuse the edits */
+const refreshGraph = (waitingOnly = false) => refresh?.(waitingOnly);
 
 /** Right-click menu commands of the panel's rows; `c` is the row's data-vscode-context. */
 const graphCommands = {
