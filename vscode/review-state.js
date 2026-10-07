@@ -108,7 +108,9 @@ const same = (a, b) => {
  * "after" is what the call itself wrote; what changed besides (by hand, git, a
  * failed Bash command) becomes an edit of its own: `outside`, numbered n + 0.5.
  * @param {string} log path of the .jsonl history @param {string} current current text
- * @param {{toolCall?: (transcript: string | undefined, toolUseId: string | undefined) => {name: string, input: any, failed: boolean} | undefined}} [opts]
+ * With `link` (calls.js), a row from before tool calls were recorded gets its call (transcript, toolUseId).
+ * @param {{toolCall?: (transcript: string | undefined, toolUseId: string | undefined) => {name: string, input: any, failed: boolean} | undefined,
+ *          link?: (row: any) => {toolUseId: string, transcript: string} | undefined}} [opts]
  * @returns {Array<{n: number, t: string, session?: string, tool?: string, prompt?: string, intent?: string, title?: string, transcript?: string, toolUseId?: string, branch?: string, before: string, after: string, added: number, removed: number, outside?: boolean}>}
  */
 function historyEdits(log, current, opts = {}) {
@@ -138,7 +140,10 @@ function historyEdits(log, current, opts = {}) {
     return { ...e, added, removed };
   };
   const out = [];
-  rows.forEach((r, i) => {
+  rows.forEach((row, i) => {
+    const linked = opts.link?.(row);
+    // Only what the row lacks: its own transcript and title stay.
+    const r = linked ? { ...row, toolUseId: linked.toolUseId, transcript: row.transcript ?? linked.transcript, title: row.title ?? linked.title } : row;
     const next = i + 1 < rows.length ? rows[i + 1].before : current;
     const edit = { n: i + 1, t: r.t, session: r.session, tool: r.tool, prompt: r.prompt, intent: r.intent, title: r.title, transcript: r.transcript, toolUseId: r.toolUseId, branch: r.branch, before: r.before };
     const wrote = opts.toolCall && (r.tool === "Edit" || r.tool === "Write") ? toolResult(r.before, opts.toolCall(r.transcript, r.toolUseId)) : undefined;

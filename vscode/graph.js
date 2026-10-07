@@ -7,8 +7,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { BASELINE_DIR, HISTORY_DIR, historyEdits, latestBefore, editBranch } = require("./review-state.js");
 const { diff, review, acceptLines } = require("./diff.js");
-const { narrationOf } = require("./narration.js");
-const { callOf, toolCallIn } = require("./calls.js");
+const { narrationOf, titleOf } = require("./narration.js");
+const { callOf, toolCallIn, linkIn } = require("./calls.js");
 const { taskKeyIn } = require("./tasks.js");
 
 const DESCRIPTIONS = path.join(".claude", "imprimatur", "descriptions.jsonl");
@@ -175,7 +175,7 @@ function graphRows(root, currentText = () => undefined) {
     if (open === undefined && !fs.existsSync(abs)) continue;
     const current = open ?? fs.readFileSync(abs, "utf8");
     const copy = path.join(root, BASELINE_DIR, file);
-    const edits = historyEdits(log, current, { toolCall: toolCallIn(root) });
+    const edits = historyEdits(log, current, { toolCall: toolCallIn(root), link: linkIn(root, file) });
     const accepted = acceptedOf(edits, fs.existsSync(copy) ? fs.readFileSync(copy, "utf8") : undefined, latestBefore(log), current);
     for (const e of edits) {
       // An edit that changed nothing (an Edit call denied, a Bash command that left the text) is no row.
@@ -183,15 +183,16 @@ function graphRows(root, currentText = () => undefined) {
       const ok = accepted(e);
       // Nothing of it left in the file (later edits replaced it all): neither open nor accepted.
       const gone = spotsOf(e, current).length === 0;
-      const intent = e.outside ? OUTSIDE : (e.toolUseId && described.get(`${e.toolUseId} ${file}`)) ?? described.get(`#${e.n} ${file}`) ?? e.intent ?? narrationOf(e.transcript, e.toolUseId);
+      const call = e.outside ? undefined : callOf(root, e.transcript, e.toolUseId);
+      const intent = e.outside ? OUTSIDE : (e.toolUseId && described.get(`${e.toolUseId} ${file}`)) ?? described.get(`#${e.n} ${file}`) ?? e.intent ?? narrationOf(e.transcript, e.toolUseId) ?? call?.said;
       rows.push({ file, n: e.n, t: e.t, session: e.session, tool: e.tool, prompt: e.prompt, intent, summary: summaryOf(e.before, e.after),
-        title: e.title, added: e.added, removed: e.removed, accepted: ok, gone, preview: ok ? undefined : previewOf(e.before, e.after), lane: 0, ...(e.outside && { outside: true }) });
+        title: e.title ?? titleOf(e.transcript), added: e.added, removed: e.removed, accepted: ok, gone, preview: ok ? undefined : previewOf(e.before, e.after), lane: 0, ...(e.outside && { outside: true }) });
       // An outside change goes in its edit's lane: the edit's own clues.
       const own = e.outside ? edits.find((x) => x.n === e.n - 0.5) : e;
       // The branch the call was made on (the transcript's) next to the recorded one: older
       // Bash rows recorded the branch after the command, older rows none (editBranch).
       const branch = editBranch(own && callOf(root, own.transcript, own.toolUseId)?.branch, own?.branch);
-      clues.set(rows.at(-1), { branch, said: own?.intent, ...(e.outside && { session: own?.session, prompt: own?.prompt }) });
+      clues.set(rows.at(-1), { branch, said: own?.intent ?? call?.said, ...(e.outside && { session: own?.session, prompt: own?.prompt }) });
     }
   }
   rows.sort((a, b) => Date.parse(b.t) - Date.parse(a.t));

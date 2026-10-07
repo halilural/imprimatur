@@ -16,7 +16,7 @@ const { registerSetupView } = require("./setupView.js");
 /** @type {ReturnType<typeof registerSetupView> | undefined} */
 let setupView;
 const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, historyEdits } = require("./review-state.js");
-const { toolCallIn } = require("./calls.js");
+const { toolCallIn, linkIn } = require("./calls.js");
 
 const color = (id) => new vscode.ThemeColor(id);
 const ruler = { overviewRulerLane: vscode.OverviewRulerLane.Left };
@@ -106,7 +106,7 @@ function hunksOf(file, text) {
  */
 const editsOf = (file, text) => {
   const root = rootOf(file);
-  return historyEdits(logOf(file) ?? "", text, root ? { toolCall: toolCallIn(root) } : {});
+  return historyEdits(logOf(file) ?? "", text, root ? { toolCall: toolCallIn(root), link: linkIn(root, path.relative(root, norm(file))) } : {});
 };
 
 /** @param {string} file */
