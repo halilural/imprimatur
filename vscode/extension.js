@@ -7,7 +7,7 @@ const vscode = require("vscode");
 const fs = require("node:fs");
 const path = require("node:path");
 const { review, acceptHunk, acceptLines, acceptGroups } = require("./diff.js");
-const { markdownItPlugin, markdownBlocks } = require("./preview.js");
+const { markdownItPlugin, markdownBlocks, reviewHtml } = require("./preview.js");
 const { openGraph, refreshGraph, graphCommands } = require("./graphView.js");
 const { WAITING_DIR, waitingSteps } = require("./waiting.js");
 const { acceptEdit, spotsOf, graphRows } = require("./graph.js");
@@ -222,6 +222,17 @@ function acceptEditOf(file, n) {
   refreshGraph();
 }
 
+/**
+ * One agent edit rendered as a Markdown review (the graph's hover, #50), or
+ * undefined: not Markdown, the preview's markdown-it not loaded yet, nothing marked.
+ * @param {string} file @param {number} n
+ */
+function renderEdit(file, n) {
+  if (!markdownIt || !/\.mdx?$/i.test(file)) return undefined;
+  const e = editsOf(file, currentText(file) ?? (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "")).find((x) => x.n === n);
+  return e && reviewHtml(markdownIt, e.before, e.after);
+}
+
 /** Open the file at the first line of an agent edit that is still in it. @param {string} file @param {number} n */
 async function goToEdit(file, n) {
   const doc = await vscode.workspace.openTextDocument(file);
@@ -242,7 +253,7 @@ function graphRoot() {
 function showGraph() {
   const root = graphRoot();
   if (!root) return void vscode.window.showInformationMessage("Agent Change Graph: no folder open.");
-  openGraph(root, openEditDiff, currentText, acceptEditOf, goToEdit);
+  openGraph(root, openEditDiff, currentText, acceptEditOf, goToEdit, renderEdit);
 }
 
 /** Status bar button, always there like Git Graph's: opens the graph, shows open asks. */
