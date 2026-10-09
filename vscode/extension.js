@@ -657,7 +657,7 @@ function activate(ctx) {
     }),
   );
   // The side bar: records (Imprimatur's database), then a way to the graph and every file that shapes the agent.
-  /** @type {{views: Record<string, any>} | undefined} */
+  /** @type {{views: Record<string, any>, trees: Record<string, any>, ui: Record<string, any>} | undefined} */
   let recordViews;
   try {
     // The repos as git spells them: roots are normalised (lower case on Windows).
@@ -684,6 +684,8 @@ function activate(ctx) {
   return {
     // The records views' data providers, read by the integration tests (#68); nothing else uses them.
     recordViews: recordViews?.views,
+    recordTrees: recordViews?.trees,
+    recordUi: recordViews?.ui,
     extendMarkdownIt: (md) => {
       markdownIt = md;
       codeLensChanged.fire();

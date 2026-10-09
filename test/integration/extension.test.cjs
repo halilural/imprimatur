@@ -50,7 +50,8 @@ suite("Imprimatur in the extension host", () => {
     const root = process.env.IMPRIMATUR_IT_ROOT;
 
     const asks = recordViews.asks.getChildren();
-    const ask = asks.find((n) => n.type === "record");
+    // Other suites add asks of their own: find the seeded one.
+    const ask = asks.find((n) => n.type === "record" && n.record.title === "Integration ask for the user");
     assert.ok(ask, `an ask, got ${JSON.stringify(asks.map((n) => n.text ?? n.id))}`);
     assert.equal(ask.record.title, "Integration ask for the user");
     assert.equal(ask.record.owner, "K");
@@ -58,7 +59,7 @@ suite("Imprimatur in the extension host", () => {
     assert.equal(recordViews.asks.getTreeItem(ask).label, "Integration ask for the user");
 
     const tasks = walk(recordViews.tasks);
-    const task = tasks.find((n) => n.type === "task");
+    const task = tasks.find((n) => n.type === "task" && n.task.key === "IT-1");
     assert.ok(task, "the task under its repo");
     assert.equal(task.task.key, "IT-1");
     assert.equal(task.repo.root, root);
