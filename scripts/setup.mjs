@@ -37,6 +37,11 @@ const wanted = (exts) => [
   ["Stop", undefined, "waiting.mjs", ""],
   ["UserPromptSubmit", undefined, "waiting.mjs", ""],
   ["PreToolUse", "mcp__imprimatur__.*", "mcp-session.mjs", ""],
+  // Process checks (#56): they act only in repos with .claude/imprimatur.json.
+  ["SessionStart", undefined, "process.mjs", ""],
+  ["PreToolUse", "Bash|Edit|Write|MultiEdit|NotebookEdit", "process.mjs", ""],
+  ["PostToolUse", "Edit|Write|MultiEdit|Bash|mcp__imprimatur__task_upsert", "process.mjs", ""],
+  ["Stop", undefined, "process.mjs", ""],
 ];
 
 const MCP_NAME = "imprimatur";
@@ -147,7 +152,8 @@ export function mergeHooks(settings, { root, lang, exts = ["md", "mdx"] }) {
     const ours = entries
       .filter((e) => (e.matcher ?? "") === (matcher ?? ""))
       .flatMap((e) => e.hooks ?? [])
-      .find((h) => typeof h.command === "string" && h.command.includes(`hooks/${script}`));
+      // Ours: the script under an imprimatur folder (a generic name like process.mjs may be someone else's).
+      .find((h) => typeof h.command === "string" && h.command.includes(`/hooks/${script}`) && /imprimatur/i.test(h.command));
     const label = `${event}${matcher ? ` [${matcher}]` : ""} → ${script}`;
     if (!ours) {
       entries.push({ ...(matcher ? { matcher } : {}), hooks: [{ type: "command", command }] });

@@ -197,6 +197,14 @@ for the `claude` CLI. It also registers the **Imprimatur MCP server**
 read and write tasks and their records (todos, questions, decisions, notes,
 ADRs, PDRs) through its tools; the records live in one database per machine
 (`~/.local/share/imprimatur/imprimatur.db`, `IMPRIMATUR_DB` to move it).
+**Process checks** (opt-in per repo): **Imprimatur: Turn On Process Checks for
+This Repo** writes `.claude/imprimatur.json`; commit it. Then Imprimatur's hooks
+show where work stopped at session start, block `git --no-verify` / `HUSKY=0`,
+keep code off `main` (allowed paths are set there), refresh the docs TOC, and
+check that each answer ends with "Neredeyiz"; they warn when a new issue lacks
+its milestone or board item, a task is done but its issue is open, code starts
+before its ADR/PDR, or a merged branch is left behind. Each check is
+`"block"`, `"warn"` or `false`. Without the file nothing runs.
 Records a repo still keeps in Markdown (`docs/todos/*/TODO.md`, `docs/design`,
 `PRODUCT.md` / `docs/product`, `docs/testing`) move in with
 `npm run import -- <repo> [--dry-run]` or **Imprimatur: Import Markdown Records**;
