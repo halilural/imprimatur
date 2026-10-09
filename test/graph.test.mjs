@@ -201,3 +201,33 @@ test("graph: a model description is asked only for edits nothing describes (#63)
   assert.deepEqual(by, { "Adds the second line to the list": undefined, "Now:": "terse", "Adds a fourth line": undefined });
   req("../vscode/records.js").reset();
 });
+
+test("graph: every tool call is a row in its task's lane; a subagent's calls follow its Agent row (#55)", async () => {
+  const { createRequire } = await import("node:module");
+  const req = createRequire(import.meta.url);
+  const fsm = await import("node:fs");
+  const os = await import("node:os");
+  const pathm = await import("node:path");
+  const root = fsm.realpathSync(fsm.mkdtempSync(pathm.join(os.tmpdir(), "imprimatur-55g-")));
+  process.env.IMPRIMATUR_DB = pathm.join(root, "i.db");
+  const records = req("../vscode/records.js");
+  records.reset();
+  const db = req("../vscode/db.js").openDb({ path: process.env.IMPRIMATUR_DB });
+  const task = db.upsertTask(db.repoOf(root).id, "#55", { title: "Activity" });
+  db.addRecord(task.id, { kind: "todo", title: "x" }, { kind: "agent", id: "claude-code:S" });
+  db.close();
+  const { record } = req("../vscode/activity.js");
+  const call = (tool_name, tool_input, extra = {}) => record(root, { session_id: "S", tool_use_id: `${tool_name}-${Math.random()}`, tool_name, tool_input, ...extra });
+  call("Read", { file_path: "a.md" });
+  call("Agent", { description: "Survey", subagent_type: "Explore" }, { tool_response: { status: "completed", agentId: "ag1", totalToolUseCount: 2 } });
+  call("Grep", { pattern: "x" }, { agent_id: "ag1", agent_type: "Explore" });
+  call("WebFetch", { url: "https://e.x" });
+  const { graphRows } = req("../vscode/graph.js");
+  const g = graphRows(root);
+  const act = g.rows.filter((r) => r.activity);
+  assert.deepEqual(act.map((r) => r.kind).sort(), ["agent", "read", "search", "web"]);
+  assert.ok(act.every((r) => r.task === "#55"), "the session's task");
+  assert.equal(act.find((r) => r.kind === "search").agent, "ag1");
+  assert.equal(act.find((r) => r.kind === "agent").agentId, "ag1");
+  records.reset();
+});

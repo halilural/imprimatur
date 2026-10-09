@@ -36,7 +36,7 @@ const ASK = "AskUserQuestion";
 
 /**
  * The hooks Imprimatur needs: [event, matcher, script, args].
- * @param {string[]} exts @returns {Array<[string, string | undefined, string, string]>}
+ * @param {string[]} exts @returns {Array<[string, string | undefined, string, string, {async?: boolean}?]>}
  */
 export const wanted = (exts) => [
   ["PreToolUse", "Edit|Write|Bash", "baseline.mjs", ` ${exts.join(" ")}`],
@@ -54,6 +54,9 @@ export const wanted = (exts) => [
   ["PreToolUse", "Bash|Edit|Write|MultiEdit|NotebookEdit", "process.mjs", ""],
   ["PostToolUse", "Edit|Write|MultiEdit|Bash|mcp__imprimatur__task_upsert", "process.mjs", ""],
   ["Stop", undefined, "process.mjs", ""],
+  // Every tool call, in a line (#55): async, the tool never waits for it.
+  ["PostToolUse", "*", "activity.mjs", "", { async: true }],
+  ["PostToolUseFailure", "*", "activity.mjs", "", { async: true }],
 ];
 
 const MCP_NAME = "imprimatur";
@@ -225,9 +228,9 @@ export function pluginMatcher(matcher) {
 export function pluginHooks() {
   /** @type {Record<string, any[]>} */
   const hooks = {};
-  for (const [event, matcher, script] of wanted([])) {
+  for (const [event, matcher, script, , opts] of wanted([])) {
     const m = pluginMatcher(matcher);
-    (hooks[event] ??= []).push({ ...(m ? { matcher: m } : {}), hooks: [{ type: "command", command: `node "\${CLAUDE_PLUGIN_ROOT}/hooks/${script}"` }] });
+    (hooks[event] ??= []).push({ ...(m ? { matcher: m } : {}), hooks: [{ type: "command", command: `node "\${CLAUDE_PLUGIN_ROOT}/hooks/${script}"`, ...(opts?.async && { async: true }) }] });
   }
   return { hooks };
 }
@@ -242,7 +245,7 @@ export function mergeHooks(settings, { root, lang, exts = ["md", "mdx"] }) {
   const out = structuredClone(settings ?? {});
   out.hooks ??= {};
   const changes = [];
-  for (const [event, matcher, script, args] of wanted(exts)) {
+  for (const [event, matcher, script, args, opts] of wanted(exts)) {
     const command = `${lang ? `IMPRIMATUR_LANG=${lang} ` : ""}node "${path.join(root, "hooks", script)}"${args}`;
     const entries = (out.hooks[event] ??= []);
     const ours = entries
@@ -251,10 +254,12 @@ export function mergeHooks(settings, { root, lang, exts = ["md", "mdx"] }) {
       .find((h) => ourHook(h, script));
     const label = `${event}${matcher ? ` [${matcher}]` : ""} → ${script}`;
     if (!ours) {
-      entries.push({ ...(matcher ? { matcher } : {}), hooks: [{ type: "command", command }] });
+      entries.push({ ...(matcher ? { matcher } : {}), hooks: [{ type: "command", command, ...(opts?.async && { async: true }) }] });
       changes.push(`added   ${label}`);
-    } else if (ours.command.replace(/"/g, "") !== command.replace(/"/g, "")) {
+    } else if (ours.command.replace(/"/g, "") !== command.replace(/"/g, "") || Boolean(ours.async) !== Boolean(opts?.async)) {
       ours.command = command;
+      if (opts?.async) ours.async = true;
+      else delete ours.async;
       changes.push(`updated ${label}`);
     }
   }

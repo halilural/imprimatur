@@ -55,7 +55,7 @@ function repo() {
 test("#52: old edits count as accepted and leave the log; a file all old or gone leaves review", () => {
   const root = repo();
   const r = archiveRepo(root, { days: 7, now: NOW });
-  assert.deepEqual(r, { edits: 3, files: 2, sessions: 1, calls: 1, descriptions: 1 });
+  assert.deepEqual(r, { edits: 3, files: 2, sessions: 1, calls: 1, descriptions: 1, activity: 0 });
   // c.md waits: a file missing now may come back with a branch switch.
   assert.equal(fs.existsSync(path.join(root, I, "history/c.md.jsonl")), true);
   // a.md: the old edit is accepted into the copy, the new one is still under review.
@@ -78,7 +78,7 @@ test("#52: old edits count as accepted and leave the log; a file all old or gone
   // Once a day; a second run finds nothing more.
   assert.equal(archiveDue(root, NOW + 3_600_000), false);
   assert.equal(archiveDue(root, NOW + 86_400_000), true);
-  assert.deepEqual(archiveRepo(root, { days: 7, now: NOW }), { edits: 0, files: 0, sessions: 0, calls: 0, descriptions: 0 });
+  assert.deepEqual(archiveRepo(root, { days: 7, now: NOW }), { edits: 0, files: 0, sessions: 0, calls: 0, descriptions: 0, activity: 0 });
 });
 
 test("#52: a log a hook wrote to after it was read is left for the next run", () => {

@@ -11,6 +11,7 @@ const { narrationOf, titleOf } = require("./narration.js");
 const { CALLS, callOf, toolCallIn, linkIn } = require("./calls.js");
 const { taskKeyIn, taskOfFile } = require("./tasks.js");
 const records = require("./records.js");
+const { activityOf } = require("./activity.js");
 
 const DESCRIPTIONS = path.join(".claude", "imprimatur", "descriptions.jsonl");
 
@@ -144,6 +145,41 @@ function tasksOf(rows) {
   return rows.map((r) => taskOfFile(r.file) ?? taskOfBranch(r.branch) ?? most(turns.get(turn(r) ?? "")) ?? taskKeyIn(r.prompt) ?? taskKeyIn(r.said));
 }
 
+/** Activity rows kept in the graph: the newest ones (older ones are in the logs and the archive). */
+const ACTIVITY_ROWS = 1500;
+
+/**
+ * An activity row's task: its subagent's Agent row's, else the session's task nearest in time
+ * (the latest before it, else the first after), else the last task the session wrote records of.
+ * Rows are newest first. @param {string} root @param {any[]} rows @param {(string | undefined)[]} tasks
+ */
+function activityTasks(root, rows, tasks) {
+  /** @type {Map<string, Array<{t: number, task: string}>>} */
+  const known = new Map();
+  rows.forEach((r, i) => {
+    const task = r.record ? r.task : tasks[i];
+    if (!r.activity && task && r.session) known.set(r.session, [...(known.get(r.session) ?? []), { t: Date.parse(r.t), task }]);
+  });
+  const bySession = records.sessionTasks(root);
+  const agentRow = new Map(rows.map((r, i) => [r.agentId, i]).filter(([id]) => id));
+  // Agent rows first: their calls follow them.
+  const order = rows.map((r, i) => i).sort((a, b) => Number(Boolean(rows[a].agent)) - Number(Boolean(rows[b].agent)));
+  for (const i of order) {
+    const r = rows[i];
+    if (!r.activity) continue;
+    const parent = r.agent ? agentRow.get(r.agent) : undefined;
+    if (parent !== undefined) {
+      tasks[i] = tasks[parent];
+      continue;
+    }
+    const list = known.get(r.session ?? "") ?? [];
+    const at = Date.parse(r.t);
+    const before = list.filter((k) => k.t <= at).sort((a, b) => b.t - a.t)[0];
+    const after = list.filter((k) => k.t > at).sort((a, b) => a.t - b.t)[0];
+    tasks[i] = (before ?? after)?.task ?? bySession.get(r.session ?? "")?.at(-1);
+  }
+}
+
 /** Words in a text (letters or digits), for "is this a sentence". @param {string | undefined} text */
 const wordsIn = (text) => (text ?? "").match(/[\p{L}\p{N}]{2,}/gu)?.length ?? 0;
 
@@ -212,7 +248,7 @@ function fileEdits(root, file, log, abs, open, callsAt) {
 /**
  * @param {string} root repo root
  * @param {(file: string) => string | undefined} [currentText] open-editor text, else read from disk
- * @returns {{rows: Array<{file: string, n: number, t: string, session?: string, tool?: string, prompt?: string, intent?: string, summary: string, title?: string, added: number, removed: number, accepted: boolean, gone: boolean, preview?: Array<[string, string]>, task?: string, lane: number, outside?: boolean, record?: number, describe?: string}>,
+ * @returns {{rows: Array<{file: string, n: number, t: string, session?: string, tool?: string, prompt?: string, intent?: string, summary: string, title?: string, added: number, removed: number, accepted: boolean, gone: boolean, preview?: Array<[string, string]>, task?: string, lane: number, outside?: boolean, record?: number, describe?: string, id?: string, activity?: boolean, kind?: string, agent?: string, agentId?: string, failed?: boolean, ms?: number}>,
  *            lanes: Array<{task?: string, title?: string, first: number, last: number}>,
  *            sessions: Array<{session: string, title?: string}>}}
  */
@@ -244,7 +280,7 @@ function graphRows(root, currentText = () => undefined) {
       const describe = !e.outside && !model && !e.gone && wordsIn(agentSaid) < 4 ? (e.toolUseId ?? `#${e.n}`) : undefined;
       rows.push({ file, n: e.n, t: e.t, session: e.session, tool: e.tool, prompt: e.prompt, intent, summary: e.summary,
         title: e.title ?? titleOf(e.transcript), added: e.added, removed: e.removed, accepted: e.accepted, gone: e.gone, preview: e.preview, lane: 0,
-        ...(e.outside && { outside: true }), ...(describe && { describe }) });
+        ...(e.outside && { outside: true }), ...(describe && { describe }), ...(e.toolUseId && { id: e.toolUseId }) });
       // An outside change goes in its edit's lane: the edit's own clues.
       const own = e.outside ? edits.find((x) => x.n === e.n - 0.5) : e;
       // The branch the call was made on (the transcript's) next to the recorded one: older
@@ -258,9 +294,18 @@ function graphRows(root, currentText = () => undefined) {
     rows.push({ file: `${v.task_key} · ${v.kind}`, n: v.id, t: new Date(v.at).toISOString(), session: v.actor?.slice(v.actor.indexOf(":") + 1),
       tool: "record", intent: changeOf(v), summary: v.title, added: 0, removed: 0, accepted: true, gone: false, lane: 0, task: v.task_key, record: v.record_id });
   }
+  // Everything else the agent did (#55): one row per tool call, the newest ACTIVITY_ROWS; a call
+  // already shown as an edit row is not repeated.
+  const shown = new Set(rows.map((r) => r.id).filter(Boolean));
+  for (const a of activityOf(root).filter((x) => !shown.has(x.id)).slice(-ACTIVITY_ROWS)) {
+    rows.push({ file: a.what, n: a.id ?? a.t, t: a.t, session: a.session, tool: a.tool, kind: a.kind, intent: a.what, summary: a.out ?? "",
+      added: 0, removed: 0, accepted: true, gone: false, lane: 0, activity: true,
+      ...(a.agent && { agent: a.agent }), ...(a.agentId && { agentId: a.agentId }), ...(a.failed && { failed: true }), ...(a.ms != null && { ms: a.ms }) });
+  }
   rows.sort((a, b) => Date.parse(b.t) - Date.parse(a.t));
-  // Record rows carry their task: they do not vote on the file rows' tasks.
-  const tasks = tasksOf(rows.map((r) => (r.record ? { ...r, session: undefined, prompt: undefined } : { ...r, ...clues.get(r) })));
+  // Record and activity rows do not vote on the file rows' tasks.
+  const tasks = tasksOf(rows.map((r) => (r.record || r.activity ? { ...r, session: undefined, prompt: undefined } : { ...r, ...clues.get(r) })));
+  activityTasks(root, rows, tasks);
   /** @type {ReturnType<typeof graphRows>["lanes"]} */
   const lanes = [];
   /** @type {ReturnType<typeof graphRows>["sessions"]} */
