@@ -184,7 +184,7 @@ async function syncOnce(db, cfg, { fetch: fetchFn = fetch, log = () => {} } = {}
   for (;;) {
     const since = Number(db.meta("pull_seq") ?? 0);
     const r = await call(cfg, `/v1/pull?since=${since}&device=${encodeURIComponent(device)}&limit=${BATCH}`, undefined, fetchFn);
-    const out = db.applyRemote(r.changes, { pullSeq: r.last });
+    const out = db.applyRemote(r.changes, { pullSeq: r.last, lastPage: !r.more || r.last <= since });
     if (out.dropped) log(`sync: gave up on ${out.dropped} pulled change${out.dropped === 1 ? "" : "s"} whose record never arrived`);
     pulled += r.changes.length;
     applied += out.applied;
