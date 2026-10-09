@@ -140,6 +140,9 @@ test("Stop: no 'Neredeyiz' blocks once (stop_hook_active ends it); merged branch
   sh(root, "merge", "-q", "--ff-only", "feat/2-done");
   const r = check("Stop", { cwd: root, last_assistant_message: "NEREDEYİZ" });
   assert.deepEqual(r.notice, ["Imprimatur (branchFinish): merged into main but not deleted: feat/2-done (git branch -d feat/2-done)."]);
+  const s1 = () => check("Stop", { cwd: root, session_id: "S1", last_assistant_message: "Neredeyiz" });
+  assert.equal(s1().notice.length, 1);
+  assert.deepEqual(s1(), {}, "once per session and branch");
 });
 
 test("SessionStart: the repo's tasks and their 👉 from the database", () => {
