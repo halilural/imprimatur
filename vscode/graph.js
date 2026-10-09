@@ -9,7 +9,8 @@ const { BASELINE_DIR, HISTORY_DIR, historyEdits, latestBefore, editBranch } = re
 const { diff, review, acceptLines } = require("./diff.js");
 const { narrationOf, titleOf } = require("./narration.js");
 const { CALLS, callOf, toolCallIn, linkIn } = require("./calls.js");
-const { taskKeyIn, taskOfFile, todoOfKey } = require("./tasks.js");
+const { taskKeyIn, taskOfFile } = require("./tasks.js");
+const records = require("./records.js");
 
 const DESCRIPTIONS = path.join(".claude", "imprimatur", "descriptions.jsonl");
 
@@ -143,12 +144,20 @@ function tasksOf(rows) {
   return rows.map((r) => taskOfFile(r.file) ?? taskOfBranch(r.branch) ?? most(turns.get(turn(r) ?? "")) ?? taskKeyIn(r.prompt) ?? taskKeyIn(r.said));
 }
 
-/** A task's title: its TODO.md heading without the key ("# #39 · Lanes" → "Lanes"). @param {string} root @param {string} task */
+/** One line for a record change: "todo added: …", "question → done: …", "👉 moved: …". @param {any} v */
+function changeOf(v) {
+  const a = v.after ?? {};
+  const what =
+    v.op === "create" ? `${v.kind} added`
+    : "pointer" in a ? (a.pointer ? "👉 here" : "👉 off")
+    : a.status ? `${v.kind} → ${a.status}`
+    : `${v.kind} edited (${Object.keys(a).join(", ")})`;
+  return `${what}: ${v.title}`;
+}
+
+/** A task's title, from Imprimatur's database. @param {string} root @param {string} task */
 function taskTitle(root, task) {
-  const todo = todoOfKey(root, task);
-  if (!todo) return undefined;
-  const head = /^#\s+(.+)$/m.exec(fs.readFileSync(path.join(root, todo), "utf8"))?.[1];
-  return head?.replace(task, "").replace(/^[\s·:–—-]+/, "").trim() || undefined;
+  return records.taskTitle(root, task);
 }
 
 /** A file's size and change time, "" when it is missing: a cache key part. @param {string} f */
@@ -200,20 +209,19 @@ function fileEdits(root, file, log, abs, open, callsAt) {
 /**
  * @param {string} root repo root
  * @param {(file: string) => string | undefined} [currentText] open-editor text, else read from disk
- * @returns {{rows: Array<{file: string, n: number, t: string, session?: string, tool?: string, prompt?: string, intent?: string, summary: string, title?: string, added: number, removed: number, accepted: boolean, gone: boolean, preview?: Array<[string, string]>, task?: string, lane: number, outside?: boolean}>,
+ * @returns {{rows: Array<{file: string, n: number, t: string, session?: string, tool?: string, prompt?: string, intent?: string, summary: string, title?: string, added: number, removed: number, accepted: boolean, gone: boolean, preview?: Array<[string, string]>, task?: string, lane: number, outside?: boolean, record?: number}>,
  *            lanes: Array<{task?: string, title?: string, first: number, last: number}>,
  *            sessions: Array<{session: string, title?: string}>}}
  */
 function graphRows(root, currentText = () => undefined) {
   const dir = path.join(root, HISTORY_DIR);
-  if (!fs.existsSync(dir)) return { rows: [], lanes: [], sessions: [] };
   /** @type {ReturnType<typeof graphRows>["rows"]} */
   const rows = [];
   /** The clues tasksOf reads that the rows do not keep (the branch, the Bash description). */
   const clues = new Map();
   const described = descriptionsOf(root);
   const callsAt = statKey(path.join(root, CALLS));
-  for (const ent of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
+  for (const ent of fs.existsSync(dir) ? fs.readdirSync(dir, { recursive: true, withFileTypes: true }) : []) {
     if (!ent.isFile() || !ent.name.endsWith(".jsonl")) continue;
     const log = path.join(ent.parentPath, ent.name);
     const file = path.relative(dir, log).slice(0, -".jsonl".length);
@@ -236,14 +244,20 @@ function graphRows(root, currentText = () => undefined) {
       clues.set(rows.at(-1), { branch, said: own?.intent ?? call?.said, ...(e.outside && { session: own?.session, prompt: own?.prompt }) });
     }
   }
+  // Agents' record changes (#60): activity in their task's lane, nothing to accept.
+  for (const v of records.agentChanges(root)) {
+    rows.push({ file: `${v.task_key} · ${v.kind}`, n: v.id, t: new Date(v.at).toISOString(), session: v.actor?.slice(v.actor.indexOf(":") + 1),
+      tool: "record", intent: changeOf(v), summary: v.title, added: 0, removed: 0, accepted: true, gone: false, lane: 0, task: v.task_key, record: v.record_id });
+  }
   rows.sort((a, b) => Date.parse(b.t) - Date.parse(a.t));
-  const tasks = tasksOf(rows.map((r) => ({ ...r, ...clues.get(r) })));
+  // Record rows carry their task: they do not vote on the file rows' tasks.
+  const tasks = tasksOf(rows.map((r) => (r.record ? { ...r, session: undefined, prompt: undefined } : { ...r, ...clues.get(r) })));
   /** @type {ReturnType<typeof graphRows>["lanes"]} */
   const lanes = [];
   /** @type {ReturnType<typeof graphRows>["sessions"]} */
   const sessions = [];
   rows.forEach((r, i) => {
-    const task = tasks[i];
+    const task = r.record ? r.task : tasks[i];
     if (task) r.task = task;
     let lane = lanes.findIndex((l) => l.task === task);
     if (lane < 0) lane = lanes.push({ ...(task && { task, title: taskTitle(root, task) }), first: i, last: i }) - 1;

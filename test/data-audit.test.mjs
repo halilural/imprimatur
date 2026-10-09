@@ -99,11 +99,14 @@ test("#45: a record of an unknown kind closes nothing", () => {
   assert.equal(waitingItems(root)[0].open, true);
 });
 
-test("#45: a done TODO.md ticks only the steps about its task, also when the item names another", () => {
+test("#45: a done task ticks only the steps about its task, also when the item names another", () => {
   const { root, log } = waitingRepo([{ t: "2026-10-06T08:00:00Z", kind: "verify", task: "#76", text: "#88: Panoyu kontrol et\n#76: Notu güncelle" }]);
-  const todo = path.join(root, "todos/88/TODO.md");
-  fs.mkdirSync(path.dirname(todo), { recursive: true });
-  fs.writeFileSync(todo, "# #88\n\n## Durum\n\nBitti\n");
+  const file = path.join(root, "imprimatur.db");
+  process.env.IMPRIMATUR_DB = file;
+  req("../vscode/records.js").reset();
+  const db = req("../vscode/db.js").openDb({ path: file });
+  db.upsertTask(db.repoOf(root).id, "#88", { status: "done" });
+  db.close();
   assert.equal(closeDoneTasks(root), 1);
   const steps = waitingSteps(root);
   assert.deepEqual(steps.map((s) => [s.task, s.state]), [["#88", "done"], ["#76", "open"]]);

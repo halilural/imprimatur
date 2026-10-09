@@ -10,7 +10,6 @@ import assert from "node:assert/strict";
 const req = createRequire(import.meta.url);
 const { graphRows } = req("../vscode/graph.js");
 const { diff } = req("../vscode/diff.js");
-const { sessionTodos, placeOf } = req("../vscode/tasks.js");
 
 // mtime resolution: make each write visibly newer.
 let clock = Date.now() / 1000 - 1000;
@@ -54,14 +53,4 @@ test("#51: a line-only diff has the same ranges as the full one", () => {
   const strip = (hs) => hs.map((h) => [h.oldStart, h.oldEnd, h.newStart, h.newEnd, h.marks.map((m) => m.kind)]);
   assert.deepEqual(strip(diff(a, b, { words: false })), strip(diff(a, b)));
   assert.deepEqual(diff(a, b, { words: false })[0].marks[0].inserted, []);
-});
-
-test("#51: the waiting list's TODO.md lookups see a TODO.md that changed", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-51t-"));
-  const todo = path.join(root, "todos/7/TODO.md");
-  write(todo, "# #7\n\n- TODO: something else\n");
-  const step = { session: "s", text: "check the deploy logs", task: "#7" };
-  assert.equal(placeOf(root, step, sessionTodos(root)).line, 0);
-  write(todo, "# #7\n\n- TODO: something else\n- TODO: (K) check the deploy logs\n");
-  assert.equal(placeOf(root, step, sessionTodos(root)).line, 4);
 });

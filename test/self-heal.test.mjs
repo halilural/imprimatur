@@ -69,18 +69,22 @@ test("#47: a done-cache written under older rules is read again from scratch", (
   fs.mkdirSync(path.dirname(log), { recursive: true });
   // The item's task field names another task; the step itself is about #37.
   fs.writeFileSync(log, JSON.stringify({ t: "2026-10-06T08:00:00Z", session: "s1", kind: "verify", task: "#36", text: "#37 için panelde kutuları tikle" }) + "\n");
-  const todo = path.join(root, "todos/37/TODO.md");
-  fs.mkdirSync(path.dirname(todo), { recursive: true });
-  fs.writeFileSync(todo, "# #37\n\n## Durum\n\nBitti\n");
-  const at = new Date("2026-10-06T10:00:00Z");
-  fs.utimesSync(todo, at, at);
-  // The old cache (plain map) saw this TODO.md already, under the old rules.
-  fs.writeFileSync(path.join(root, ".claude/imprimatur/todo-done.json"), JSON.stringify({ "todos/37/TODO.md": at.getTime() }));
+  const file = path.join(root, "imprimatur.db");
+  process.env.IMPRIMATUR_DB = file;
+  req("../vscode/records.js").reset();
+  const db = req("../vscode/db.js").openDb({ path: file });
+  const repoId = db.repoOf(root).id;
+  db.upsertTask(repoId, "#37", { status: "done" });
+  const at = Date.parse("2026-10-06T10:00:00Z");
+  db.sqlite.prepare("UPDATE tasks SET updated_at = ? WHERE repo_id = ? AND key = '#37'").run(at, repoId);
+  db.close();
+  // The old cache (file-based rules) saw this task already.
+  fs.writeFileSync(path.join(root, ".claude/imprimatur/todo-done.json"), JSON.stringify({ rules: 2, tasks: { "#37": at } }));
   assert.equal(closeDoneTasks(root), 1);
   assert.equal(waitingItems(root)[0].open, false);
   // The new cache: nothing to do twice.
   assert.equal(closeDoneTasks(root), 0);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(root, ".claude/imprimatur/todo-done.json"), "utf8")).rules, 2);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(root, ".claude/imprimatur/todo-done.json"), "utf8")).rules, 3);
 });
 
 test("#49: a row from before tool calls were recorded is matched to its call by file and time, and kept", () => {

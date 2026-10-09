@@ -109,10 +109,14 @@ test("graph: one lane per task, not per session (#39)", () => {
     fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
     fs.writeFileSync(path.join(root, file), "x\n");
   };
-  fs.mkdirSync(path.join(root, "todos/25"), { recursive: true });
-  // Session s1 works on #25 (its TODO.md and, in the same turn, the README), then on #37 on its branch.
+  const dbFile = path.join(root, "imprimatur.db");
+  process.env.IMPRIMATUR_DB = dbFile;
+  createRequire(import.meta.url)("../vscode/records.js").reset();
+  const db = createRequire(import.meta.url)("../vscode/db.js").openDb({ path: dbFile });
+  db.upsertTask(db.repoOf(root).id, "#25", { title: "Agent setup" });
+  db.close();
+  // Session s1 works on #25 (an edit under the old todos/ folder and, in the same turn, the README), then on #37 on its branch.
   write("todos/25/TODO.md", [{ t: "2026-10-06T10:00:00Z", session: "s1", prompt: "do 25" }]);
-  fs.writeFileSync(path.join(root, "todos/25/TODO.md"), "# #25 · Agent setup\n");
   write("README.md", [
     { t: "2026-10-06T10:01:00Z", session: "s1", prompt: "do 25" },
     { t: "2026-10-06T11:00:00Z", session: "s1", prompt: "now the tick", branch: "fix/37-tick", before: "a\n" },
@@ -147,4 +151,28 @@ test("graph: a task from its branch, a Jira key, or the Bash description (#39)",
     ]),
     ["LATD-12", "#41", "#37", undefined],
   );
+});
+
+test("graph: agents' record changes are rows in their task's lane, with nothing to accept (#60)", async () => {
+  const { createRequire } = await import("node:module");
+  const req = createRequire(import.meta.url);
+  const fsm = await import("node:fs");
+  const os = await import("node:os");
+  const pathm = await import("node:path");
+  const root = fsm.realpathSync(fsm.mkdtempSync(pathm.join(os.tmpdir(), "imprimatur-60-")));
+  process.env.IMPRIMATUR_DB = pathm.join(root, "i.db");
+  const records = req("../vscode/records.js");
+  records.reset();
+  const db = req("../vscode/db.js").openDb({ path: process.env.IMPRIMATUR_DB });
+  const task = db.upsertTask(db.repoOf(root).id, "#60", { title: "Views" });
+  const r = db.addRecord(task.id, { kind: "todo", owner: "C", title: "tree views" }, { kind: "agent", id: "claude-code:S1" });
+  db.updateRecord(r.id, { status: "done" }, { kind: "agent", id: "claude-code:S1" });
+  db.addRecord(task.id, { kind: "note", title: "by the user" }, { kind: "user", id: "u" });
+  db.close();
+  const { graphRows } = req("../vscode/graph.js");
+  const g = graphRows(root);
+  assert.deepEqual(g.rows.map((x) => x.intent), ["todo → done: tree views", "todo added: tree views"]);
+  assert.ok(g.rows.every((x) => x.record === r.id && x.accepted && x.session === "S1" && x.task === "#60"));
+  assert.deepEqual(g.lanes.map((l) => [l.task, l.title]), [["#60", "Views"]]);
+  records.reset();
 });

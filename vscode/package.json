@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.33.0",
+  "version": "0.34.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -41,6 +41,8 @@
     "todo-done.js",
     "db.js",
     "import.js",
+    "records.js",
+    "recordsView.js",
     "media/imprimatur.svg",
     "media/icon.png"
   ],
@@ -122,6 +124,75 @@
         "command": "imprimatur.archiveNow",
         "title": "Archive Old Agent Edits and Asks Now",
         "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.records.refresh",
+        "title": "Refresh Records",
+        "category": "Imprimatur",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "imprimatur.records.search",
+        "title": "Search Records",
+        "category": "Imprimatur",
+        "icon": "$(search)"
+      },
+      {
+        "command": "imprimatur.records.show",
+        "title": "Show Record",
+        "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.records.done",
+        "title": "Mark Done",
+        "category": "Imprimatur",
+        "icon": "$(check)"
+      },
+      {
+        "command": "imprimatur.records.reopen",
+        "title": "Reopen",
+        "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.records.drop",
+        "title": "Drop",
+        "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.records.pointer",
+        "title": "Move 👉 Here",
+        "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.records.editTitle",
+        "title": "Edit Title…",
+        "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.records.copy",
+        "title": "Copy Text",
+        "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.records.add",
+        "title": "Add Record…",
+        "category": "Imprimatur",
+        "icon": "$(add)"
+      },
+      {
+        "command": "imprimatur.records.taskDone",
+        "title": "Mark Task Done",
+        "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.records.taskReopen",
+        "title": "Reopen Task",
+        "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.records.reveal",
+        "title": "Reveal Record",
+        "category": "Imprimatur"
       }
     ],
     "colors": [
@@ -195,6 +266,50 @@
         {
           "command": "imprimatur.graph.goTo",
           "when": "false"
+        },
+        {
+          "command": "imprimatur.records.show",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.records.done",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.records.reopen",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.records.drop",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.records.pointer",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.records.editTitle",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.records.copy",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.records.add",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.records.taskDone",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.records.taskReopen",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.records.reveal",
+          "when": "false"
         }
       ],
       "webview/context": [
@@ -239,6 +354,73 @@
           "command": "imprimatur.setup.refresh",
           "when": "view == imprimatur.setup",
           "group": "navigation@3"
+        },
+        {
+          "command": "imprimatur.records.search",
+          "when": "view =~ /^imprimatur\\.records\\./",
+          "group": "navigation@1"
+        },
+        {
+          "command": "imprimatur.records.refresh",
+          "when": "view =~ /^imprimatur\\.records\\./",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "imprimatur.records.done",
+          "when": "view =~ /^imprimatur\\.records\\./ && viewItem =~ /^record-open/",
+          "group": "inline@1"
+        },
+        {
+          "command": "imprimatur.records.done",
+          "when": "view =~ /^imprimatur\\.records\\./ && viewItem =~ /^record-open/",
+          "group": "1_state@1"
+        },
+        {
+          "command": "imprimatur.records.reopen",
+          "when": "view =~ /^imprimatur\\.records\\./ && viewItem =~ /^record-(done|dropped)/",
+          "group": "1_state@2"
+        },
+        {
+          "command": "imprimatur.records.drop",
+          "when": "view =~ /^imprimatur\\.records\\./ && viewItem =~ /^record-open/",
+          "group": "1_state@3"
+        },
+        {
+          "command": "imprimatur.records.pointer",
+          "when": "view =~ /^imprimatur\\.records\\./ && viewItem == record-open",
+          "group": "1_state@4"
+        },
+        {
+          "command": "imprimatur.records.editTitle",
+          "when": "view =~ /^imprimatur\\.records\\./ && viewItem =~ /^record-/",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "imprimatur.records.add",
+          "when": "view =~ /^imprimatur\\.records\\./ && viewItem =~ /^(record-|task-)/",
+          "group": "2_edit@2"
+        },
+        {
+          "command": "imprimatur.records.copy",
+          "when": "view =~ /^imprimatur\\.records\\./ && viewItem =~ /^record-/",
+          "group": "3_copy@1"
+        },
+        {
+          "command": "imprimatur.records.add",
+          "when": "view =~ /^imprimatur\\.records\\./ && viewItem =~ /^task-/",
+          "group": "inline@1"
+        },
+        {
+          "command": "imprimatur.records.taskDone",
+          "when": "view =~ /^imprimatur\\.records\\./ && viewItem == task-live",
+          "group": "1_state@1"
+        },
+        {
+          "command": "imprimatur.records.taskReopen",
+          "when": "view =~ /^imprimatur\\.records\\./ && viewItem == task-closed",
+          "group": "1_state@1"
         }
       ]
     },
@@ -300,6 +482,40 @@
     },
     "views": {
       "imprimatur": [
+        {
+          "id": "imprimatur.records.asks",
+          "name": "Waiting on me",
+          "contextualTitle": "Imprimatur"
+        },
+        {
+          "id": "imprimatur.records.tasks",
+          "name": "Tasks",
+          "contextualTitle": "Imprimatur"
+        },
+        {
+          "id": "imprimatur.records.questions",
+          "name": "Questions",
+          "contextualTitle": "Imprimatur",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "imprimatur.records.decisions",
+          "name": "Decisions",
+          "contextualTitle": "Imprimatur",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "imprimatur.records.adr",
+          "name": "Architecture (ADR)",
+          "contextualTitle": "Imprimatur",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "imprimatur.records.pdr",
+          "name": "Product (PDR)",
+          "contextualTitle": "Imprimatur",
+          "visibility": "collapsed"
+        },
         {
           "id": "imprimatur.setup",
           "name": "Agent setup",

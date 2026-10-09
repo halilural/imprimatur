@@ -7,7 +7,7 @@
 //   messages are kept on them, then Haiku audits the session with its final
 //   message (vscode/audit.js), as the Stop hook would have. Sessions that
 //   already have a waiting log (the hook ran) or were scanned before are skipped.
-// - TODO.md files (TODO.md, docs/todos/*/TODO.md, todos/*/TODO.md): "TODO: (K)" lines, the user's
+// - Imprimatur's database (#60): the user's open records (owner K), the user's
 //   own to-dos. Rescanned each time: new lines are added, lines gone or DONE
 //   are ticked (by "file").
 "use strict";
@@ -16,11 +16,11 @@ const os = require("node:os");
 const path = require("node:path");
 const { audit, pointedAsks } = require("./audit.js");
 const { WAITING_DIR, itemsOf, readLog, tickStep } = require("./waiting.js");
-const { todoFiles } = require("./tasks.js");
+const records = require("./records.js");
 
 const DAYS = 30;
 const SCANNED = path.join(".claude", "imprimatur", "scanned.json");
-/** The waiting log that holds the TODO.md steps. */
+/** The waiting log that holds the user's open records. */
 const FILES_SESSION = "todo-files";
 const TRANSCRIPTS = path.join(os.homedir(), ".claude", "projects");
 
@@ -146,46 +146,41 @@ async function scanSession(root, session, tx, opts) {
 }
 
 /**
- * The user's to-dos in TODO.md files: "TODO: (K)" lines that are not done.
- * @param {string} root @returns {Array<{file: string, text: string}>}
+ * The user's open records in Imprimatur's database (owner K: todos and
+ * questions), one step each, grouped by task. @param {string} root
+ * @returns {Array<{task: string, text: string}>}
  */
 function todoAsks(root) {
-  return todoFiles(root)
-    .filter((f) => fs.existsSync(path.join(root, f)))
-    .flatMap((f) =>
-      fs
-        .readFileSync(path.join(root, f), "utf8")
-        .split("\n")
-        .map((l) => /^\s*[-*]\s+(?:👉\s*)?TODO:\s*\(K\)\s*(.+)$/u.exec(l)?.[1].replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\*\*|__|`/g, "").trim())
-        .filter((t) => !!t)
-        .map((text) => ({ file: f, text: /** @type {string} */ (text) })),
-    );
+  return records.userAsks(root).map((r) => ({ task: r.task_key, text: r.title }));
 }
 
 /**
- * Sync the TODO.md steps: add new ones (one item per file), tick the open ones
- * no longer in their file. @param {string} root @returns {{added: number, ticked: number}}
+ * Sync the user's records into Waiting on you: add new ones (one item per
+ * task), tick the open ones no longer open. Items written before #60 carry a
+ * TODO.md path in `prompt`; they are ticked the same way.
+ * @param {string} root @returns {{added: number, ticked: number}}
  */
 function scanTodos(root) {
   const log = path.join(root, WAITING_DIR, `${FILES_SESSION}.jsonl`);
   const now = todoAsks(root);
   const items = itemsOf(readLog(log), FILES_SESSION);
-  const known = new Set(items.flatMap((it) => it.text.split("\n").map((t) => `${it.prompt}\n${t}`)));
+  const known = new Set(items.flatMap((it) => it.text.split("\n").map((t) => `${it.task ?? it.prompt}\n${t}`)));
   let ticked = 0;
   for (const it of items) {
     if (!it.open) continue;
     it.text.split("\n").forEach((text, i) => {
-      if (it.checked?.includes(i) || now.some((a) => a.file === it.prompt && a.text === text)) return;
-      tickStep(log, { item: it.t, i }, "file", `no longer open in ${it.prompt}`);
+      if (it.checked?.includes(i) || now.some((a) => a.task === it.task && a.text === text)) return;
+      tickStep(log, { item: it.t, i }, "file", `no longer open in Imprimatur${it.task ? ` (${it.task})` : ""}`);
       ticked++;
     });
   }
-  const fresh = now.filter((a) => !known.has(`${a.file}\n${a.text}`));
-  const files = [...new Set(fresh.map((a) => a.file))];
+  const fresh = now.filter((a) => !known.has(`${a.task}\n${a.text}`));
+  const tasks = [...new Set(fresh.map((a) => a.task))];
   const t = Date.now();
-  files.forEach((file, k) => {
-    const text = fresh.filter((a) => a.file === file).map((a) => a.text).join("\n");
-    append(log, { t: new Date(t + k).toISOString(), session: FILES_SESSION, kind: "verify", text, prompt: file, title: file, todo: file });
+  tasks.forEach((task, k) => {
+    const text = fresh.filter((a) => a.task === task).map((a) => a.text).join("\n");
+    const title = records.taskTitle(root, task);
+    append(log, { t: new Date(t + k).toISOString(), session: FILES_SESSION, kind: "verify", text, task, prompt: task, title: title ? `${task} · ${title}` : task });
   });
   return { added: fresh.length, ticked };
 }

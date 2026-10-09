@@ -8,7 +8,7 @@
 // - Stop: Haiku reads the final message (audit.mjs, in the background): what it
 //   asks becomes an item, steps it settles are ticked. Without the model
 //   (IMPRIMATUR_DESCRIBE=off, or a failed call): lines that ask ("?", "test et",
-//   "shall I", 👉). A task whose TODO.md says done closes its asks in every
+//   "shall I", 👉). A task done in Imprimatur's database closes its asks in every
 //   session (vscode/todo-done.js);
 // - UserPromptSubmit, PostToolUse AskUserQuestion: the user's answer; Haiku
 //   ticks the steps it settles (resolve.mjs).
@@ -158,7 +158,7 @@ export function recordWaiting(data, project) {
   const { transcriptInfo } = require("./baseline.mjs");
   const root = repoRoot(path.resolve(project)) ?? path.resolve(project);
   const log = path.join(root, WAITING_DIR, `${session}.jsonl`);
-  // A task marked done in its TODO.md closes its asks in every session (#43).
+  // A task marked done in Imprimatur closes its asks in every session (#43, #60).
   if (data.hook_event_name === "Stop") {
     try {
       require("../vscode/todo-done.js").closeDoneTasks(root);
