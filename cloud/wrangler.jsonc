@@ -1,0 +1,18 @@
+// Imprimatur sync server (#61). Deploy: see README "Sync between machines".
+{
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "imprimatur-sync",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "imprimatur-sync",
+      // From `npx wrangler d1 create imprimatur-sync`.
+      "database_id": "REPLACE_WITH_YOUR_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ]
+  // Secret: `npx wrangler secret put SYNC_TOKEN` (never in this file).
+}

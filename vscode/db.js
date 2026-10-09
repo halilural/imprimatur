@@ -76,8 +76,57 @@ const MIGRATIONS = [
   );
   CREATE INDEX record_versions_record ON record_versions(record_id, at);
   `,
+  // Sync between machines (#61): field changes wait in outbox until pushed; clock
+  // keeps who last set each synced field and when (last writer wins per field).
+  `
+  CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT);
+  CREATE TABLE outbox (
+    id INTEGER PRIMARY KEY,
+    entity TEXT NOT NULL,
+    key TEXT NOT NULL,
+    field TEXT NOT NULL,
+    value TEXT,
+    at INTEGER NOT NULL
+  );
+  CREATE TABLE clock (
+    entity TEXT NOT NULL,
+    key TEXT NOT NULL,
+    field TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    device TEXT NOT NULL,
+    PRIMARY KEY (entity, key, field)
+  ) WITHOUT ROWID;
+  `,
 ];
 const VERSION = MIGRATIONS.length;
+
+/**
+ * Synced fields per entity (#61). Keys: repo = its origin, task = origin + "\t" + task key,
+ * record = its uid. "task" comes first: a record seen for the first time needs it.
+ */
+const SYNC_FIELDS = {
+  repo: ["name"],
+  task: ["title", "status", "summary", "epic"],
+  record: ["task", "kind", "owner", "status", "pointer", "title", "body", "position", "parent", "links", "created_at"],
+};
+/** A repo known only from another machine: root "origin:<origin>" until this machine opens it. */
+const PLACEHOLDER = "origin:";
+const TASK_STATUSES = ["open", "active", "done", "dropped"];
+const RECORD_STATUSES = ["open", "done", "dropped"];
+/** Changes kept for later (their parent record has not arrived), at most. */
+const MAX_PENDING = 5000;
+
+/**
+ * One spelling per remote: git@github.com:a/b.git and https://github.com/a/b are the same repo.
+ * @param {string} url
+ */
+function normOrigin(url) {
+  let s = String(url).trim().replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/^[^@/]+@/, "");
+  if (!/^[^/]*:\d+\//.test(s)) s = s.replace(/^([^/:]+):/, "$1/");
+  s = s.replace(/\/+$/, "").replace(/\.git$/, "");
+  const i = s.indexOf("/");
+  return i < 0 ? s.toLowerCase() : s.slice(0, i).toLowerCase() + s.slice(i);
+}
 
 /** Record fields a caller may set; the rest are the database's. */
 const EDITABLE = ["kind", "owner", "status", "title", "body", "position", "parent_id", "links"];
@@ -199,12 +248,33 @@ class Db {
   /** The repo row for a root, created on first sight. @param {string} root @param {{origin?: string, name?: string}} [info] */
   repoOf(root, info = {}) {
     const found = this.q("SELECT * FROM repos WHERE root = ?").get(root);
-    if (found) return found;
+    if (found && (!info.origin || found.origin)) return found;
+    const origin = info.origin ? normOrigin(info.origin) : null;
     return this.tx(() => {
+      const row = this.q("SELECT * FROM repos WHERE root = ?").get(root);
+      const placeholder = origin && this.q("SELECT * FROM repos WHERE root = ?").get(PLACEHOLDER + origin);
+      if (row) {
+        if (row.origin || !origin) return row;
+        // The origin is learnt now: tasks that came from other machines move in (keys this repo lacks).
+        if (placeholder) {
+          this.q(`UPDATE tasks SET repo_id = ? WHERE repo_id = ? AND key NOT IN (SELECT key FROM tasks WHERE repo_id = ?)`)
+            .run(row.id, placeholder.id, row.id);
+        }
+        this.q("UPDATE repos SET origin = ? WHERE id = ?").run(info.origin, row.id);
+        if (this.syncOn()) this.seed_(row.id);
+        return this.q("SELECT * FROM repos WHERE id = ?").get(row.id);
+      }
+      if (placeholder) {
+        // First opened here after its tasks arrived from another machine: adopt it.
+        this.q("UPDATE repos SET root = ?, name = ? WHERE id = ?").run(root, info.name ?? path.basename(root), placeholder.id);
+        return this.q("SELECT * FROM repos WHERE id = ?").get(placeholder.id);
+      }
       this.q("INSERT OR IGNORE INTO repos (uid, root, origin, name, created_at) VALUES (?, ?, ?, ?, ?)").run(
         uid(), root, info.origin ?? null, info.name ?? path.basename(root), Date.now(),
       );
-      return this.q("SELECT * FROM repos WHERE root = ?").get(root);
+      const made = this.q("SELECT * FROM repos WHERE root = ?").get(root);
+      this.trackRepo_(made, Date.now());
+      return made;
     });
   }
 
@@ -216,6 +286,7 @@ class Db {
   upsertTask(repoId, key, fields = {}) {
     return this.tx(() => {
       const now = Date.now();
+      const before = this.q("SELECT * FROM tasks WHERE repo_id = ? AND key = ?").get(repoId, key);
       this.q(`INSERT INTO tasks (uid, repo_id, key, title, status, epic_id, summary, created_at, updated_at)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT (repo_id, key) DO UPDATE SET
@@ -227,7 +298,10 @@ class Db {
         "epicId" in fields ? 1 : 0, fields.epicId ?? null,
         "summary" in fields ? 1 : 0, fields.summary ?? null, now,
       );
-      return this.q("SELECT * FROM tasks WHERE repo_id = ? AND key = ?").get(repoId, key);
+      const after = this.q("SELECT * FROM tasks WHERE repo_id = ? AND key = ?").get(repoId, key);
+      const col = { title: "title", status: "status", summary: "summary", epic: "epic_id" };
+      this.trackTask_(after, SYNC_FIELDS.task.filter((f) => !before || before[col[f]] !== after[col[f]]), now);
+      return after;
     });
   }
 
@@ -266,6 +340,7 @@ class Db {
       const after = Object.fromEntries(EDITABLE.filter((f) => row[f] != null).map((f) => [f, row[f]]));
       this.version_(id, actor, "create", null, after, now);
       if (fields.pointer) this.movePointer(id, actor, now);
+      this.trackRecord_(id, SYNC_FIELDS.record, now);
       return this.record(id);
     });
   }
@@ -296,11 +371,14 @@ class Db {
       this.q(`UPDATE records SET ${fields.map((f) => `${f} = ?`).join(", ")}, updated_at = ? WHERE id = ?`)
         .run(...fields.map((f) => (f === "links" ? json(after[f]) : after[f])), now, id);
       this.version_(id, actor, "update", before, after, now);
+      const synced = fields.map((f) => (f === "parent_id" ? "parent" : f));
       // A record that is no longer open cannot be where we left off.
       if (old.pointer && after.status && after.status !== "open") {
         this.q("UPDATE records SET pointer = 0 WHERE id = ?").run(id);
         this.version_(id, actor, "update", { pointer: true }, { pointer: false }, now);
+        synced.push("pointer");
       }
+      this.trackRecord_(id, synced, now);
       return this.record(id);
     });
   }
@@ -328,6 +406,7 @@ class Db {
       const now = Date.now();
       if (this.q("UPDATE records SET pointer = 0, updated_at = ? WHERE id = ? AND pointer = 1").run(now, id).changes) {
         this.version_(id, actor, "update", { pointer: true }, { pointer: false }, now);
+        this.trackRecord_(id, ["pointer"], now);
       }
       return this.record(id);
     });
@@ -349,9 +428,11 @@ class Db {
     if (prev) {
       this.q("UPDATE records SET pointer = 0, updated_at = ? WHERE id = ?").run(now, prev.id);
       this.version_(prev.id, actor, "update", { pointer: true }, { pointer: false }, now);
+      this.trackRecord_(prev.id, ["pointer"], now);
     }
     this.q("UPDATE records SET pointer = 1, updated_at = ? WHERE id = ?").run(now, id);
     this.version_(id, actor, "update", { pointer: false }, { pointer: true }, now);
+    this.trackRecord_(id, ["pointer"], now);
   }
 
   /** @param {number} id @param {Actor} actor @param {string} op @param {any} before @param {any} after @param {number} at */
@@ -487,6 +568,361 @@ class Db {
                  ${repoId == null ? "" : "AND t.repo_id = ?"} ORDER BY r.created_at DESC LIMIT ?`;
     return (repoId == null ? this.q(sql).all(limit) : this.q(sql).all(repoId, limit)).map(recordOf);
   }
+
+  // ---- Sync between machines (#61) ----
+
+  /** @param {string} k @returns {string | undefined} */
+  meta(k) {
+    return this.q("SELECT v FROM meta WHERE k = ?").get(k)?.v ?? undefined;
+  }
+
+  /** @param {string} k @param {string | number | null} v null deletes */
+  setMeta(k, v) {
+    if (v == null) this.q("DELETE FROM meta WHERE k = ?").run(k);
+    else this.q("INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v").run(k, String(v));
+  }
+
+  /** Whether local writes are queued for sync. Off: writes cost what they did before #61. */
+  syncOn() {
+    return this.meta("sync") === "on";
+  }
+
+  /** This device's id, made once. */
+  deviceId() {
+    let d = this.meta("device");
+    if (!d) {
+      this.q("INSERT OR IGNORE INTO meta (k, v) VALUES ('device', ?)").run(uid());
+      d = /** @type {string} */ (this.meta("device"));
+    }
+    return d;
+  }
+
+  /** Turns sync on; the first time, every existing repo, task and record is queued. */
+  enableSync() {
+    return this.tx(() => {
+      this.setMeta("sync", "on");
+      this.deviceId();
+      if (this.meta("seeded")) return 0;
+      const n = this.seed_();
+      this.setMeta("seeded", "1");
+      return n;
+    });
+  }
+
+  disableSync() {
+    this.setMeta("sync", null);
+  }
+
+  /** Queued changes, oldest first. @param {number} limit */
+  outbox(limit = 1000) {
+    return this.q("SELECT * FROM outbox ORDER BY id LIMIT ?").all(limit);
+  }
+
+  outboxCount() {
+    return /** @type {any} */ (this.q("SELECT count(*) AS n FROM outbox").get()).n;
+  }
+
+  /** The server has every queued change up to this id. @param {number} id */
+  ackOutbox(id) {
+    this.q("DELETE FROM outbox WHERE id <= ?").run(id);
+  }
+
+  /** @param {any} repo */
+  originKey_(repo) {
+    return repo?.origin ? normOrigin(repo.origin) : undefined;
+  }
+
+  /** @param {any} task */
+  taskKey_(task) {
+    const origin = task && this.originKey_(this.q("SELECT origin FROM repos WHERE id = ?").get(task.repo_id));
+    return origin ? `${origin}\t${task.key}` : undefined;
+  }
+
+  /** A synced field's value as this database holds it. @param {"repo" | "task" | "record"} entity @param {any} row @param {string} f */
+  syncValue_(entity, row, f) {
+    if (entity === "repo") return row.name ?? null;
+    if (entity === "task") {
+      if (f === "epic") return row.epic_id == null ? null : this.taskById(row.epic_id)?.key ?? null;
+      return row[f] ?? null;
+    }
+    if (f === "task") return this.taskKey_(this.taskById(row.task_id)) ?? null;
+    if (f === "parent") return row.parent_id == null ? null : this.q("SELECT uid FROM records WHERE id = ?").get(row.parent_id)?.uid ?? null;
+    if (f === "pointer") return Boolean(row.pointer);
+    if (f === "links") return typeof row.links === "string" ? JSON.parse(row.links) : row.links ?? null;
+    return row[f] ?? null;
+  }
+
+  /**
+   * Queues fields of one entity and claims them in the clock. A local write is never
+   * older than what the clock holds (another machine's clock may run ahead).
+   * @param {string} entity @param {string} key @param {Array<[string, any]>} fields @param {number} at
+   */
+  enqueue_(entity, key, fields, at) {
+    const device = this.deviceId();
+    for (const [field, value] of fields) {
+      const clock = this.q("SELECT at FROM clock WHERE entity = ? AND key = ? AND field = ?").get(entity, key, field);
+      const t = clock && clock.at >= at ? clock.at + 1 : at;
+      this.q("INSERT INTO outbox (entity, key, field, value, at) VALUES (?, ?, ?, ?, ?)").run(entity, key, field, JSON.stringify(value ?? null), t);
+      this.q(`INSERT INTO clock (entity, key, field, at, device) VALUES (?, ?, ?, ?, ?)
+              ON CONFLICT (entity, key, field) DO UPDATE SET at = excluded.at, device = excluded.device`).run(entity, key, field, t, device);
+    }
+  }
+
+  /** @param {any} repo @param {number} at */
+  trackRepo_(repo, at) {
+    const key = this.originKey_(repo);
+    if (!key || repo.root.startsWith(PLACEHOLDER) || !this.syncOn()) return;
+    this.enqueue_("repo", key, [["name", repo.name ?? null]], at);
+  }
+
+  /** @param {any} task @param {string[]} fields @param {number} at */
+  trackTask_(task, fields, at) {
+    if (!fields.length || !this.syncOn()) return;
+    const key = this.taskKey_(task);
+    if (key) this.enqueue_("task", key, fields.map((f) => [f, this.syncValue_("task", task, f)]), at);
+  }
+
+  /** @param {number} id @param {string[]} fields @param {number} at */
+  trackRecord_(id, fields, at) {
+    if (!fields.length || !this.syncOn()) return;
+    const rec = this.record(id);
+    if (!rec || !this.taskKey_(this.taskById(rec.task_id))) return;
+    this.enqueue_("record", rec.uid, fields.map((f) => [f, this.syncValue_("record", rec, f)]), at);
+  }
+
+  /**
+   * Queues every synced field of the repos with an origin (or one repo), dated by its
+   * updated_at. Fields another machine set last stay theirs.
+   * @param {number} [repoId]
+   */
+  seed_(repoId) {
+    const device = this.deviceId();
+    let n = 0;
+    /** @param {string} entity @param {string} key @param {any} row @param {number} at */
+    const put = (entity, key, row, at) => {
+      for (const f of /** @type {any} */ (SYNC_FIELDS)[entity]) {
+        const clock = this.q("SELECT at, device FROM clock WHERE entity = ? AND key = ? AND field = ?").get(entity, key, f);
+        if (clock && clock.device !== device) continue;
+        const t = clock?.at ?? at;
+        this.q("INSERT INTO outbox (entity, key, field, value, at) VALUES (?, ?, ?, ?, ?)")
+          .run(entity, key, f, JSON.stringify(this.syncValue_(/** @type {any} */ (entity), row, f) ?? null), t);
+        this.q("INSERT OR IGNORE INTO clock (entity, key, field, at, device) VALUES (?, ?, ?, ?, ?)").run(entity, key, f, t, device);
+        n++;
+      }
+    };
+    const repos = repoId == null ? this.q("SELECT * FROM repos WHERE origin IS NOT NULL ORDER BY id").all()
+      : this.q("SELECT * FROM repos WHERE id = ? AND origin IS NOT NULL").all(repoId);
+    for (const repo of repos) {
+      const origin = /** @type {string} */ (this.originKey_(repo));
+      if (!repo.root.startsWith(PLACEHOLDER)) put("repo", origin, repo, repo.created_at);
+      for (const task of this.q("SELECT * FROM tasks WHERE repo_id = ? ORDER BY id").all(repo.id)) {
+        put("task", `${origin}\t${task.key}`, task, task.updated_at);
+      }
+      const recs = this.q("SELECT r.* FROM records r JOIN tasks t ON t.id = r.task_id WHERE t.repo_id = ? ORDER BY r.id").all(repo.id);
+      for (const rec of recs) put("record", rec.uid, recordOf(rec), rec.updated_at);
+    }
+    return n;
+  }
+
+  /** The repo for an origin: a real one if this machine has it, else a placeholder. @param {string} origin */
+  repoForOrigin_(origin) {
+    const all = this.q("SELECT * FROM repos WHERE origin IS NOT NULL ORDER BY id").all();
+    const mine = all.filter((r) => normOrigin(r.origin) === origin);
+    const found = mine.find((r) => !r.root.startsWith(PLACEHOLDER)) ?? mine[0];
+    if (found) return found;
+    const name = origin.split("/").filter(Boolean).pop() ?? origin;
+    this.q("INSERT INTO repos (uid, root, origin, name, created_at) VALUES (?, ?, ?, ?, ?)").run(uid(), PLACEHOLDER + origin, origin, name, Date.now());
+    return this.q("SELECT * FROM repos WHERE root = ?").get(PLACEHOLDER + origin);
+  }
+
+  /** The task for a sync key, created if missing. @param {string} key @returns {any} */
+  taskForKey_(key) {
+    const tab = key.indexOf("\t");
+    if (tab <= 0 || tab === key.length - 1) return undefined;
+    const repo = this.repoForOrigin_(key.slice(0, tab));
+    return this.taskIn_(repo.id, key.slice(tab + 1));
+  }
+
+  /** @param {number} repoId @param {string} key */
+  taskIn_(repoId, key) {
+    const t = this.taskByKey(repoId, key);
+    if (t) return t;
+    const now = Date.now();
+    this.q("INSERT INTO tasks (uid, repo_id, key, title, status, created_at, updated_at) VALUES (?, ?, ?, '', 'open', ?, ?)").run(uid(), repoId, key, now, now);
+    return this.taskByKey(repoId, key);
+  }
+
+  /**
+   * Applies changes pulled from other machines in one transaction: per field the newer
+   * change wins (a tie goes to the larger device id). Nothing here is queued again.
+   * Changes waiting on a record that has not arrived are kept and tried next time.
+   * @param {Array<{entity: string, key: string, field: string, value: string | null, at: number, device: string}>} changes
+   * @param {{pullSeq?: number}} [o] saved with the changes
+   */
+  applyRemote(changes, { pullSeq } = {}) {
+    return this.tx(() => {
+      const order = { repo: 0, task: 1, record: 2 };
+      let todo = [...JSON.parse(this.meta("pending") ?? "[]"), ...changes]
+        .map((c, i) => /** @type {const} */ ([c, i]))
+        .sort((a, b) => ((/** @type {any} */ (order))[a[0].entity] ?? 3) - ((/** @type {any} */ (order))[b[0].entity] ?? 3) || a[1] - b[1])
+        .map(([c]) => c);
+      /** @type {Map<number, {before: any, after: any, device: string, op: string, at: number}>} */
+      const versions = new Map();
+      let applied = 0;
+      // A record's parent may come later in the same batch: try again while that helps.
+      for (let pass = 0; todo.length && pass < 3; pass++) {
+        const later = [];
+        for (const c of todo) {
+          const r = this.applyOne_(c, versions);
+          if (r === "later") later.push(c);
+          else if (r) applied++;
+        }
+        if (later.length === todo.length) break;
+        todo = later;
+      }
+      for (const [id, v] of versions) {
+        if (!Object.keys(v.after).length && v.op === "update") continue;
+        this.version_(id, { kind: "import", id: `sync:${v.device}` }, v.op, v.op === "create" ? null : v.before, v.after, v.at);
+      }
+      this.setMeta("pending", todo.length ? JSON.stringify(todo.slice(-MAX_PENDING)) : null);
+      if (pullSeq != null) this.setMeta("pull_seq", pullSeq);
+      return { applied, pending: todo.length };
+    });
+  }
+
+  /** @param {any} c @param {Map<number, any>} versions @returns {boolean | "later"} */
+  applyOne_(c, versions) {
+    const { entity, key, field, at, device } = c;
+    if (!(/** @type {any} */ (SYNC_FIELDS))[entity]?.includes(field) || typeof key !== "string" || !Number.isSafeInteger(at) || typeof device !== "string") return false;
+    let value;
+    try {
+      value = c.value == null ? null : JSON.parse(c.value);
+    } catch {
+      return false;
+    }
+    const clock = this.q("SELECT at, device FROM clock WHERE entity = ? AND key = ? AND field = ?").get(entity, key, field);
+    if (clock && (at < clock.at || (at === clock.at && device < clock.device))) return false;
+    const str = (v) => typeof v === "string";
+    if (entity === "repo") {
+      if (!str(value)) return false;
+      const repo = this.repoForOrigin_(key);
+      // A repo's name is its folder here; only a placeholder takes the other machine's.
+      if (repo.root.startsWith(PLACEHOLDER)) this.q("UPDATE repos SET name = ? WHERE id = ?").run(value, repo.id);
+    } else if (entity === "task") {
+      const task = this.taskForKey_(key);
+      if (!task) return false;
+      const set = (col, v) => this.q(`UPDATE tasks SET ${col} = ?, updated_at = max(updated_at, ?) WHERE id = ?`).run(v, at, task.id);
+      if (field === "title") {
+        if (!str(value)) return false;
+        set("title", value);
+      } else if (field === "status") {
+        if (!TASK_STATUSES.includes(value)) return false;
+        set("status", value);
+      } else if (field === "summary") {
+        if (value !== null && !str(value)) return false;
+        set("summary", value);
+      } else if (field === "epic") {
+        if (value !== null && !str(value)) return false;
+        const epic = value === null ? null : this.taskIn_(task.repo_id, value);
+        set("epic_id", epic && epic.id !== task.id ? epic.id : null);
+      }
+    } else {
+      let rec = this.recordByUid(key);
+      if (!rec) {
+        if (field !== "task") return "later";
+        const task = str(value) ? this.taskForKey_(value) : undefined;
+        if (!task) return false;
+        const { lastInsertRowid } = this.q(`INSERT INTO records (uid, task_id, kind, status, title, position, created_at, updated_at)
+                                            VALUES (?, ?, 'note', 'open', '', 0, ?, ?)`).run(key, task.id, at, at);
+        versions.set(Number(lastInsertRowid), { before: {}, after: {}, device, op: "create", at });
+        rec = /** @type {any} */ (this.record(Number(lastInsertRowid)));
+      } else {
+        const r = this.applyField_(rec, field, value, at);
+        if (r !== true) return r;
+        const v = versions.get(rec.id) ?? { before: {}, after: {}, device, op: "update", at };
+        versions.set(rec.id, v);
+        const col = field === "parent" ? "parent_id" : field;
+        if (!(col in v.before)) v.before[col] = rec[col] ?? null;
+        const now = /** @type {any} */ (this.record(rec.id));
+        v.after[col] = now[col] ?? null;
+        if (JSON.stringify(v.before[col]) === JSON.stringify(v.after[col]) && v.op === "update") {
+          delete v.before[col];
+          delete v.after[col];
+        }
+        v.at = Math.max(v.at, at);
+        v.device = device;
+      }
+    }
+    this.q(`INSERT INTO clock (entity, key, field, at, device) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (entity, key, field) DO UPDATE SET at = excluded.at, device = excluded.device`).run(entity, key, field, at, device);
+    return true;
+  }
+
+  /** One synced field of an existing record. @param {any} rec @param {string} field @param {any} value @param {number} at @returns {boolean | "later"} */
+  applyField_(rec, field, value, at) {
+    const set = (col, v) => this.q(`UPDATE records SET ${col} = ?, updated_at = max(updated_at, ?) WHERE id = ?`).run(v, at, rec.id);
+    switch (field) {
+      case "task": {
+        const task = typeof value === "string" ? this.taskForKey_(value) : undefined;
+        if (!task) return false;
+        if (task.id === rec.task_id) return true;
+        // Its 👉 stays only if the task it moves to has none.
+        if (rec.pointer && this.q("SELECT 1 FROM records WHERE task_id = ? AND pointer = 1").get(task.id)) set("pointer", 0);
+        set("task_id", task.id);
+        return true;
+      }
+      case "kind":
+        if (!KINDS.includes(value)) return false;
+        set("kind", value);
+        return true;
+      case "owner":
+        if (value !== null && value !== "C" && value !== "K") return false;
+        set("owner", value);
+        return true;
+      case "status":
+        if (!RECORD_STATUSES.includes(value)) return false;
+        set("status", value);
+        return true;
+      case "pointer":
+        if (typeof value !== "boolean") return false;
+        if (value) this.q("UPDATE records SET pointer = 0 WHERE task_id = ? AND pointer = 1 AND id != ?").run(rec.task_id, rec.id);
+        set("pointer", value ? 1 : 0);
+        return true;
+      case "title":
+        if (typeof value !== "string") return false;
+        set("title", value);
+        return true;
+      case "body":
+        if (value !== null && typeof value !== "string") return false;
+        set("body", value);
+        return true;
+      case "position":
+        if (!Number.isFinite(value)) return false;
+        set("position", value);
+        return true;
+      case "parent": {
+        if (value === null) {
+          set("parent_id", null);
+          return true;
+        }
+        if (typeof value !== "string") return false;
+        const parent = this.q("SELECT id FROM records WHERE uid = ?").get(value);
+        if (!parent) return "later";
+        set("parent_id", parent.id === rec.id ? null : parent.id);
+        return true;
+      }
+      case "links":
+        if (value !== null && (typeof value !== "object" || Array.isArray(value))) return false;
+        set("links", json(value));
+        return true;
+      case "created_at":
+        if (!Number.isSafeInteger(value)) return false;
+        set("created_at", value);
+        return true;
+      default:
+        return false;
+    }
+  }
 }
 
 /**
@@ -526,4 +962,4 @@ function openDb({ path: file = dbPath(), busyMs = 5000 } = {}) {
   return db;
 }
 
-module.exports = { openDb, dbPath, onWindowsDrive, KINDS, ACTORS, VERSION, MIGRATIONS };
+module.exports = { openDb, dbPath, onWindowsDrive, normOrigin, KINDS, ACTORS, VERSION, MIGRATIONS, SYNC_FIELDS, PLACEHOLDER };

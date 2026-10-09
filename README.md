@@ -279,6 +279,33 @@ it can run again (nothing is added twice) and checks each file's count. Or by ha
 3. Extension: `npm run package`, then install `dist/imprimatur-<version>.vsix`
    (`code --install-extension …`, or Extensions view → Install from VSIX).
 
+### Sync between machines
+
+Tasks and records live in one database per machine. To share them, run the
+small sync server in `cloud/` (a Cloudflare Worker with a D1 database) on your
+own Cloudflare account, once:
+
+```sh
+cd cloud
+npx wrangler d1 create imprimatur-sync        # put the printed database_id in wrangler.jsonc
+npx wrangler d1 migrations apply imprimatur-sync --remote
+npx wrangler secret put SYNC_TOKEN            # a long random string, e.g. `openssl rand -hex 32`
+npx wrangler deploy
+```
+
+Then on each machine: `npm run sync -- --setup https://imprimatur-sync.<you>.workers.dev <token>`.
+It saves the address and token next to the database (`config.json`, readable only
+by you), turns sync on and sends what is already there. VS Code then syncs on
+start, every minute and a few seconds after each change (**Imprimatur: Sync Now**
+to force it; one line per sync in the Imprimatur output). `npm run sync` syncs
+from a terminal; `npm run sync -- --off` stops queueing changes.
+
+- Repos are matched by their `origin` remote (ssh and https spellings are the
+  same); repos without one stay on their machine. A task that arrives before you
+  open its repo here waits under `origin:<remote>` and moves in when you do.
+- Each field (title, status, 👉, …) keeps the newest change; a change on one
+  machine never undoes a different field changed on another.
+
 ### Limits
 
 - No marks in diff tabs (e.g. Working Tree): git already colors those.

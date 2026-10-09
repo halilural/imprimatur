@@ -13,6 +13,8 @@ const { WAITING_DIR, waitingSteps } = require("./waiting.js");
 const { acceptEdit, spotsOf, graphRows } = require("./graph.js");
 const { registerSetupView } = require("./setupView.js");
 const { registerRecordViews } = require("./recordsView.js");
+const records = require("./records.js");
+const { readConfig, syncOnce, syncLoop, describe } = require("./sync.js");
 
 /** @type {ReturnType<typeof registerSetupView> | undefined} */
 let setupView;
@@ -659,11 +661,50 @@ function activate(ctx) {
   // The side bar: records (Imprimatur's database), then a way to the graph and every file that shapes the agent.
   /** @type {{views: Record<string, any>} | undefined} */
   let recordViews;
+  // Sync between machines (#61), when set up (config.json next to the database): now,
+  // every 60 s, and 5 s after a local write. Only queued local changes start a sync:
+  // applying pulled changes queues nothing, so the change it makes to the file ends there.
+  /** @type {ReturnType<typeof syncLoop> | undefined} */
+  let syncer;
+  const runSync = async () => {
+    const db = records.dbOf();
+    if (!db) throw new Error(records.lastError ?? "database not available");
+    const cfg = readConfig(db.file);
+    if (!cfg) return "sync: not set up (npm run sync -- --setup <url> <token>)";
+    return describe(await syncOnce(db, cfg));
+  };
+  /** Starts the loop once sync is set up (at activation, or later by Sync Now). */
+  const startSync = () => {
+    const db = records.dbOf();
+    if (syncer || !db || !readConfig(db.file)) return false;
+    syncer = syncLoop(runSync, (line, error) => (error ? log.warn(line) : log.info(line)));
+    ctx.subscriptions.push({ dispose: () => syncer?.dispose() });
+    return true;
+  };
+  try {
+    if (startSync()) syncer?.now();
+  } catch (e) {
+    log.error(`sync: ${e instanceof Error ? e.message : e}`);
+  }
+  ctx.subscriptions.push(vscode.commands.registerCommand("imprimatur.syncNow", async () => {
+    try {
+      const line = await runSync();
+      log.info(line);
+      startSync();
+      vscode.window.setStatusBarMessage(`Imprimatur ${line}`, 5000);
+    } catch (e) {
+      log.warn(`sync failed: ${e instanceof Error ? e.message : e}`);
+      vscode.window.showErrorMessage(`Imprimatur sync failed: ${e instanceof Error ? e.message : e}`);
+    }
+  }));
   try {
     // The repos as git spells them: roots are normalised (lower case on Windows).
     recordViews = registerRecordViews(ctx, () => [...roots].map((r) => repoRoot(r) ?? r), (msg) => log.warn(msg), () => {
       syncRecords();
       setupView?.refreshCounts();
+      try {
+        if (syncer && records.dbOf()?.outboxCount()) syncer.kick();
+      } catch {}
     });
   } catch (e) {
     log.error(`records views: ${e instanceof Error ? e.message : e}`);
