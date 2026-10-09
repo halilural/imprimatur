@@ -609,8 +609,13 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
   // A tick changes only the waiting list: it reuses the edits, the costly half (graphRows).
   /** @type {ReturnType<typeof graphRows> | undefined} */
   let edits;
-  const page = (nonce = crypto.randomBytes(16).toString("hex"), waitingOnly = false) =>
-    html((edits = waitingOnly && edits ? edits : graphRows(root, currentText)), root, nonce, waitingSteps(root));
+  const page = (nonce = crypto.randomBytes(16).toString("hex"), waitingOnly = false) => {
+    if (!(waitingOnly && edits)) {
+      edits = graphRows(root, currentText);
+      describeShown(root, edits.rows);
+    }
+    return html(edits, root, nonce, waitingSteps(root));
+  };
   // An edit refreshes three times (extension.js refreshSoon): send only what changed.
   let sent = "";
   // Load once; after that the page updates in place (its "render" message):
@@ -653,6 +658,48 @@ function timed(what, m, work) {
   const out = work();
   appendPerf(`${what} host: waited ${m.at ? start - m.at : "?"}ms, work ${Date.now() - start}ms`);
   return out;
+}
+
+/** Rows the graph asks a description for: the newest ones, as the panel shows them first. */
+const DESCRIBE_ROWS = 40;
+/** At most this many model calls at once. */
+const DESCRIBE_AT_ONCE = 2;
+/** Edits being described or waiting: "root\tfile\tkey". @type {Set<string>} */
+const describing = new Set();
+/** @type {string[]} */
+const describeQueue = [];
+let describeRunning = 0;
+
+/**
+ * Lazy descriptions (#63): when the graph is drawn, the newest edits that nothing
+ * describes (no model sentence, no agent words) get one from hooks/describe.mjs in
+ * the background; its line in descriptions.jsonl redraws the graph. An edit never
+ * shown costs no model call. IMPRIMATUR_DESCRIBE=off turns it off.
+ * @param {string} root @param {ReturnType<typeof graphRows>["rows"]} rows
+ */
+function describeShown(root, rows) {
+  if (process.env.IMPRIMATUR_DESCRIBE === "off") return;
+  for (const r of rows.slice(0, DESCRIBE_ROWS)) {
+    if (!r.describe) continue;
+    const job = `${root}\t${r.file}\t${r.describe}`;
+    if (describing.has(job)) continue;
+    describing.add(job);
+    describeQueue.push(job);
+  }
+  while (describeRunning < DESCRIBE_AT_ONCE && describeQueue.length) {
+    const job = /** @type {string} */ (describeQueue.shift());
+    const [where, file, key] = job.split("\t");
+    describeRunning++;
+    // In the extension: its package has no hooks/ folder. A failed one is not asked again in
+    // this window; the changed line stays.
+    require("./describe.js")
+      .describe(where, file, key, modelLang() ?? "English")
+      .catch(() => {})
+      .finally(() => {
+        describeRunning--;
+        describeShown(where, []);
+      });
+  }
 }
 
 const appendPerf = (text) => fs.appendFile(path.join(os.tmpdir(), "imprimatur-perf.log"), `${new Date().toISOString()} ${text} ${shown ?? ""}\n`, () => {});
