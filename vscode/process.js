@@ -252,12 +252,18 @@ function check(event, input, deps = {}) {
     const records = deps.records ?? require("./records.js");
     const id = records.repoId(root);
     const tasks = id === undefined ? [] : records.dbOf().whereWeLeftOff(id);
-    context.push(
-      tasks.length
-        ? ["Where we left off (Imprimatur; read and write records with the mcp__imprimatur__* tools):",
-            ...tasks.slice(0, 15).map((t) => `- ${t.key}${t.title ? ` ${t.title}` : ""} [${t.status}]${t.pointer_title ? ` 👉 ${t.pointer_title}` : ""}${t.open_records ? ` (${t.open_records} open)` : ""}`)].join("\n")
-        : "No unfinished tasks in Imprimatur for this repo. Record work with the mcp__imprimatur__* tools (task_upsert, record_add, pointer_set).",
-    );
+    // Claude Code cuts SessionStart context at 10,000 characters to a 2,000-character preview:
+    // short lines, and well under the cap.
+    const cut = (t, n) => (t && t.length > n ? `${t.slice(0, n - 1)}…` : t);
+    const lines = ["Where we left off (Imprimatur; read and write records with the mcp__imprimatur__* tools; task_get for a task's records):"];
+    let size = lines[0].length;
+    for (const t of tasks.slice(0, 15)) {
+      const line = `- ${t.key}${t.title ? ` ${cut(t.title, 80)}` : ""} [${t.status}]${t.pointer_title ? ` 👉 ${cut(t.pointer_title, 100)}` : ""}${t.open_records ? ` (${t.open_records} open)` : ""}`;
+      if (size + line.length > 4000) break;
+      lines.push(line);
+      size += line.length + 1;
+    }
+    context.push(tasks.length ? lines.join("\n") : "No unfinished tasks in Imprimatur for this repo. Record work with the mcp__imprimatur__* tools (task_upsert, record_add, pointer_set).");
   }
 
   if (event === "PreToolUse" && tool === "Bash" && s.hookBypass.mode && bypasses(ti.command)) {
