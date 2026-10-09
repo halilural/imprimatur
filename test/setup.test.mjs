@@ -7,15 +7,19 @@ const root = "/home/u/projects/imprimatur";
 test("setup: adds every hook to empty settings, keeps other hooks", () => {
   const before = { model: "x", hooks: { SessionStart: [{ hooks: [{ type: "command", command: "heal.mjs" }] }] } };
   const { settings, changes } = mergeHooks(before, { root, lang: "Turkish" });
-  assert.equal(changes.length, 10);
+  assert.equal(changes.length, 14);
   assert.ok(changes.every((c) => c.startsWith("added")));
-  assert.deepEqual(settings.hooks.SessionStart, before.hooks.SessionStart);
+  assert.deepEqual(settings.hooks.SessionStart[0], before.hooks.SessionStart[0], "other hooks are kept, ours added after them");
+  assert.match(settings.hooks.SessionStart[1].hooks[0].command, /hooks\/process\.mjs"$/);
   assert.equal(settings.model, "x");
   assert.deepEqual(settings.hooks.PreToolUse[0], {
     matcher: "Edit|Write|Bash",
     hooks: [{ type: "command", command: `IMPRIMATUR_LANG=Turkish node "${root}/hooks/baseline.mjs" md mdx` }],
   });
-  assert.deepEqual(settings.hooks.Stop, [{ hooks: [{ type: "command", command: `IMPRIMATUR_LANG=Turkish node "${root}/hooks/waiting.mjs"` }] }]);
+  assert.deepEqual(settings.hooks.Stop, [
+    { hooks: [{ type: "command", command: `IMPRIMATUR_LANG=Turkish node "${root}/hooks/waiting.mjs"` }] },
+    { hooks: [{ type: "command", command: `IMPRIMATUR_LANG=Turkish node "${root}/hooks/process.mjs"` }] },
+  ]);
   assert.equal(before.hooks.PreToolUse, undefined); // the input is not changed
 });
 

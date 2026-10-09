@@ -499,6 +499,28 @@ function activate(ctx) {
     vscode.commands.registerCommand("imprimatur.showHistory", showHistory),
     vscode.commands.registerCommand("imprimatur.openGraph", showGraph),
     vscode.commands.registerCommand("imprimatur.acceptRange", acceptRange),
+    // Process checks (#56): a repo turns them on with a committed .claude/imprimatur.json.
+    vscode.commands.registerCommand("imprimatur.processOn", async () => {
+      const { starterSettings, CONFIG } = require("./process.js");
+      const list = [...roots].map((r) => repoRoot(r) ?? r);
+      const root = list.length > 1 ? await vscode.window.showQuickPick(list, { title: "Turn on process checks in which repo?" }) : list[0];
+      if (!root) return;
+      const file = path.join(root, CONFIG);
+      if (fs.existsSync(file)) {
+        await vscode.window.showTextDocument(vscode.Uri.file(file));
+        return vscode.window.showInformationMessage("Process checks are already on here: this file sets them.");
+      }
+      const allow = await vscode.window.showInputBox({
+        title: "On main, which paths may be edited without a branch?",
+        prompt: "A regular expression on the repo-relative path; empty: nothing (every edit needs a branch)",
+        value: "^docs/",
+      });
+      if (allow === undefined) return;
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, JSON.stringify(starterSettings({ allow: allow.trim() ? [allow.trim()] : [] }), null, 2) + "\n");
+      await vscode.window.showTextDocument(vscode.Uri.file(file));
+      vscode.window.showInformationMessage("Process checks are on for this repo from the next tool call. Commit .claude/imprimatur.json; each check is \"block\", \"warn\" or false.");
+    }),
     vscode.commands.registerCommand("imprimatur.importMarkdown", () => {
       // Lazy: node:sqlite loads only when records are used.
       const { openDb } = require("./db.js");

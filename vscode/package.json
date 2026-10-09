@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.34.1",
+  "version": "0.35.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -41,6 +41,7 @@
     "todo-done.js",
     "db.js",
     "import.js",
+    "process.js",
     "records.js",
     "recordsView.js",
     "media/imprimatur.svg",
@@ -205,6 +206,11 @@
         "title": "Show This Window's Repos Only",
         "category": "Imprimatur",
         "icon": "$(root-folder)"
+      },
+      {
+        "command": "imprimatur.processOn",
+        "title": "Turn On Process Checks for This Repo",
+        "category": "Imprimatur"
       }
     ],
     "colors": [
