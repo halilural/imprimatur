@@ -12,14 +12,25 @@
 //   hooks' language), and with --show-in, where Markdown changes show (preview | editor | both), in
 //   VS Code's machine settings (~/.vscode-server/data/Machine/settings.json on
 //   a remote/WSL machine, else the user settings);
-// - checks that the `claude` CLI is on PATH (the model features use it).
+// - checks that the `claude` CLI is on PATH (the model features use it);
+// - with --lang / --exts, <database folder>/config.json, read by hooks started
+//   without args (the plugin's; vscode/config.js).
+// With --plugin (#67), Claude Code gets the hooks and the MCP server from the
+// Imprimatur plugin instead: this checkout is added as the "imprimatur"
+// marketplace, imprimatur@imprimatur is installed (user scope), and our hooks
+// and user-scope MCP server are taken out of settings (a backup first). Without
+// --plugin, an installed and enabled plugin means no hooks or Claude Code MCP
+// server are written (they would run twice).
 //
-//   npm run setup -- [--lang Turkish] [--show-in both] [--exts md,mdx] [--no-extension] [--dry-run]
+//   npm run setup -- [--plugin] [--lang Turkish] [--show-in both] [--exts md,mdx] [--no-extension] [--dry-run]
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+
+const require = createRequire(import.meta.url);
 
 const ASK = "AskUserQuestion";
 
@@ -27,7 +38,7 @@ const ASK = "AskUserQuestion";
  * The hooks Imprimatur needs: [event, matcher, script, args].
  * @param {string[]} exts @returns {Array<[string, string | undefined, string, string]>}
  */
-const wanted = (exts) => [
+export const wanted = (exts) => [
   ["PreToolUse", "Edit|Write|Bash", "baseline.mjs", ` ${exts.join(" ")}`],
   ["PostToolUse", "Bash", "baseline.mjs", ` ${exts.join(" ")}`],
   ["PostToolUseFailure", "Bash", "baseline.mjs", ` ${exts.join(" ")}`],
@@ -138,6 +149,90 @@ export function mergeCodex(toml, { root }) {
 }
 
 /**
+ * Ours: the script under an imprimatur folder (a generic name like process.mjs
+ * may be someone else's). Windows paths use backslashes.
+ * @param {any} hook a handler from settings @param {string} [script] one script, else any of ours
+ */
+function ourHook(hook, script) {
+  if (typeof hook?.command !== "string" || !/imprimatur/i.test(hook.command)) return false;
+  const cmd = hook.command.replace(/\\/g, "/");
+  const scripts = script ? [script] : [...new Set(wanted([]).map((w) => w[2]))];
+  return scripts.some((s) => cmd.includes(`/hooks/${s}`));
+}
+
+/**
+ * Settings without Imprimatur's hooks (the plugin brings them, #67): other
+ * handlers, matchers and events are kept; a group or event left empty goes.
+ * Pure: returns a copy and what was removed.
+ * @param {any} settings @returns {{settings: any, changes: string[]}}
+ */
+export function removeOurHooks(settings) {
+  const out = structuredClone(settings ?? {});
+  const changes = [];
+  if (!out.hooks || typeof out.hooks !== "object") return { settings: out, changes };
+  for (const [event, groups] of Object.entries(out.hooks)) {
+    if (!Array.isArray(groups)) continue;
+    const kept = [];
+    for (const g of groups) {
+      const hooks = Array.isArray(g?.hooks) ? g.hooks : [];
+      const left = hooks.filter((h) => !ourHook(h));
+      for (const h of hooks) {
+        if (left.includes(h)) continue;
+        const script = /\/hooks\/([\w-]+\.mjs)/.exec(h.command.replace(/\\/g, "/"))?.[1];
+        changes.push(`removed ${event}${g.matcher ? ` [${g.matcher}]` : ""} → ${script}`);
+      }
+      if (left.length === hooks.length) kept.push(g);
+      else if (left.length) kept.push({ ...g, hooks: left });
+    }
+    if (kept.length) out.hooks[event] = kept;
+    else delete out.hooks[event];
+  }
+  if (!Object.keys(out.hooks).length) delete out.hooks;
+  return { settings: out, changes };
+}
+
+/** The plugin's id in Claude Code: <plugin>@<marketplace>. */
+export const PLUGIN_ID = "imprimatur@imprimatur";
+
+/**
+ * Whether the Imprimatur plugin is installed and enabled for every project
+ * (user scope), from `claude plugin list --json`.
+ * @param {any} list @returns {boolean}
+ */
+export function pluginEnabled(list) {
+  return Array.isArray(list) && list.some((p) => String(p?.id ?? "").startsWith("imprimatur@") && p.enabled === true && (p.scope ?? "user") === "user");
+}
+
+/**
+ * A settings matcher for the plugin: each mcp__imprimatur__ tool also under the
+ * plugin's own server name (mcp__plugin_imprimatur_imprimatur__…). An exact list
+ * stays an exact list, a regex stays a regex (`|` is alternation there).
+ * @param {string | undefined} matcher
+ */
+export function pluginMatcher(matcher) {
+  if (!matcher) return matcher;
+  return matcher
+    .split("|")
+    .flatMap((p) => (p.startsWith("mcp__imprimatur__") ? [p, p.replace("mcp__imprimatur__", "mcp__plugin_imprimatur_imprimatur__")] : [p]))
+    .join("|");
+}
+
+/**
+ * hooks/hooks.json for the plugin, from the same list as the settings hooks.
+ * No args: the hooks read language and extensions from IMPRIMATUR_LANG, the
+ * plugin's options or config.json (vscode/config.js).
+ */
+export function pluginHooks() {
+  /** @type {Record<string, any[]>} */
+  const hooks = {};
+  for (const [event, matcher, script] of wanted([])) {
+    const m = pluginMatcher(matcher);
+    (hooks[event] ??= []).push({ ...(m ? { matcher: m } : {}), hooks: [{ type: "command", command: `node "\${CLAUDE_PLUGIN_ROOT}/hooks/${script}"` }] });
+  }
+  return { hooks };
+}
+
+/**
  * Settings with Imprimatur's hooks in place. Pure: returns a copy and the changes.
  * @param {any} settings ~/.claude/settings.json content
  * @param {{root: string, lang?: string, exts?: string[]}} opts root: this repo
@@ -153,8 +248,7 @@ export function mergeHooks(settings, { root, lang, exts = ["md", "mdx"] }) {
     const ours = entries
       .filter((e) => (e.matcher ?? "") === (matcher ?? ""))
       .flatMap((e) => e.hooks ?? [])
-      // Ours: the script under an imprimatur folder (a generic name like process.mjs may be someone else's).
-      .find((h) => typeof h.command === "string" && h.command.includes(`/hooks/${script}`) && /imprimatur/i.test(h.command));
+      .find((h) => ourHook(h, script));
     const label = `${event}${matcher ? ` [${matcher}]` : ""} → ${script}`;
     if (!ours) {
       entries.push({ ...(matcher ? { matcher } : {}), hooks: [{ type: "command", command }] });
@@ -241,9 +335,11 @@ function writeWithBackup(file, data) {
 
 /**
  * The MCP server in every installed client. node:sqlite needs Node >= 22.13.
- * @param {string} root @param {{dry: boolean}} opts
+ * claude: "add" registers it in Claude Code; "remove" takes our registration
+ * out and "skip" leaves it, when the plugin brings the server (#67).
+ * @param {string} root @param {{dry: boolean, claude?: "add" | "remove" | "skip"}} opts
  */
-function registerMcp(root, { dry }) {
+function registerMcp(root, { dry, claude = "add" }) {
   const [major, minor] = process.versions.node.split(".").map(Number);
   if (major < 22 || (major === 22 && minor < 13)) {
     console.log(`MCP server: Node ${process.versions.node} has no node:sqlite; install Node >= 22.13 and run setup again.`);
@@ -257,7 +353,21 @@ function registerMcp(root, { dry }) {
     claudeHas = JSON.parse(fs.readFileSync(path.join(home, ".claude.json"), "utf8")).mcpServers?.[MCP_NAME];
   } catch {}
   const claudeSame = claudeHas?.command === command && JSON.stringify(claudeHas?.args) === JSON.stringify(args);
-  if (claudeSame) console.log("MCP server in Claude Code: in place");
+  if (claude === "remove") {
+    if (!claudeHas) console.log("MCP server in Claude Code: from the plugin");
+    else {
+      console.log(`MCP server in Claude Code: from the plugin; removing the user-scope one${dry ? " (dry run)" : ""}`);
+      if (!dry) {
+        try {
+          execFileSync("claude", ["mcp", "remove", "-s", "user", MCP_NAME], { stdio: ["ignore", "ignore", "pipe"] });
+        } catch (e) {
+          console.log(`  failed: ${String(/** @type {any} */ (e).stderr || /** @type {Error} */ (e).message).trim()}`);
+        }
+      }
+    }
+  } else if (claude === "skip") {
+    console.log(`MCP server in Claude Code: from the plugin${claudeHas ? `; a user-scope one is also registered (npm run setup -- --plugin removes it)` : ""}`);
+  } else if (claudeSame) console.log("MCP server in Claude Code: in place");
   else if (!has("claude")) console.log(`MCP server in Claude Code: 'claude' not on PATH; run: claude mcp add -s user ${MCP_NAME} -- ${command} ${args.join(" ")}`);
   else {
     console.log(`MCP server in Claude Code: ${claudeHas ? "updated" : "added"} (user scope)`);
@@ -317,7 +427,50 @@ function options(argv) {
     exts: get("--exts")?.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
     extension: !argv.includes("--no-extension"),
     dry: argv.includes("--dry-run"),
+    plugin: argv.includes("--plugin"),
   };
+}
+
+/** A claude command's JSON output; undefined when it fails. @param {string[]} args */
+function claudeJson(args) {
+  try {
+    return JSON.parse(execFileSync("claude", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * --plugin: this checkout as the "imprimatur" marketplace, the plugin installed
+ * (user scope) and enabled. @returns {boolean} whether the plugin is (or, dry, would be) in place
+ * @param {string} root @param {{dry: boolean, lang?: string, exts?: string[]}} opts
+ */
+function installPlugin(root, { dry, lang, exts }) {
+  if (!has("claude")) {
+    console.log(`Plugin: 'claude' not on PATH; run: claude plugin marketplace add ${root} && claude plugin install ${PLUGIN_ID}`);
+    return false;
+  }
+  const steps = [];
+  const markets = claudeJson(["plugin", "marketplace", "list", "--json"]);
+  const market = Array.isArray(markets) ? markets.find((m) => m?.name === "imprimatur") : undefined;
+  if (!market) steps.push(["plugin", "marketplace", "add", root]);
+  const list = claudeJson(["plugin", "list", "--json"]);
+  const have = Array.isArray(list) ? list.find((p) => p?.id === PLUGIN_ID && (p.scope ?? "user") === "user") : undefined;
+  const config = [...(lang ? ["--config", `language=${lang}`] : []), ...(exts?.length ? ["--config", `extensions=${exts.join(",")}`] : [])];
+  if (!have) steps.push(["plugin", "install", PLUGIN_ID, "--scope", "user", ...config]);
+  else if (!have.enabled) steps.push(["plugin", "enable", PLUGIN_ID, "--scope", "user"]);
+  console.log(`Plugin ${PLUGIN_ID}: ${steps.length ? "to install" : "installed and enabled"}${market ? ` (marketplace "imprimatur" from ${market.path ?? market.repo ?? market.source})` : ""}`);
+  for (const step of steps) {
+    console.log(`  ${dry ? "would run" : "running"}: claude ${step.join(" ")}`);
+    if (dry) continue;
+    try {
+      execFileSync("claude", step, { stdio: "inherit" });
+    } catch {
+      console.log("  failed: settings hooks and the MCP server are left as they are.");
+      return false;
+    }
+  }
+  return true;
 }
 
 /** @param {string} cmd @param {string[]} args */
@@ -335,17 +488,41 @@ function main() {
   const opts = options(process.argv.slice(2));
   const file = path.join(os.homedir(), ".claude", "settings.json");
   const before = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
-  const hooked = mergeHooks(before, { root, lang: opts.lang, exts: opts.exts });
+
+  // The plugin (#67) brings the hooks and the MCP server: --plugin installs it and
+  // takes ours out of settings.json; without --plugin, an enabled plugin means
+  // nothing is written there (the hooks would run twice).
+  if (opts.plugin && !installPlugin(root, opts)) {
+    process.exitCode = 1;
+    return;
+  }
+  const fromPlugin = opts.plugin || pluginEnabled(has("claude") ? claudeJson(["plugin", "list", "--json"]) : undefined);
+  const hooked = opts.plugin ? removeOurHooks(before) : fromPlugin ? { settings: before, changes: [] } : mergeHooks(before, { root, lang: opts.lang, exts: opts.exts });
   const status = mergeStatusLine(hooked.settings, { root });
   const settings = status.settings;
   const changes = [...hooked.changes, ...(status.change ? [status.change] : [])];
 
-  console.log(`Hooks in ${file}:`);
+  console.log(`Hooks in ${file}${fromPlugin ? ` (the ${PLUGIN_ID} plugin brings them)` : ""}:`);
   console.log(changes.length ? changes.map((c) => `  ${c}`).join("\n") : "  all in place");
+  if (fromPlugin && !opts.plugin && removeOurHooks(before).changes.length) {
+    console.log("  Imprimatur's hooks are also in this file and would run twice: npm run setup -- --plugin takes them out.");
+  }
   if (status.hint) console.log(`  statusLine: ${status.hint}`);
   if (changes.length && !opts.dry) writeWithBackup(file, settings);
 
-  registerMcp(root, opts);
+  registerMcp(root, { dry: opts.dry, claude: opts.plugin ? "remove" : fromPlugin ? "skip" : "add" });
+
+  // Language and extensions for hooks started without args (the plugin's): vscode/config.js.
+  if (opts.lang || opts.exts?.length) {
+    const { configPath, readConfig, mergeConfig } = require("../vscode/config.js");
+    const cfgFile = configPath();
+    const { config, changed } = mergeConfig(readConfig(cfgFile), { lang: opts.lang, exts: opts.exts });
+    console.log(`Hook config ${cfgFile}: ${changed ? JSON.stringify(config) : "already set"}`);
+    if (changed && !opts.dry) {
+      fs.mkdirSync(path.dirname(cfgFile), { recursive: true });
+      fs.writeFileSync(cfgFile, JSON.stringify(config, null, 2) + "\n");
+    }
+  }
 
   if (opts.showIn || opts.lang) {
     const vs = vscodeSettingsFile();

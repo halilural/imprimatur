@@ -14,7 +14,8 @@
     "package": "node scripts/build.mjs && mkdir -p dist && cd vscode && npx --yes @vscode/vsce@4.0.0 package --skip-license --allow-missing-repository -o ../dist/",
     "setup": "node scripts/setup.mjs",
     "import": "node scripts/import.mjs",
-    "build": "node scripts/build.mjs"
+    "build": "node scripts/build.mjs",
+    "plugin": "node scripts/plugin.mjs"
   },
   "devDependencies": {
     "@vscode/test-cli": "0.0.15",

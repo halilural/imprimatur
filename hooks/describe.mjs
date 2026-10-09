@@ -10,7 +10,8 @@ const require = createRequire(import.meta.url);
 export const { DESCRIPTIONS, diffText, promptFor, cleanSentence, editTexts, describe, askModel } = require("../vscode/describe.js");
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const [root, file, toolUseId, lang = "English"] = process.argv.slice(2);
+  const [root, file, toolUseId, given] = process.argv.slice(2);
+  const lang = given || require("../vscode/config.js").hookLang() || "English";
   describe(root, file, toolUseId, lang)
     .catch((e) => process.stderr.write(`imprimatur describe: ${e.message}\n`))
     .finally(() => process.exit(0));

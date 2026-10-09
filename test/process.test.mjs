@@ -131,6 +131,9 @@ test("sweep: a task set done while its issue is open", () => {
   const call = (state) => check("PostToolUse", { cwd: root, tool_name: "mcp__imprimatur__task_upsert", tool_input: { key: "#56", status: "done" } }, { gh: () => JSON.stringify({ state }) });
   assert.match(call("OPEN").context[0], /#56 is done in Imprimatur but its GitHub issue is open/);
   assert.deepEqual(call("CLOSED"), {});
+  // The plugin's server names the tool mcp__plugin_imprimatur_imprimatur__task_upsert (#67).
+  const plugin = check("PostToolUse", { cwd: root, tool_name: "mcp__plugin_imprimatur_imprimatur__task_upsert", tool_input: { key: "#56", status: "done" } }, { gh: () => JSON.stringify({ state: "OPEN" }) });
+  assert.match(plugin.context[0], /#56 is done in Imprimatur/);
 });
 
 test("Stop: no 'Neredeyiz' blocks once (stop_hook_active ends it); merged branches left behind are named", () => {
