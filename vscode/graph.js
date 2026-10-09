@@ -9,7 +9,7 @@ const { BASELINE_DIR, HISTORY_DIR, historyEdits, latestBefore, editBranch } = re
 const { diff, review, acceptLines } = require("./diff.js");
 const { narrationOf, titleOf } = require("./narration.js");
 const { CALLS, callOf, toolCallIn, linkIn } = require("./calls.js");
-const { taskKeyIn } = require("./tasks.js");
+const { taskKeyIn, taskOfFile, todoOfKey } = require("./tasks.js");
 
 const DESCRIPTIONS = path.join(".claude", "imprimatur", "descriptions.jsonl");
 
@@ -110,13 +110,6 @@ function acceptEdit(copy, e, current) {
   return out;
 }
 
-/** The task a file under todos/<key>/ belongs to: todos/37/… → #37, todos/LATD-12/… → LATD-12. @param {string} file */
-function taskOfFile(file) {
-  const [top, dir, ...rest] = file.split(/[\\/]/);
-  if (top !== "todos" || !dir || !rest.length) return undefined;
-  return /^\d+$/.test(dir) ? `#${dir}` : taskKeyIn(dir);
-}
-
 /** The task a branch names: <type>/<n>-name → #n, else a Jira key in it. @param {string} [branch] */
 function taskOfBranch(branch) {
   if (!branch) return undefined;
@@ -127,7 +120,7 @@ function taskOfBranch(branch) {
 
 /**
  * Each edit's task, from its own clues, never from its session alone (one
- * session can work on several tasks): (1) its file is under todos/<key>/;
+ * session can work on several tasks): (1) its file is under (docs/)todos/<key>/;
  * (2) the branch it was made on; (3) the task whose todos/ the same turn
  * (session + request) edited most; (4) a key the request or the Bash
  * description names. None: undefined (the "No task" lane).
@@ -152,9 +145,9 @@ function tasksOf(rows) {
 
 /** A task's title: its TODO.md heading without the key ("# #39 · Lanes" → "Lanes"). @param {string} root @param {string} task */
 function taskTitle(root, task) {
-  const todo = path.join(root, "todos", task.replace(/^#/, ""), "TODO.md");
-  if (!fs.existsSync(todo)) return undefined;
-  const head = /^#\s+(.+)$/m.exec(fs.readFileSync(todo, "utf8"))?.[1];
+  const todo = todoOfKey(root, task);
+  if (!todo) return undefined;
+  const head = /^#\s+(.+)$/m.exec(fs.readFileSync(path.join(root, todo), "utf8"))?.[1];
   return head?.replace(task, "").replace(/^[\s·:–—-]+/, "").trim() || undefined;
 }
 

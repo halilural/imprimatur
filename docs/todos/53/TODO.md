@@ -4,7 +4,7 @@
 
 ## Durum
 
-Açıldı, Sprint 2'de (10–16 Ekim). Sıradaki iş #54 (yerleşim) — 2026-10-09
+Sürüyor (Sprint 2): #54'ün kod tarafı bitti (0.33.0, bu repo `docs/todos/`'ta); kalan dev-workflow skill'i ve diğer repolar — 2026-10-09
 
 ## Yapılacaklar
 

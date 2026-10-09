@@ -1,5 +1,5 @@
 {
-  // Trees show only titles by default; commits and todos/<N>/ refer to numbers.
+  // Trees show only titles by default; commits and docs/todos/<N>/ refer to numbers.
   "githubIssues.showIssueNumberInTree": true,
   "githubPullRequests.showPullRequestNumberInTree": true,
   // Current sprint first, open and closed as separate queries (open oldest

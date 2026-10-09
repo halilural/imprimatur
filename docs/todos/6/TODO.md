@@ -1,6 +1,6 @@
 # #6 · test: agent-review elle testleri (MT-AR-001…012)
 
-[#6](https://github.com/halilural/imprimatur/issues/6) · Part of [#2](../2/TODO.md) · Sprint 2 · testler: [agent-review.md](../../docs/testing/imprimatur.md)
+[#6](https://github.com/halilural/imprimatur/issues/6) · Part of [#2](../2/TODO.md) · Sprint 2 · testler: [agent-review.md](../../testing/imprimatur.md)
 
 ## Durum
 

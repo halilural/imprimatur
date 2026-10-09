@@ -7,7 +7,7 @@
 //   messages are kept on them, then Haiku audits the session with its final
 //   message (vscode/audit.js), as the Stop hook would have. Sessions that
 //   already have a waiting log (the hook ran) or were scanned before are skipped.
-// - TODO.md files (TODO.md, todos/*/TODO.md): "TODO: (K)" lines, the user's
+// - TODO.md files (TODO.md, docs/todos/*/TODO.md, todos/*/TODO.md): "TODO: (K)" lines, the user's
 //   own to-dos. Rescanned each time: new lines are added, lines gone or DONE
 //   are ticked (by "file").
 "use strict";
@@ -16,6 +16,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { audit, pointedAsks } = require("./audit.js");
 const { WAITING_DIR, itemsOf, readLog, tickStep } = require("./waiting.js");
+const { todoFiles } = require("./tasks.js");
 
 const DAYS = 30;
 const SCANNED = path.join(".claude", "imprimatur", "scanned.json");
@@ -149,9 +150,7 @@ async function scanSession(root, session, tx, opts) {
  * @param {string} root @returns {Array<{file: string, text: string}>}
  */
 function todoAsks(root) {
-  const todos = path.join(root, "todos");
-  const files = ["TODO.md", ...(fs.existsSync(todos) ? fs.readdirSync(todos).map((d) => path.join("todos", d, "TODO.md")) : [])];
-  return files
+  return todoFiles(root)
     .filter((f) => fs.existsSync(path.join(root, f)))
     .flatMap((f) =>
       fs
