@@ -182,7 +182,8 @@ export function mergeStatusLine(settings, { root }) {
   const command = statusLineCommand(root);
   const have = out.statusLine;
   if (have) {
-    const ours = typeof have.command === "string" && have.command.includes("/hooks/statusline.mjs") && /imprimatur/i.test(have.command);
+    // Windows paths use backslashes: compare with forward slashes.
+    const ours = typeof have.command === "string" && have.command.replace(/\\/g, "/").includes("/hooks/statusline.mjs") && /imprimatur/i.test(have.command);
     if (!ours) return { settings: out, change: undefined, hint: `another status line is set; to add ours, append the output of: ${command}` };
     if (have.command.replace(/"/g, "") === command.replace(/"/g, "")) return { settings: out, change: undefined };
     out.statusLine = { ...have, command };
@@ -373,6 +374,16 @@ function main() {
 
   if (opts.extension && !opts.dry) {
     console.log("Extension:");
+    // Packaging bundles with esbuild (a dev dependency): a pulled checkout may not have it yet.
+    if (!fs.existsSync(path.join(root, "node_modules", "esbuild"))) {
+      console.log("  installing build tools (npm install)…");
+      try {
+        execFileSync("npm", ["install", "--no-audit", "--no-fund"], { cwd: root, stdio: "inherit" });
+      } catch {
+        console.log("  npm install failed: run it in the repo, then npm run setup again.");
+        return;
+      }
+    }
     execFileSync("npm", ["run", "-s", "package"], { cwd: root, stdio: "inherit" });
     const { version } = JSON.parse(fs.readFileSync(path.join(root, "vscode", "package.json"), "utf8"));
     const vsix = path.join(root, "dist", `imprimatur-${version}.vsix`);

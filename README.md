@@ -197,6 +197,11 @@ for the `claude` CLI. It also registers the **Imprimatur MCP server**
 read and write tasks and their records (todos, questions, decisions, notes,
 ADRs, PDRs) through its tools; the records live in one database per machine
 (`~/.local/share/imprimatur/imprimatur.db`, `IMPRIMATUR_DB` to move it).
+**Status line**: setup adds Claude Code's status line (only if you have none):
+`Imprimatur · 3 waiting on you · #64 👉 …` for the session's repo and task.
+In an untrusted VS Code folder Imprimatur shows changes and records but starts
+no model calls or repo scripts (Workspace Trust).
+
 **Process checks** (opt-in per repo): **Imprimatur: Turn On Process Checks for
 This Repo** writes `.claude/imprimatur.json`; commit it. Then Imprimatur's hooks
 show where work stopped at session start, block `git --no-verify` / `HUSKY=0`,

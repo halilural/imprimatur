@@ -27,12 +27,19 @@ const inodeOf = (file) => {
   }
 };
 
+/** How long an open waits on a lock (the status line wants it short). */
+let busyMs = 5000;
+/** @param {{busyMs?: number}} o */
+function configure(o) {
+  if (o.busyMs !== undefined) busyMs = o.busyMs;
+}
+
 /** The process's connection, or undefined when it cannot open. */
 function dbOf() {
   if (db) return db;
   if (Date.now() - failedAt < RETRY_MS) return undefined;
   try {
-    db = require("./db.js").openDb();
+    db = require("./db.js").openDb({ busyMs });
     ino = inodeOf(db.file);
     lastError = undefined;
   } catch (e) {
@@ -132,7 +139,7 @@ function agentChanges(root) {
 }
 
 module.exports = {
-  agentChanges, checkFile, dbOf, reset, repoId, task, taskTitle, sessionTasks, doneTasks, userAsks, recordsOf, jiraLink,
+  agentChanges, checkFile, configure, dbOf, reset, repoId, task, taskTitle, sessionTasks, doneTasks, userAsks, recordsOf, jiraLink,
   get lastError() {
     return lastError;
   },

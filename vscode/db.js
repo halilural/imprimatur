@@ -133,8 +133,9 @@ const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 
  * SQLite answers SQLITE_BUSY at once (busy_timeout does not apply): retry for 5 s.
  * @param {any} s
  */
-function toWal(s) {
-  const deadline = Date.now() + 5000;
+/** @param {any} s @param {number} [waitMs] */
+function toWal(s, waitMs = 5000) {
+  const deadline = Date.now() + waitMs;
   for (;;) {
     try {
       if (s.prepare("PRAGMA journal_mode").get().journal_mode === "wal") return;
@@ -492,7 +493,7 @@ class Db {
  * Opens (creating if needed) the device database and brings its schema up to date.
  * @param {{path?: string}} [o]
  */
-function openDb({ path: file = dbPath() } = {}) {
+function openDb({ path: file = dbPath(), busyMs = 5000 } = {}) {
   if (file !== ":memory:") {
     if (onWindowsDrive(file)) {
       throw new Error(`Imprimatur: database ${file} is on a Windows drive; WAL breaks across WSL/Windows, use a Linux path`);
@@ -504,8 +505,8 @@ function openDb({ path: file = dbPath() } = {}) {
   const s = db.sqlite;
   try {
     // busy_timeout first: the rest may wait on another opener.
-    s.exec("PRAGMA busy_timeout = 5000");
-    toWal(s);
+    s.exec(`PRAGMA busy_timeout = ${Math.max(0, Math.floor(busyMs))}`);
+    toWal(s, busyMs);
     s.exec("PRAGMA synchronous = NORMAL");
     s.exec("PRAGMA foreign_keys = ON");
     db.version = /** @type {any} */ (s.prepare("PRAGMA user_version").get()).user_version;

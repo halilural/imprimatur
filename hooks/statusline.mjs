@@ -93,7 +93,14 @@ function main() {
   const file = path.join(os.tmpdir(), `imprimatur-statusline-${id}.json`);
   let line = cached(file);
   if (line === undefined) {
-    line = lineFor(root, session);
+    // A locked database must not hold the status line: wait 200 ms at most, and cache even a
+    // failed answer so the next refresh does not wait again.
+    try {
+      require("../vscode/records.js").configure({ busyMs: 200 });
+      line = lineFor(root, session);
+    } catch {
+      line = "Imprimatur";
+    }
     try {
       fs.writeFileSync(file, JSON.stringify({ at: Date.now(), line }));
     } catch {}
