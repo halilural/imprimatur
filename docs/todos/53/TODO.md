@@ -12,9 +12,9 @@ Sürüyor (Sprint 2): yön değişti, kayıtların asıl kaynağı Imprimatur ve
 - 👉 TODO: (C) [#57 Veritabanı: node:sqlite, cihaz bazlı, asıl kaynak](https://github.com/halilural/imprimatur/issues/57) — önce ARCHITECTURE.md hedef hâl
 - TODO: (C) [#58 Imprimatur MCP sunucusu](https://github.com/halilural/imprimatur/issues/58)
 - TODO: (C) [#59 Markdown kayıtlarını aktar, sonra kaldır](https://github.com/halilural/imprimatur/issues/59)
-- TODO: (C) [#60 Kayıt görünümleri](https://github.com/halilural/imprimatur/issues/60) — Sprint 3
-- TODO: (C) [#55 Grafikte ajanın her işi](https://github.com/halilural/imprimatur/issues/55) — Sprint 3, kayıt değişiklikleri Accept'siz
-- TODO: (C) [#56 Süreç hook'ları Imprimatur'a](https://github.com/halilural/imprimatur/issues/56) — Sprint 3, veritabanından okur
+- TODO: (C) [#60 Kayıt görünümleri](https://github.com/halilural/imprimatur/issues/60)
+- TODO: (C) [#55 Grafikte ajanın her işi](https://github.com/halilural/imprimatur/issues/55) — kayıt değişiklikleri Accept'siz
+- TODO: (C) [#56 Süreç hook'ları Imprimatur'a](https://github.com/halilural/imprimatur/issues/56) — veritabanından okur
 - TODO: (C) [#61 Bulut desteği](https://github.com/halilural/imprimatur/issues/61) — Backlog
 - TODO: (K) prepzio ve electron-mcp-server için karar (#54)
 
@@ -34,3 +34,4 @@ Sürüyor (Sprint 2): yön değişti, kayıtların asıl kaynağı Imprimatur ve
 - DECISION: (2026-10-09) Veritabanı cihaz bazlı; bulut desteği ayrı iş (#61).
 - DECISION: (2026-10-09) Agent Change Graph'te kayıt değişiklikleri Accept edilmez (#55).
 - DECISION: (2026-10-09) Markdown tamamen kalkar, üretilen görünüm yok. README.md, CLAUDE.md, AGENTS.md, .claude/rules ve skill'ler araç yapılandırması olarak dosyada kalır (varsayım, kullanıcıya bildirildi).
+- DECISION: (2026-10-09) Kullanıcı: "hepsi bir sprintte olacak": #55–#60 Sprint 2'de; #61 (bulut) Backlog'da kaldı ("sonrasında").
