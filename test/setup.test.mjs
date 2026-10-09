@@ -7,7 +7,9 @@ const root = "/home/u/projects/imprimatur";
 test("setup: adds every hook to empty settings, keeps other hooks", () => {
   const before = { model: "x", hooks: { SessionStart: [{ hooks: [{ type: "command", command: "heal.mjs" }] }] } };
   const { settings, changes } = mergeHooks(before, { root, lang: "Turkish" });
-  assert.equal(changes.length, 14);
+  assert.equal(changes.length, 16);
+  const activity = settings.hooks.PostToolUse.find((e) => e.matcher === "*").hooks[0];
+  assert.equal(activity.async, true, "the activity hook never makes a tool wait (#55)");
   assert.ok(changes.every((c) => c.startsWith("added")));
   assert.deepEqual(settings.hooks.SessionStart[0], before.hooks.SessionStart[0], "other hooks are kept, ours added after them");
   assert.match(settings.hooks.SessionStart[1].hooks[0].command, /hooks\/process\.mjs"$/);

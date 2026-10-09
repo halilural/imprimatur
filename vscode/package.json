@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.38.0",
+  "version": "0.39.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {

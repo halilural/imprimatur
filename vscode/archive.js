@@ -17,6 +17,7 @@ const path = require("node:path");
 const zlib = require("node:zlib");
 const { BASELINE_DIR, HISTORY_DIR, historyEdits } = require("./review-state.js");
 const { WAITING_DIR, readLog, itemsOf } = require("./waiting.js");
+const { ACTIVITY_DIR } = require("./activity.js");
 const { acceptEdit } = require("./graph.js");
 const { CALLS } = require("./calls.js");
 
@@ -111,7 +112,7 @@ function archiveRepo(root, opts = {}) {
 
 /** @param {string} root @param {{days?: number, now?: number}} opts */
 function archiveUnlocked(root, { days = 7, now = Date.now() }) {
-  const out = { edits: 0, files: 0, sessions: 0, calls: 0, descriptions: 0 };
+  const out = { edits: 0, files: 0, sessions: 0, calls: 0, descriptions: 0, activity: 0 };
   const cutoff = now - days * DAY;
   const dest = path.join(root, ARCHIVE_DIR, new Date(now).toISOString().slice(0, 10));
   const history = path.join(root, HISTORY_DIR);
@@ -233,6 +234,18 @@ function archiveUnlocked(root, { days = 7, now = Date.now() }) {
       if (!records.length || last >= cutoff || fs.statSync(log).mtimeMs >= cutoff || itemsOf(records, name.slice(0, -".jsonl".length)).some((it) => it.open)) continue;
       stash(path.join(dest, "waiting", name), fs.readFileSync(log, "utf8"));
       if (rewrite(log, "", was)) out.sessions++;
+    }
+  // Activity logs (#55): a session's whole log once its last call is old.
+  const activity = path.join(root, ACTIVITY_DIR);
+  if (fs.existsSync(activity))
+    for (const name of fs.readdirSync(activity).filter((n) => n.endsWith(".jsonl"))) {
+      const log = path.join(activity, name);
+      const was = stamp(log);
+      const text = fs.readFileSync(log, "utf8");
+      const last = Math.max(0, ...text.split("\n").map((l) => Date.parse(/"t":"([^"]+)"/.exec(l)?.[1] ?? "") || 0));
+      if (!text || last >= cutoff || fs.statSync(log).mtimeMs >= cutoff) continue;
+      stash(path.join(dest, "activity", name), text);
+      if (rewrite(log, "", was)) out.activity++;
     }
   fs.mkdirSync(path.dirname(path.join(root, STATE)), { recursive: true });
   fs.writeFileSync(path.join(root, STATE), JSON.stringify({ at: new Date(now).toISOString(), days, ...out }, null, 2) + "\n");

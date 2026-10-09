@@ -42,6 +42,20 @@ const reviewStyle = () => (reviewCss ??= (() => {
   return "";
 })());
 
+/** Row kinds of the graph's filter (#55): badge and label. */
+const ACTIVITY = {
+  edit: ["✎", "Edits"],
+  record: ["≡", "Records"],
+  agent: ["⑃", "Subagents"],
+  skill: ["★", "Skills"],
+  mcp: ["⚙", "MCP"],
+  web: ["⌁", "Web"],
+  read: ["◱", "Reads"],
+  search: ["⌕", "Searches"],
+  bash: ["$", "Bash"],
+  other: ["·", "Other"],
+};
+
 const KINDS = { question: ["❓", "Question"], command: ["⚙", "Command"], verify: ["👀", "Verify / test"], input: ["✋", "Input"] };
 
 const COLORS = ["#4fc1ff", "#c586c0", "#dcdcaa", "#4ec9b0", "#ce9178", "#9cdcfe", "#f48771", "#b5cea8"];
@@ -176,7 +190,7 @@ function html(data, root, nonce, waiting = []) {
     return `${key}<span ${color}>${esc(l.title ?? "")}</span>`;
   });
   // A record change: shown in its task's lane; it opens the record, nothing to accept (#60).
-  const recordRow = (r, i) => `<tr class="rec" data-record="${r.record}" data-i="${i}" data-q="${esc([r.file, r.intent, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}" title="Record change: click to show the record">
+  const recordRow = (r, i) => `<tr class="rec" data-kind="record" data-record="${r.record}" data-i="${i}" data-q="${esc([r.file, r.intent, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}" title="Record change: click to show the record">
   <td class="ok"><span class="badge-rec" title="Record change (nothing to accept)">≡</span></td>
   ${lanes ? `<td class="g">${laneSvg(i, r, data.lanes, cols)}</td>` : ""}
   <td class="d">${esc(r.intent ?? r.summary)}</td>
@@ -186,10 +200,37 @@ function html(data, root, nonce, waiting = []) {
   <td class="s" title="${esc(r.session ?? "")}">${esc(sessionTitle.get(r.session ?? "?") ?? (r.session ?? "?").slice(0, 8))}</td>
   <td class="c"></td>
 </tr>`;
+  // Everything else the agent did (#55): a row per tool call, its kind as a badge, nothing to
+  // accept. A subagent's calls sit under its Agent row, folded.
+  const calls = new Map();
+  for (const r of data.rows) if (r.agent) calls.set(r.agent, (calls.get(r.agent) ?? 0) + 1);
+  const activityRow = (r, i) => {
+    const [icon, label] = ACTIVITY[r.kind] ?? ACTIVITY.other;
+    const fold = r.agentId && calls.get(r.agentId) ? `<a href="#" class="grp" data-agent="${esc(r.agentId)}" title="Show or hide the subagent's calls">▸ ${calls.get(r.agentId)} calls</a> ` : "";
+    return `<tr class="act${r.agent ? " sub" : ""}${r.failed ? " failed" : ""}" data-kind="${esc(r.kind ?? "other")}"${r.agent ? ` data-parent="${esc(r.agent)}"` : ""} data-i="${i}" data-q="${esc([r.tool, r.intent, r.summary, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}" title="${esc([`${r.tool}${r.failed ? " (failed)" : ""}${r.ms != null ? ` · ${r.ms} ms` : ""}`, r.intent, r.summary && `→ ${r.summary}`].filter(Boolean).join("\n"))}">
+  <td class="ok"><span class="badge-kind" title="${esc(label)}">${icon}</span></td>
+  ${lanes ? `<td class="g">${laneSvg(i, r, data.lanes, cols)}</td>` : ""}
+  <td class="d">${r.agent ? "↳ " : ""}${fold}${esc(r.intent ?? "")}${r.summary ? ` <span class="out">→ ${esc(r.summary)}</span>` : ""}</td>
+  <td class="tk">${taskCell[r.lane]}</td>
+  <td class="f">${esc(r.tool ?? "")}</td>
+  <td class="t">${esc(time(r.t))}</td>
+  <td class="s" title="${esc(r.session ?? "")}">${esc(sessionTitle.get(r.session ?? "?") ?? (r.session ?? "?").slice(0, 8))}</td>
+  <td class="c"></td>
+</tr>`;
+  };
+  const kindCount = new Map();
+  for (const r of data.rows) {
+    const k = r.record ? "record" : r.activity ? (r.kind ?? "other") : "edit";
+    kindCount.set(k, (kindCount.get(k) ?? 0) + 1);
+  }
+  const chips = Object.entries(ACTIVITY)
+    .filter(([k]) => kindCount.get(k))
+    .map(([k, [icon, label]]) => `<button class="chip" data-kind="${k}" title="Show or hide: ${esc(label)}">${icon} ${esc(label)} <span class="n">${kindCount.get(k)}</span></button>`)
+    .join("");
   const body = data.rows.length
     ? data.rows
         .map(
-          (r, i) => r.record ? recordRow(r, i) : `<tr${r.gone || r.outside ? ` class="${[r.gone && "gone", r.outside && "outside"].filter(Boolean).join(" ")}"` : ""} data-file="${esc(r.file)}" data-n="${r.n}" data-i="${i}" data-q="${esc([r.file, r.intent, r.summary, r.prompt, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}"
+          (r, i) => r.record ? recordRow(r, i) : r.activity ? activityRow(r, i) : `<tr data-kind="edit"${r.gone || r.outside ? ` class="${[r.gone && "gone", r.outside && "outside"].filter(Boolean).join(" ")}"` : ""} data-file="${esc(r.file)}" data-n="${r.n}" data-i="${i}" data-q="${esc([r.file, r.intent, r.summary, r.prompt, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}"
   data-vscode-context="${menu({ webviewSection: r.accepted || r.gone ? "edit-ok" : "edit-open", file: r.file, n: r.n })}"${r.preview ? "" : ` title="${esc(r.prompt ? `Request: ${r.prompt}` : "")}"`}>
   <td class="ok">${r.gone ? `<span class="badge-gone" title="Later edits rewrote or removed all of it: nothing left to accept">replaced</span>` : r.accepted ? `<span class="badge-ok" title="Accepted">✓</span>` : `<span class="badge-open" title="Under review — Accept, or right-click">●</span><button class="acc" title="Accept this edit">Accept</button>`}</td>
   ${lanes ? `<td class="g">${laneSvg(i, r, data.lanes, cols)}</td>` : ""}
@@ -230,6 +271,12 @@ function html(data, root, nonce, waiting = []) {
   button.acc.on { display: inline-block; font-size: 12px; padding: 2px 10px; } button.acc.on[hidden] { display: none; }
   tr:hover button.acc { display: inline-block; } tr:hover .badge-open { display: none; }
   td.g { padding: 0; width: 1px; } td.g svg { display: block; }
+  #kinds { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 6px; }
+  .chip { font: inherit; font-size: 12px; padding: 1px 8px; border-radius: 10px; cursor: pointer; border: 1px solid var(--vscode-button-border, var(--vscode-panel-border));
+    background: transparent; color: var(--vscode-foreground); opacity: .55; } .chip.on { opacity: 1; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
+  .badge-kind { display: inline-flex; min-width: 18px; justify-content: center; font-size: 12px; opacity: .85; }
+  tr.act td.d .out { opacity: .65; } tr.act.failed td.d { color: var(--vscode-errorForeground); } tr.sub td.d { padding-left: 22px; }
+  a.grp { text-decoration: none; font-size: 11px; opacity: .8; margin-right: 4px; }
   tr.rec { cursor: pointer; } tr.rec:hover { background: var(--vscode-list-hoverBackground); }
   .badge-rec { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
     border: 1px solid var(--vscode-charts-blue, #3794ff); color: var(--vscode-charts-blue, #3794ff); }
@@ -281,8 +328,8 @@ function html(data, root, nonce, waiting = []) {
 <header><strong>Agent Change Graph</strong>
 <nav><button data-tab="edits">Edits ${pending ? `<span class="badge">${pending}</span>` : ""}</button><button data-tab="waiting">Waiting on you ${open ? `<span class="badge">${open}</span>` : ""}</button></nav>
 <input id="filter" placeholder="Filter by file, request or answer"><label id="ans" hidden><input type="checkbox" id="answered"> open only</label><button id="audit" class="acc on" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">Audit</button><button id="scan" class="acc on" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">Scan history</button>
-<span class="n" id="count-edits">${data.rows.filter((r) => !r.record).length} edits · ${data.rows.filter((r) => r.record).length} record changes · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span><span class="n" id="count-waiting">${open} open · ${waiting.length} steps</span></header>
-<section id="edits"><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
+<span class="n" id="count-edits">${data.rows.filter((r) => !r.record && !r.activity).length} edits · ${data.rows.filter((r) => r.activity).length} other calls · ${data.rows.filter((r) => r.record).length} record changes · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span><span class="n" id="count-waiting">${open} open · ${waiting.length} steps</span></header>
+<section id="edits"><div id="kinds">${chips}</div><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
 <tbody>${body}</tbody></table>
 <script type="application/json" id="rows">${JSON.stringify(data.rows.map((r) => (r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview, file: r.file, n: r.n, md: /\.mdx?$/i.test(r.file) } : null))).replace(/</g, "\\u003c")}</script></section>
 <section id="waiting"><div class="legend"><span>☐ open: tick when done</span><span><span class="badge-ok">✓</span> done</span><span><span class="badge-gone">replaced</span> asked again later</span><span><span class="pill">Answered</span> question you answered</span></div>
@@ -334,7 +381,7 @@ function html(data, root, nonce, waiting = []) {
   });
   // Tab, filter, the answered toggle and opened rows survive an update.
   // The repo goes into the saved state too: a panel restored after a reload shows the same one.
-  const state = Object.assign({ tab: "edits", q: "", answered: false, expanded: [] }, vscode.getState(), { root: ${JSON.stringify(root).replace(/</g, "\\u003c")} });
+  const state = Object.assign({ tab: "edits", q: "", answered: false, expanded: [], kinds: ${JSON.stringify(Object.fromEntries(Object.keys({ edit: 1, record: 1, agent: 1, skill: 1, web: 1, mcp: 1, read: 0, search: 0, bash: 0, other: 0 }).map((k) => [k, ["edit", "record", "agent", "skill", "web", "mcp"].includes(k)])))}, agents: [] }, vscode.getState(), { root: ${JSON.stringify(root).replace(/</g, "\\u003c")} });
   const filter = document.getElementById("filter");
   const answered = document.getElementById("answered");
   filter.value = state.q;
@@ -350,8 +397,12 @@ function html(data, root, nonce, waiting = []) {
     document.getElementById("audit").hidden = state.tab !== "waiting";
     document.getElementById("scan").hidden = state.tab !== "waiting";
     const q = state.q.toLowerCase();
+    document.querySelectorAll("#kinds .chip").forEach((b) => b.classList.toggle("on", state.kinds[b.dataset.kind] !== false));
+    document.querySelectorAll("a.grp").forEach((a) => (a.textContent = (state.agents.includes(a.dataset.agent) ? "▾" : "▸") + a.textContent.slice(1)));
     document.querySelectorAll("tr[data-q]").forEach((tr) => {
-      const show = tr.dataset.q.toLowerCase().includes(q) && (!state.answered || !("done" in tr.dataset));
+      // A subagent's call shows with its open Agent row, whatever its kind; other rows by kind.
+      const kindOn = tr.dataset.parent ? state.agents.includes(tr.dataset.parent) : !tr.dataset.kind || state.kinds[tr.dataset.kind] !== false;
+      const show = kindOn && tr.dataset.q.toLowerCase().includes(q) && (!state.answered || !("done" in tr.dataset));
       tr.style.display = show ? "" : "none";
       if (tr.nextElementSibling?.classList.contains("x")) tr.nextElementSibling.hidden = !show || !state.expanded.includes(tr.dataset.key);
     });
@@ -375,6 +426,15 @@ function html(data, root, nonce, waiting = []) {
       run.disabled = true;
       run.textContent = run.id === "audit" ? "Auditing…" : "Scanning…";
       return vscode.postMessage({ type: run.id });
+    }
+    const chip = t.closest("#kinds .chip");
+    if (chip) { state.kinds[chip.dataset.kind] = state.kinds[chip.dataset.kind] === false; return apply(); }
+    const grp = t.closest("a.grp");
+    if (grp) {
+      e.preventDefault();
+      const a = grp.dataset.agent;
+      state.agents = state.agents.includes(a) ? state.agents.filter((x) => x !== a) : [...state.agents, a];
+      return apply();
     }
     const rec = t.closest("tr.rec");
     if (rec) return vscode.postMessage({ type: "showRecord", id: Number(rec.dataset.record) });
