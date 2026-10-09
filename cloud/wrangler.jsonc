@@ -10,7 +10,7 @@
       "binding": "DB",
       "database_name": "imprimatur-sync",
       // From `npx wrangler d1 create imprimatur-sync`.
-      "database_id": "REPLACE_WITH_YOUR_DATABASE_ID",
+      "database_id": "8baea550-1bbe-42e6-8d58-c1d36e92db68",
       "migrations_dir": "migrations"
     }
   ]

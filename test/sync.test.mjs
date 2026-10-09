@@ -549,3 +549,20 @@ test("npm run sync -- --setup: the token comes from the environment, never argv"
   assert.match(ok.stdout, /sync on/);
   assert.equal(ok.status, 1, "nothing listens there: the sync itself fails");
 });
+
+test("a 👉 that comes pages before its record still lands: tries count per sync, not per page", async () => {
+  const { openDb } = (await import("node:module")).createRequire(import.meta.url)("../vscode/db.js");
+  const fsm = await import("node:fs");
+  const os = await import("node:os");
+  const pathm = await import("node:path");
+  const dir = fsm.mkdtempSync(pathm.join(os.tmpdir(), "imprimatur-61p-"));
+  const db = openDb({ path: pathm.join(dir, "b.db") });
+  const origin = "github.com/u/r";
+  const taskKey = `${origin}\t#1`;
+  const ch = (entity, key, field, value, at = 1) => ({ entity, key, field, value: JSON.stringify(value), at, device: "A" });
+  db.applyRemote([ch("repo", origin, "name", "r"), ch("task", taskKey, "title", "T"), ch("task", taskKey, "pointer", "rec-1")], { lastPage: false });
+  for (let page = 0; page < 5; page++) db.applyRemote([], { lastPage: false });
+  db.applyRemote([ch("record", "rec-1", "task", taskKey), ch("record", "rec-1", "kind", "todo"), ch("record", "rec-1", "title", "x"), ch("record", "rec-1", "status", "open")], { lastPage: true });
+  assert.equal(db.recordByUid("rec-1").pointer, true);
+  db.close();
+});

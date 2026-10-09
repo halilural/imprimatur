@@ -816,15 +816,16 @@ class Db {
    * @param {Array<{entity: string, key: string, field: string, value: string | null, at: number, device: string}>} changes
    * @param {{pullSeq?: number}} [o] saved with the changes
    */
-  applyRemote(changes, { pullSeq } = {}) {
+  applyRemote(changes, { pullSeq, lastPage = true } = {}) {
     return this.tx(() => {
       const order = { repo: 0, task: 1, record: 2 };
-      // A change still waiting after MAX_TRIES pulls (its record never came: say its task
-      // was invalid) is dropped.
+      // A change still waiting after MAX_TRIES syncs (its record never came: say its task was
+      // invalid) is dropped. Tries count once per sync, on its last page: during a long pull a
+      // 👉 often comes pages before its record.
       const waiting = JSON.parse(this.meta("pending") ?? "[]");
-      const kept = waiting.filter((/** @type {any} */ c) => (c.tries ?? 0) < MAX_TRIES);
+      const kept = lastPage ? waiting.filter((/** @type {any} */ c) => (c.tries ?? 0) < MAX_TRIES) : waiting;
       const dropped = waiting.length - kept.length;
-      let todo = [...kept.map((/** @type {any} */ c) => ({ ...c, tries: (c.tries ?? 0) + 1 })), ...changes.map((c) => ({ ...c, tries: 0 }))]
+      let todo = [...kept.map((/** @type {any} */ c) => ({ ...c, tries: (c.tries ?? 0) + (lastPage ? 1 : 0) })), ...changes.map((c) => ({ ...c, tries: 0 }))]
         .map((c, i) => /** @type {const} */ ([c, i]))
         .sort((a, b) => ((/** @type {any} */ (order))[a[0].entity] ?? 3) - ((/** @type {any} */ (order))[b[0].entity] ?? 3) || a[1] - b[1])
         .map(([c]) => c);
