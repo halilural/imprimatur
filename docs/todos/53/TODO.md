@@ -4,13 +4,13 @@
 
 ## Durum
 
-Sürüyor (Sprint 2): yön değişti, kayıtların asıl kaynağı Imprimatur veritabanı; sıradaki #57 — 2026-10-09
+Sürüyor (Sprint 2): veritabanı (#57) hazır; sıradaki #58 MCP sunucusu — 2026-10-09
 
 ## Yapılacaklar
 
 - DONE: (C) [#54 Yerleşim: docs/todos/](https://github.com/halilural/imprimatur/issues/54) — imprimatur, groundwork, interview, twinread taşındı; kalanlar doğrudan veritabanına (#59)
-- 👉 TODO: (C) [#57 Veritabanı: node:sqlite, cihaz bazlı, asıl kaynak](https://github.com/halilural/imprimatur/issues/57) — önce ARCHITECTURE.md hedef hâl
-- TODO: (C) [#58 Imprimatur MCP sunucusu](https://github.com/halilural/imprimatur/issues/58)
+- DONE: (C) [#57 Veritabanı: node:sqlite, cihaz bazlı, asıl kaynak](https://github.com/halilural/imprimatur/issues/57) — `vscode/db.js`, ARCHITECTURE.md «Kayıt veritabanı»
+- 👉 TODO: (C) [#58 Imprimatur MCP sunucusu](https://github.com/halilural/imprimatur/issues/58)
 - TODO: (C) [#59 Markdown kayıtlarını aktar, sonra kaldır](https://github.com/halilural/imprimatur/issues/59)
 - TODO: (C) [#60 Kayıt görünümleri](https://github.com/halilural/imprimatur/issues/60)
 - TODO: (C) [#55 Grafikte ajanın her işi](https://github.com/halilural/imprimatur/issues/55) — kayıt değişiklikleri Accept'siz
