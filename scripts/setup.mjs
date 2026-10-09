@@ -3,6 +3,7 @@
 // - the Claude Code hooks in ~/.claude/settings.json (a backup first; ours are
 //   found by their script name, added when missing, updated when the path or
 //   language differs; other hooks are left alone);
+// - the status line (hooks/statusline.mjs) there, only when none is set;
 // - the Imprimatur MCP server (mcp/server.mjs) for Claude Code (user scope, via
 //   `claude mcp`), Cursor (~/.cursor/mcp.json) and Codex (~/.codex/config.toml)
 //   when those are installed;
@@ -166,6 +167,31 @@ export function mergeHooks(settings, { root, lang, exts = ["md", "mdx"] }) {
   return { settings: out, changes };
 }
 
+/** The status line command (hooks/statusline.mjs). @param {string} root */
+const statusLineCommand = (root) => `node "${path.join(root, "hooks", "statusline.mjs")}"`;
+
+/**
+ * Settings with Imprimatur's status line (#66), only when there is none: a
+ * status line the user has is never replaced. Pure: returns a copy and the
+ * change; `hint` says how to add ours by hand when another one is in place.
+ * @param {any} settings @param {{root: string}} opts
+ * @returns {{settings: any, change: string | undefined, hint?: string}}
+ */
+export function mergeStatusLine(settings, { root }) {
+  const out = structuredClone(settings ?? {});
+  const command = statusLineCommand(root);
+  const have = out.statusLine;
+  if (have) {
+    const ours = typeof have.command === "string" && have.command.includes("/hooks/statusline.mjs") && /imprimatur/i.test(have.command);
+    if (!ours) return { settings: out, change: undefined, hint: `another status line is set; to add ours, append the output of: ${command}` };
+    if (have.command.replace(/"/g, "") === command.replace(/"/g, "")) return { settings: out, change: undefined };
+    out.statusLine = { ...have, command };
+    return { settings: out, change: "updated statusLine → statusline.mjs" };
+  }
+  out.statusLine = { type: "command", command };
+  return { settings: out, change: "added   statusLine → statusline.mjs" };
+}
+
 /**
  * VS Code settings with one imprimatur setting set. Pure: returns a copy and the change.
  * @param {any} settings @param {string} key @param {string} value @param {string} fallback shown when unset
@@ -308,10 +334,14 @@ function main() {
   const opts = options(process.argv.slice(2));
   const file = path.join(os.homedir(), ".claude", "settings.json");
   const before = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
-  const { settings, changes } = mergeHooks(before, { root, lang: opts.lang, exts: opts.exts });
+  const hooked = mergeHooks(before, { root, lang: opts.lang, exts: opts.exts });
+  const status = mergeStatusLine(hooked.settings, { root });
+  const settings = status.settings;
+  const changes = [...hooked.changes, ...(status.change ? [status.change] : [])];
 
   console.log(`Hooks in ${file}:`);
   console.log(changes.length ? changes.map((c) => `  ${c}`).join("\n") : "  all in place");
+  if (status.hint) console.log(`  statusLine: ${status.hint}`);
   if (changes.length && !opts.dry) writeWithBackup(file, settings);
 
   registerMcp(root, opts);
