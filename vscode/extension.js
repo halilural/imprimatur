@@ -498,6 +498,29 @@ function activate(ctx) {
     vscode.commands.registerCommand("imprimatur.showHistory", showHistory),
     vscode.commands.registerCommand("imprimatur.openGraph", showGraph),
     vscode.commands.registerCommand("imprimatur.acceptRange", acceptRange),
+    vscode.commands.registerCommand("imprimatur.importMarkdown", () => {
+      // Lazy: node:sqlite loads only when records are used.
+      const { openDb } = require("./db.js");
+      const { importRepo, summary } = require("./import.js");
+      const lines = [];
+      try {
+        const db = openDb();
+        try {
+          for (const root of roots) {
+            // roots are normalised (lower case on Windows); the repo row wants git's spelling.
+            const r = importRepo(db, repoRoot(root) ?? root);
+            for (const f of r.files) log.info(`import ${root}: ${f.file}: ${f.records} records, ${f.added} new, ${f.updated} updated${f.unparsed.length ? `, unparsed: ${f.unparsed.join(" | ")}` : ""}`);
+            lines.push(`${path.basename(root)}: ${summary(r)}`);
+          }
+        } finally {
+          db.close();
+        }
+        vscode.window.showInformationMessage(`Imprimatur import: ${lines.join("; ") || "no repo open"}. Details in Output → Imprimatur.`);
+      } catch (e) {
+        log.error(`import: ${e instanceof Error ? e.message : e}`);
+        vscode.window.showErrorMessage(`Imprimatur import failed: ${e instanceof Error ? e.message : e}`);
+      }
+    }),
     vscode.commands.registerCommand("imprimatur.archiveNow", () => {
       const done = archiveAll(true);
       const days = vscode.workspace.getConfiguration("imprimatur").get("archive.afterDays", 7);
