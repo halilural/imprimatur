@@ -198,3 +198,17 @@ test("speed: 10k records, panel queries < 1 ms, open < 5 ms", () => {
   assert.ok(recordsMs < k && asksMs < k && tasksMs < k, JSON.stringify(report));
   assert.ok(openMs < 5 * k, JSON.stringify(report));
 });
+
+test("taskKeys: a repo's task keys, most recently updated first (#64)", () => {
+  const db = openDb({ path: tmpDb() });
+  const a = db.repoOf("/a");
+  const b = db.repoOf("/b");
+  db.upsertTask(a.id, "#1");
+  db.upsertTask(a.id, "#2");
+  db.upsertTask(b.id, "#3");
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+  db.upsertTask(a.id, "#1", { title: "again" });
+  assert.deepEqual(db.taskKeys(a.id), ["#1", "#2"]);
+  assert.deepEqual(db.taskKeys(db.repoOf("/c").id), []);
+  db.close();
+});
