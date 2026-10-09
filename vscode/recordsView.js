@@ -15,6 +15,13 @@ const { watchFile } = require("./watch.js");
 
 const SCHEME = "imprimatur-record";
 const USER = { kind: /** @type {"user"} */ ("user"), id: os.userInfo().username };
+/** The prompts the commands show; the integration tests replace them (#60). */
+const ui = {
+  /** @type {typeof vscode.window.showInputBox} */
+  showInputBox: (...a) => vscode.window.showInputBox(...a),
+  /** @type {typeof vscode.window.showQuickPick} */
+  showQuickPick: (...a) => /** @type {any} */ (vscode.window.showQuickPick)(...a),
+};
 
 /** Icon per kind and status. @param {any} r */
 function iconOf(r) {
@@ -298,31 +305,31 @@ function registerRecordViews(ctx, roots, log, onChange = () => {}) {
     vscode.commands.registerCommand("imprimatur.records.pointer", (node) => write(() => records.dbOf().setPointer(recordOf(node).id, USER))),
     vscode.commands.registerCommand("imprimatur.records.editTitle", async (node) => {
       const r = recordOf(node);
-      const title = await vscode.window.showInputBox({ prompt: `${r.kind} title`, value: r.title, validateInput: (v) => (v.trim() ? undefined : "Empty") });
+      const title = await ui.showInputBox({ prompt: `${r.kind} title`, value: r.title, validateInput: (v) => (v.trim() ? undefined : "Empty") });
       if (title !== undefined && title.trim() !== r.title) write(() => records.dbOf().updateRecord(r.id, { title: title.trim() }, USER));
     }),
     vscode.commands.registerCommand("imprimatur.records.copy", (node) => vscode.env.clipboard.writeText(recordOf(node)?.title ?? node?.task?.key ?? "")),
     vscode.commands.registerCommand("imprimatur.records.add", async (node) => {
       const task = node?.task ?? (node?.record ? records.dbOf().taskById(node.record.task_id) : undefined);
       if (!task) return;
-      const kind = await vscode.window.showQuickPick(KIND_PICK, { title: `Add to ${task.key}` });
+      const kind = await ui.showQuickPick(KIND_PICK, { title: `Add to ${task.key}` });
       if (!kind) return;
-      const title = await vscode.window.showInputBox({ prompt: `${kind.label} in ${task.key}`, validateInput: (v) => (v.trim() ? undefined : "Empty") });
+      const title = await ui.showInputBox({ prompt: `${kind.label} in ${task.key}`, validateInput: (v) => (v.trim() ? undefined : "Empty") });
       if (!title?.trim()) return;
-      const owner = kind.label === "question" ? "K" : kind.label === "todo" ? (await vscode.window.showQuickPick([{ label: "K", description: "you do it" }, { label: "C", description: "the agent does it" }], { title: "Who does it?" }))?.label : undefined;
+      const owner = kind.label === "question" ? "K" : kind.label === "todo" ? (await ui.showQuickPick([{ label: "K", description: "you do it" }, { label: "C", description: "the agent does it" }], { title: "Who does it?" }))?.label : undefined;
       write(() => records.dbOf().addRecord(task.id, { kind: kind.label, title: title.trim(), ...(owner && { owner }) }, USER));
     }),
     vscode.commands.registerCommand("imprimatur.records.taskDone", (node) => write(() => records.dbOf().upsertTask(node.task.repo_id, node.task.key, { status: "done" }))),
     vscode.commands.registerCommand("imprimatur.records.taskReopen", (node) => write(() => records.dbOf().upsertTask(node.task.repo_id, node.task.key, { status: "active" }))),
     vscode.commands.registerCommand("imprimatur.records.search", async () => {
       if (!records.dbOf()) return;
-      const text = await vscode.window.showInputBox({ prompt: "Search records (title and body, every repo)" });
+      const text = await ui.showInputBox({ prompt: "Search records (title and body, every repo)" });
       // Read again after each wait: Refresh may have reopened the connection.
       const db = records.dbOf();
       if (!text?.trim() || !db) return;
       const repos = new Map(db.repos().map((r) => [r.id, r]));
       const found = db.search(text.trim(), { limit: 100 });
-      const pick = await vscode.window.showQuickPick(
+      const pick = await ui.showQuickPick(
         found.map((r) => {
           const task = db.taskById(r.task_id);
           return { label: r.title, description: `${repos.get(task?.repo_id)?.name ?? ""} · ${r.task_key} · ${r.kind} · ${r.status}`, record: r, root: repos.get(task?.repo_id)?.root };
@@ -360,8 +367,9 @@ function registerRecordViews(ctx, roots, log, onChange = () => {}) {
       if (record) vscode.commands.executeCommand("imprimatur.records.show", target);
     }),
   );
-  // views: the tree data providers, handed out by activate for the integration tests (#68).
-  return { refresh, views };
+  // views, trees and ui: the tree data providers, their views (badges) and the prompts,
+  // handed out by activate for the integration tests (#68).
+  return { refresh, views, trees, ui };
 }
 
 module.exports = { registerRecordViews, RecordsView, pageOf };
