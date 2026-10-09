@@ -657,9 +657,11 @@ function activate(ctx) {
     }),
   );
   // The side bar: records (Imprimatur's database), then a way to the graph and every file that shapes the agent.
+  /** @type {{views: Record<string, any>} | undefined} */
+  let recordViews;
   try {
     // The repos as git spells them: roots are normalised (lower case on Windows).
-    registerRecordViews(ctx, () => [...roots].map((r) => repoRoot(r) ?? r), (msg) => log.warn(msg), () => {
+    recordViews = registerRecordViews(ctx, () => [...roots].map((r) => repoRoot(r) ?? r), (msg) => log.warn(msg), () => {
       syncRecords();
       setupView?.refreshCounts();
     });
@@ -680,6 +682,8 @@ function activate(ctx) {
   vscode.commands.executeCommand("markdown.api.render", "").then(undefined, () => {});
   // Markdown preview: the built-in markdown extension calls this with its markdown-it.
   return {
+    // The records views' data providers, read by the integration tests (#68); nothing else uses them.
+    recordViews: recordViews?.views,
     extendMarkdownIt: (md) => {
       markdownIt = md;
       codeLensChanged.fire();
