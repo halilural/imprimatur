@@ -9,13 +9,16 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test",
+    "test": "node --test \"test/*.test.mjs\"",
+    "test:integration": "node test/integration/run.mjs",
     "package": "node scripts/build.mjs && mkdir -p dist && cd vscode && npx --yes @vscode/vsce@4.0.0 package --skip-license --allow-missing-repository -o ../dist/",
     "setup": "node scripts/setup.mjs",
     "import": "node scripts/import.mjs",
     "build": "node scripts/build.mjs"
   },
   "devDependencies": {
+    "@vscode/test-cli": "0.0.15",
+    "@vscode/test-electron": "3.1.0",
     "esbuild": "0.28.2",
     "markdown-it": "^15.0.2"
   }

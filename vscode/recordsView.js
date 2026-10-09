@@ -360,7 +360,8 @@ function registerRecordViews(ctx, roots, log, onChange = () => {}) {
       if (record) vscode.commands.executeCommand("imprimatur.records.show", target);
     }),
   );
-  return { refresh };
+  // views: the tree data providers, handed out by activate for the integration tests (#68).
+  return { refresh, views };
 }
 
 module.exports = { registerRecordViews, RecordsView, pageOf };
