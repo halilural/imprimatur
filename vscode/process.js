@@ -354,7 +354,9 @@ function check(event, input, deps = {}) {
         .filter(([name, at]) => name && name !== main && name !== current && Number(at) > since)
         .map(([name]) => name)
         // A branch nobody committed on is new, not merged (a --ff-only merge leaves both at one commit).
-        .filter((name) => /^commit/m.test(run(["reflog", "show", "--format=%gs", name], root) ?? ""));
+        .filter((name) => /^commit/m.test(run(["reflog", "show", "--format=%gs", name], root) ?? ""))
+        // Said once per session and branch: the turn ends often, the branch stays until deleted.
+        .filter((name) => once(root, input.session_id, `branch ${name}`));
       if (left.length) found(s.branchFinish, "branchFinish", `merged into ${main} but not deleted: ${left.join(", ")} (git branch -d ${left.join(" ")}).`, notice);
     }
   }
