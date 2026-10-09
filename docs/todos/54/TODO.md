@@ -4,7 +4,7 @@
 
 ## Durum
 
-Sürüyor: Imprimatur iki yerleşimi okuyor, bu repo taşındı (0.33.0), dev-workflow v2.5 hazır. Kalan: diğer repolar — 2026-10-09
+Sürüyor: Imprimatur iki yerleşimi okuyor; imprimatur, groundwork, interview, twinread taşındı; dev-workflow v2.5. Kalan: investment, dirtywork (açık oturumlar), prepzio, electron-mcp-server (karar) — 2026-10-09
 
 ## Yapılacaklar
 
@@ -16,7 +16,13 @@ Sürüyor: Imprimatur iki yerleşimi okuyor, bu repo taşındı (0.33.0), dev-wo
 - DONE: (C) Sürüm 0.33.0, main'e birleştirildi, `npm run setup -- --lang Turkish` ile bu makinede kuruldu
 - 👉 TODO: (K) Diğer repoların taşınma sırası (öneri: groundwork, investment, interview, dirtywork; sonra prepzio, twinread, radarly, electron-mcp-server)
 - DONE: (C) dev-workflow skill'i v2.5 (`~/.claude/skills/dev-workflow/SKILL.md`, git'te değil): 22 yol `docs/todos/`'a, `ALLOWED_ON_MAIN` ve pre-commit `^docs/`, TODO.md'den test linki `../../testing/…`; bölüm 0'da "önce yerleşim", yeni bölüm 14: kökte kalanlar + eski repoyu taşıma adımları (bağlantılar, CLAUDE.md, rules `paths:`, hook'lar, Todo Tree, grep kontrolü) — 2026-10-09
-- TODO: (C) Diğer repoları taşı (sıraya göre); interview story dosyaları ve `.claude/rules/stories.md` yolu, twinread `TEMPLATE.md`, prepzio `NOTES.local.md`, electron-mcp-server kök .md'leri
+- DONE: (C) groundwork taşındı: [groundwork#35](https://github.com/halilural/groundwork/issues/35), 7bde35f; hook'lar, pre-commit, docs-toc (`docs/todos/` atlanır), Todo Tree; hook testleri 33/33 — 2026-10-09
+- DONE: (C) interview taşındı: [interview#224](https://github.com/halilural/interview/issues/224), 6c13a4b; story dosyaları, `.claude/rules/stories.md` `paths:`, hook'lar, docs-toc; hook testleri yeşil — 2026-10-09
+- DONE: (C) twinread taşındı: 474e677 (Linear, issue yok); `TEMPLATE.md`, 14 BLUEPRINT linki, CLAUDE.md, Todo Tree — 2026-10-09
+- TODO: (C) investment ve dirtywork: açık Claude oturumları var (investment'ta biri çalışıyor, dirtywork feature dalında + 8 commit'lenmemiş dosya); oturumlar kapanınca taşı
+- TODO: (K) prepzio organizasyon reposu (`prepzio/prepzio`): taşıma ekibe sorulsun mu; `NOTES.local.md` git-ignored, kalır
+- TODO: (K) electron-mcp-server: `todos/` yok; 5 kök .md (`ISSUE_TEMPLATE.md`, `MCP_USAGE_GUIDE.md`, `REACT_COMPATIBILITY_ISSUES.md`, `SECURITY.md`, `SECURITY_CONFIG.md`) `docs/`'a taşınsın mı
+- NOTE: (2026-10-09) radarly: `todos/` ve ek kök .md yok, taşınacak bir şey yok
 - TODO: (K) İş makinesinde pull + `npm run setup -- --lang Turkish`
 
 ## Sorular (kullanıcıya)
