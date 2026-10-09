@@ -34,7 +34,7 @@ export async function auditTurn(log, turn, ask) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [log, message = "", request, title] = process.argv.slice(2);
-  auditTurn(log, { message, request: request || undefined, title: title || undefined, lang: process.env.IMPRIMATUR_LANG || undefined })
+  auditTurn(log, { message, request: request || undefined, title: title || undefined, lang: require("../vscode/config.js").hookLang() })
     .catch((e) => process.stderr.write(`imprimatur audit: ${e.message}\n`))
     .finally(() => process.exit(0));
 }

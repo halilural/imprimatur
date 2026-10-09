@@ -45,6 +45,25 @@ edits right in your editor and keeps a list of what it asked you.
 3. Ask Claude to edit a Markdown file, then open it: the changes are marked.
    Click **Agent Graph** in the status bar for the edits and what waits on you.
 
+### Install as a Claude Code plugin
+
+The hooks and the MCP server also ship as a Claude Code plugin, so Claude Code
+keeps them up to date instead of `~/.claude/settings.json`:
+
+```sh
+claude plugin marketplace add halilural/imprimatur
+claude plugin install imprimatur@imprimatur
+```
+
+The plugin does not bring the VS Code extension or the status line. In a clone
+of this repo, run `npm run setup -- --plugin [--lang Turkish] [--exts md,mdx]`:
+it installs the plugin from the clone, takes the settings-file hooks and the
+user-scope MCP server out (a backup first), and adds the status line and the
+extension. Plugin hooks take no arguments: they read the language and file
+extensions from `IMPRIMATUR_LANG`, the plugin's options (`/config`), or the
+`config.json` next to Imprimatur's database that `--lang` / `--exts` write.
+While the plugin is enabled, a plain `npm run setup` writes no hooks.
+
 ## Reference
 
 ### Features

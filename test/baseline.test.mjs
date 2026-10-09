@@ -97,7 +97,7 @@ test("path with a space still runs the hook", () => {
   fs.mkdirSync(path.join(spaced, "hooks"), { recursive: true });
   fs.mkdirSync(path.join(spaced, "vscode"));
   fs.copyFileSync(hook, path.join(spaced, "hooks/baseline.mjs"));
-  fs.copyFileSync(path.resolve(import.meta.dirname, "../vscode/review-state.js"), path.join(spaced, "vscode/review-state.js"));
+  for (const f of ["review-state.js", "config.js", "db.js"]) fs.copyFileSync(path.resolve(import.meta.dirname, "../vscode", f), path.join(spaced, "vscode", f));
   const input = JSON.stringify({ tool_input: { file_path: path.join(dir, "b.md") } });
   spawnSync("node", [path.join(spaced, "hooks/baseline.mjs")], { input, env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
   assert.equal(read(copy(dir, "b.md")), "");

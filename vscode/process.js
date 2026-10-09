@@ -273,7 +273,7 @@ function check(event, input, deps = {}) {
     // Claude Code cuts SessionStart context at 10,000 characters to a 2,000-character preview:
     // short lines, and well under the cap.
     const cut = (t, n) => (t && t.length > n ? `${t.slice(0, n - 1)}…` : t);
-    const lines = ["Where we left off (Imprimatur; read and write records with the mcp__imprimatur__* tools; task_get for a task's records):"];
+    const lines = ["Where we left off (Imprimatur; read and write records with the imprimatur MCP tools; task_get for a task's records):"];
     let size = lines[0].length;
     for (const t of tasks.slice(0, 15)) {
       const line = `- ${t.key}${t.title ? ` ${cut(t.title, 80)}` : ""} [${t.status}]${t.pointer_title ? ` 👉 ${cut(t.pointer_title, 100)}` : ""}${t.open_records ? ` (${t.open_records} open)` : ""}`;
@@ -281,7 +281,7 @@ function check(event, input, deps = {}) {
       lines.push(line);
       size += line.length + 1;
     }
-    context.push(tasks.length ? lines.join("\n") : "No unfinished tasks in Imprimatur for this repo. Record work with the mcp__imprimatur__* tools (task_upsert, record_add, pointer_set).");
+    context.push(tasks.length ? lines.join("\n") : "No unfinished tasks in Imprimatur for this repo. Record work with the imprimatur MCP tools (task_upsert, record_add, pointer_set).");
   }
 
   // Merged branches left behind go to the agent, who can delete them: at session start, and
@@ -354,7 +354,7 @@ function check(event, input, deps = {}) {
     if (s.issueFields.mode && n) remember(root, input.session_id, "created", n);
   }
 
-  if (event === "PostToolUse" && tool === "mcp__imprimatur__task_upsert" && s.sweep.mode && ti.status === "done" && /^#\d+$/.test(ti.key ?? "")) {
+  if (event === "PostToolUse" && require("./config.js").imprimaturTool(tool) === "task_upsert" && s.sweep.mode && ti.status === "done" && /^#\d+$/.test(ti.key ?? "")) {
     if (parse(ghRun(["issue", "view", ti.key.slice(1), "--json", "state"], root))?.state === "OPEN") {
       found(s.sweep, "sweep", `${ti.key} is done in Imprimatur but its GitHub issue is open: close it (gh issue close ${ti.key.slice(1)} -c "…") and move its board item to Done.`);
     }

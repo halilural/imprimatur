@@ -1,0 +1,15 @@
+{
+  "name": "imprimatur",
+  "description": "Imprimatur: an AI agent's doc edits as tracked changes, with Claude Code hooks and an MCP server for tasks and records.",
+  "owner": {
+    "name": "halilural",
+    "url": "https://github.com/halilural"
+  },
+  "plugins": [
+    {
+      "name": "imprimatur",
+      "source": "./",
+      "description": "Claude Code hooks that record each agent edit and what it waits on you for, plus Imprimatur's MCP server."
+    }
+  ]
+}

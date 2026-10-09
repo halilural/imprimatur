@@ -1,0 +1,40 @@
+{
+  "name": "imprimatur",
+  "displayName": "Imprimatur",
+  "version": "0.37.0",
+  "description": "See every doc edit your AI agent makes as tracked changes until you accept it: Claude Code hooks that record each edit and what the agent waits on you for, and an MCP server for tasks and records. Pair it with the Imprimatur VS Code extension (npm run setup -- --plugin).",
+  "author": {
+    "name": "halilural",
+    "url": "https://github.com/halilural"
+  },
+  "homepage": "https://github.com/halilural/imprimatur",
+  "repository": "https://github.com/halilural/imprimatur",
+  "license": "MIT",
+  "keywords": [
+    "tracked-changes",
+    "review",
+    "markdown",
+    "tasks",
+    "vscode"
+  ],
+  "mcpServers": {
+    "imprimatur": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/mcp/server.mjs"
+      ]
+    }
+  },
+  "userConfig": {
+    "language": {
+      "type": "string",
+      "title": "Language",
+      "description": "Language of model-written text (edit descriptions, Waiting on you), e.g. Turkish. Empty: the agent's own."
+    },
+    "extensions": {
+      "type": "string",
+      "title": "File extensions",
+      "description": "Comma-separated extensions whose edits are tracked. Empty: md,mdx (or config.json from npm run setup -- --exts)."
+    }
+  }
+}

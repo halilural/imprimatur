@@ -217,8 +217,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href &
       const data = JSON.parse(input || "{}");
       const file = data.tool_input?.file_path;
       const project = process.env.CLAUDE_PROJECT_DIR || data.cwd || process.cwd();
-      const args = process.argv.slice(2).map((e) => e.toLowerCase());
-      const exts = args.length ? args : ["md", "mdx"];
+      // Args (settings-file hooks) win; else IMPRIMATUR_*, plugin options, config.json (#67).
+      const exts = createRequire(import.meta.url)("../vscode/config.js").hookExts(process.argv.slice(2));
       if (data.tool_name === "Bash") bashEdit(data.hook_event_name, data, project, exts);
       else if (file && !String(data.hook_event_name ?? "").startsWith("PostToolUse"))
         takeBaseline(project, file, exts, { session: data.session_id, tool: data.tool_name, ...transcriptInfo(data.transcript_path),

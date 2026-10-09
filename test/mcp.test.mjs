@@ -186,6 +186,8 @@ test("hook: adds the session to Imprimatur's tool input, leaves other tools alon
   const out = JSON.parse(run({ session_id: "S9", tool_name: "mcp__imprimatur__record_add", tool_input: { task: "#58", kind: "note", title: "x" } }));
   assert.deepEqual(out.hookSpecificOutput.updatedInput, { task: "#58", kind: "note", title: "x", _session: "S9" });
   assert.equal(out.hookSpecificOutput.permissionDecision, "allow");
+  const plugin = JSON.parse(run({ session_id: "S9", tool_name: "mcp__plugin_imprimatur_imprimatur__task_get", tool_input: { key: "#67" } }));
+  assert.deepEqual(plugin.hookSpecificOutput.updatedInput, { key: "#67", _session: "S9" }); // the plugin's server (#67)
   assert.equal(run({ session_id: "S9", tool_name: "mcp__other__x", tool_input: {} }), "");
   assert.equal(execFileSync(process.execPath, [HOOK], { input: "garbage", encoding: "utf8" }), "");
 });
