@@ -15,7 +15,8 @@
 //                       issueFields     …and checks the new issue's milestone and board item
 //   PostToolUse MCP     sweep           a task set done: its GitHub issue still open
 //   Stop                status          the answer has no "Neredeyiz" section
-//                       branchFinish    branches merged into main (last 14 days) but not deleted
+//   SessionStart, Bash  branchFinish    (after git merge/switch/checkout/pull) merged branches left behind
+
 "use strict";
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
@@ -218,6 +219,23 @@ function take(root, session, list) {
   return got;
 }
 
+/**
+ * Branches already in main, other than main and the one checked out, touched in the last 14
+ * days, that someone committed on: the merge happened, the delete did not.
+ * @param {string} root @param {string} main @param {typeof git} run
+ */
+function leftBranches(root, main, run) {
+  const current = run(["symbolic-ref", "--short", "HEAD"], root);
+  const since = Date.now() / 1000 - 14 * 86400;
+  return (run(["for-each-ref", "--merged", main, "--format=%(refname:short) %(committerdate:unix)", "refs/heads"], root) ?? "")
+    .split("\n")
+    .map((l) => l.split(" "))
+    .filter(([name, at]) => name && name !== main && name !== current && Number(at) > since)
+    .map(([name]) => name)
+    // A branch nobody committed on is new, not merged (a --ff-only merge leaves both at one commit).
+    .filter((name) => /^commit/m.test(run(["reflog", "show", "--format=%gs", name], root) ?? ""));
+}
+
 /** The issue a branch is for: feat/56-process → 56. @param {string | undefined} branch */
 const issueOfBranch = (branch) => /^[a-z]+\/(\d+)-/.exec(branch ?? "")?.[1];
 
@@ -264,6 +282,15 @@ function check(event, input, deps = {}) {
       size += line.length + 1;
     }
     context.push(tasks.length ? lines.join("\n") : "No unfinished tasks in Imprimatur for this repo. Record work with the mcp__imprimatur__* tools (task_upsert, record_add, pointer_set).");
+  }
+
+  // Merged branches left behind go to the agent, who can delete them: at session start, and
+  // after a command that merges or switches branches. (A Stop warning reaches only the user.)
+  const branchMove = event === "PostToolUse" && tool === "Bash" && /\bgit\s+(merge|switch|checkout|pull)\b/.test(ti.command ?? "");
+  if (s.branchFinish.mode && (event === "SessionStart" || branchMove)) {
+    const main = s.mainGuard.branch ?? "main";
+    const left = leftBranches(root, main, run);
+    if (left.length) found(s.branchFinish, "branchFinish", `merged into ${main} but not deleted: ${left.join(", ")}. Delete them: git branch -d ${left.join(" ")}.`);
   }
 
   if (event === "PreToolUse" && tool === "Bash" && s.hookBypass.mode && bypasses(ti.command)) {
@@ -345,23 +372,6 @@ function check(event, input, deps = {}) {
         const missing = [!info.milestone && "milestone", !info.projectItems?.length && "board item", info.projectItems?.length && !info.projectItems.some((p) => p.status?.name) && "board Status"].filter(Boolean);
         if (missing.length) found(s.issueFields, "issueFields", `#${n}, opened this turn, has no ${missing.join(", ")}.`, notice);
       }
-    }
-    if (s.branchFinish.mode) {
-      // Branches already in main, other than main and the one checked out, touched in the last
-      // 14 days: the merge happened, the delete did not. Older ones are left alone.
-      const main = s.mainGuard.branch ?? "main";
-      const current = branch();
-      const since = Date.now() / 1000 - 14 * 86400;
-      const left = (run(["for-each-ref", "--merged", main, "--format=%(refname:short) %(committerdate:unix)", "refs/heads"], root) ?? "")
-        .split("\n")
-        .map((l) => l.split(" "))
-        .filter(([name, at]) => name && name !== main && name !== current && Number(at) > since)
-        .map(([name]) => name)
-        // A branch nobody committed on is new, not merged (a --ff-only merge leaves both at one commit).
-        .filter((name) => /^commit/m.test(run(["reflog", "show", "--format=%gs", name], root) ?? ""))
-        // Said once per session and branch: the turn ends often, the branch stays until deleted.
-        .filter((name) => once(root, input.session_id, `branch ${name}`));
-      if (left.length) found(s.branchFinish, "branchFinish", `merged into ${main} but not deleted: ${left.join(", ")} (git branch -d ${left.join(" ")}).`, notice);
     }
   }
   return { ...(block && { block }), ...(context.length && { context }), ...(notice.length && { notice }) };
