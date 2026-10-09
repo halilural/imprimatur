@@ -285,8 +285,12 @@ function check(event, input, deps = {}) {
         const records = deps.records ?? require("./records.js");
         // Only code (not Markdown), and only when the database knows the task: no answer is no warning.
         const known = !/\.(md|mdx|txt)$/i.test(rel) && records.repoId(root) !== undefined && records.task?.(root, `#${n}`) !== undefined;
-        const list = known ? records.recordsOf(root, `#${n}`) : [];
-        if (known && !list.some((r) => r.kind === "adr" || r.kind === "pdr") && once(root, input.session_id, `design #${n}`)) {
+        // The task's own ADR/PDR, or one anywhere in the repo that names the issue (links.issue,
+        // or "#n" in its text): imported design records live under the ADR and PDR tasks.
+        const names = (r) => Number(r.links?.issue) === Number(n) || new RegExp(`#${n}(?!\\d)`).test(`${r.title}\n${r.body ?? ""}`);
+        const designed = known && (records.recordsOf(root, `#${n}`).some((r) => r.kind === "adr" || r.kind === "pdr")
+          || (records.dbOf()?.recordsByKind(records.repoId(root), ["adr", "pdr"]) ?? []).some(names));
+        if (known && !designed && once(root, input.session_id, `design #${n}`)) {
           found(s.designFirst, "designFirst", `#${n} has no ADR or PDR record yet. A change in behaviour starts with its design: record_add kind "pdr" (what the user sees) or "adr" (how it is built), then the code. File: ${rel}`);
         }
       }

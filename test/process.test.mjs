@@ -70,6 +70,11 @@ test("designFirst: code on a <type>/<n>-… branch before the task has an ADR or
   assert.equal(none.block, undefined);
   assert.match(none.context[0], /#56 has no ADR or PDR/);
   assert.deepEqual(edit({ ...known, recordsOf: () => [{ kind: "pdr" }] }), {});
+  // An ADR or PDR under another task (imported design records) that names the issue counts.
+  const elsewhere = (r) => edit({ ...known, recordsOf: () => [], dbOf: () => ({ recordsByKind: () => [r] }) });
+  assert.deepEqual(elsewhere({ kind: "pdr", title: "Vergi sayfası", links: { issue: 56 } }), {});
+  assert.deepEqual(elsewhere({ kind: "adr", title: "Vergi verisi (#56)" }), {});
+  assert.match(elsewhere({ kind: "adr", title: "başka iş (#567)" }).context[0], /#56 has no ADR/);
   assert.deepEqual(edit(noRecords), {}, "no database answer, no warning");
   const md = check("PreToolUse", { cwd: root, tool_name: "Edit", tool_input: { file_path: path.join(root, "notes.md") } }, { records: { ...known, recordsOf: () => [] } });
   assert.deepEqual(md, {}, "Markdown is not code");
