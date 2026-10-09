@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mergeHooks, mergeShowIn, mergeLanguage } from "../scripts/setup.mjs";
+import { mergeHooks, mergeShowIn, mergeLanguage, mergeStatusLine } from "../scripts/setup.mjs";
 
 const root = "/home/u/projects/imprimatur";
 
@@ -48,4 +48,25 @@ test("setup: --lang also sets imprimatur.language, so the extension writes in th
   assert.deepEqual(settings, { "imprimatur.showIn": "both", "imprimatur.language": "Turkish" });
   assert.equal(change, "imprimatur.language: (default the agent's language) → Turkish");
   assert.equal(mergeLanguage(settings, "Turkish").change, undefined);
+});
+
+test("setup: the status line is added only when there is none; another one is kept with a hint", () => {
+  const command = `node "${root}/hooks/statusline.mjs"`;
+  const before = { model: "x" };
+  const { settings, change, hint } = mergeStatusLine(before, { root });
+  assert.deepEqual(settings, { model: "x", statusLine: { type: "command", command } });
+  assert.equal(change, "added   statusLine → statusline.mjs");
+  assert.equal(hint, undefined);
+  assert.equal(before.statusLine, undefined); // the input is not changed
+
+  assert.deepEqual(mergeStatusLine(settings, { root }), { settings, change: undefined });
+  const moved = mergeStatusLine({ statusLine: { type: "command", command: "node /old/imprimatur/hooks/statusline.mjs", padding: 1 } }, { root });
+  assert.equal(moved.change, "updated statusLine → statusline.mjs");
+  assert.deepEqual(moved.settings.statusLine, { type: "command", command, padding: 1 });
+
+  const theirs = { statusLine: { type: "command", command: "~/.claude/statusline.sh" } };
+  const kept = mergeStatusLine(theirs, { root });
+  assert.deepEqual(kept.settings, theirs);
+  assert.equal(kept.change, undefined);
+  assert.match(kept.hint, /statusline\.mjs/);
 });
