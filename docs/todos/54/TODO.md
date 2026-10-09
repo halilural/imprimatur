@@ -4,7 +4,7 @@
 
 ## Durum
 
-Sürüyor: Imprimatur iki yerleşimi okuyor, bu repo taşındı (0.33.0). Kalan: dev-workflow skill'i ve diğer repolar — 2026-10-09
+Sürüyor: Imprimatur iki yerleşimi okuyor, bu repo taşındı (0.33.0), dev-workflow v2.5 hazır. Kalan: diğer repolar — 2026-10-09
 
 ## Yapılacaklar
 
@@ -15,7 +15,7 @@ Sürüyor: Imprimatur iki yerleşimi okuyor, bu repo taşındı (0.33.0). Kalan:
 - DONE: (C) Bu repo: `git mv todos docs/todos`, TODO.md'lerdeki göreli bağlantılar (`../../docs/…` → `../../…`, `../../vscode|hooks` → `../../../…`), README, `.vscode/settings.json`
 - DONE: (C) Sürüm 0.33.0, main'e birleştirildi, `npm run setup -- --lang Turkish` ile bu makinede kuruldu
 - 👉 TODO: (K) Diğer repoların taşınma sırası (öneri: groundwork, investment, interview, dirtywork; sonra prepzio, twinread, radarly, electron-mcp-server)
-- TODO: (C) dev-workflow skill'i: TODO.md yolu, Todo Tree `includeGlobs`, `ALLOWED_ON_MAIN` (`^docs/`), where-we-left-off grep'i, commit kapsamı `todos/N`, `todos/README.md` → `docs/todos/README.md`, eski repolar için taşıma adımı
+- DONE: (C) dev-workflow skill'i v2.5 (`~/.claude/skills/dev-workflow/SKILL.md`, git'te değil): 22 yol `docs/todos/`'a, `ALLOWED_ON_MAIN` ve pre-commit `^docs/`, TODO.md'den test linki `../../testing/…`; bölüm 0'da "önce yerleşim", yeni bölüm 14: kökte kalanlar + eski repoyu taşıma adımları (bağlantılar, CLAUDE.md, rules `paths:`, hook'lar, Todo Tree, grep kontrolü) — 2026-10-09
 - TODO: (C) Diğer repoları taşı (sıraya göre); interview story dosyaları ve `.claude/rules/stories.md` yolu, twinread `TEMPLATE.md`, prepzio `NOTES.local.md`, electron-mcp-server kök .md'leri
 - TODO: (K) İş makinesinde pull + `npm run setup -- --lang Turkish`
 
