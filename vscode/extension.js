@@ -501,14 +501,16 @@ function activate(ctx) {
     vscode.commands.registerCommand("imprimatur.acceptRange", acceptRange),
     // Process checks (#56): a repo turns them on with a committed .claude/imprimatur.json.
     vscode.commands.registerCommand("imprimatur.processOn", async () => {
-      const { starterSettings, CONFIG } = require("./process.js");
+      const { starterSettings, CONFIG, trust } = require("./process.js");
       const list = [...roots].map((r) => repoRoot(r) ?? r);
       const root = list.length > 1 ? await vscode.window.showQuickPick(list, { title: "Turn on process checks in which repo?" }) : list[0];
       if (!root) return;
       const file = path.join(root, CONFIG);
+      // Turning it on trusts the repo: its docs TOC script may run from Imprimatur's hook.
+      trust(root);
       if (fs.existsSync(file)) {
         await vscode.window.showTextDocument(vscode.Uri.file(file));
-        return vscode.window.showInformationMessage("Process checks are already on here: this file sets them.");
+        return vscode.window.showInformationMessage("Process checks are on here (this file sets them); the repo is now trusted to run its docs TOC script.");
       }
       const allow = await vscode.window.showInputBox({
         title: "On main, which paths may be edited without a branch?",

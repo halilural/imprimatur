@@ -138,6 +138,42 @@ function relOf(root, cwd, file) {
   return path.relative(real(root), real(abs));
 }
 
+/** Repos whose own scripts the user allowed (by the VS Code command): a file outside every repo. */
+const TRUSTED = () => path.join(path.dirname(require("./db.js").dbPath()), "trusted-repos.json");
+
+/** @param {string} root */
+function isTrusted(root) {
+  try {
+    return JSON.parse(fs.readFileSync(TRUSTED(), "utf8")).includes(fs.realpathSync(root));
+  } catch {
+    return false;
+  }
+}
+
+/** Adds a repo to the trusted list. @param {string} root */
+function trust(root) {
+  let list = [];
+  try {
+    list = JSON.parse(fs.readFileSync(TRUSTED(), "utf8"));
+  } catch {}
+  const real = fs.realpathSync(root);
+  if (list.includes(real)) return;
+  fs.mkdirSync(path.dirname(TRUSTED()), { recursive: true });
+  fs.writeFileSync(TRUSTED(), JSON.stringify([...list, real], null, 2) + "\n");
+}
+
+/** A repo script path from settings: an existing file inside the repo (links resolved), never a flag. @param {string} root @param {any} rel */
+function scriptIn(root, rel) {
+  if (typeof rel !== "string" || !rel || rel.startsWith("-")) return undefined;
+  try {
+    const real = fs.realpathSync(path.resolve(root, rel));
+    const inside = path.relative(fs.realpathSync(root), real);
+    return !inside.startsWith("..") && !path.isAbsolute(inside) && fs.statSync(real).isFile() ? real : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** JSON from a command's output, or undefined. @param {string | undefined} text */
 const parse = (text) => {
   try {
@@ -253,10 +289,14 @@ function check(event, input, deps = {}) {
 
   if (event === "PostToolUse" && EDITS.test(tool) && ti.file_path && relOf(root, input.cwd, ti.file_path) !== undefined) {
     const rel = /** @type {string} */ (relOf(root, input.cwd, ti.file_path)).split(path.sep).join("/");
-    if (s.docsToc.mode && /^docs\/.*\.md$/.test(rel) && fs.existsSync(path.join(root, s.docsToc.script))) {
-      const r = spawnSync(process.execPath, [s.docsToc.script], { cwd: root, encoding: "utf8", timeout: 10000 });
+    // The TOC script is the repo's code: it runs only in repos the user trusted (outside the repo).
+    const script = s.docsToc.mode && /^docs\/.*\.md$/.test(rel) ? scriptIn(root, s.docsToc.script) : undefined;
+    if (script && isTrusted(root)) {
+      const r = spawnSync(process.execPath, ["--", script], { cwd: root, encoding: "utf8", timeout: 10000 });
       const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim();
       if (out) context.push(say("docsToc", out));
+    } else if (script && once(root, input.session_id, "untrusted")) {
+      context.push(say("docsToc", `not run: this repo is not trusted to run ${s.docsToc.script}. The user can trust it with "Imprimatur: Turn On Process Checks for This Repo".`));
     }
     if (s.unopenedSources.mode && /^docs\/market-research\//.test(rel)) {
       try {
@@ -342,4 +382,4 @@ function starterSettings({ allow, branch } = {}) {
   };
 }
 
-module.exports = { check, reply, settingsOf, starterSettings, repoOf, issueOfBranch, bypasses, DEFAULTS, CONFIG };
+module.exports = { check, reply, settingsOf, starterSettings, repoOf, issueOfBranch, bypasses, trust, isTrusted, scriptIn, DEFAULTS, CONFIG };
