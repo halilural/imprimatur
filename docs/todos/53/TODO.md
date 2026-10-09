@@ -4,14 +4,14 @@
 
 ## Durum
 
-Sürüyor (Sprint 2): veritabanı (#57) hazır; sıradaki #58 MCP sunucusu — 2026-10-09
+Sürüyor (Sprint 2): veritabanı (#57) ve MCP sunucusu (#58) hazır; sıradaki #59 aktarma — 2026-10-09
 
 ## Yapılacaklar
 
 - DONE: (C) [#54 Yerleşim: docs/todos/](https://github.com/halilural/imprimatur/issues/54) — imprimatur, groundwork, interview, twinread taşındı; kalanlar doğrudan veritabanına (#59)
 - DONE: (C) [#57 Veritabanı: node:sqlite, cihaz bazlı, asıl kaynak](https://github.com/halilural/imprimatur/issues/57) — `vscode/db.js`, ARCHITECTURE.md «Kayıt veritabanı»
-- 👉 TODO: (C) [#58 Imprimatur MCP sunucusu](https://github.com/halilural/imprimatur/issues/58)
-- TODO: (C) [#59 Markdown kayıtlarını aktar, sonra kaldır](https://github.com/halilural/imprimatur/issues/59)
+- DONE: (C) [#58 Imprimatur MCP sunucusu](https://github.com/halilural/imprimatur/issues/58) — `mcp/server.mjs`, 8 araç, setup üç istemciye kaydeder
+- 👉 TODO: (C) [#59 Markdown kayıtlarını aktar, sonra kaldır](https://github.com/halilural/imprimatur/issues/59) — sonunda dev-workflow v3
 - TODO: (C) [#60 Kayıt görünümleri](https://github.com/halilural/imprimatur/issues/60)
 - TODO: (C) [#55 Grafikte ajanın her işi](https://github.com/halilural/imprimatur/issues/55) — kayıt değişiklikleri Accept'siz
 - TODO: (C) [#56 Süreç hook'ları Imprimatur'a](https://github.com/halilural/imprimatur/issues/56) — veritabanından okur

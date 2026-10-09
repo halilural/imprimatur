@@ -191,7 +191,12 @@ descriptions and steps; default English), `--dry-run` shows the changes only,
 the editor (VS Code machine settings, `imprimatur.showIn`). It backs up
 `~/.claude/settings.json`, adds the hooks below for every repo (updates ours in
 place, leaves others alone), packages and installs the extension, and checks
-for the `claude` CLI. Or by hand:
+for the `claude` CLI. It also registers the **Imprimatur MCP server**
+(`mcp/server.mjs`; Node 22.13+): Claude Code at user scope, Cursor
+(`~/.cursor/mcp.json`) and Codex (`~/.codex/config.toml`) when installed. Agents
+read and write tasks and their records (todos, questions, decisions, notes,
+ADRs, PDRs) through its tools; the records live in one database per machine
+(`~/.local/share/imprimatur/imprimatur.db`, `IMPRIMATUR_DB` to move it). Or by hand:
 
 1. Hook, in your project's `.claude/settings.json` (extensions after the
    script name; default `md mdx`):
@@ -228,6 +233,10 @@ for the `claude` CLI. Or by hand:
    arguments) on `PreToolUse` and `PostToolUse` with matcher `AskUserQuestion`,
    on `PermissionRequest`, `Stop` and `UserPromptSubmit`, and on `Notification`
    with matcher `agent_needs_input|elicitation_dialog|elicitation_url_dialog`.
+
+   MCP server: `claude mcp add -s user imprimatur -- node /path/to/imprimatur/mcp/server.mjs`,
+   and `hooks/mcp-session.mjs` on `PreToolUse` with matcher
+   `mcp__imprimatur__.*` (it tells the server which session calls).
 
 2. Ignore the copies: add `.claude/imprimatur/` to `.gitignore` (or to your
    global git ignore file).

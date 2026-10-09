@@ -359,6 +359,36 @@ class Db {
     ).map(recordOf);
   }
 
+  /** @param {number} repoId @param {string} key */
+  taskByKey(repoId, key) {
+    return this.q("SELECT * FROM tasks WHERE repo_id = ? AND key = ?").get(repoId, key);
+  }
+
+  /**
+   * Where each unfinished task of a repo was left: its 👉 record and its open records count.
+   * @param {number} repoId
+   */
+  whereWeLeftOff(repoId) {
+    return this.q(`SELECT t.key, t.title, t.status, t.summary,
+                     p.id AS pointer_id, p.kind AS pointer_kind, p.owner AS pointer_owner, p.title AS pointer_title,
+                     (SELECT count(*) FROM records o WHERE o.task_id = t.id AND o.status = 'open') AS open_records
+                   FROM tasks t LEFT JOIN records p ON p.task_id = t.id AND p.pointer = 1
+                   WHERE t.repo_id = ? AND t.status IN ('open', 'active')
+                   ORDER BY t.updated_at DESC LIMIT 100`).all(repoId);
+  }
+
+  /**
+   * Records whose title or body contains the text (case-insensitive for ASCII), newest first.
+   * @param {string} text @param {{repoId?: number, kind?: string, limit?: number}} [o]
+   */
+  search(text, { repoId, kind, limit = 20 } = {}) {
+    const like = `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    return this.q(`SELECT r.*, t.key AS task_key FROM records r JOIN tasks t ON t.id = r.task_id
+                   WHERE (r.title LIKE $like ESCAPE '\\' OR r.body LIKE $like ESCAPE '\\')
+                     AND ($repo IS NULL OR t.repo_id = $repo) AND ($kind IS NULL OR r.kind = $kind)
+                   ORDER BY r.updated_at DESC LIMIT $limit`).all({ like, repo: repoId ?? null, kind: kind ?? null, limit }).map(recordOf);
+  }
+
   /** Open records the user (K) owes, newest first, across repos or in one. @param {{repoId?: number, limit?: number}} [o] */
   openAsks({ repoId, limit = 50 } = {}) {
     const sql = `SELECT r.*, t.key AS task_key, t.repo_id FROM records r JOIN tasks t ON t.id = r.task_id
