@@ -5,11 +5,13 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { handle, MAX_CHANGES } from "../cloud/src/worker.js";
+import { spawnSync } from "node:child_process";
+import { handle, MAX_CHANGES, MAX_VALUE, MAX_KEY } from "../cloud/src/worker.js";
 
 const req = createRequire(import.meta.url);
 const { openDb, normOrigin } = req("../vscode/db.js");
-const { syncOnce, syncLoop, readConfig, writeConfig, configPath } = req("../vscode/sync.js");
+const sync = req("../vscode/sync.js");
+const { syncOnce, syncLoop, readConfig, writeConfig, configPath } = sync;
 const { DatabaseSync } = req("node:sqlite");
 
 const MIGRATION = fs.readFileSync(new URL("../cloud/migrations/0001_changes.sql", import.meta.url), "utf8");
@@ -344,10 +346,206 @@ test("syncLoop: kick is debounced, runs never overlap", async () => {
   await new Promise((r) => setTimeout(r, 30));
   assert.equal(runs, 1);
   const first = loop.now();
-  loop.now();
+  const second = loop.now();
+  assert.equal(loop.now(), second, "one queued run however often it is asked for");
   await first;
+  assert.deepEqual(await second, { line: "ok" }, "Sync Now waits for its own run");
   await new Promise((r) => setTimeout(r, 40));
   loop.dispose();
   assert.equal(overlap, false);
   assert.equal(runs, 3, "a run asked for during a run comes after it");
+});
+
+// ---- Review fixes ----
+
+test("client and Worker agree on the limits", () => {
+  assert.equal(sync.MAX_VALUE, MAX_VALUE);
+  assert.equal(sync.MAX_KEY, MAX_KEY);
+});
+
+test("an over-long value is cut before the push (text ends in …, an object becomes {truncated}); here it stays whole", async () => {
+  const s = server();
+  const a = machine("/a/proj", "git@github.com:u/proj.git");
+  const b = machine("/b/proj", "git@github.com:u/proj.git");
+  const big = "ş".repeat(MAX_VALUE + 10);
+  const r = a.db.addRecord(a.db.upsertTask(a.repo.id, "#1").id, { kind: "note", title: "big", body: big, links: { blob: "x".repeat(MAX_VALUE) } }, user);
+  const out = await run(a, s);
+  assert.equal(out.dropped, 0);
+  assert.equal(a.db.outboxCount(), 0);
+  await run(b, s);
+  const got = b.db.recordByUid(r.uid);
+  assert.ok(got.body.endsWith("…") && got.body.length < big.length && big.startsWith(got.body.slice(0, -1)));
+  assert.deepEqual(got.links, { truncated: true });
+  assert.equal(got.title, "big");
+  assert.equal(a.db.record(r.id).body, big);
+});
+
+test("a change the Worker refuses is found by halving the batch and dropped; the rest goes through", async () => {
+  const s = server();
+  const a = machine("/a/proj", "git@github.com:u/proj.git");
+  const t = a.db.upsertTask(a.repo.id, "#1");
+  for (let i = 0; i < 9; i++) a.db.addRecord(t.id, { kind: "note", title: i === 6 ? "POISON" : `n${i}` }, user);
+  const refusing = async (url, init) => {
+    if (init?.body && init.body.includes("POISON")) return new Response(JSON.stringify({ error: "nope" }), { status: 400 });
+    return s.fetch(url, init);
+  };
+  const lines = [];
+  const out = await syncOnce(a.db, cfg, { fetch: refusing, log: (l) => lines.push(l) });
+  assert.equal(out.dropped, 1);
+  assert.equal(a.db.outboxCount(), 0, "nothing stuck");
+  assert.match(lines.join("\n"), /dropped a change the server refused \(record .* title\)/);
+  const b = machine(undefined);
+  await run(b, s);
+  const titles = b.db.sqlite.prepare("SELECT title FROM records ORDER BY title").all().map((x) => x.title);
+  assert.equal(titles.length, 9);
+  assert.ok(!titles.includes("POISON"));
+});
+
+test("a failed push does not stop the pull", async () => {
+  const s = server();
+  const a = machine("/a/proj", "git@github.com:u/proj.git");
+  const b = machine("/b/proj", "git@github.com:u/proj.git");
+  a.db.upsertTask(a.repo.id, "#1", { title: "from A" });
+  await run(a, s);
+  b.db.upsertTask(b.repo.id, "#2", { title: "B's" });
+  const down = async (url, init) => (init?.method === "POST" ? new Response("busy", { status: 503 }) : s.fetch(url, init));
+  await assert.rejects(syncOnce(b.db, cfg, { fetch: down }), /HTTP 503.*pull went on: sync: pushed 0, pulled [1-9]/);
+  assert.equal(b.db.taskByKey(b.repo.id, "#1").title, "from A");
+  assert.ok(b.db.outboxCount() > 0, "B's change waits for the next push");
+});
+
+test("two syncs at once: each acks only what it pushed, a change queued meanwhile survives", async () => {
+  const s = server();
+  const a = machine("/a/proj", "git@github.com:u/proj.git");
+  const t = a.db.upsertTask(a.repo.id, "#1");
+  a.db.addRecord(t.id, { kind: "note", title: "first" }, user);
+  let late;
+  let inner = false;
+  const overlapping = async (url, init) => {
+    if (init?.method === "POST" && !inner) {
+      inner = true;
+      // Another window syncs the same rows meanwhile, then a new change is queued.
+      await syncOnce(a.db, cfg, { fetch: s.fetch });
+      late = a.db.addRecord(t.id, { kind: "note", title: "queued meanwhile" }, user);
+    }
+    return s.fetch(url, init);
+  };
+  await syncOnce(a.db, cfg, { fetch: overlapping });
+  // Acking by "id <= the last pushed" with reused ids would have deleted it unsent.
+  const b = machine(undefined);
+  await run(b, s);
+  assert.equal(b.db.recordByUid(late.uid).title, "queued meanwhile");
+});
+
+test("the 👉 set on different records on two machines ends on the same one on both", async () => {
+  const s = server();
+  const a = machine("/a/proj", "git@github.com:u/proj.git");
+  const b = machine("/b/proj", "git@github.com:u/proj.git");
+  const t = a.db.upsertTask(a.repo.id, "#3");
+  const r1 = a.db.addRecord(t.id, { kind: "todo", title: "one" }, user);
+  const r2 = a.db.addRecord(t.id, { kind: "todo", title: "two" }, user);
+  await run(a, s);
+  await run(b, s);
+  a.db.setPointer(r1.id, user);
+  b.db.setPointer(b.db.recordByUid(r2.uid).id, user);
+  await run(a, s);
+  await run(b, s);
+  await run(a, s);
+  const pointed = (m) => m.db.sqlite.prepare("SELECT uid FROM records WHERE pointer = 1").all().map((x) => x.uid);
+  assert.deepEqual(pointed(a), pointed(b));
+  assert.equal(pointed(a).length, 1);
+  // Clearing it travels too.
+  const held = a.db.recordByUid(pointed(a)[0]);
+  a.db.clearPointer(held.id, user);
+  await run(a, s);
+  await run(b, s);
+  assert.deepEqual(pointed(b), []);
+});
+
+test("a repo that learns its origin merges the placeholder's same-key task, then the placeholder goes", async () => {
+  const s = server();
+  const a = machine("/a/proj", "git@github.com:u/proj.git");
+  const t = a.db.upsertTask(a.repo.id, "#1", { title: "Title from A" });
+  const fromA = a.db.addRecord(t.id, { kind: "todo", title: "A's todo", pointer: true }, user);
+  await run(a, s);
+  const b = machine(undefined);
+  const local = b.db.repoOf("/b/proj");
+  const bt = b.db.upsertTask(local.id, "#1", { summary: "B's summary" });
+  const fromB = b.db.addRecord(bt.id, { kind: "note", title: "B's note" }, user);
+  await run(b, s);
+  assert.equal(b.db.repos().length, 2, "placeholder next to the origin-less repo");
+  b.db.repoOf("/b/proj", { origin: "https://github.com/u/proj" });
+  assert.deepEqual(b.db.repos().map((r) => r.root), ["/b/proj"]);
+  const merged = b.db.taskByKey(local.id, "#1");
+  assert.equal(merged.title, "Title from A");
+  assert.equal(merged.summary, "B's summary");
+  const recs = b.db.recordsOf(merged.id);
+  assert.deepEqual(recs.map((r) => r.uid).sort(), [fromA.uid, fromB.uid].sort());
+  assert.equal(recs.find((r) => r.uid === fromA.uid).pointer, true);
+  // B's own fields now sync back to A.
+  await run(b, s);
+  await run(a, s);
+  assert.equal(a.db.taskByKey(a.repo.id, "#1").summary, "B's summary");
+  assert.equal(a.db.recordByUid(fromB.uid).title, "B's note");
+});
+
+test("two clones of one origin: the first syncs, the second does not", () => {
+  const { db, repo } = machine("/a/one", "git@github.com:u/proj.git");
+  const second = db.repoOf("/a/two", { origin: "https://github.com/u/proj" });
+  assert.deepEqual(db.unsyncedClones().map((r) => r.id), [second.id]);
+  const before = db.outboxCount();
+  db.addRecord(db.upsertTask(second.id, "#1").id, { kind: "note", title: "x" }, user);
+  assert.equal(db.outboxCount(), before);
+  db.addRecord(db.upsertTask(repo.id, "#1").id, { kind: "note", title: "y" }, user);
+  assert.ok(db.outboxCount() > before);
+});
+
+test("sync off then on again: edits made while off are queued", async () => {
+  const s = server();
+  const a = machine("/a/proj", "git@github.com:u/proj.git");
+  a.db.upsertTask(a.repo.id, "#1", { title: "before" });
+  await run(a, s);
+  a.db.disableSync();
+  a.db.upsertTask(a.repo.id, "#1", { title: "while off" });
+  assert.equal(a.db.outboxCount(), 0);
+  assert.ok(a.db.enableSync() > 0);
+  await run(a, s);
+  const b = machine("/b/proj", "git@github.com:u/proj.git");
+  await run(b, s);
+  assert.equal(b.db.taskByKey(b.repo.id, "#1").title, "while off");
+});
+
+test("the Worker counts bytes, not chars: 413, not 500", async () => {
+  const s = server();
+  const body = JSON.stringify({ device: "d1", changes: [{ entity: "task", key: "k\t#1", field: "title", value: JSON.stringify("ş".repeat(600_000)), at: 1 }] });
+  assert.ok(body.length < 1_000_000);
+  const res = await s.fetch(`${URL_}/v1/push`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}` }, body });
+  assert.equal(res.status, 413);
+});
+
+test("changes that wait for a record that never comes are dropped after 3 pulls", () => {
+  const { db } = machine(undefined);
+  const orphan = { entity: "record", key: "uid-x", field: "title", value: JSON.stringify("t"), at: 5, device: "d" };
+  const bad = { entity: "record", key: "uid-x", field: "task", value: JSON.stringify("no tab here"), at: 5, device: "d" };
+  assert.equal(db.applyRemote([bad, orphan]).pending, 1);
+  assert.equal(db.applyRemote([]).pending, 1);
+  assert.equal(db.applyRemote([]).pending, 1);
+  assert.equal(db.applyRemote([]).pending, 1);
+  const last = db.applyRemote([]);
+  assert.equal(last.pending, 0);
+  assert.equal(last.dropped, 1);
+});
+
+test("npm run sync -- --setup: the token comes from the environment, never argv", () => {
+  const file = tmpDb();
+  const script = new URL("../scripts/sync.mjs", import.meta.url).pathname;
+  const env = { ...process.env, IMPRIMATUR_DB: file };
+  const refused = spawnSync(process.execPath, [script, "--setup", "http://127.0.0.1:9", "tok"], { env, encoding: "utf8" });
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /does not go on the command line/);
+  assert.equal(readConfig(file), undefined);
+  const ok = spawnSync(process.execPath, [script, "--setup", "http://127.0.0.1:9"], { env: { ...env, IMPRIMATUR_SYNC_TOKEN: "from-env" }, encoding: "utf8", timeout: 20_000 });
+  assert.deepEqual(readConfig(file), { url: "http://127.0.0.1:9", token: "from-env" });
+  assert.match(ok.stdout, /sync on/);
+  assert.equal(ok.status, 1, "nothing listens there: the sync itself fails");
 });

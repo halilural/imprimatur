@@ -293,18 +293,26 @@ npx wrangler secret put SYNC_TOKEN            # a long random string, e.g. `open
 npx wrangler deploy
 ```
 
-Then on each machine: `npm run sync -- --setup https://imprimatur-sync.<you>.workers.dev <token>`.
-It saves the address and token next to the database (`config.json`, readable only
-by you), turns sync on and sends what is already there. VS Code then syncs on
-start, every minute and a few seconds after each change (**Imprimatur: Sync Now**
-to force it; one line per sync in the Imprimatur output). `npm run sync` syncs
-from a terminal; `npm run sync -- --off` stops queueing changes.
+Then on each machine: `npm run sync -- --setup https://imprimatur-sync.<you>.workers.dev`.
+It asks for the token (or reads `IMPRIMATUR_SYNC_TOKEN`; never put it on the
+command line, where shell history keeps it), saves the address and token next to
+the database (`config.json`, readable only by you), turns sync on and sends what
+is already there. VS Code then syncs on start, every minute and a few seconds
+after each change (**Imprimatur: Sync Now** to force it; one line per sync in the
+Imprimatur output). `npm run sync` syncs from a terminal; `npm run sync -- --off`
+stops queueing changes (`--setup` again queues everything, edits made meanwhile included).
 
 - Repos are matched by their `origin` remote (ssh and https spellings are the
   same); repos without one stay on their machine. A task that arrives before you
   open its repo here waits under `origin:<remote>` and moves in when you do.
+  Two clones of one remote on the same machine: only the first one Imprimatur
+  saw syncs.
 - Each field (title, status, 👉, …) keeps the newest change; a change on one
   machine never undoes a different field changed on another.
+- A value over 100,000 characters (a huge record body) is sent cut short, ending
+  in "…"; the machine that wrote it keeps it whole.
+- The server keeps every change it was sent; nothing compacts its `changes`
+  table yet. It stays small for one person's records; a new machine replays it all.
 
 ### Limits
 

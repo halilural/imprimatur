@@ -8,8 +8,8 @@
 
 export const MAX_CHANGES = 1000;
 export const MAX_BODY = 1_000_000;
-const MAX_VALUE = 100_000;
-const MAX_KEY = 2000;
+export const MAX_VALUE = 100_000;
+export const MAX_KEY = 2000;
 const ENTITIES = ["repo", "task", "record"];
 const ID = /^[A-Za-z0-9._:-]{1,100}$/;
 
@@ -49,8 +49,13 @@ function invalid(c) {
 /** @param {Request} req @param {{DB: any}} env */
 async function push(req, env) {
   if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY) return fail(413, `body over ${MAX_BODY} bytes; push fewer changes at once`);
-  const text = await req.text();
-  if (text.length > MAX_BODY) return fail(413, `body over ${MAX_BODY} bytes; push fewer changes at once`);
+  let text;
+  try {
+    text = await req.text();
+  } catch {
+    return fail(400, "body could not be read");
+  }
+  if (new TextEncoder().encode(text).byteLength > MAX_BODY) return fail(413, `body over ${MAX_BODY} bytes; push fewer changes at once`);
   let body;
   try {
     body = JSON.parse(text);

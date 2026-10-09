@@ -670,8 +670,8 @@ function activate(ctx) {
     const db = records.dbOf();
     if (!db) throw new Error(records.lastError ?? "database not available");
     const cfg = readConfig(db.file);
-    if (!cfg) return "sync: not set up (npm run sync -- --setup <url> <token>)";
-    return describe(await syncOnce(db, cfg));
+    if (!cfg) return "sync: not set up (npm run sync -- --setup <url>)";
+    return describe(await syncOnce(db, cfg, { log: (line) => log.warn(line) }));
   };
   /** Starts the loop once sync is set up (at activation, or later by Sync Now). */
   const startSync = () => {
@@ -679,6 +679,8 @@ function activate(ctx) {
     if (syncer || !db || !readConfig(db.file)) return false;
     syncer = syncLoop(runSync, (line, error) => (error ? log.warn(line) : log.info(line)));
     ctx.subscriptions.push({ dispose: () => syncer?.dispose() });
+    // Said once: a second clone of an origin does not sync (the first one by id does).
+    for (const r of db.unsyncedClones()) log.info(`sync: ${r.root} is a second clone of ${r.origin}; only the first one syncs`);
     return true;
   };
   try {
@@ -686,16 +688,15 @@ function activate(ctx) {
   } catch (e) {
     log.error(`sync: ${e instanceof Error ? e.message : e}`);
   }
+  // Through the loop, so it never runs alongside a timed sync.
   ctx.subscriptions.push(vscode.commands.registerCommand("imprimatur.syncNow", async () => {
     try {
-      const line = await runSync();
-      log.info(line);
       startSync();
-      vscode.window.setStatusBarMessage(`Imprimatur ${line}`, 5000);
-    } catch (e) {
-      log.warn(`sync failed: ${e instanceof Error ? e.message : e}`);
-      vscode.window.showErrorMessage(`Imprimatur sync failed: ${e instanceof Error ? e.message : e}`);
-    }
+    } catch {}
+    if (!syncer) return void vscode.window.showInformationMessage("Imprimatur: sync is not set up; run npm run sync -- --setup <url> in the Imprimatur folder.");
+    const { line, error } = await syncer.now();
+    if (error) vscode.window.showErrorMessage(`Imprimatur ${error}`);
+    else if (line) vscode.window.setStatusBarMessage(`Imprimatur ${line}`, 5000);
   }));
   try {
     // The repos as git spells them: roots are normalised (lower case on Windows).
