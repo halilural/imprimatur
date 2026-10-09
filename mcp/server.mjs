@@ -240,7 +240,9 @@ export function handle(db, msg, state) {
       case "ping":
         return done({});
       case "tools/list":
-        return done({ tools: toolList() });
+        // 2026-07-28 list results carry caching hints, which modern clients require. The tools
+        // are the same for everyone and change only with a new server version.
+        return done({ tools: toolList(), ...(modern && { ttlMs: 3_600_000, cacheScope: "public" }) });
       case "tools/call": {
         try {
           const out = callTool(db, params.name, params.arguments, state);

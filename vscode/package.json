@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.34.0",
+  "version": "0.34.1",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -193,6 +193,18 @@
         "command": "imprimatur.records.reveal",
         "title": "Reveal Record",
         "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.records.allRepos",
+        "title": "Show Every Repo",
+        "category": "Imprimatur",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "imprimatur.records.thisWindow",
+        "title": "Show This Window's Repos Only",
+        "category": "Imprimatur",
+        "icon": "$(root-folder)"
       }
     ],
     "colors": [
@@ -364,6 +376,16 @@
           "command": "imprimatur.records.refresh",
           "when": "view =~ /^imprimatur\\.records\\./",
           "group": "navigation@2"
+        },
+        {
+          "command": "imprimatur.records.allRepos",
+          "when": "view =~ /^imprimatur\\.records\\./ && !imprimatur.records.allRepos",
+          "group": "navigation@3"
+        },
+        {
+          "command": "imprimatur.records.thisWindow",
+          "when": "view =~ /^imprimatur\\.records\\./ && imprimatur.records.allRepos",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [

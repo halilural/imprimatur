@@ -78,6 +78,7 @@ test("legacy handshake: initialize, initialized, tools/list", async () => {
   assert.equal(unknown.result.protocolVersion, "2025-11-25", "an unknown version gets our latest legacy one");
   const list = await s.send("tools/list");
   assert.equal(list.result.resultType, undefined);
+  assert.equal(list.result.ttlMs, undefined, "legacy results stay as they were");
   const names = list.result.tools.map((t) => t.name);
   assert.deepEqual(names.sort(), ["pointer_set", "record_add", "record_update", "search", "task_get", "task_list", "task_upsert", "where_we_left_off"]);
   for (const t of list.result.tools) {
@@ -95,6 +96,10 @@ test("modern era: server/discover, resultType, unsupported version, unknown meth
   assert.equal(d.result.resultType, "complete");
   assert.deepEqual(d.result.supportedVersions, ["2026-07-28"]);
   assert.equal(d.result._meta[`${META}serverInfo`].name, "imprimatur");
+  // 2026-07-28 clients reject a list without caching hints ("ttlMs: expected number").
+  const tools = await s.send("tools/list", modern());
+  assert.equal(typeof tools.result.ttlMs, "number");
+  assert.ok(["public", "private"].includes(tools.result.cacheScope));
   const bad = await s.send("tools/list", { _meta: { [`${META}protocolVersion`]: "2030-01-01" } });
   assert.equal(bad.error.code, -32022);
   assert.deepEqual(bad.error.data, { supported: ["2026-07-28"], requested: "2030-01-01" });

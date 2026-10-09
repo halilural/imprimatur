@@ -41,11 +41,15 @@ const TASK_ICON = { open: "issues", active: "play-circle", done: "issue-closed",
  * of record kinds (questions, decisions, adr, pdr), grouped by repo.
  */
 class RecordsView {
-  /** @param {"asks" | "tasks" | "kinds"} mode @param {string[]} [kinds] @param {() => string[]} [workspaceRoots] */
-  constructor(mode, kinds = [], workspaceRoots = () => []) {
+  /**
+   * @param {"asks" | "tasks" | "kinds"} mode @param {string[]} [kinds] @param {() => string[]} [workspaceRoots]
+   * @param {() => boolean} [allRepos] every repo in the database, not only this window's
+   */
+  constructor(mode, kinds = [], workspaceRoots = () => [], allRepos = () => false) {
     this.mode = mode;
     this.kinds = kinds;
     this.workspaceRoots = workspaceRoots;
+    this.allRepos = allRepos;
     this.changed = new vscode.EventEmitter();
     this.onDidChangeTreeData = this.changed.event;
     /** @type {Map<string, any>} id → node, for reveal and getParent */
@@ -56,12 +60,14 @@ class RecordsView {
     this.changed.fire(undefined);
   }
 
-  /** Repos, those open in this window first. */
+  /** This window's repos; with "all repos" on, every repo, this window's first. */
   repos() {
     const db = records.dbOf();
     if (!db) return [];
     const here = new Set(this.workspaceRoots());
-    return db.repos().sort((a, b) => Number(here.has(b.root)) - Number(here.has(a.root)));
+    const all = db.repos();
+    if (!this.allRepos()) return all.filter((r) => here.has(r.root));
+    return all.sort((a, b) => Number(here.has(b.root)) - Number(here.has(a.root)));
   }
 
   /** @param {any} node */
@@ -76,13 +82,13 @@ class RecordsView {
     if (!db) return [{ id: "error", type: "message", text: `Imprimatur database: ${records.lastError ?? "not available"}` }];
     if (!node) {
       if (this.mode === "asks") {
-        const repos = new Map(db.repos().map((r) => [r.id, r]));
-        const asks = db.openAsks({ limit: 200 });
-        if (!asks.length) return [{ id: "empty", type: "message", text: "Nothing waits on you." }];
+        const repos = new Map(this.repos().map((r) => [r.id, r]));
+        const asks = db.openAsks({ limit: 500 }).filter((r) => repos.has(r.repo_id));
+        if (!asks.length) return [{ id: "empty", type: "message", text: this.allRepos() ? "Nothing waits on you." : "Nothing waits on you in this window's repos." }];
         return asks.map((r) => this.keep({ id: `r${r.id}`, type: "record", record: r, repo: repos.get(r.repo_id), showTask: true }));
       }
       const repos = this.repos();
-      if (!repos.length) return [{ id: "empty", type: "message", text: "No records yet: agents add them through Imprimatur's MCP tools." }];
+      if (!repos.length) return [{ id: "empty", type: "message", text: this.allRepos() ? "No records yet: agents add them through Imprimatur's MCP tools." : "No records for this window's repos yet." }];
       return repos.map((repo) => this.keep({ id: `${this.mode}:repo${repo.id}`, type: "repo", repo }));
     }
     if (node.type === "repo" && this.mode === "tasks") {
@@ -158,7 +164,8 @@ class RecordsView {
     const item = new vscode.TreeItem(r.title, C.None);
     item.id = node.id;
     const bits = [node.showTask ? r.task_key ?? "" : "", r.owner === "K" ? "you" : r.owner === "C" ? "agent" : "", r.status !== "open" ? r.status : ""];
-    if (this.mode === "asks" && node.repo) bits.unshift(node.repo.name);
+    // Only with every repo shown does a row need to say which one.
+    if (this.mode === "asks" && node.repo && this.allRepos()) bits.unshift(node.repo.name);
     item.description = bits.filter(Boolean).join(" · ");
     item.tooltip = new vscode.MarkdownString(`**${r.kind}** · ${r.status}${r.owner ? ` · ${r.owner === "K" ? "you" : "agent"}` : ""}${r.pointer ? " · 👉" : ""}\n\n${r.title}${r.body ? `\n\n---\n\n${r.body}` : ""}`);
     item.iconPath = iconOf(r);
@@ -197,20 +204,24 @@ function pageOf(id) {
  * @param {(msg: string) => void} log @param {() => void} [onChange] also told when the database changes (the graph)
  */
 function registerRecordViews(ctx, roots, log, onChange = () => {}) {
+  // This window's repos by default; a title button shows every repo (kept per workspace).
+  let all = ctx.workspaceState.get("imprimatur.records.allRepos", false);
+  const allRepos = () => all;
+  vscode.commands.executeCommand("setContext", "imprimatur.records.allRepos", all);
   const views = {
-    asks: new RecordsView("asks", [], roots),
-    tasks: new RecordsView("tasks", [], roots),
-    questions: new RecordsView("kinds", ["question"], roots),
-    decisions: new RecordsView("kinds", ["decision"], roots),
-    adr: new RecordsView("kinds", ["adr"], roots),
-    pdr: new RecordsView("kinds", ["pdr"], roots),
+    asks: new RecordsView("asks", [], roots, allRepos),
+    tasks: new RecordsView("tasks", [], roots, allRepos),
+    questions: new RecordsView("kinds", ["question"], roots, allRepos),
+    decisions: new RecordsView("kinds", ["decision"], roots, allRepos),
+    adr: new RecordsView("kinds", ["adr"], roots, allRepos),
+    pdr: new RecordsView("kinds", ["pdr"], roots, allRepos),
   };
   const trees = Object.fromEntries(
     Object.entries(views).map(([name, provider]) => [name, vscode.window.createTreeView(`imprimatur.records.${name}`, { treeDataProvider: provider, showCollapseAll: name !== "asks" })]),
   );
   const refresh = () => Object.values(views).forEach((v) => v.refresh());
   const badge = () => {
-    const n = records.dbOf()?.openAsks({ limit: 200 }).length ?? 0;
+    const n = records.dbOf() ? views.asks.getChildren().filter((x) => x.type === "record").length : 0;
     trees.asks.badge = n ? { value: n, tooltip: `${n} waiting on you` } : undefined;
   };
 
@@ -272,6 +283,15 @@ function registerRecordViews(ctx, roots, log, onChange = () => {}) {
   ctx.subscriptions.push(
     ...Object.values(trees),
     vscode.workspace.registerTextDocumentContentProvider(SCHEME, { onDidChange: pages.event, provideTextDocumentContent: (uri) => pageOf(Number(uri.path.replace(/\D/g, ""))) }),
+    ...["allRepos", "thisWindow"].map((name) =>
+      vscode.commands.registerCommand(`imprimatur.records.${name}`, () => {
+        all = name === "allRepos";
+        ctx.workspaceState.update("imprimatur.records.allRepos", all);
+        vscode.commands.executeCommand("setContext", "imprimatur.records.allRepos", all);
+        refresh();
+        badge();
+      }),
+    ),
     vscode.commands.registerCommand("imprimatur.records.refresh", () => {
       records.reset();
       refresh();
