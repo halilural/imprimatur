@@ -144,6 +144,9 @@ function tasksOf(rows) {
   return rows.map((r) => taskOfFile(r.file) ?? taskOfBranch(r.branch) ?? most(turns.get(turn(r) ?? "")) ?? taskKeyIn(r.prompt) ?? taskKeyIn(r.said));
 }
 
+/** Words in a text (letters or digits), for "is this a sentence". @param {string | undefined} text */
+const wordsIn = (text) => (text ?? "").match(/[\p{L}\p{N}]{2,}/gu)?.length ?? 0;
+
 /** One line for a record change: "todo added: …", "question → done: …", "👉 moved: …". @param {any} v */
 function changeOf(v) {
   const a = v.after ?? {};
@@ -209,7 +212,7 @@ function fileEdits(root, file, log, abs, open, callsAt) {
 /**
  * @param {string} root repo root
  * @param {(file: string) => string | undefined} [currentText] open-editor text, else read from disk
- * @returns {{rows: Array<{file: string, n: number, t: string, session?: string, tool?: string, prompt?: string, intent?: string, summary: string, title?: string, added: number, removed: number, accepted: boolean, gone: boolean, preview?: Array<[string, string]>, task?: string, lane: number, outside?: boolean, record?: number}>,
+ * @returns {{rows: Array<{file: string, n: number, t: string, session?: string, tool?: string, prompt?: string, intent?: string, summary: string, title?: string, added: number, removed: number, accepted: boolean, gone: boolean, preview?: Array<[string, string]>, task?: string, lane: number, outside?: boolean, record?: number, describe?: string}>,
  *            lanes: Array<{task?: string, title?: string, first: number, last: number}>,
  *            sessions: Array<{session: string, title?: string}>}}
  */
@@ -233,9 +236,15 @@ function graphRows(root, currentText = () => undefined) {
     for (const e of edits) {
       if (e.hidden) continue;
       const call = e.outside ? undefined : callOf(root, e.transcript, e.toolUseId);
-      const intent = e.outside ? OUTSIDE : (e.toolUseId && described.get(`${e.toolUseId} ${file}`)) ?? described.get(`#${e.n} ${file}`) ?? e.intent ?? narrationOf(e.transcript, e.toolUseId) ?? call?.said;
+      const model = (e.toolUseId && described.get(`${e.toolUseId} ${file}`)) ?? described.get(`#${e.n} ${file}`);
+      const agentSaid = e.intent ?? narrationOf(e.transcript, e.toolUseId) ?? call?.said;
+      const intent = e.outside ? OUTSIDE : model ?? agentSaid;
+      // A model description only where nothing says what the edit did (#63): the agent's own
+      // words (a sentence, not "Now:") make one needless. The graph asks for it when shown.
+      const describe = !e.outside && !model && !e.gone && wordsIn(agentSaid) < 4 ? (e.toolUseId ?? `#${e.n}`) : undefined;
       rows.push({ file, n: e.n, t: e.t, session: e.session, tool: e.tool, prompt: e.prompt, intent, summary: e.summary,
-        title: e.title ?? titleOf(e.transcript), added: e.added, removed: e.removed, accepted: e.accepted, gone: e.gone, preview: e.preview, lane: 0, ...(e.outside && { outside: true }) });
+        title: e.title ?? titleOf(e.transcript), added: e.added, removed: e.removed, accepted: e.accepted, gone: e.gone, preview: e.preview, lane: 0,
+        ...(e.outside && { outside: true }), ...(describe && { describe }) });
       // An outside change goes in its edit's lane: the edit's own clues.
       const own = e.outside ? edits.find((x) => x.n === e.n - 0.5) : e;
       // The branch the call was made on (the transcript's) next to the recorded one: older

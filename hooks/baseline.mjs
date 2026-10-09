@@ -129,21 +129,8 @@ export function takeBaseline(project, file, exts = ["md", "mdx"], meta = {}, kno
   const { session, tool, prompt, intent, title, transcript, toolUseId, branchBefore } = meta;
   const row = { t: new Date().toISOString(), session, tool, prompt, intent, title, transcript, toolUseId, branch: editBranch(branchBefore, branchAt(root)), before };
   fs.appendFileSync(log, JSON.stringify(row) + "\n");
-  if (toolUseId) describeLater(root, rel, toolUseId);
+  // The description is made when the graph shows the edit, if the agent's words do not say it (#63).
   return kept ? "kept" : "written";
-}
-
-/**
- * Start hooks/describe.mjs in the background for this edit (a small model
- * writes the graph's description); the tool never waits for it.
- * IMPRIMATUR_DESCRIBE=off turns it off (tests); IMPRIMATUR_LANG picks the language.
- * @param {string} root @param {string} rel @param {string} toolUseId
- */
-function describeLater(root, rel, toolUseId) {
-  if (process.env.IMPRIMATUR_DESCRIBE === "off") return;
-  const script = path.join(path.dirname(new URL(import.meta.url).pathname), "describe.mjs");
-  const child = spawn(process.execPath, [script, root, rel, toolUseId, process.env.IMPRIMATUR_LANG || "English"], { detached: true, stdio: "ignore" });
-  child.unref();
 }
 
 /**

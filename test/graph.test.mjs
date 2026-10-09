@@ -176,3 +176,28 @@ test("graph: agents' record changes are rows in their task's lane, with nothing 
   assert.deepEqual(g.lanes.map((l) => [l.task, l.title]), [["#60", "Views"]]);
   records.reset();
 });
+
+test("graph: a model description is asked only for edits nothing describes (#63)", async () => {
+  const { createRequire } = await import("node:module");
+  const req = createRequire(import.meta.url);
+  const fsm = await import("node:fs");
+  const os = await import("node:os");
+  const pathm = await import("node:path");
+  const root = fsm.realpathSync(fsm.mkdtempSync(pathm.join(os.tmpdir(), "imprimatur-63-")));
+  process.env.IMPRIMATUR_DB = pathm.join(root, "i.db");
+  req("../vscode/records.js").reset();
+  const I = pathm.join(root, ".claude", "imprimatur");
+  fsm.mkdirSync(pathm.join(I, "history"), { recursive: true });
+  fsm.writeFileSync(pathm.join(root, "a.md"), "one\ntwo\nthree\nfour\n");
+  const rows = [
+    { t: "2026-10-09T10:00:00Z", session: "s", tool: "Edit", toolUseId: "said", intent: "Adds the second line to the list", before: "one\n" },
+    { t: "2026-10-09T10:01:00Z", session: "s", tool: "Edit", toolUseId: "terse", intent: "Now:", before: "one\ntwo\n" },
+    { t: "2026-10-09T10:02:00Z", session: "s", tool: "Edit", toolUseId: "modeled", before: "one\ntwo\nthree\n" },
+  ];
+  fsm.writeFileSync(pathm.join(I, "history", "a.md.jsonl"), rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  fsm.writeFileSync(pathm.join(I, "descriptions.jsonl"), JSON.stringify({ toolUseId: "modeled", file: "a.md", text: "Adds a fourth line" }) + "\n");
+  const { graphRows } = req("../vscode/graph.js");
+  const by = Object.fromEntries(graphRows(root).rows.map((r) => [r.intent, r.describe]));
+  assert.deepEqual(by, { "Adds the second line to the list": undefined, "Now:": "terse", "Adds a fourth line": undefined });
+  req("../vscode/records.js").reset();
+});
