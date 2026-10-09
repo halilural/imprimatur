@@ -79,8 +79,26 @@ test("designFirst: code on a <type>/<n>-… branch before the task has an ADR or
   assert.deepEqual(s1({ ...known, recordsOf: () => [] }), {});
 });
 
+test("docsToc: only a trusted repo's script, inside the repo; never a flag or a path outside", () => {
+  const root = repo({ process: { docsToc: { script: "scripts/toc.mjs" } } });
+  process.env.IMPRIMATUR_DB = path.join(root, "db", "i.db");
+  const { trust, isTrusted, scriptIn } = req("../vscode/process.js");
+  fs.mkdirSync(path.join(root, "scripts"));
+  fs.writeFileSync(path.join(root, "scripts", "toc.mjs"), "console.log('ran')");
+  const post = () => check("PostToolUse", { cwd: root, tool_name: "Write", tool_input: { file_path: path.join(root, "docs/a.md") } });
+  assert.match(post().context[0], /not run: this repo is not trusted/);
+  trust(root);
+  assert.equal(isTrusted(root), true);
+  assert.deepEqual(post().context, ["Imprimatur (docsToc): ran"]);
+  assert.equal(scriptIn(root, "--eval=1"), undefined);
+  assert.equal(scriptIn(root, "../../etc/passwd"), undefined);
+  assert.equal(scriptIn(root, "/etc/hostname"), undefined);
+});
+
 test("docsToc runs the repo's script after a docs edit; unopenedSources warns", () => {
   const root = repo({ process: {} });
+  process.env.IMPRIMATUR_DB = path.join(root, "db", "i.db");
+  req("../vscode/process.js").trust(root);
   fs.mkdirSync(path.join(root, "scripts"));
   fs.writeFileSync(path.join(root, "scripts", "docs-toc.mjs"), "console.log('toc: docs/a.md updated')");
   fs.mkdirSync(path.join(root, "docs", "market-research"), { recursive: true });
