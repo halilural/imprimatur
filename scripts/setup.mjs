@@ -3,6 +3,9 @@
 // - the Claude Code hooks in ~/.claude/settings.json (a backup first; ours are
 //   found by their script name, added when missing, updated when the path or
 //   language differs; other hooks are left alone);
+// - the Imprimatur MCP server (mcp/server.mjs) for Claude Code (user scope, via
+//   `claude mcp`), Cursor (~/.cursor/mcp.json) and Codex (~/.codex/config.toml)
+//   when those are installed;
 // - the VS Code extension (npm run package + code --install-extension);
 // - with --lang, imprimatur.language (the extension's model calls use the
 //   hooks' language), and with --show-in, where Markdown changes show (preview | editor | both), in
@@ -33,7 +36,100 @@ const wanted = (exts) => [
   ["Notification", "agent_needs_input|elicitation_dialog|elicitation_url_dialog", "waiting.mjs", ""],
   ["Stop", undefined, "waiting.mjs", ""],
   ["UserPromptSubmit", undefined, "waiting.mjs", ""],
+  ["PreToolUse", "mcp__imprimatur__.*", "mcp-session.mjs", ""],
 ];
+
+const MCP_NAME = "imprimatur";
+/** How every client starts the MCP server. @param {string} root */
+const mcpCommand = (root) => ({ command: "node", args: [path.join(root, "mcp", "server.mjs")] });
+
+/**
+ * Cursor's ~/.cursor/mcp.json with our server. Pure: returns a copy and the change.
+ * @param {any} config @param {{root: string}} opts
+ */
+export function mergeCursor(config, { root }) {
+  const out = structuredClone(config ?? {});
+  out.mcpServers ??= {};
+  const want = { type: "stdio", ...mcpCommand(root) };
+  const have = out.mcpServers[MCP_NAME];
+  if (have && have.command === want.command && JSON.stringify(have.args) === JSON.stringify(want.args)) {
+    return { config: out, change: undefined };
+  }
+  out.mcpServers[MCP_NAME] = { ...have, ...want };
+  return { config: out, change: `${have ? "updated" : "added  "} mcpServers.${MCP_NAME}` };
+}
+
+/** The table header's dotted key, quotes removed (`[ mcp_servers."x" ]` → "mcp_servers.x"); undefined for other lines. @param {string} line */
+function tomlHeader(line) {
+  const m = /^\s*\[(?!\[)\s*((?:[A-Za-z0-9_-]+|"[^"]*"|'[^']*')(?:\s*\.\s*(?:[A-Za-z0-9_-]+|"[^"]*"|'[^']*'))*)\s*\]/.exec(line);
+  return m?.[1].split(/\s*\.\s*(?=(?:[^"']|"[^"]*"|'[^']*')*$)/).map((k) => k.replace(/^["']|["']$/g, "")).join(".");
+}
+
+/**
+ * Where each line of a TOML text starts a table: lines inside multi-line arrays
+ * and strings never do. @param {string[]} lines @returns {boolean[]}
+ */
+function tableStarts(lines) {
+  let depth = 0;
+  let inString = "";
+  return lines.map((line) => {
+    const starts = !inString && depth === 0 && /^\s*\[/.test(line);
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (inString) {
+        if (line.startsWith(inString, i)) {
+          i += inString.length - 1;
+          inString = "";
+        } else if (c === "\\" && inString[0] === '"') i++;
+        continue;
+      }
+      if (c === "#") break;
+      const triple = line.slice(i, i + 3);
+      if (triple === '"""' || triple === "'''") {
+        inString = triple;
+        i += 2;
+      } else if (c === '"' || c === "'") inString = c;
+      else if (!starts && c === "[") depth++;
+      else if (!starts && c === "]") depth = Math.max(0, depth - 1);
+    }
+    // A one-line string cannot run past its line.
+    if (inString.length === 1) inString = "";
+    return starts;
+  });
+}
+
+/**
+ * Codex's config.toml with our [mcp_servers.imprimatur] table (and its subtables) replaced.
+ * Pure text edit: the rest of the file is kept byte for byte, line endings too.
+ * @param {string} toml @param {{root: string}} opts
+ */
+export function mergeCodex(toml, { root }) {
+  const { command, args } = mcpCommand(root);
+  const eol = toml.includes("\r\n") ? "\r\n" : "\n";
+  const blockLines = [`[mcp_servers.${MCP_NAME}]`, `command = ${JSON.stringify(command)}`, `args = [${args.map((a) => JSON.stringify(a)).join(", ")}]`];
+  const block = blockLines.join(eol) + eol;
+  const lines = toml.split(eol);
+  const starts = tableStarts(lines);
+  const ours = (i) => {
+    const key = starts[i] && tomlHeader(lines[i]);
+    return Boolean(key) && (key === `mcp_servers.${MCP_NAME}` || key.startsWith(`mcp_servers.${MCP_NAME}.`));
+  };
+  const start = lines.findIndex((_, i) => ours(i));
+  if (start < 0) {
+    const sep = toml === "" || toml.endsWith(eol + eol) ? "" : toml.endsWith(eol) ? eol : eol + eol;
+    return { toml: toml + sep + block, change: `added   [mcp_servers.${MCP_NAME}]` };
+  }
+  let end = start + 1;
+  while (end < lines.length && (!starts[end] || ours(end))) end++;
+  // Keep the blank lines that separated the old block from the next table.
+  while (end > start + 1 && lines[end - 1].trim() === "") end--;
+  if (lines.slice(start, end).join(eol) === blockLines.join(eol) && lines.findIndex((_, i) => i >= end && ours(i)) < 0) {
+    return { toml, change: undefined };
+  }
+  const rest = lines.slice(end).filter((_, i) => !ours(end + i));
+  const next = [...lines.slice(0, start), ...blockLines, ...rest].join(eol);
+  return { toml: next, change: `updated [mcp_servers.${MCP_NAME}]` };
+}
 
 /**
  * Settings with Imprimatur's hooks in place. Pure: returns a copy and the changes.
@@ -110,6 +206,72 @@ function writeWithBackup(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
 }
 
+/**
+ * The MCP server in every installed client. node:sqlite needs Node >= 22.13.
+ * @param {string} root @param {{dry: boolean}} opts
+ */
+function registerMcp(root, { dry }) {
+  const [major, minor] = process.versions.node.split(".").map(Number);
+  if (major < 22 || (major === 22 && minor < 13)) {
+    console.log(`MCP server: Node ${process.versions.node} has no node:sqlite; install Node >= 22.13 and run setup again.`);
+    return;
+  }
+  const home = os.homedir();
+  const { command, args } = mcpCommand(root);
+
+  let claudeHas;
+  try {
+    claudeHas = JSON.parse(fs.readFileSync(path.join(home, ".claude.json"), "utf8")).mcpServers?.[MCP_NAME];
+  } catch {}
+  const claudeSame = claudeHas?.command === command && JSON.stringify(claudeHas?.args) === JSON.stringify(args);
+  if (claudeSame) console.log("MCP server in Claude Code: in place");
+  else if (!has("claude")) console.log(`MCP server in Claude Code: 'claude' not on PATH; run: claude mcp add -s user ${MCP_NAME} -- ${command} ${args.join(" ")}`);
+  else {
+    console.log(`MCP server in Claude Code: ${claudeHas ? "updated" : "added"} (user scope)`);
+    if (!dry) {
+      try {
+        // `claude mcp add` refuses an existing name: remove first, put the old one back if add fails.
+        if (claudeHas) execFileSync("claude", ["mcp", "remove", "-s", "user", MCP_NAME], { stdio: "ignore" });
+        try {
+          execFileSync("claude", ["mcp", "add", "-s", "user", MCP_NAME, "--", command, ...args], { stdio: ["ignore", "ignore", "pipe"] });
+        } catch (e) {
+          if (claudeHas) execFileSync("claude", ["mcp", "add-json", "-s", "user", MCP_NAME, JSON.stringify(claudeHas)], { stdio: "ignore" });
+          throw e;
+        }
+      } catch (e) {
+        console.log(`  failed: ${String(/** @type {any} */ (e).stderr || /** @type {Error} */ (e).message).trim()}`);
+      }
+    }
+  }
+
+  const cursorDir = path.join(home, ".cursor");
+  if (fs.existsSync(cursorDir)) {
+    const file = path.join(cursorDir, "mcp.json");
+    try {
+      const { config, change } = mergeCursor(fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {}, { root });
+      console.log(`MCP server in Cursor (${file}): ${change ?? "in place"}`);
+      if (change && !dry) writeWithBackup(file, config);
+    } catch {
+      console.log(`MCP server in Cursor: ${file} is not plain JSON; add ${JSON.stringify({ [MCP_NAME]: { type: "stdio", command, args } })} to mcpServers by hand.`);
+    }
+  } else console.log("MCP server in Cursor: not installed (~/.cursor missing), skipped");
+
+  const codexDir = path.join(home, ".codex");
+  if (fs.existsSync(codexDir)) {
+    const file = path.join(codexDir, "config.toml");
+    try {
+      const { toml, change } = mergeCodex(fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "", { root });
+      console.log(`MCP server in Codex (${file}): ${change ?? "in place"}`);
+      if (change && !dry) {
+        if (fs.existsSync(file)) fs.copyFileSync(file, `${file}.bak-${new Date().toISOString().replace(/[:.]/g, "-")}-imprimatur`);
+        fs.writeFileSync(file, toml);
+      }
+    } catch (e) {
+      console.log(`MCP server in Codex: ${file}: ${/** @type {Error} */ (e).message}`);
+    }
+  } else console.log("MCP server in Codex: not installed (~/.codex missing), skipped");
+}
+
 /** @param {string[]} argv */
 function options(argv) {
   const get = (name) => {
@@ -145,6 +307,8 @@ function main() {
   console.log(`Hooks in ${file}:`);
   console.log(changes.length ? changes.map((c) => `  ${c}`).join("\n") : "  all in place");
   if (changes.length && !opts.dry) writeWithBackup(file, settings);
+
+  registerMcp(root, opts);
 
   if (opts.showIn || opts.lang) {
     const vs = vscodeSettingsFile();

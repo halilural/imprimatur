@@ -7,7 +7,7 @@ const root = "/home/u/projects/imprimatur";
 test("setup: adds every hook to empty settings, keeps other hooks", () => {
   const before = { model: "x", hooks: { SessionStart: [{ hooks: [{ type: "command", command: "heal.mjs" }] }] } };
   const { settings, changes } = mergeHooks(before, { root, lang: "Turkish" });
-  assert.equal(changes.length, 9);
+  assert.equal(changes.length, 10);
   assert.ok(changes.every((c) => c.startsWith("added")));
   assert.deepEqual(settings.hooks.SessionStart, before.hooks.SessionStart);
   assert.equal(settings.model, "x");
