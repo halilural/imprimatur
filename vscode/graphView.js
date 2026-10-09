@@ -18,15 +18,28 @@ const records = require("./records.js");
 const { scanTodos } = require("./history.js");
 const { closeDoneTasks } = require("./todo-done.js");
 const { scopeCss } = require("./preview.js");
+const { trustGate } = require("./trust.js");
+
+/** Where the graph logs (the extension's output channel). @type {(msg: string) => void} */
+let logLine = () => {};
+/** In an untrusted folder no model call starts from here (#65). */
+const allowed = trustGate(() => vscode.workspace.isTrusted, (msg) => logLine(msg));
+/** @param {(msg: string) => void} fn */
+const setGraphLog = (fn) => void (logLine = fn);
+/** Options of the panel's webview: scripts, and no local files to load (everything is inline). */
+const WEBVIEW_OPTIONS = { enableScripts: true, localResourceRoots: [] };
 
 /** The preview's marks (preview.css), for the hover's rendered review (#50); read once. */
 let reviewCss;
+/** preview.css sits next to this file, or one up when it runs bundled (vscode/dist/extension.js). */
+const cssPaths = (dir = __dirname) => [path.join(dir, "preview.css"), path.join(dir, "..", "preview.css")];
 const reviewStyle = () => (reviewCss ??= (() => {
-  try {
-    return scopeCss(fs.readFileSync(path.join(__dirname, "preview.css"), "utf8"), "#pop .review");
-  } catch {
-    return "";
+  for (const file of cssPaths()) {
+    try {
+      return scopeCss(fs.readFileSync(file, "utf8"), "#pop .review");
+    } catch {}
   }
+  return "";
 })());
 
 const KINDS = { question: ["❓", "Question"], command: ["⚙", "Command"], verify: ["👀", "Verify / test"], input: ["✋", "Input"] };
@@ -320,7 +333,8 @@ function html(data, root, nonce, waiting = []) {
     }
   });
   // Tab, filter, the answered toggle and opened rows survive an update.
-  const state = Object.assign({ tab: "edits", q: "", answered: false, expanded: [] }, vscode.getState());
+  // The repo goes into the saved state too: a panel restored after a reload shows the same one.
+  const state = Object.assign({ tab: "edits", q: "", answered: false, expanded: [] }, vscode.getState(), { root: ${JSON.stringify(root).replace(/</g, "\\u003c")} });
   const filter = document.getElementById("filter");
   const answered = document.getElementById("answered");
   filter.value = state.q;
@@ -553,10 +567,14 @@ let actions;
  * @param {(file: string, n: number) => unknown} acceptEdit
  * @param {(file: string, n: number) => unknown} goTo
  * @param {(file: string, n: number) => string | undefined} [renderEdit] an edit as a rendered Markdown review (#50)
+ * @param {vscode.WebviewPanel} [restored] a panel VS Code brought back after a reload (the serializer)
  */
-function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = () => undefined) {
+function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = () => undefined, restored) {
+  // One graph panel: a restored one while another is open goes away.
+  if (restored && panel && restored !== panel) restored.dispose();
   if (!panel) {
-    panel = vscode.window.createWebviewPanel("imprimatur.graph", "Agent Change Graph", vscode.ViewColumn.Active, { enableScripts: true });
+    if (restored) restored.webview.options = WEBVIEW_OPTIONS;
+    panel = restored ?? vscode.window.createWebviewPanel("imprimatur.graph", "Agent Change Graph", vscode.ViewColumn.Active, WEBVIEW_OPTIONS);
     panel.webview.onDidReceiveMessage((m) => {
       if (m.type === "check") return timed("tick", m, () => tick(m));
       if (m.type === "perf") return perfLog(m);
@@ -630,9 +648,16 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
     const next = page("", waitingOnly);
     if (next !== sent) p.webview.postMessage({ type: "render", html: (sent = next) });
   };
-  p.reveal();
+  if (!restored) p.reveal();
   // Set up after work began: once per project, find what already waited on the user.
-  if (!scannedBefore(root)) scanAll();
+  if (!scannedBefore(root) && allowed("scan history")) scanAll();
+}
+
+/** The folder was trusted: describe what is shown, run the first scan if it never ran. */
+function graphTrusted() {
+  if (!shown) return;
+  refreshGraph();
+  if (!scannedBefore(shown)) scanAll();
 }
 
 /**
@@ -678,7 +703,7 @@ let describeRunning = 0;
  * @param {string} root @param {ReturnType<typeof graphRows>["rows"]} rows
  */
 function describeShown(root, rows) {
-  if (process.env.IMPRIMATUR_DESCRIBE === "off") return;
+  if (process.env.IMPRIMATUR_DESCRIBE === "off" || !allowed("edit descriptions (claude)")) return;
   for (const r of rows.slice(0, DESCRIBE_ROWS)) {
     if (!r.describe) continue;
     const job = `${root}\t${r.file}\t${r.describe}`;
@@ -716,6 +741,10 @@ function perfLog(m) {
 /** The Audit button: Haiku reviews every session's open steps (vscode/audit.js). */
 async function auditAll() {
   if (!shown) return;
+  if (!allowed("audit (claude)")) {
+    reload?.(); // the button shows "Auditing…" and an update would not redraw it: load the page anew
+    return void vscode.window.showInformationMessage("Imprimatur: Audit calls the claude CLI; trust this folder to use it.");
+  }
   const dir = path.join(shown, WAITING_DIR);
   const logs = fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => n.endsWith(".jsonl")).map((n) => path.join(dir, n)) : [];
   const withOpen = logs.filter((l) => openSteps(l).length);
@@ -749,6 +778,10 @@ const scanning = new Set();
 async function scanAll(again = false) {
   const root = shown;
   if (!root || scanning.has(root)) return;
+  if (!allowed("scan history (claude)")) {
+    reload?.();
+    return void vscode.window.showInformationMessage("Imprimatur: Scan history calls the claude CLI; trust this folder to use it.");
+  }
   scanning.add(root);
   let res;
   await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur: scanning past sessions" }, async (p) => {
@@ -800,4 +833,4 @@ const graphCommands = {
   "imprimatur.graph.copyAsk": (c) => vscode.env.clipboard.writeText(c.text ?? ""),
 };
 
-module.exports = { openGraph, refreshGraph, syncRecords, graphCommands, laneSvg, html };
+module.exports = { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, laneSvg, html, cssPaths, WEBVIEW_OPTIONS };

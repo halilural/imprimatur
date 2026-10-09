@@ -17,40 +17,28 @@
     "SCM Providers",
     "Other"
   ],
-  "main": "./extension.js",
+  "main": "./dist/extension.js",
   "files": [
-    "extension.js",
-    "diff.js",
-    "review-state.js",
-    "preview.js",
+    "dist/extension.js",
     "preview.css",
-    "graph.js",
-    "graphView.js",
-    "waiting.js",
-    "narration.js",
     "preview-markers.js",
-    "mermaid-diff.js",
-    "model.js",
-    "audit.js",
-    "history.js",
-    "tasks.js",
-    "agent-setup.js",
-    "setupView.js",
-    "calls.js",
-    "archive.js",
-    "todo-done.js",
-    "db.js",
-    "import.js",
-    "describe.js",
-    "process.js",
-    "records.js",
-    "recordsView.js",
     "media/imprimatur.svg",
     "media/icon.png"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onWebviewPanel:imprimatur.graph"
   ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In an untrusted folder Imprimatur shows changes and records but starts no model calls (claude), gh or repo scripts."
+    },
+    "virtualWorkspaces": false
+  },
   "contributes": {
     "commands": [
       {

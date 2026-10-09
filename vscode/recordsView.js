@@ -7,11 +7,11 @@
 // views follow the database file: any writer (an agent through MCP, a hook,
 // another window) shows up at once; nothing polls.
 "use strict";
-const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const vscode = require("vscode");
 const records = require("./records.js");
+const { watchFile } = require("./watch.js");
 
 const SCHEME = "imprimatur-record";
 const USER = { kind: /** @type {"user"} */ ("user"), id: os.userInfo().username };
@@ -225,30 +225,17 @@ function registerRecordViews(ctx, roots, log, onChange = () => {}) {
     trees.asks.badge = n ? { value: n, tooltip: `${n} waiting on you` } : undefined;
   };
 
-  // Follow the database file: a write anywhere changes its WAL. Event-driven, debounced.
-  /** @type {NodeJS.Timeout | undefined} */
-  let timer;
-  const db = records.dbOf();
-  if (db) {
-    try {
-      const dir = path.dirname(db.file);
-      const base = path.basename(db.file);
-      const watcher = fs.watch(dir, (_e, name) => {
-        if (!name || !String(name).startsWith(base)) return;
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-          records.checkFile();
-          refresh();
-          badge();
-          refreshPages();
-          onChange();
-        }, 300);
-      });
-      ctx.subscriptions.push({ dispose: () => watcher.close() });
-    } catch (e) {
-      log(`records: cannot watch the database: ${e instanceof Error ? e.message : e}`);
-    }
-  }
+  // Follow the database file: a write anywhere changes its WAL. Event-driven, debounced;
+  // armed again after a watch error, and before the database exists (vscode/watch.js).
+  const file = records.dbOf()?.file ?? require("./db.js").dbPath();
+  if (file !== ":memory:")
+    ctx.subscriptions.push(watchFile(file, () => {
+      records.checkFile();
+      refresh();
+      badge();
+      refreshPages();
+      onChange();
+    }, log));
   badge();
 
   const pages = new vscode.EventEmitter();

@@ -8,7 +8,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { review, acceptHunk, acceptLines, acceptGroups } = require("./diff.js");
 const { markdownItPlugin, markdownBlocks, reviewHtml } = require("./preview.js");
-const { openGraph, refreshGraph, syncRecords, graphCommands } = require("./graphView.js");
+const { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog } = require("./graphView.js");
 const { WAITING_DIR, waitingSteps } = require("./waiting.js");
 const { acceptEdit, spotsOf, graphRows } = require("./graph.js");
 const { registerSetupView } = require("./setupView.js");
@@ -258,6 +258,18 @@ function showGraph() {
   openGraph(root, openEditDiff, currentText, acceptEditOf, goToEdit, renderEdit);
 }
 
+/**
+ * A graph panel open before a reload comes back (WebviewPanelSerializer) with the
+ * repo its page saved, if it is still there; else the usual one.
+ * @param {vscode.WebviewPanel} panel @param {any} state the page's vscode.setState
+ */
+async function restoreGraph(panel, state) {
+  const saved = typeof state?.root === "string" && state.root;
+  const root = saved && (roots.has(norm(saved)) || fs.existsSync(saved)) ? saved : graphRoot();
+  if (!root) return void panel.dispose();
+  openGraph(root, openEditDiff, currentText, acceptEditOf, goToEdit, renderEdit, panel);
+}
+
 /** Status bar button, always there like Git Graph's: opens the graph, shows open asks. */
 function updateGraphButton() {
   const root = graphRoot();
@@ -487,6 +499,7 @@ function addFolder(folder, ctx) {
 function activate(ctx) {
   log = vscode.window.createOutputChannel("Imprimatur", { log: true });
   ctx.subscriptions.push(log);
+  setGraphLog((msg) => log.info(msg));
   status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
   graphButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 48);
   graphButton.command = "imprimatur.openGraph";
@@ -501,6 +514,11 @@ function activate(ctx) {
     vscode.commands.registerCommand("imprimatur.acceptRange", acceptRange),
     // Process checks (#56): a repo turns them on with a committed .claude/imprimatur.json.
     vscode.commands.registerCommand("imprimatur.processOn", async () => {
+      // It trusts the repo's docs TOC script: not from a folder VS Code does not trust.
+      if (!vscode.workspace.isTrusted) {
+        log.info("untrusted workspace: process checks not turned on");
+        return void vscode.window.showInformationMessage("Imprimatur: process checks let the repo's scripts run; trust this folder first.");
+      }
       const { starterSettings, CONFIG, trust } = require("./process.js");
       const list = [...roots].map((r) => repoRoot(r) ?? r);
       const root = list.length > 1 ? await vscode.window.showQuickPick(list, { title: "Turn on process checks in which repo?" }) : list[0];
@@ -571,6 +589,16 @@ function activate(ctx) {
     }),
   );
   for (const f of vscode.workspace.workspaceFolders ?? []) addFolder(f, ctx);
+  ctx.subscriptions.push(
+    vscode.window.registerWebviewPanelSerializer("imprimatur.graph", { deserializeWebviewPanel: restoreGraph }),
+    // Trusted now: what was skipped (descriptions, the first scan) may run.
+    vscode.workspace.onDidGrantWorkspaceTrust(() => {
+      log.info("workspace trusted: model calls allowed");
+      graphTrusted();
+      refreshEverything();
+    }),
+  );
+  if (!vscode.workspace.isTrusted) log.info("untrusted workspace: Imprimatur shows changes and records but starts no claude, gh or repo scripts");
   // Once a day per repo: at start (after things settle), then checked hourly.
   const archiveTimer = setTimeout(() => archiveAll(), 30_000);
   const archiveHourly = setInterval(() => archiveAll(), 3_600_000);
