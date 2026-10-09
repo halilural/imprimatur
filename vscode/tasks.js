@@ -59,7 +59,7 @@ function namesTask(text, key) {
   return !!num && new RegExp(`(?<![\\w-])${num}(?![\\w-])`).test(text);
 }
 
-/** The key a TODO.md's folder names: todos/LATD-13937/TODO.md → LATD-13937, todos/25/TODO.md → #25. @param {string} todo */
+/** The key a TODO.md's folder names: (docs/)todos/LATD-13937/TODO.md → LATD-13937, todos/25/TODO.md → #25. @param {string} todo */
 function keyOfTodo(todo) {
   const dir = path.basename(path.dirname(todo));
   if (/^\d+$/.test(dir)) return `#${dir}`;
@@ -173,10 +173,29 @@ function githubOf(root) {
   }
 }
 
-/** The task's own TODO.md by the usual layout (todos/<key>/TODO.md, todos/<n>/TODO.md for #n), if it exists. @param {string} root @param {string} key */
+/** Where task folders live, newer layout first (#54): docs/todos/<key>/, then todos/<key>/. */
+const TODO_DIRS = [path.join("docs", "todos"), "todos"];
+
+/** Every TODO.md the layouts name: the root one, then each task folder's (repo-relative, may not exist). @param {string} root */
+function todoFiles(root) {
+  return [
+    "TODO.md",
+    ...TODO_DIRS.flatMap((dir) => (fs.existsSync(path.join(root, dir)) ? fs.readdirSync(path.join(root, dir)).map((d) => path.join(dir, d, "TODO.md")) : [])),
+  ];
+}
+
+/** The task a file under a task folder belongs to: (docs/)todos/37/… → #37, todos/LATD-12/… → LATD-12. @param {string} file */
+function taskOfFile(file) {
+  const parts = file.split(/[\\/]/);
+  const at = parts[0] === "todos" ? 1 : parts[0] === "docs" && parts[1] === "todos" ? 2 : 0;
+  const [dir, ...rest] = parts.slice(at);
+  if (!at || !dir || !rest.length) return undefined;
+  return /^\d+$/.test(dir) ? `#${dir}` : taskKeyIn(dir);
+}
+
+/** The task's own TODO.md by the usual layout ((docs/)todos/<key>/TODO.md, <n>/ for #n), if it exists. @param {string} root @param {string} key */
 function todoOfKey(root, key) {
-  const rel = path.join("todos", key.replace(/^#/, ""), "TODO.md");
-  return fs.existsSync(path.join(root, rel)) ? rel : undefined;
+  return TODO_DIRS.map((dir) => path.join(dir, key.replace(/^#/, ""), "TODO.md")).find((rel) => fs.existsSync(path.join(root, rel)));
 }
 
 /**
@@ -188,9 +207,7 @@ function jiraBase(root, key, cache = new Map()) {
   if (!cache.has("jira")) {
     /** @type {Map<string, string>} project → address up to and with /browse/ */
     const bases = new Map();
-    const todos = path.join(root, "todos");
-    const files = ["TODO.md", ...(fs.existsSync(todos) ? fs.readdirSync(todos).map((d) => path.join("todos", d, "TODO.md")) : [])];
-    for (const f of files) {
+    for (const f of todoFiles(root)) {
       const t = textOf(path.join(root, f));
       if (!t) continue;
       for (const m of t.text.matchAll(/(https?:\/\/[^\s)\]]+\/browse\/)([A-Z][A-Z0-9]+)-\d+/g)) if (!bases.has(m[2])) bases.set(m[2], m[1]);
@@ -234,4 +251,4 @@ function placeOf(root, step, todos, cache = new Map()) {
   return { task, url: (task ? linkFor(text, task) : undefined) ?? fallback, todo, line };
 }
 
-module.exports = { taskKeyIn, normKey, leadKey, keyOfTodo, taskOf, stepTask, namesTask, sessionTodos, lineFor, linkFor, placeOf, jiraBase };
+module.exports = { TODO_DIRS, todoFiles, taskOfFile, todoOfKey, taskKeyIn, normKey, leadKey, keyOfTodo, taskOf, stepTask, namesTask, sessionTodos, lineFor, linkFor, placeOf, jiraBase };

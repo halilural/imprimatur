@@ -8,7 +8,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { WAITING_DIR, readLog, itemsOf, tickStep } = require("./waiting.js");
-const { keyOfTodo, stepTask } = require("./tasks.js");
+const { keyOfTodo, stepTask, todoFiles } = require("./tasks.js");
 
 const SEEN = path.join(".claude", "imprimatur", "todo-done.json");
 /**
@@ -32,13 +32,10 @@ function isDone(text) {
   return lines.some((l) => /^(?:[-*]\s+)?(?:durum|status)\s*[:·—-]\s*/iu.test(l) && DONE.test(l.replace(/^(?:[-*]\s+)?(?:durum|status)\s*[:·—-]\s*/iu, "")));
 }
 
-/** The task's TODO.md files: todos/<key>/TODO.md. @param {string} root */
+/** The task's TODO.md files: (docs/)todos/<key>/TODO.md. @param {string} root */
 function taskTodos(root) {
-  const todos = path.join(root, "todos");
-  if (!fs.existsSync(todos)) return [];
-  return fs
-    .readdirSync(todos)
-    .map((d) => path.join("todos", d, "TODO.md"))
+  return todoFiles(root)
+    .slice(1)
     .filter((f) => fs.existsSync(path.join(root, f)));
 }
 

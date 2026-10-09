@@ -163,7 +163,7 @@ and so do waiting logs with nothing open. Open asks stay until you do them.
    steps it reports done or asks again. A message that names a task
    (`LATD-13977`, or `13977` alone) also settles that task's steps asked in
    other sessions. An item closes when all its steps are ticked. When a task's
-   `todos/<task>/TODO.md` says done (its `## Durum` / `## Status` starts with
+   `docs/todos/<task>/TODO.md` (or the older `todos/<task>/TODO.md`) says done (its `## Durum` / `## Status` starts with
    Bitti or Done), the next turn end ticks the task's steps in every session,
    except ones asked after the TODO.md last changed. After each agent turn, Haiku audits the list with the agent's final
    message ([vscode/audit.js](vscode/audit.js)): it closes steps that are done,
@@ -181,7 +181,7 @@ and so do waiting logs with nothing open. Open asks stay until you do them.
    each session with its final message, as the hook would have. Sessions that
    already have a log or were scanned before are skipped (`.claude/imprimatur/scanned.json`).
    It also adds the `TODO: (K)` lines (your own to-dos) of `TODO.md` and
-   `todos/*/TODO.md`; on the next scan the ones marked DONE or removed are ticked.
+   `docs/todos/*/TODO.md` (or `todos/*/TODO.md`); on the next scan the ones marked DONE or removed are ticked.
 
 ### Setup options, or install by hand
 

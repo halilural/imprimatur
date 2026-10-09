@@ -8,7 +8,7 @@ Sürüyor: tasarım — 2026-10-02
 
 ## Yapılacaklar
 
-- DONE: (C) 1. [ARCHITECTURE.md · Modül: agent-review](../../docs/design/ARCHITECTURE.md) hedef hâl (git'siz, tarihçe, son düzenleme parlak) — 2026-10-02
+- DONE: (C) 1. [ARCHITECTURE.md · Modül: agent-review](../../design/ARCHITECTURE.md) hedef hâl (git'siz, tarihçe, son düzenleme parlak) — 2026-10-02
 - DONE: (C) 2. Hook: kopya yalnız yoksa alınır (git'e bakmaz); her düzenlemede tarihçeye satır (`.claude/agent-review/history/<yol>.jsonl`: zaman, oturum, araç, öncesi) — 2026-10-02
 - DONE: (C) 3. Eklenti: git izleme ve temizlik kalkar; parlak = son düzenleme (tarihçenin son "öncesi"ne göre), soluk = önceki düzenlemeler; Accept / Accept all tek temizlik
 - DONE: (C) 4. Kelime mi satır mı: satırda yalnız tek kelime değiştiyse (bir kelime yerine bir kelime, ya da tek kelime eklendi/silindi) kelime olarak; birden fazla kelime değiştiyse satır olarak: yeni satır bütün vurgulu, eski satır sonda bütün olarak kırmızı üstü çizili
