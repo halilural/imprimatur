@@ -356,4 +356,4 @@ function summary(r) {
   return `${r.total} records (${r.added} new, ${r.updated} updated, ${r.dropped} gone from Markdown → dropped) from ${r.files.length} files; ${unparsed} lines kept as notes; ${off.length ? `count off: ${off.join(", ")}` : "counts match"}`;
 }
 
-module.exports = { summary, importRepo, parseTodo, parseDesign, parseSections, sources, taskStatus, ACTOR };
+module.exports = { summary, importRepo, originOf, parseTodo, parseDesign, parseSections, sources, taskStatus, ACTOR };

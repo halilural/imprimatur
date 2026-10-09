@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const { openDb, KINDS } = require("../vscode/db.js");
 const { repoRoot } = require("../vscode/review-state.js");
+const { originOf } = require("../vscode/import.js");
 
 const MODERN = "2026-07-28";
 const LEGACY = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
@@ -203,7 +204,15 @@ function repoOf(db, repo) {
   const start = repo || process.env.CLAUDE_PROJECT_DIR || process.cwd();
   const root = repoRoot(path.resolve(start));
   if (!root) throw new ToolError(`${start} is not inside a git repo; pass repo (an absolute path inside the repo)`);
-  return { id: db.repoOf(root).id, root };
+  return { id: db.repoOf(root, { origin: originCached(root) }).id, root };
+}
+
+/** root → its origin remote (sync keys a repo by it, #61); git asked once per root. @type {Map<string, string | undefined>} */
+const origins = new Map();
+/** @param {string} root */
+function originCached(root) {
+  if (!origins.has(root)) origins.set(root, originOf(root));
+  return origins.get(root);
 }
 
 /** Up to 5 keys nearest to a mistyped one: same prefix first, then by number, then the most recent. @param {string[]} keys @param {string} key */

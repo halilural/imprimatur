@@ -116,6 +116,11 @@
         "category": "Imprimatur"
       },
       {
+        "command": "imprimatur.syncNow",
+        "title": "Sync Now",
+        "category": "Imprimatur"
+      },
+      {
         "command": "imprimatur.records.refresh",
         "title": "Refresh Records",
         "category": "Imprimatur",
