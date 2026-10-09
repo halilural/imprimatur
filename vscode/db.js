@@ -449,6 +449,11 @@ class Db {
     return this.q("SELECT * FROM tasks WHERE repo_id = ? AND key = ?").get(repoId, key);
   }
 
+  /** Every task key of a repo, most recently updated first (#64: suggestions for a mistyped key). @param {number} repoId @returns {string[]} */
+  taskKeys(repoId) {
+    return this.q("SELECT key FROM tasks WHERE repo_id = ? ORDER BY updated_at DESC, id DESC").all(repoId).map((/** @type {any} */ t) => t.key);
+  }
+
   /**
    * Where each unfinished task of a repo was left: its 👉 record and its open records count.
    * @param {number} repoId

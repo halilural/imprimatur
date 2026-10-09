@@ -116,7 +116,10 @@ test("every tool: a task, its records, 👉, versions with the session, search, 
   const s = session({ cwd: root });
   const json = (r) => {
     assert.equal(r.isError, undefined, r.content?.[0]?.text);
-    assert.deepEqual(JSON.parse(r.content[0].text), r.structuredContent);
+    // The text is a digest for the model; structuredContent carries the data (#64).
+    assert.equal(typeof r.content[0].text, "string");
+    assert.ok(r.content[0].text.length > 0);
+    assert.equal(typeof r.structuredContent, "object");
     return r.structuredContent;
   };
   const { task } = json(await call(s, "task_upsert", { key: "#58", title: "MCP", status: "active", epic: "#53", _session: "S1" }));
@@ -134,8 +137,11 @@ test("every tool: a task, its records, 👉, versions with the session, search, 
   assert.equal(doneTodo.pointer, false, "a done record loses the 👉");
   json(await call(s, "pointer_set", { id: q.id }));
 
-  const got = json(await call(s, "task_get", { key: "#58" }));
+  const got = json(await call(s, "task_get", { key: "#58", status: "all" }));
   assert.deepEqual(got.records.map((r) => [r.kind, r.pointer]), [["todo", false], ["question", true], ["answer", false]]);
+  const openOnly = json(await call(s, "task_get", { key: "#58" }));
+  assert.deepEqual(openOnly.records.map((r) => r.kind), ["question", "answer"], "by default: open records only");
+  assert.deepEqual(json(await call(s, "task_get", { key: "#58", dropped: true })).records.length, 3, "dropped: true still works (status all)");
 
   const left = json(await call(s, "where_we_left_off", {}));
   const t58 = left.tasks.find((t) => t.key === "#58");
@@ -274,4 +280,191 @@ test("setup: Codex edge cases: quoted header, multi-line array, strings, CRLF", 
   assert.equal(mergeCodex(crlf, { root: "/r" }).change, undefined);
   const twice = mergeCodex("[mcp_servers.imprimatur]\ncommand = \"node\"\nargs = [\"/r/mcp/server.mjs\"]\n[other]\n[mcp_servers.imprimatur.env]\nK = \"v\"\n", { root: "/r" });
   assert.equal(twice.toml.match(/mcp_servers\.imprimatur/g).length, 1, "a scattered subtable is removed too");
+});
+
+// #64: MCP spec 2026-07-28 and "Writing effective tools for agents".
+
+test("discover and initialize carry the instructions; discover has caching hints", async () => {
+  const s = session({ cwd: gitRepo() });
+  const d = (await s.send("server/discover", modern())).result;
+  assert.equal(d.ttlMs, 3_600_000);
+  assert.equal(d.cacheScope, "public");
+  assert.equal(typeof d.instructions, "string");
+  assert.ok(d.instructions.length <= 1500, `${d.instructions.length} chars`);
+  for (const w of ["where_we_left_off", "#58", "Jira", "parent_id", "C = the agent", "K = the user", "👉", "pointer_set", "pointer:true",
+    "summary", "record_update", "\"done\"", "repo \"*\"", "_session"]) {
+    assert.ok(d.instructions.includes(w), `instructions mention ${w}`);
+  }
+  const init = (await s.send("initialize", { protocolVersion: "2025-06-18", clientInfo: { name: "old" } })).result;
+  assert.equal(init.instructions, d.instructions);
+  await s.close();
+});
+
+test("tools: title, annotations, closed input schemas that still take _session, output schemas", async () => {
+  const s = session({ cwd: gitRepo() });
+  const { tools } = (await s.send("tools/list", modern())).result;
+  const idempotent = { record_add: false };
+  for (const t of tools) {
+    assert.equal(typeof t.title, "string", t.name);
+    assert.ok(t.title.length > 0);
+    assert.equal(t.annotations.openWorldHint, false, t.name);
+    assert.equal(t.annotations.destructiveHint, false, t.name);
+    assert.equal(t.annotations.idempotentHint, idempotent[t.name] ?? true, t.name);
+    assert.equal(t.inputSchema.additionalProperties, false, t.name);
+    assert.ok(t.inputSchema.properties._session, `${t.name} takes _session`);
+    assert.equal(t.outputSchema.type, "object", t.name);
+    assert.ok(t.outputSchema.required.length > 0, t.name);
+  }
+  const ro = Object.fromEntries(tools.map((t) => [t.name, t.annotations.readOnlyHint]));
+  assert.deepEqual(ro, {
+    where_we_left_off: true, task_list: true, task_get: true, search: true,
+    task_upsert: false, record_add: false, record_update: false, pointer_set: false,
+  });
+  // The hook's _session passes the closed schema.
+  assert.equal((await call(s, "task_list", { _session: "S1" })).isError, undefined);
+  await s.close();
+});
+
+/** A light JSON Schema check: types, enums, required keys, nested properties and items. */
+function conforms(schema, v, at = "$") {
+  const types = [].concat(schema.type ?? []);
+  if (types.length) {
+    const is = (t) => (t === "null" ? v === null : t === "array" ? Array.isArray(v)
+      : t === "object" ? v !== null && typeof v === "object" && !Array.isArray(v) : t === "integer" ? Number.isInteger(v) : typeof v === t);
+    assert.ok(types.some(is), `${at}: ${JSON.stringify(v)} is not ${types.join("|")}`);
+  }
+  if (schema.enum && v !== null) assert.ok(schema.enum.includes(v), `${at}: ${v} not in ${schema.enum}`);
+  if (Array.isArray(v)) v.forEach((x, i) => schema.items && conforms(schema.items, x, `${at}[${i}]`));
+  else if (v && typeof v === "object") {
+    for (const k of schema.required ?? []) assert.ok(k in v, `${at}.${k} is missing`);
+    for (const [k, p] of Object.entries(schema.properties ?? {})) if (v[k] !== undefined) conforms(p, v[k], `${at}.${k}`);
+  }
+}
+
+test("every tool's structuredContent matches its outputSchema", async () => {
+  const s = session({ cwd: gitRepo() });
+  const schemas = Object.fromEntries((await s.send("tools/list", modern())).result.tools.map((t) => [t.name, t.outputSchema]));
+  const seen = new Set();
+  const ok = async (name, args) => {
+    const r = await call(s, name, args);
+    assert.equal(r.isError, undefined, r.content[0].text);
+    conforms(schemas[name], r.structuredContent, name);
+    seen.add(name);
+    return r.structuredContent;
+  };
+  await ok("where_we_left_off", {});
+  await ok("task_upsert", { key: "#1", title: "One", status: "active", summary: "half way", epic: "#0" });
+  const { record: q } = await ok("record_add", { task: "#1", kind: "question", owner: "K", title: "Q?", body: "x".repeat(900), pointer: true, links: { issue: 1 } });
+  await ok("record_add", { task: "#1", kind: "answer", title: "A", parent_id: q.id });
+  const { record: n } = await ok("record_add", { task: "#1", kind: "note", title: "N" });
+  await ok("record_update", { id: n.id, status: "done", body: "result" });
+  await ok("pointer_set", { id: q.id });
+  await ok("task_list", {});
+  await ok("task_get", { key: "#1" });
+  await ok("task_get", { key: "#1", status: "all", limit: 1 });
+  await ok("search", { text: "x", repo: "*" });
+  await ok("where_we_left_off", {});
+  assert.equal(seen.size, Object.keys(schemas).length, "every tool was checked");
+  await s.close();
+});
+
+test("task_get: open records and the 👉 by default, kind, paging, bodies cut unless full", async () => {
+  const s = session({ cwd: gitRepo() });
+  const long = "y".repeat(800);
+  const ids = [];
+  for (let i = 0; i < 60; i++) {
+    const args = { task: "#7", kind: i % 2 ? "note" : "todo", title: `r${i}`, ...(i === 0 && { body: long }) };
+    ids.push((await call(s, "record_add", args)).structuredContent.record.id);
+  }
+  await call(s, "record_update", { id: ids[1], status: "done" });
+  await call(s, "record_update", { id: ids[3], status: "dropped" });
+
+  const first = await call(s, "task_get", { key: "#7" });
+  const p1 = first.structuredContent;
+  assert.equal(p1.total, 58, "done and dropped left out");
+  assert.equal(p1.returned, 50);
+  assert.equal(p1.records.length, 50);
+  assert.equal(p1.next_offset, 50);
+  assert.equal(p1.records[0].body.length, 501, "500 chars and an ellipsis");
+  assert.equal(p1.records[0].body_truncated, true);
+  assert.match(first.content[0].text, /offset 50/);
+  assert.match(first.content[0].text, /full:true/);
+  assert.match(first.content[0].text, /status "all"/);
+
+  const p2 = (await call(s, "task_get", { key: "#7", offset: 50 })).structuredContent;
+  assert.equal(p2.returned, 8);
+  assert.equal(p2.next_offset, undefined);
+  assert.equal(p2.records[0].title, "r52");
+
+  const full = (await call(s, "task_get", { key: "#7", full: true, limit: 1 })).structuredContent;
+  assert.equal(full.records[0].body, long);
+  assert.equal(full.records[0].body_truncated, undefined);
+  assert.equal(full.next_offset, 1);
+
+  assert.equal((await call(s, "task_get", { key: "#7", limit: 500 })).structuredContent.returned, 58, "limit clamped, not refused");
+  assert.equal((await call(s, "task_get", { key: "#7", status: "all" })).structuredContent.total, 60);
+  assert.deepEqual((await call(s, "task_get", { key: "#7", status: "done" })).structuredContent.records.map((r) => r.title), ["r1"]);
+  assert.deepEqual((await call(s, "task_get", { key: "#7", status: "dropped" })).structuredContent.records.map((r) => r.title), ["r3"]);
+  assert.equal((await call(s, "task_get", { key: "#7", kind: "note" })).structuredContent.total, 28);
+  await s.close();
+});
+
+test("digests: compact text for the model", async () => {
+  const s = session({ cwd: gitRepo() });
+  await call(s, "task_upsert", { key: "#58", title: "MCP", status: "active", summary: "server written" });
+  const add = { task: "#58", kind: "todo", owner: "C", title: "server.mjs", pointer: true, body: "line one\nline two" };
+  const { record: todo } = (await call(s, "record_add", add)).structuredContent;
+  await call(s, "record_add", { task: "#58", kind: "question", owner: "K", title: "Genel mi?" });
+  const text = async (name, args) => (await call(s, name, args)).content[0].text;
+
+  assert.equal(await text("where_we_left_off", {}), `1 unfinished task:\n- #58 MCP [active] 👉 [${todo.id}] server.mjs (2 open)\n  where we are: server written`);
+  const got = await text("task_get", { key: "#58" });
+  assert.equal(got.split("\n")[0], "#58 MCP [active] — server written");
+  assert.ok(got.includes(`[${todo.id}] todo/open C server.mjs 👉\n    line one line two`), got);
+  assert.ok(got.includes(`[${todo.id + 1}] question/open K Genel mi?`), got);
+  assert.match(got, /2 of 2 records \(status open\)/);
+  assert.equal(await text("task_list", {}), "1 task:\n- #58 MCP [active] — server written");
+  assert.match(await text("search", { text: "genel" }), /^1 record:\n- #58 \[\d+\] question\/open K Genel mi\?$/);
+  assert.equal(await text("search", { text: "zzz" }), "No records match \"zzz\".");
+  assert.match(await text("record_update", { id: todo.id, status: "done" }), /^Updated \[\d+\] todo\/done C server\.mjs$/);
+  assert.match(await text("record_add", { task: "#58", kind: "note", title: "n" }), /^Added \[\d+\] note\/open - n$/);
+  assert.match(await text("pointer_set", { id: todo.id + 1 }), /^👉 now on \[\d+\] question\/open K Genel mi\? 👉$/);
+  assert.match(await text("task_upsert", { key: "#58" }), /^Saved task #58 MCP/);
+  await s.close();
+});
+
+test("errors tell the model how to recover", async () => {
+  const root = gitRepo();
+  const s = session({ cwd: root });
+  const err = async (name, args) => {
+    const r = await call(s, name, args);
+    assert.equal(r.isError, true, `${name} ${JSON.stringify(args)}`);
+    return r.content[0].text;
+  };
+  assert.match(await err("task_get", { key: "#1" }), /no tasks yet.*record_add/);
+  for (const k of ["#50", "#57", "#58", "#59", "#60", "#61", "#100", "PROJ-5"]) await call(s, "task_upsert", { key: k });
+  const unknown = await err("task_get", { key: "#580" });
+  assert.ok(unknown.includes(root), "names the repo root");
+  assert.match(unknown, /Closest keys: #58, /);
+  assert.equal(unknown.match(/Closest keys: ([^.]*)\./)[1].split(", ").length, 5);
+  assert.match(unknown, /record_add.*creates/);
+  assert.match(await err("task_get", { key: "#62" }), /Closest keys: #61, #60, #59, #58, #57\./);
+
+  assert.match(await err("task_list", { status: "closed" }), /status must be one of: open, active, done, dropped/);
+  assert.match(await err("task_get", { key: "#58", status: "active" }), /one of: open, done, dropped, all/);
+  assert.match(await err("record_add", { task: "#58", kind: "bug", title: "x" }), /kind must be one of: todo, question, answer/);
+  assert.match(await err("record_add", { task: "#58", kind: "todo", title: "x", owner: "me" }), /owner must be one of: C, K/);
+  assert.match(await err("task_list", { stauts: "open" }), /unknown argument "stauts".*valid arguments: repo, status/);
+  assert.match(await err("record_add", { task: "#58", kind: "note", title: "t".repeat(301) }), /title is 301 chars; the limit is 300/);
+  assert.match(await err("record_add", { task: "#58", kind: "note", title: "t", body: "b".repeat(20_001) }), /body is 20001 chars; the limit is 20000/);
+  assert.match(await err("task_get", { key: "#58", offset: -1 }), /offset/);
+  assert.match(await err("task_get", { key: "#58", full: "yes" }), /full must be a boolean/);
+
+  const { record } = (await call(s, "record_add", { task: "#58", kind: "todo", title: "t", status: "done" })).structuredContent;
+  assert.match(await err("pointer_set", { id: record.id }), /is done.*Reopen it first with record_update.*status: "open"/);
+  assert.match(await err("record_add", { task: "#58", kind: "todo", title: "t", status: "done", pointer: true }), /only on an open record/);
+  assert.match(await err("pointer_set", { id: 9999 }), /no record 9999.*task_get.*search/);
+  assert.match(await err("record_update", { id: 9999, status: "done" }), /no record 9999.*task_get.*search/);
+  assert.match(await err("record_add", { task: "#58", kind: "answer", title: "a", parent_id: 9999 }), /no record 9999 \(parent_id\)/);
+  await s.close();
 });
