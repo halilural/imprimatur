@@ -171,7 +171,10 @@ export function recordWaiting(data, project) {
   if (models && data.hook_event_name === "Stop") {
     const message = String(data.last_assistant_message ?? "").slice(0, 6000);
     const { prompt, title } = transcriptInfo(data.transcript_path);
-    if (message) start("audit.mjs", message, prompt ?? "", title ?? "");
+    // Haiku only when there is something to settle or record: open steps, or a reply that
+    // asks (👉, a question, "test et"…). A plain report costs no model call (#62).
+    const { openSteps } = require("../vscode/waiting.js");
+    if (message && (openSteps(log).length || asksIn(message).lines.length)) start("audit.mjs", message, prompt ?? "", title ?? "");
   }
   // The user's message settles the steps it decides (resolve.mjs, in the background),
   // here or, when it names their task, in other sessions: also without a log of its own.

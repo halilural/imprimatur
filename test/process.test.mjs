@@ -147,6 +147,10 @@ test("SessionStart: the repo's tasks and their 👉 from the database", () => {
   const records = { ...noRecords, repoId: () => 1, dbOf: () => ({ whereWeLeftOff: () => [{ key: "#56", title: "Process", status: "active", pointer_title: "process.mjs", open_records: 2 }] }) };
   const r = check("SessionStart", { cwd: root }, { records });
   assert.match(r.context[0], /Where we left off[\s\S]*- #56 Process \[active\] 👉 process\.mjs \(2 open\)/);
+  const long = { ...records, dbOf: () => ({ whereWeLeftOff: () => Array.from({ length: 15 }, (_, i) => ({ key: `#${i}`, title: "t".repeat(500), status: "active", pointer_title: "p".repeat(500) })) }) };
+  const big = check("SessionStart", { cwd: root }, { records: long }).context[0];
+  assert.ok(big.length <= 4100, `${big.length} characters`);
+  assert.match(big, /t{79}…/);
 });
 
 test("bypasses: real flags only, not quoted text, heredocs or other tools", () => {
