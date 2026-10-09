@@ -230,6 +230,11 @@ class Db {
     });
   }
 
+  /** @param {string} u */
+  recordByUid(u) {
+    return recordOf(this.q("SELECT * FROM records WHERE uid = ?").get(u));
+  }
+
   /** @param {number} id */
   record(id) {
     return recordOf(this.q("SELECT * FROM records WHERE id = ?").get(id));
@@ -239,7 +244,8 @@ class Db {
    * Adds a record at the end of its task (or at `position`).
    * @param {number} taskId
    * @param {{kind: string, title: string, owner?: string | null, status?: string, body?: string | null,
-   *   position?: number, parent_id?: number | null, links?: any, pointer?: boolean}} fields
+   *   position?: number, parent_id?: number | null, links?: any, pointer?: boolean, uid?: string}} fields
+   *   uid: a stable id from the caller (the Markdown import), else a random one
    * @param {Actor} actor
    */
   addRecord(taskId, fields, actor) {
@@ -251,7 +257,7 @@ class Db {
       const { lastInsertRowid } = this.q(`INSERT INTO records
           (uid, task_id, kind, owner, status, title, body, position, parent_id, links, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-        uid(), taskId, fields.kind, fields.owner ?? null, fields.status ?? "open", fields.title, fields.body ?? null,
+        fields.uid ?? uid(), taskId, fields.kind, fields.owner ?? null, fields.status ?? "open", fields.title, fields.body ?? null,
         position, fields.parent_id ?? null, json(fields.links), now, now,
       );
       const id = Number(lastInsertRowid);
@@ -313,6 +319,23 @@ class Db {
       this.movePointer(id, actor, Date.now());
       return this.record(id);
     });
+  }
+
+  /** Takes the 👉 off this record, if it has it. @param {number} id @param {Actor} actor */
+  clearPointer(id, actor) {
+    return this.tx(() => {
+      const now = Date.now();
+      if (this.q("UPDATE records SET pointer = 0, updated_at = ? WHERE id = ? AND pointer = 1").run(now, id).changes) {
+        this.version_(id, actor, "update", { pointer: true }, { pointer: false }, now);
+      }
+      return this.record(id);
+    });
+  }
+
+  /** Imported records of one source file in a repo (links.source). @param {number} repoId @param {string} source */
+  recordsFromSource(repoId, source) {
+    return this.q(`SELECT r.* FROM records r JOIN tasks t ON t.id = r.task_id
+                   WHERE t.repo_id = ? AND r.uid LIKE 'md:%' AND json_extract(r.links, '$.source') = ?`).all(repoId, source).map(recordOf);
   }
 
   /** @param {number} id @param {Actor} actor @param {number} now */

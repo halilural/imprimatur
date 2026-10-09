@@ -39,6 +39,8 @@
     "calls.js",
     "archive.js",
     "todo-done.js",
+    "db.js",
+    "import.js",
     "media/imprimatur.svg",
     "media/icon.png"
   ],
@@ -110,6 +112,11 @@
         "title": "Mark all as seen",
         "category": "Imprimatur",
         "icon": "$(check-all)"
+      },
+      {
+        "command": "imprimatur.importMarkdown",
+        "title": "Import Markdown Records (TODO.md, design, product, tests)",
+        "category": "Imprimatur"
       },
       {
         "command": "imprimatur.archiveNow",

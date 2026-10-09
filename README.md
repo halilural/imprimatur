@@ -196,7 +196,11 @@ for the `claude` CLI. It also registers the **Imprimatur MCP server**
 (`~/.cursor/mcp.json`) and Codex (`~/.codex/config.toml`) when installed. Agents
 read and write tasks and their records (todos, questions, decisions, notes,
 ADRs, PDRs) through its tools; the records live in one database per machine
-(`~/.local/share/imprimatur/imprimatur.db`, `IMPRIMATUR_DB` to move it). Or by hand:
+(`~/.local/share/imprimatur/imprimatur.db`, `IMPRIMATUR_DB` to move it).
+Records a repo still keeps in Markdown (`docs/todos/*/TODO.md`, `docs/design`,
+`PRODUCT.md` / `docs/product`, `docs/testing`) move in with
+`npm run import -- <repo> [--dry-run]` or **Imprimatur: Import Markdown Records**;
+it can run again (nothing is added twice) and checks each file's count. Or by hand:
 
 1. Hook, in your project's `.claude/settings.json` (extensions after the
    script name; default `md mdx`):
