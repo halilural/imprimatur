@@ -138,16 +138,20 @@ test("Stop: no 'Neredeyiz' blocks once (stop_hook_active ends it); merged branch
   assert.match(check("Stop", { cwd: root, last_assistant_message: "Bitti." }).block, /no "neredeyiz" section/);
   assert.deepEqual(check("Stop", { cwd: root, last_assistant_message: "Bitti.\n\n## Neredeyiz\n- x" }), {});
   assert.deepEqual(check("Stop", { cwd: root, stop_hook_active: true, last_assistant_message: "Bitti." }), {});
+});
+
+test("branchFinish: merged branches left behind are told to the agent at session start and after a merge", () => {
+  const root = repo({ process: { whereWeLeftOff: false } });
   sh(root, "branch", "feat/3-new");
   sh(root, "switch", "-q", "-c", "feat/2-done");
   sh(root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "work");
   sh(root, "switch", "-q", "main");
   sh(root, "merge", "-q", "--ff-only", "feat/2-done");
-  const r = check("Stop", { cwd: root, last_assistant_message: "NEREDEYİZ" });
-  assert.deepEqual(r.notice, ["Imprimatur (branchFinish): merged into main but not deleted: feat/2-done (git branch -d feat/2-done)."]);
-  const s1 = () => check("Stop", { cwd: root, session_id: "S1", last_assistant_message: "Neredeyiz" });
-  assert.equal(s1().notice.length, 1);
-  assert.deepEqual(s1(), {}, "once per session and branch");
+  const want = ["Imprimatur (branchFinish): merged into main but not deleted: feat/2-done. Delete them: git branch -d feat/2-done."];
+  assert.deepEqual(check("SessionStart", { cwd: root }).context, want);
+  assert.deepEqual(check("PostToolUse", { cwd: root, tool_name: "Bash", tool_input: { command: "git merge --ff-only feat/2-done" } }).context, want);
+  assert.deepEqual(check("PostToolUse", { cwd: root, tool_name: "Bash", tool_input: { command: "npm test" } }), {});
+  assert.deepEqual(check("Stop", { cwd: root, last_assistant_message: "Neredeyiz" }), {}, "not at Stop: only the user would see it");
 });
 
 test("SessionStart: the repo's tasks and their 👉 from the database", () => {
