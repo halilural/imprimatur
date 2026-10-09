@@ -6,7 +6,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const req = createRequire(import.meta.url);
-const { taskKeyIn, keyOfTodo, lineFor, linkFor, sessionTodos, placeOf } = req("../vscode/tasks.js");
+const { taskKeyIn, keyOfTodo, lineFor, placeOf } = req("../vscode/tasks.js");
+const records = req("../vscode/records.js");
 
 test("tasks: keys in text and in a TODO.md's folder", () => {
   assert.equal(taskKeyIn("LATD-13937 için Tim'e yaz"), "LATD-13937");
@@ -17,33 +18,32 @@ test("tasks: keys in text and in a TODO.md's folder", () => {
   assert.equal(keyOfTodo("todos/25/TODO.md"), "#25");
 });
 
-test("tasks: the line that says the step, and the link that names the task", () => {
-  const md = "# #25 · Epic\n\n[#25](https://github.com/o/r/issues/25)\n\n- 👉 TODO: (K) Tim'e takip mailini gönder (!2690)\n- TODO: (C) README\n";
-  assert.equal(lineFor(md, "LATD-13937: Tim'e !2690 için takip mailini gönder"), 5);
+test("tasks: the line that says the step", () => {
+  const md = "Epic\nTim'e takip mailini gönder (!2690)\nREADME\n";
+  assert.equal(lineFor(md, "LATD-13937: Tim'e !2690 için takip mailini gönder"), 2);
   assert.equal(lineFor(md, "Paneli aç"), 0);
-  assert.equal(linkFor(md, "#25"), "https://github.com/o/r/issues/25");
-  assert.equal(linkFor("[LATD-13937](https://acme.atlassian.net/browse/LATD-13937)", "LATD-13937"), "https://acme.atlassian.net/browse/LATD-13937");
-  assert.equal(linkFor(md, "#7"), undefined);
 });
 
-test("tasks: a step's place from the TODO.md its session edited", () => {
+test("tasks: a step's place from the records its session wrote", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-tasks-"));
-  const todo = "todos/LATD-13937/TODO.md";
-  fs.mkdirSync(path.join(root, path.dirname(todo)), { recursive: true });
-  fs.writeFileSync(path.join(root, todo), "# LATD-13937\n\n[LATD-13937](https://acme.atlassian.net/browse/LATD-13937)\n\n- 👉 TODO: (K) Tim'e takip mailini gönder\n");
-  const hist = path.join(root, ".claude/imprimatur/history", `${todo}.jsonl`);
-  fs.mkdirSync(path.dirname(hist), { recursive: true });
-  fs.writeFileSync(hist, JSON.stringify({ t: "2026-10-05T10:00:00Z", session: "s1", before: "" }) + "\n");
-  const todos = sessionTodos(root);
-  assert.deepEqual(todos.get("s1"), [todo]);
-  assert.deepEqual(placeOf(root, { session: "s1", text: "Tim'e takip mailini gönder" }, todos), {
-    task: "LATD-13937", url: "https://acme.atlassian.net/browse/LATD-13937", todo, line: 5,
+  const file = path.join(root, "imprimatur.db");
+  process.env.IMPRIMATUR_DB = file;
+  records.reset();
+  const db = req("../vscode/db.js").openDb({ path: file });
+  const repoId = db.repoOf(root).id;
+  const t = db.upsertTask(repoId, "LATD-13937", { title: "Tim" });
+  const r = db.addRecord(t.id, { kind: "todo", owner: "K", title: "Tim'e takip mailini gönder", body: "https://acme.atlassian.net/browse/LATD-13937" }, { kind: "agent", id: "claude-code:s1" });
+  db.close();
+  const sessions = records.sessionTasks(root);
+  assert.deepEqual(sessions.get("s1"), ["LATD-13937"]);
+  assert.deepEqual(placeOf(root, { session: "s1", text: "Tim'e takip mailini gönder" }, sessions), {
+    task: "LATD-13937", url: "https://acme.atlassian.net/browse/LATD-13937", record: r.id,
   });
-  assert.deepEqual(placeOf(root, { session: "other", text: "x" }, todos), { task: undefined });
-  // An old (scanned) session that never edited it still finds the task's own TODO.md.
-  assert.deepEqual(placeOf(root, { session: "old", text: "LATD-13937: Tim'e yaz" }, todos).todo, todo);
-  // A Jira key without a TODO.md of its own: the address learned from another TODO.md.
-  assert.deepEqual(placeOf(root, { session: "old", text: "LATD-13931: Tim'e özet mail gönder" }, todos), { task: "LATD-13931", url: "https://acme.atlassian.net/browse/LATD-13931" });
-  // The same session asks something its TODO.md does not say: no task from the file.
-  assert.deepEqual(placeOf(root, { session: "s1", text: "Jira adresi ne?" }, todos), { task: undefined });
+  assert.deepEqual(placeOf(root, { session: "other", text: "x" }, sessions), {});
+  // A step that names the task finds its record without the session.
+  assert.equal(placeOf(root, { session: "old", text: "LATD-13937: Tim'e takip mailini gönder" }, sessions).record, r.id);
+  // A Jira key without a record of its own: the address learned from another record.
+  assert.deepEqual(placeOf(root, { session: "old", text: "LATD-13931: Tim'e özet mail gönder" }, sessions), { task: "LATD-13931", url: "https://acme.atlassian.net/browse/LATD-13931" });
+  // The same session asks something none of its records say: no task.
+  assert.deepEqual(placeOf(root, { session: "s1", text: "Jira adresi ne?" }, sessions), {});
 });

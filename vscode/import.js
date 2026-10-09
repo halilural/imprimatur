@@ -17,7 +17,8 @@ const { execFileSync } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
-const { TODO_DIRS } = require("./tasks.js");
+/** Where task folders lived, newer layout first (#54). */
+const TODO_DIRS = [path.join("docs", "todos"), "todos"];
 
 const ACTOR = { kind: /** @type {"import"} */ ("import"), id: "markdown" };
 

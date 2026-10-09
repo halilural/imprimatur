@@ -13,7 +13,9 @@ const { graphRows } = require("./graph.js");
 const { WAITING_DIR, waitingSteps, openSteps } = require("./waiting.js");
 const { audit } = require("./audit.js");
 const { scanHistory, scannedBefore } = require("./history.js");
-const { sessionTodos, placeOf } = require("./tasks.js");
+const { placeOf } = require("./tasks.js");
+const records = require("./records.js");
+const { scanTodos } = require("./history.js");
 const { closeDoneTasks } = require("./todo-done.js");
 const { scopeCss } = require("./preview.js");
 
@@ -81,7 +83,7 @@ const STATES = {
  * @param {string} root
  */
 function waitingBody(steps, sessions, root) {
-  const todos = sessionTodos(root);
+  const sessions_ = records.sessionTasks(root);
   const cache = new Map();
   if (!steps.length) return `<tr><td colspan="7" class="empty">Nothing asked of you yet.</td></tr>`;
   const order = sessions.map((l) => l.session);
@@ -105,19 +107,17 @@ function waitingBody(steps, sessions, root) {
         : w.state === "replaced" ? `<span class="badge-gone" title="${esc(STATES.replaced[1])}">replaced</span>`
         : `<span class="pill" title="${esc(STATES[w.state]?.[1] ?? "")}">${esc(STATES[w.state]?.[0] ?? w.state)}</span>`;
       const source = mine ? "you" : w.by ?? (w.answer ? esc(w.answer) : "");
-      // The task and where it is written down (vscode/tasks.js): the key opens its issue or Jira page, the file icon its TODO.md line.
-      const place = placeOf(root, w, todos, cache);
+      // The task and its record (vscode/tasks.js): the key opens its issue or Jira page, the record icon shows the record.
+      const place = placeOf(root, w, sessions_, cache);
       const open = (cls, attrs, label, title) => `<a href="#" class="task ${cls}" ${attrs} title="${esc(title)}">${label}</a>`;
-      // No page and no TODO.md: the key is a plain label, not a link that does nothing.
-      const key = place.task && !place.url && !place.todo
-        ? `<span class="task key" title="${esc(`${place.task}: no TODO.md or link found`)}">${esc(place.task)}</span>`
-        : place.task
-        ? open("key", place.url ? `data-url="${esc(place.url)}"` : place.todo ? `data-todo="${esc(place.todo)}" data-line="${place.line ?? 0}"` : "", esc(place.task), place.url ?? (place.todo ? `Open ${place.todo}` : place.task))
+      // No page: the key shows the task in Imprimatur's Tasks view.
+      const key = place.task
+        ? open("key", place.url ? `data-url="${esc(place.url)}"` : `data-task="${esc(place.task)}"`, esc(place.task), place.url ?? `Show ${place.task} in Tasks`)
         : "";
       // The badge names the task: the text need not start with it too ("LATD-13937: …").
       const stepText = place.task && w.text.startsWith(place.task) ? w.text.slice(place.task.length).replace(/^[\s:–—-]+/, "") || w.text : w.text;
       // Before the text: a long text is cut at the end of the cell (…), and the icon must stay.
-      const file = place.todo ? open("file", `data-todo="${esc(place.todo)}" data-line="${place.line ?? 0}"`, "📄", `${place.todo}${place.line ? `, line ${place.line}` : ""}`) : "";
+      const file = place.record ? open("file", `data-record="${place.record}"`, "📄", `Show the record in ${place.task}`) : "";
       const more = [
         w.why ? `<div class="why">${esc(w.why)}</div>` : "",
         w.detail && w.detail !== w.text ? `<details><summary>Full message</summary><pre>${esc(w.detail)}</pre></details>` : "",
@@ -152,22 +152,31 @@ function html(data, root, nonce, waiting = []) {
   const cols = columnsOf(data.lanes);
   const time = (t) => new Date(t).toLocaleString();
   const sessionTitle = new Map(data.sessions.map((s) => [s.session, s.title]));
-  // Each lane's task, as in Waiting on you: the key opens its issue or Jira page (else its TODO.md), then the TODO.md's title.
+  // Each lane's task, as in Waiting on you: the key opens its issue or Jira page (else the task in Tasks), then its title.
   const cache = new Map();
   const taskCell = data.lanes.map((l, k) => {
     const color = `style="color:${COLORS[k % COLORS.length]}"`;
     if (!l.task) return `<span class="none" ${color} title="No todos/ file, branch or key names its task">No task</span>`;
     const place = placeOf(root, { session: "", text: "", task: l.task }, new Map(), cache);
-    const target = place.url ? `data-url="${esc(place.url)}"` : place.todo ? `data-todo="${esc(place.todo)}" data-line="0"` : "";
-    const key = target
-      ? `<a href="#" class="task key" ${target} title="${esc(place.url ?? `Open ${place.todo}`)}">${esc(l.task)}</a>`
-      : `<span class="task key">${esc(l.task)}</span>`;
+    const target = place.url ? `data-url="${esc(place.url)}"` : `data-task="${esc(l.task)}"`;
+    const key = `<a href="#" class="task key" ${target} title="${esc(place.url ?? `Show ${l.task} in Tasks`)}">${esc(l.task)}</a>`;
     return `${key}<span ${color}>${esc(l.title ?? "")}</span>`;
   });
+  // A record change: shown in its task's lane; it opens the record, nothing to accept (#60).
+  const recordRow = (r, i) => `<tr class="rec" data-record="${r.record}" data-i="${i}" data-q="${esc([r.file, r.intent, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}" title="Record change: click to show the record">
+  <td class="ok"><span class="badge-rec" title="Record change (nothing to accept)">≡</span></td>
+  ${lanes ? `<td class="g">${laneSvg(i, r, data.lanes, cols)}</td>` : ""}
+  <td class="d">${esc(r.intent ?? r.summary)}</td>
+  <td class="tk">${taskCell[r.lane]}</td>
+  <td class="f">${esc(r.file)}</td>
+  <td class="t">${esc(time(r.t))}</td>
+  <td class="s" title="${esc(r.session ?? "")}">${esc(sessionTitle.get(r.session ?? "?") ?? (r.session ?? "?").slice(0, 8))}</td>
+  <td class="c"></td>
+</tr>`;
   const body = data.rows.length
     ? data.rows
         .map(
-          (r, i) => `<tr${r.gone || r.outside ? ` class="${[r.gone && "gone", r.outside && "outside"].filter(Boolean).join(" ")}"` : ""} data-file="${esc(r.file)}" data-n="${r.n}" data-i="${i}" data-q="${esc([r.file, r.intent, r.summary, r.prompt, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}"
+          (r, i) => r.record ? recordRow(r, i) : `<tr${r.gone || r.outside ? ` class="${[r.gone && "gone", r.outside && "outside"].filter(Boolean).join(" ")}"` : ""} data-file="${esc(r.file)}" data-n="${r.n}" data-i="${i}" data-q="${esc([r.file, r.intent, r.summary, r.prompt, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}"
   data-vscode-context="${menu({ webviewSection: r.accepted || r.gone ? "edit-ok" : "edit-open", file: r.file, n: r.n })}"${r.preview ? "" : ` title="${esc(r.prompt ? `Request: ${r.prompt}` : "")}"`}>
   <td class="ok">${r.gone ? `<span class="badge-gone" title="Later edits rewrote or removed all of it: nothing left to accept">replaced</span>` : r.accepted ? `<span class="badge-ok" title="Accepted">✓</span>` : `<span class="badge-open" title="Under review — Accept, or right-click">●</span><button class="acc" title="Accept this edit">Accept</button>`}</td>
   ${lanes ? `<td class="g">${laneSvg(i, r, data.lanes, cols)}</td>` : ""}
@@ -208,6 +217,9 @@ function html(data, root, nonce, waiting = []) {
   button.acc.on { display: inline-block; font-size: 12px; padding: 2px 10px; } button.acc.on[hidden] { display: none; }
   tr:hover button.acc { display: inline-block; } tr:hover .badge-open { display: none; }
   td.g { padding: 0; width: 1px; } td.g svg { display: block; }
+  tr.rec { cursor: pointer; } tr.rec:hover { background: var(--vscode-list-hoverBackground); }
+  .badge-rec { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
+    border: 1px solid var(--vscode-charts-blue, #3794ff); color: var(--vscode-charts-blue, #3794ff); }
   tr[data-file] { cursor: pointer; } tr[data-file]:hover, tr.w:hover { background: var(--vscode-list-hoverBackground); }
   .n, .t { opacity: .75; } .a { color: var(--vscode-gitDecoration-addedResourceForeground, #81b88b); } .r { color: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39); }
   .empty { opacity: .7; padding: 12px; }
@@ -256,7 +268,7 @@ function html(data, root, nonce, waiting = []) {
 <header><strong>Agent Change Graph</strong>
 <nav><button data-tab="edits">Edits ${pending ? `<span class="badge">${pending}</span>` : ""}</button><button data-tab="waiting">Waiting on you ${open ? `<span class="badge">${open}</span>` : ""}</button></nav>
 <input id="filter" placeholder="Filter by file, request or answer"><label id="ans" hidden><input type="checkbox" id="answered"> open only</label><button id="audit" class="acc on" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">Audit</button><button id="scan" class="acc on" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">Scan history</button>
-<span class="n" id="count-edits">${data.rows.length} edits · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span><span class="n" id="count-waiting">${open} open · ${waiting.length} steps</span></header>
+<span class="n" id="count-edits">${data.rows.filter((r) => !r.record).length} edits · ${data.rows.filter((r) => r.record).length} record changes · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span><span class="n" id="count-waiting">${open} open · ${waiting.length} steps</span></header>
 <section id="edits"><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
 <tbody>${body}</tbody></table>
 <script type="application/json" id="rows">${JSON.stringify(data.rows.map((r) => (r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview, file: r.file, n: r.n, md: /\.mdx?$/i.test(r.file) } : null))).replace(/</g, "\\u003c")}</script></section>
@@ -340,7 +352,8 @@ function html(data, root, nonce, waiting = []) {
     if (task) {
       e.preventDefault();
       if (task.dataset.url) vscode.postMessage({ type: "openUrl", url: task.dataset.url });
-      else if (task.dataset.todo) vscode.postMessage({ type: "openTodo", file: task.dataset.todo, line: Number(task.dataset.line) });
+      else if (task.dataset.record) vscode.postMessage({ type: "showRecord", id: Number(task.dataset.record) });
+      else if (task.dataset.task) vscode.postMessage({ type: "showTask", task: task.dataset.task });
       return;
     }
     const run = t.closest("#audit, #scan");
@@ -349,6 +362,8 @@ function html(data, root, nonce, waiting = []) {
       run.textContent = run.id === "audit" ? "Auditing…" : "Scanning…";
       return vscode.postMessage({ type: run.id });
     }
+    const rec = t.closest("tr.rec");
+    if (rec) return vscode.postMessage({ type: "showRecord", id: Number(rec.dataset.record) });
     const edit = t.closest("tr[data-file]");
     if (edit) {
       const accept = !!t.closest("button.acc");
@@ -547,7 +562,8 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
       if (m.type === "perf") return perfLog(m);
       if (m.type === "audit") return auditAll();
       if (m.type === "openUrl" && /^https?:\/\//.test(m.url)) return vscode.env.openExternal(vscode.Uri.parse(m.url));
-      if (m.type === "openTodo" && shown) return openTodo(shown, m.file, m.line);
+      if (m.type === "showRecord" && shown) return vscode.commands.executeCommand("imprimatur.records.reveal", { root: shown, record: m.id });
+      if (m.type === "showTask" && shown) return vscode.commands.executeCommand("imprimatur.records.reveal", { root: shown, task: m.task });
       if (m.type === "scan") return scanAll();
       if (m.type === "preview" && shown) {
         let html;
@@ -583,11 +599,12 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
     acceptEdit: (file, n) => acceptEdit(path.join(root, file), n),
     goTo: (file, n) => goTo(path.join(root, file), n),
   };
-  // Tasks whose TODO.md says done close their asks now, not only at the next turn end in this repo.
+  // Done tasks close their asks now, and the user's open records show up, not only at the next turn end.
   try {
     closeDoneTasks(root);
+    scanTodos(root);
   } catch {
-    // a waiting log being written: the next turn end closes them
+    // a waiting log being written: the next draw catches up
   }
   // A tick changes only the waiting list: it reuses the edits, the costly half (graphRows).
   /** @type {ReturnType<typeof graphRows> | undefined} */
@@ -675,18 +692,6 @@ async function auditAll() {
 /** The language model-written steps use: the setting, else the hooks' variable (vscode/history.js, audit.js). */
 const modelLang = () => vscode.workspace.getConfiguration("imprimatur").get("language") || process.env.IMPRIMATUR_LANG || undefined;
 
-/**
- * Open a TODO.md at a line (1-based; 0: its top). Only files inside the repo.
- * @param {string} root @param {string} file repo-relative @param {number} line
- */
-async function openTodo(root, file, line) {
-  const abs = path.resolve(root, file);
-  if (path.relative(root, abs).startsWith("..")) return;
-  const doc = await vscode.workspace.openTextDocument(abs);
-  const at = new vscode.Position(Math.max(0, (line || 1) - 1), 0);
-  await vscode.window.showTextDocument(doc, { selection: new vscode.Range(at, at), preview: false });
-}
-
 /** Projects being scanned now (a second click or panel open waits for the first). */
 const scanning = new Set();
 
@@ -709,7 +714,7 @@ async function scanAll(again = false) {
   scanning.delete(root);
   refreshGraph();
   if (!res) return;
-  const msg = `Scan history: ${res.sessions} past session${res.sessions === 1 ? "" : "s"} read, ${res.todos.added} to-do${res.todos.added === 1 ? "" : "s"} from TODO.md added${res.todos.ticked ? `, ${res.todos.ticked} ticked (done in TODO.md)` : ""}.`;
+  const msg = `Scan history: ${res.sessions} past session${res.sessions === 1 ? "" : "s"} read, ${res.todos.added} record${res.todos.added === 1 ? "" : "s"} of yours added from Imprimatur${res.todos.ticked ? `, ${res.todos.ticked} ticked (no longer open)` : ""}.`;
   // Nothing new: sessions read before are skipped. Rescan writes them anew (e.g. after a language change).
   const pick = res.sessions || again
     ? await vscode.window.showInformationMessage(msg)
@@ -720,6 +725,22 @@ async function scanAll(again = false) {
 /** Re-render the open panel, if any (after an agent edit). */
 /** @param {boolean} [waitingOnly] only the waiting list changed: reuse the edits */
 const refreshGraph = (waitingOnly = false) => refresh?.(waitingOnly);
+
+/**
+ * The database changed (a record, a task's status): done tasks close their asks,
+ * the user's open records sync into Waiting on you, then the graph redraws.
+ * Both write only under the repo's .claude/imprimatur, never the database: no loop.
+ */
+function syncRecords() {
+  if (!shown) return;
+  try {
+    closeDoneTasks(shown);
+    scanTodos(shown);
+  } catch {
+    // a waiting log being written: the next change catches up
+  }
+  refreshGraph();
+}
 
 /** Right-click menu commands of the panel's rows; `c` is the row's data-vscode-context. */
 const graphCommands = {
@@ -732,4 +753,4 @@ const graphCommands = {
   "imprimatur.graph.copyAsk": (c) => vscode.env.clipboard.writeText(c.text ?? ""),
 };
 
-module.exports = { openGraph, refreshGraph, graphCommands, laneSvg, html };
+module.exports = { openGraph, refreshGraph, syncRecords, graphCommands, laneSvg, html };

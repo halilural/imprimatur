@@ -10,11 +10,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { askModel } = require("./model.js");
 const { openSteps, tickStep, labelsIn } = require("./waiting.js");
-const { sessionTodos, keyOfTodo, taskKeyIn, normKey, leadKey } = require("./tasks.js");
+const { taskKeyIn, normKey, leadKey } = require("./tasks.js");
+const records = require("./records.js");
 
 /**
  * The task a turn is about, before the model: a key in the request or the
- * reply, else the folder of the TODO.md the session edited last.
+ * reply, else the task the session last wrote a record of (Imprimatur).
  * @param {string} log <root>/.claude/imprimatur/waiting/<session>.jsonl @param {{message?: string, request?: string, session?: string}} turn
  */
 function taskHint(log, turn) {
@@ -22,8 +23,8 @@ function taskHint(log, turn) {
   if (key) return key;
   try {
     const root = path.resolve(path.dirname(log), "..", "..", "..");
-    const todos = sessionTodos(root).get(turn.session ?? path.basename(log, ".jsonl")) ?? [];
-    return todos.length ? keyOfTodo(todos[todos.length - 1]) : undefined;
+    const tasks = records.sessionTasks(root).get(turn.session ?? path.basename(log, ".jsonl")) ?? [];
+    return tasks[tasks.length - 1];
   } catch {
     return undefined;
   }

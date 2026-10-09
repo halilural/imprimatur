@@ -8,10 +8,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { review, acceptHunk, acceptLines, acceptGroups } = require("./diff.js");
 const { markdownItPlugin, markdownBlocks, reviewHtml } = require("./preview.js");
-const { openGraph, refreshGraph, graphCommands } = require("./graphView.js");
+const { openGraph, refreshGraph, syncRecords, graphCommands } = require("./graphView.js");
 const { WAITING_DIR, waitingSteps } = require("./waiting.js");
 const { acceptEdit, spotsOf, graphRows } = require("./graph.js");
 const { registerSetupView } = require("./setupView.js");
+const { registerRecordViews } = require("./recordsView.js");
 
 /** @type {ReturnType<typeof registerSetupView> | undefined} */
 let setupView;
@@ -603,7 +604,16 @@ function activate(ctx) {
       render(editor);
     }),
   );
-  // The side bar: a way to the graph, and every file that shapes the agent.
+  // The side bar: records (Imprimatur's database), then a way to the graph and every file that shapes the agent.
+  try {
+    // The repos as git spells them: roots are normalised (lower case on Windows).
+    registerRecordViews(ctx, () => [...roots].map((r) => repoRoot(r) ?? r), (msg) => log.warn(msg), () => {
+      syncRecords();
+      setupView?.refreshCounts();
+    });
+  } catch (e) {
+    log.error(`records views: ${e instanceof Error ? e.message : e}`);
+  }
   setupView = registerSetupView(ctx, () => [...roots], () => {
     const root = graphRoot();
     if (!root) return { edits: 0, waiting: 0 };

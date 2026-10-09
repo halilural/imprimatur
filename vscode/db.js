@@ -382,6 +382,68 @@ class Db {
     ).map(recordOf);
   }
 
+  /** Every repo with records, by name. */
+  repos() {
+    return this.q("SELECT * FROM repos ORDER BY name, root").all();
+  }
+
+  /** @param {number} id */
+  taskById(id) {
+    return this.q("SELECT * FROM tasks WHERE id = ?").get(id);
+  }
+
+  /**
+   * A repo's records of some kinds with their task key, newest first; dropped ones left out.
+   * @param {number} repoId @param {string[]} kinds @param {{limit?: number}} [o]
+   */
+  recordsByKind(repoId, kinds, { limit = 500 } = {}) {
+    const list = kinds.filter((k) => KINDS.includes(k));
+    if (!list.length) return [];
+    return this.q(`SELECT r.*, t.key AS task_key FROM records r JOIN tasks t ON t.id = r.task_id
+                   WHERE t.repo_id = ? AND r.kind IN (${list.map(() => "?").join(", ")}) AND r.status != 'dropped'
+                   ORDER BY r.updated_at DESC LIMIT ?`).all(repoId, ...list, limit).map(recordOf);
+  }
+
+  /** The repo row of a root, without creating it. @param {string} root */
+  repoByRoot(root) {
+    return this.q("SELECT * FROM repos WHERE root = ?").get(root);
+  }
+
+  /**
+   * Tasks each agent session wrote records of, last written last: session → keys.
+   * The actor is "<client>:<session>" (the MCP server's hook adds the session).
+   * @param {number} repoId @returns {Map<string, string[]>}
+   */
+  sessionTasks(repoId) {
+    /** @type {Map<string, string[]>} */
+    const out = new Map();
+    const rows = this.q(`SELECT v.actor, t.key, max(v.at) AS at FROM record_versions v
+                         JOIN records r ON r.id = v.record_id JOIN tasks t ON t.id = r.task_id
+                         WHERE t.repo_id = ? AND v.actor_kind = 'agent' AND v.actor LIKE '%:%'
+                         GROUP BY v.actor, t.key ORDER BY at`).all(repoId);
+    for (const { actor, key } of rows) {
+      const session = actor.slice(actor.indexOf(":") + 1);
+      out.set(session, [...(out.get(session) ?? []).filter((k) => k !== key), key]);
+    }
+    return out;
+  }
+
+  /**
+   * Agents' record changes in a repo, newest first: each version with its record and task (#60).
+   * @param {number} repoId @param {{limit?: number}} [o]
+   */
+  agentChanges(repoId, { limit = 300 } = {}) {
+    return this.q(`SELECT v.id, v.at, v.actor, v.op, v.before, v.after, r.id AS record_id, r.kind, r.title, r.status, t.key AS task_key
+                   FROM record_versions v JOIN records r ON r.id = v.record_id JOIN tasks t ON t.id = r.task_id
+                   WHERE t.repo_id = ? AND v.actor_kind = 'agent' ORDER BY v.id DESC LIMIT ?`).all(repoId, limit)
+      .map((/** @type {any} */ v) => ({ ...v, before: v.before ? JSON.parse(v.before) : null, after: v.after ? JSON.parse(v.after) : null }));
+  }
+
+  /** Done tasks and when they last changed: key → epoch ms. @param {number} repoId @returns {Map<string, number>} */
+  doneTasks(repoId) {
+    return new Map(this.q("SELECT key, updated_at FROM tasks WHERE repo_id = ? AND status = 'done'").all(repoId).map((t) => [t.key, t.updated_at]));
+  }
+
   /** @param {number} repoId @param {string} key */
   taskByKey(repoId, key) {
     return this.q("SELECT * FROM tasks WHERE repo_id = ? AND key = ?").get(repoId, key);

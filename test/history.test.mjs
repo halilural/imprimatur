@@ -7,7 +7,8 @@ import assert from "node:assert/strict";
 
 const req = createRequire(import.meta.url);
 const { scanHistory, scanTodos, todoAsks, turnsOf, slugOf, scannedBefore, FILES_SESSION } = req("../vscode/history.js");
-const { waitingSteps, openSteps } = req("../vscode/waiting.js");
+const { waitingSteps, waitingItems, openSteps } = req("../vscode/waiting.js");
+const records = req("../vscode/records.js");
 
 const ago = (min) => new Date(Date.now() - min * 60_000).toISOString();
 
@@ -101,15 +102,29 @@ test("history: without the model, the final message's 👉 lines are still recor
   assert.deepEqual(waitingSteps(root).map((s) => [s.text, s.state]), [["Bakar mısın?", "open"]]);
 });
 
-test("history: (K) to-dos in TODO.md become steps; done or removed ones are ticked on the next scan", () => {
+test("history: (K) records in the database become steps; done or dropped ones are ticked on the next scan", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-history-"));
-  const todo = path.join(root, "todos/7/TODO.md");
-  fs.mkdirSync(path.dirname(todo), { recursive: true });
-  fs.writeFileSync(todo, "- 👉 TODO: (K) 5. Gözle: `düğme`, liste\n- TODO: (K) 6. Gözle → [#6](../6/TODO.md)\n- TODO: (C) Claude'un işi\n- TODO: (K) Reload Window\n- DONE: (K) eski\n");
-  assert.deepEqual(todoAsks(root), [{ file: "todos/7/TODO.md", text: "5. Gözle: düğme, liste" }, { file: "todos/7/TODO.md", text: "6. Gözle → #6" }, { file: "todos/7/TODO.md", text: "Reload Window" }]);
+  const file = path.join(root, "imprimatur.db");
+  process.env.IMPRIMATUR_DB = file;
+  records.reset();
+  const db = req("../vscode/db.js").openDb({ path: file });
+  const actor = { kind: "user", id: "k" };
+  const t = db.upsertTask(db.repoOf(root).id, "#7", { title: "Panel" });
+  const add = (kind, owner, title, status) => db.addRecord(t.id, { kind, owner, title, status }, actor);
+  const r5 = add("todo", "K", "5. Gözle: düğme, liste");
+  const r6 = add("question", "K", "6. Gözle → #6");
+  add("todo", "C", "Claude'un işi");
+  add("todo", "K", "Reload Window");
+  add("todo", "K", "eski", "done");
+  const sorted = (a) => [...a].sort((x, y) => x.text.localeCompare(y.text));
+  assert.deepEqual(sorted(todoAsks(root)), [
+    { task: "#7", text: "5. Gözle: düğme, liste" }, { task: "#7", text: "6. Gözle → #6" }, { task: "#7", text: "Reload Window" },
+  ]);
   assert.deepEqual(scanTodos(root), { added: 3, ticked: 0 });
   assert.deepEqual(scanTodos(root), { added: 0, ticked: 0 });
-  fs.writeFileSync(todo, "- DONE: (K) 5. Gözle: düğme, liste\n- TODO: (K) Reload Window\n- TODO: (K) Yeni iş\n");
+  db.updateRecord(r5.id, { status: "done" }, actor);
+  db.updateRecord(r6.id, { status: "dropped" }, actor);
+  add("todo", "K", "Yeni iş");
   assert.deepEqual(scanTodos(root), { added: 1, ticked: 2 });
   const steps = waitingSteps(root).filter((s) => s.session === FILES_SESSION);
   assert.deepEqual(steps.map((s) => [s.text, s.state, s.by]).sort(), [
@@ -118,6 +133,8 @@ test("history: (K) to-dos in TODO.md become steps; done or removed ones are tick
     ["Reload Window", "open", undefined],
     ["Yeni iş", "open", undefined],
   ]);
+  assert.equal(waitingItems(root)[0].title, "#7 · Panel");
+  db.close();
 });
 
 test("history: rescan writes again what only the scan wrote; sessions a hook or you touched are kept", async () => {
