@@ -15,7 +15,7 @@ import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-const { openDb, KINDS, DOC_KINDS, SECTION_STATUSES, SECTION_KEY } = require("../vscode/db.js");
+const { openDb, KINDS, DOC_KINDS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX } = require("../vscode/db.js");
 const { repoRoot } = require("../vscode/review-state.js");
 const { originOf } = require("../vscode/import.js");
 
@@ -47,8 +47,8 @@ const RECORD_STATUS = ["open", "done", "dropped"];
 const GET_STATUS = ["open", "done", "dropped", "all"];
 const MAX_TITLE = 300;
 const MAX_BODY = 20_000;
-/** A design document section's body (#72): longer than a record's. */
-const MAX_SECTION_BODY = 60_000;
+/** A design document section's body (#72): longer than a record's, short enough to sync (db.js). */
+const MAX_SECTION_BODY = SECTION_BODY_MAX;
 const DOC_KIND = { type: "string", enum: Object.keys(DOC_KINDS), description: "architecture (how it is built) or product (what the user gets)" };
 const SECTION_KEY_ARG = { type: "string", maxLength: 64, description: "The section's slug, e.g. \"storage\" (a-z, 0-9, -); unique in the document" };
 const BODY_CUT = 500;

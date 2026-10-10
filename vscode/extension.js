@@ -518,6 +518,8 @@ function addFolder(folder, ctx) {
  * repo's docs/ARCHITECTURE.md and docs/PRODUCT.md are written from it, when their text
  * changed (imprimatur.docs.export, on by default). Never committed.
  */
+/** Files a skip was logged for (once each, until the window reloads). @type {Set<string>} */
+const exportSkips = new Set();
 const exportSoon = require("./docs-export.js").debounce(() => {
   const db = records.dbOf();
   if (!db) return;
@@ -525,7 +527,13 @@ const exportSoon = require("./docs-export.js").debounce(() => {
   for (const root of roots) {
     if (!vscode.workspace.getConfiguration("imprimatur", vscode.Uri.file(root)).get("docs.export", true)) continue;
     try {
-      for (const r of exportDocs(db, root)) if (r.written) log.info(`docs: wrote ${r.file}`);
+      for (const r of exportDocs(db, root)) {
+        if (r.written) log.info(`docs: wrote ${r.file}`);
+        if (r.skipped && !exportSkips.has(`${r.skipped}\t${r.file}`)) {
+          exportSkips.add(`${r.skipped}\t${r.file}`);
+          log.warn(r.skipped === "manual" ? `docs: ${r.file} is hand-written (no Imprimatur header): not overwritten` : `docs: ${r.file} leads outside the repo (symlink): not written`);
+        }
+      }
     } catch (e) {
       log.warn(`docs: ${root}: ${e instanceof Error ? e.message : e}`);
     }
@@ -723,7 +731,7 @@ function activate(ctx) {
       live = undefined;
       startLive(db);
     }
-    return describe(await syncOnce(db, cfg, { log: (line) => log.warn(line) }));
+    return describe(await syncOnce(db, cfg, { log: (line, loud) => { if (!loud) return log.warn(line); log.error(line); vscode.window.showWarningMessage(`Imprimatur ${line}`); } }));
   };
   const SYNC_POLL_MS = 60_000;
   const LIVE_POLL_MS = 300_000;

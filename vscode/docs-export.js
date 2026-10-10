@@ -3,6 +3,8 @@
 // docs/PRODUCT.md, generated from the database (the source of truth) after a
 // change. The extension calls exportDocs, debounced; a file is written only when
 // its text changed, and never committed. Superseded sections are left out.
+// Never overwritten: a file someone wrote by hand (its first line is not HEADER), and
+// anything outside the repo (docs/ or the file a symlink that leads elsewhere).
 "use strict";
 const fs = require("node:fs");
 const path = require("node:path");
@@ -39,11 +41,53 @@ function docMarkdown(db, docId) {
   return out.join("\n\n") + "\n";
 }
 
+/** The repo's file for a kind: <root>/docs/ARCHITECTURE.md or PRODUCT.md. @param {string} root @param {string} kind */
+const fileOf = (root, kind) => path.join(root, "docs", /** @type {any} */ (FILES)[kind]);
+
+/** Whether the file is there and was not written by Imprimatur (its first line is not HEADER). @param {string} file */
+function handWritten(file) {
+  let text;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    return false;
+  }
+  return text.split("\n", 1)[0].replace(/\r$/, "") !== HEADER;
+}
+
+/** "manual" when the kind's file in the repo is hand-written (the panel says so), else undefined. @param {string} root @param {string} kind */
+function fileState(root, kind) {
+  return Object.hasOwn(FILES, kind) && handWritten(fileOf(root, kind)) ? "manual" : undefined;
+}
+
+/**
+ * Whether writing the file stays inside the repo: docs/ (when there) resolves inside the
+ * repo's real path, and the file is not a symlink.
+ * @param {string} root @param {string} file
+ */
+function inside(root, file) {
+  try {
+    const realRoot = fs.realpathSync(root);
+    const dir = path.dirname(file);
+    if (fs.existsSync(dir)) {
+      const rel = path.relative(realRoot, fs.realpathSync(dir));
+      if (rel.startsWith("..") || path.isAbsolute(rel)) return false;
+    }
+    try {
+      if (fs.lstatSync(file).isSymbolicLink()) return false;
+    } catch {}
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Writes the repo's documents to <root>/docs/, each only when its text changed.
- * A document with no current section writes nothing (an existing file stays).
+ * A document with no current section writes nothing (an existing file stays). Skipped:
+ * "manual", a hand-written file there; "outside", docs/ or the file leads out of the repo.
  * @param {any} db @param {string} root a repo root on this machine
- * @returns {Array<{kind: string, file: string, written: boolean}>}
+ * @returns {Array<{kind: string, file: string, written: boolean, skipped?: "manual" | "outside"}>}
  */
 function exportDocs(db, root) {
   let repo = db.repoByRoot(root);
@@ -59,6 +103,14 @@ function exportDocs(db, root) {
     const text = doc && docMarkdown(db, doc.id);
     if (!text) continue;
     const file = path.join(root, "docs", name);
+    if (!inside(root, file)) {
+      out.push({ kind, file, written: false, skipped: /** @type {const} */ ("outside") });
+      continue;
+    }
+    if (handWritten(file)) {
+      out.push({ kind, file, written: false, skipped: /** @type {const} */ ("manual") });
+      continue;
+    }
     let old;
     try {
       old = fs.readFileSync(file, "utf8");
@@ -66,6 +118,11 @@ function exportDocs(db, root) {
     const written = old !== text;
     if (written) {
       fs.mkdirSync(path.dirname(file), { recursive: true });
+      // Made just now (or raced): checked again.
+      if (!inside(root, file)) {
+        out.push({ kind, file, written: false, skipped: /** @type {const} */ ("outside") });
+        continue;
+      }
       // Through a temp file: a reader never sees half of it.
       const tmp = `${file}.${process.pid}.tmp`;
       fs.writeFileSync(tmp, text);
@@ -91,4 +148,4 @@ function debounce(fn, ms = 2000) {
   return call;
 }
 
-module.exports = { docMarkdown, exportDocs, debounce, FILES, HEADER };
+module.exports = { docMarkdown, exportDocs, debounce, fileState, FILES, HEADER };

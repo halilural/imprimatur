@@ -186,6 +186,12 @@ const SYNC_FIELDS = {
 /** Design documents (#72): kind → the title a new one gets. */
 const DOC_KINDS = { architecture: "Mimari Tasarım Dokümanı", product: "Ürün Tasarım Dokümanı" };
 const SECTION_STATUSES = ["current", "superseded"];
+/**
+ * A section's body and title, at most (#72): the body JSON-encoded stays under the sync
+ * Worker's MAX_VALUE (100,000) even when escaping doubles it.
+ */
+const SECTION_BODY_MAX = 40_000;
+const SECTION_TITLE_MAX = 300;
 /** A section's key: a slug, unique in its document. */
 const SECTION_KEY = /^[a-z0-9][a-z0-9-]{0,63}$/;
 /** A repo known only from another machine: root "origin:<origin>" until this machine opens it. */
@@ -1023,6 +1029,10 @@ class Db {
     if (fields.status !== undefined && !SECTION_STATUSES.includes(fields.status)) throw new Error(`Imprimatur: section status must be one of ${SECTION_STATUSES.join(", ")}`);
     if (fields.position !== undefined && !Number.isFinite(fields.position)) throw new Error("Imprimatur: section position must be a number");
     if (fields.title !== undefined && (typeof fields.title !== "string" || !fields.title.trim())) throw new Error("Imprimatur: section title must be a non-empty string");
+    if (fields.title !== undefined && fields.title.trim().length > SECTION_TITLE_MAX) throw new Error(`Imprimatur: section title is over ${SECTION_TITLE_MAX} chars`);
+    if (fields.body != null && (typeof fields.body !== "string" || fields.body.length > SECTION_BODY_MAX)) {
+      throw new Error(`Imprimatur: section body is ${String(fields.body).length} chars; the limit is ${SECTION_BODY_MAX}. Split it into sections.`);
+    }
     return this.tx(() => {
       const doc = this.docById(docId);
       if (!doc) throw new Error(`Imprimatur: no document ${docId}`);
@@ -1467,8 +1477,9 @@ class Db {
     const origin = parts.join("\t");
     if (!origin || !Object.hasOwn(DOC_KINDS, kind) || !SECTION_KEY.test(skey)) return false;
     const ok = {
-      title: () => typeof value === "string" && value.trim() !== "",
-      body: () => value === null || typeof value === "string",
+      // The same limits as a local write: another machine's code may be older or wrong.
+      title: () => typeof value === "string" && value.trim() !== "" && value.length <= SECTION_TITLE_MAX,
+      body: () => value === null || (typeof value === "string" && value.length <= SECTION_BODY_MAX),
       position: () => Number.isFinite(value),
       status: () => SECTION_STATUSES.includes(value),
       records: () => Array.isArray(value) && value.every((u) => typeof u === "string"),
@@ -1476,6 +1487,13 @@ class Db {
     if (!ok()) return false;
     const clock = this.q("SELECT at, device FROM clock WHERE entity = 'section' AND key = ? AND field = ?").get(key, field);
     if (clock && (at < clock.at || (at === clock.at && device < clock.device))) return false;
+    // Every record first: one not here yet and nothing changes (links, clock); tried again later.
+    /** @type {any[]} */
+    let found = [];
+    if (field === "records") {
+      found = value.map((/** @type {string} */ u) => this.q("SELECT r.id, t.repo_id FROM records r JOIN tasks t ON t.id = r.task_id WHERE r.uid = ?").get(u));
+      if (found.some((r) => !r)) return "later";
+    }
     const repo = this.repoForOrigin_(origin);
     if (!this.docFind(repo.id, kind)) {
       this.q("INSERT INTO documents (uid, repo_id, kind, title, updated_at) VALUES (?, ?, ?, ?, ?)").run(uid(), repo.id, kind, /** @type {any} */ (DOC_KINDS)[kind], at);
@@ -1492,12 +1510,9 @@ class Db {
     versions.set(s.id, v);
     const ids = () => this.q("SELECT record_id FROM doc_section_records WHERE section_id = ? ORDER BY record_id").all(s.id).map((/** @type {any} */ r) => r.record_id);
     const was = field === "records" ? ids() : s[field] ?? null;
-    let missing = false;
     if (field === "records") {
-      const found = value.map((/** @type {string} */ u) => this.q("SELECT r.id, t.repo_id FROM records r JOIN tasks t ON t.id = r.task_id WHERE r.uid = ?").get(u));
-      missing = found.some((/** @type {any} */ r) => !r);
       this.q("DELETE FROM doc_section_records WHERE section_id = ?").run(s.id);
-      for (const r of found) if (r && r.repo_id === repo.id) this.q("INSERT OR IGNORE INTO doc_section_records (section_id, record_id) VALUES (?, ?)").run(s.id, r.id);
+      for (const r of found) if (r.repo_id === repo.id) this.q("INSERT OR IGNORE INTO doc_section_records (section_id, record_id) VALUES (?, ?)").run(s.id, r.id);
     } else {
       this.q(`UPDATE doc_sections SET ${field} = ? WHERE id = ?`).run(value, s.id);
     }
@@ -1512,7 +1527,6 @@ class Db {
     }
     v.at = Math.max(v.at, at);
     v.device = device;
-    if (missing) return "later";
     this.q(`INSERT INTO clock (entity, key, field, at, device) VALUES ('section', ?, ?, ?, ?)
             ON CONFLICT (entity, key, field) DO UPDATE SET at = excluded.at, device = excluded.device`).run(key, field, at, device);
     return true;
@@ -1622,4 +1636,4 @@ function openDb({ path: file = dbPath(), busyMs = 5000 } = {}) {
   return db;
 }
 
-module.exports = { openDb, dbPath, onWindowsDrive, normOrigin, refersTo, KINDS, ACTORS, VERSION, MIGRATIONS, SYNC_FIELDS, PLACEHOLDER, TRACKER_KEY, DOC_KINDS, SECTION_STATUSES, SECTION_KEY };
+module.exports = { openDb, dbPath, onWindowsDrive, normOrigin, refersTo, KINDS, ACTORS, VERSION, MIGRATIONS, SYNC_FIELDS, PLACEHOLDER, TRACKER_KEY, DOC_KINDS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, SECTION_TITLE_MAX };
