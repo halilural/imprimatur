@@ -125,9 +125,17 @@ function jiraLink(root, key) {
   const id = repoId(root);
   if (id === undefined) return undefined;
   const project = key.split("-")[0];
-  for (const r of db.search(`/browse/${project}-`, { repoId: id, limit: 5 })) {
-    const m = new RegExp(`(https?://[^\\s)\\]"]+/browse/)${project}-\\d+`).exec(`${r.title}\n${r.body ?? ""}\n${JSON.stringify(r.links ?? "")}`);
-    if (m) return `${m[1]}${key}`;
+  if (!project) return undefined;
+  // The key comes from records anyone writes: its project is matched as text, never as a pattern.
+  const literal = project.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  try {
+    const re = new RegExp(`(https?://[^\\s)\\]"]+/browse/)${literal}-\\d+`);
+    for (const r of db.search(`/browse/${project}-`, { repoId: id, limit: 5 })) {
+      const m = re.exec(`${r.title}\n${r.body ?? ""}\n${JSON.stringify(r.links ?? "")}`);
+      if (m) return `${m[1]}${key}`;
+    }
+  } catch {
+    // a key no address can be built from
   }
   return undefined;
 }

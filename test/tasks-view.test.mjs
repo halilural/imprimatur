@@ -36,7 +36,7 @@ function seed() {
   const other = db.repoOf(otherRoot, { name: "other" });
   const o1 = db.upsertTask(other.id, "OT-1", { title: "Other", status: "active" });
   const oq = db.addRecord(o1.id, { kind: "question", owner: "K", title: "Other repo ask" }, AGENT);
-  return { db, root, repo, epic, t1, t2, t3, done1, next, agentTodo, q, adr, dec, test1, other, o1, oq };
+  return { db, file: path.join(dir, "imprimatur.db"), root, repo, epic, t1, t2, t3, done1, next, agentTodo, q, adr, dec, test1, other, o1, oq };
 }
 
 test("#69 quick-add: ? question (yours), ! decision, # note, @ben your todo, else the agent's todo", () => {

@@ -212,6 +212,18 @@ class Db {
     /** @type {Map<string, any>} */
     this.statements = new Map();
     this.version = 0;
+    /** Transactions open on this connection: a nested tx joins the outer one. */
+    this.depth = 0;
+    /** Commits made through this connection (data_version only counts other connections'). */
+    this.writes = 0;
+  }
+
+  /**
+   * Changes when the database does, through this connection or any other (#69):
+   * caches of what was read are good while it stays the same.
+   */
+  changeStamp() {
+    return `${/** @type {any} */ (this.q("PRAGMA data_version").get()).data_version}:${this.writes}`;
   }
 
   /** A prepared statement, cached per connection. @param {string} sql */
@@ -234,10 +246,14 @@ class Db {
     if (this.version > VERSION) {
       throw new Error(`Imprimatur database ${this.file} is schema ${this.version}, newer than this code (${VERSION}): read-only`);
     }
+    // Inside another tx: part of it, so several writes commit or roll back together.
+    if (this.depth) return fn();
     this.sqlite.exec("BEGIN IMMEDIATE");
+    this.depth++;
     try {
       const out = fn();
       this.sqlite.exec("COMMIT");
+      this.writes++;
       return out;
     } catch (e) {
       // SQLite may have rolled back already (IOERR, FULL): keep the real error.
@@ -245,6 +261,8 @@ class Db {
         this.sqlite.exec("ROLLBACK");
       } catch {}
       throw e;
+    } finally {
+      this.depth--;
     }
   }
 
@@ -622,6 +640,29 @@ class Db {
                          WHERE r.task_id = ? ORDER BY v.id DESC LIMIT ?`).all(taskId, limit)
       .map((/** @type {any} */ v) => ({ ...v, before: v.before ? JSON.parse(v.before) : null, after: v.after ? JSON.parse(v.after) : null }));
     return { list, total };
+  }
+
+  /**
+   * The user's answer to an open question: an answer record under it and the
+   * question done, in one transaction (#69).
+   * @param {number} questionId @param {{title: string, body?: string | null}} answer @param {Actor} actor
+   */
+  answerQuestion(questionId, answer, actor) {
+    return this.tx(() => {
+      const q = this.record(questionId);
+      if (!q) throw new Error(`Imprimatur: no record ${questionId}`);
+      if (q.kind !== "question") throw new Error(`Imprimatur: record ${questionId} is a ${q.kind}, not a question`);
+      if (q.status !== "open") throw new Error(`Imprimatur: question ${questionId} is ${q.status}, not open`);
+      const made = this.addRecord(q.task_id, { kind: "answer", title: answer.title, body: answer.body ?? null, parent_id: q.id }, actor);
+      this.updateRecord(q.id, { status: "done" }, actor);
+      return made;
+    });
+  }
+
+  /** Who created each record of a task: record id → actor kind, one query (#69). @param {number} taskId @returns {Map<number, string>} */
+  creatorsOf(taskId) {
+    return new Map(this.q(`SELECT v.record_id, v.actor_kind FROM record_versions v JOIN records r ON r.id = v.record_id
+                           WHERE r.task_id = ? AND v.op = 'create'`).all(taskId).map((/** @type {any} */ v) => [v.record_id, v.actor_kind]));
   }
 
   /**

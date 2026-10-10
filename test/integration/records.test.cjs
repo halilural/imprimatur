@@ -263,6 +263,22 @@ suite("Records on the Imprimatur panel (#60, #69, MT-AR-060…064)", () => {
     assert.match(done.note, /no longer open in Imprimatur \(IT-64\)/);
   });
 
+  test("a write the database refuses gives the typed text back to the page (review 1, 2)", async () => {
+    const { panelMessage, panelState, launcher } = await api();
+    const { records: [todo] } = seedTask("IT-66", { title: "Refused", status: "active" }, [{ kind: "todo", owner: "K", title: "Not a question" }]);
+    await vscode.commands.executeCommand("imprimatur.records.reveal", { root: ROOT, task: "IT-66" });
+    panelMessage({ type: "answer", id: todo.id, text: "keep me" });
+    const failed = panelState().failed;
+    assert.equal(failed?.type, "failed");
+    assert.equal(failed.what, "answer");
+    assert.equal(failed.text, "keep me", "the text goes back to the answer box");
+    assert.match(failed.error, /not a question/);
+    assert.equal(withDb((db) => db.recordsOf(db.record(todo.id).task_id).filter((r) => r.kind === "answer").length), 0);
+    // One count: the launcher's badge is the panel's tab badge.
+    launcher.refresh();
+    await until(() => panelState().html.includes(`Bende bekleyenler <span class="badge">${launcher.now.inbox}</span>`), "the same count on the tab badge");
+  });
+
   test("deep links: reveal by record opens Görevler on its task and lights the record", async () => {
     const { panelState } = await api();
     const { task, records: [, rec] } = seedTask("IT-65", { title: "Deep link", status: "open" }, [

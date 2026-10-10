@@ -8,13 +8,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { review, acceptHunk, acceptLines, acceptGroups } = require("./diff.js");
 const { markdownItPlugin, markdownBlocks, reviewHtml } = require("./preview.js");
-const { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setPanelScope, panelState, panelMessage } = require("./graphView.js");
+const { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setPanelScope, panelState, panelMessage, inboxNow: panelInbox } = require("./graphView.js");
 const { WAITING_DIR, waitingSteps } = require("./waiting.js");
 const { acceptEdit, spotsOf, graphRows } = require("./graph.js");
 const { registerSetupView } = require("./setupView.js");
 const { registerRecordCommands } = require("./recordsView.js");
 const { registerLauncher } = require("./launcherView.js");
-const { inboxCount } = require("./tasksView.js");
 const records = require("./records.js");
 const { readConfig, syncOnce, syncLoop, describe } = require("./sync.js");
 
@@ -269,16 +268,8 @@ function showGraph(at) {
   openGraph(root, openEditDiff, currentText, acceptEditOf, goToEdit, renderEdit, undefined, at);
 }
 
-/** What waits on the user in the graph's repo: open asks and tests, and turn-end asks. */
-function inboxNow() {
-  const root = graphRoot();
-  if (!root) return 0;
-  try {
-    return inboxCount(records.dbOf(), root, waitingSteps(root));
-  } catch {
-    return waitingSteps(root).filter((w) => w.state === "open").length;
-  }
-}
+/** What waits on the user: one count for the launcher, the status bar and the panel (graphView.inboxNow). */
+const inboxNow = () => panelInbox(graphRoot());
 
 /**
  * A graph panel open before a reload comes back (WebviewPanelSerializer) with the
@@ -728,7 +719,11 @@ function activate(ctx) {
     // The panel's "every repo" switch, kept per workspace as the record views kept it.
     setPanelScope({
       get: () => ctx.workspaceState.get("imprimatur.records.allRepos", false),
-      set: (v) => void ctx.workspaceState.update("imprimatur.records.allRepos", v),
+      set: (v) => {
+        ctx.workspaceState.update("imprimatur.records.allRepos", v);
+        // The counts follow the panel's scope.
+        setTimeout(updateGraphButton);
+      },
     });
     recordCommands = registerRecordCommands(
       ctx,
