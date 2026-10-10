@@ -106,6 +106,18 @@
         "icon": "$(check-all)"
       },
       {
+        "command": "imprimatur.setup.compareVariant",
+        "title": "Compare with Another Repo's Copy",
+        "category": "Imprimatur",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "imprimatur.setup.explainLastChange",
+        "title": "Explain Last Change",
+        "category": "Imprimatur",
+        "icon": "$(sparkle)"
+      },
+      {
         "command": "imprimatur.importMarkdown",
         "title": "Import Markdown Records (TODO.md, design, product, tests)",
         "category": "Imprimatur"
@@ -390,6 +402,21 @@
       ],
       "view/item/context": [
         {
+          "command": "imprimatur.setup.compareVariant",
+          "when": "view == imprimatur.setup && viewItem =~ /^setupFile-drift/",
+          "group": "inline@1"
+        },
+        {
+          "command": "imprimatur.setup.compareVariant",
+          "when": "view == imprimatur.setup && viewItem =~ /^setupFile-drift/",
+          "group": "1_setup@1"
+        },
+        {
+          "command": "imprimatur.setup.explainLastChange",
+          "when": "view == imprimatur.setup && viewItem =~ /^setupFile.*-repo/",
+          "group": "1_setup@2"
+        },
+        {
           "command": "imprimatur.records.done",
           "when": "view =~ /^imprimatur\\.records\\./ && viewItem =~ /^record-open/",
           "group": "inline@1"
@@ -476,6 +503,28 @@
           },
           "default": [],
           "markdownDescription": "Glob patterns of Markdown files that also get marks in the editor when `#imprimatur.showIn#` is `preview`, e.g. `**/todos/**`."
+        },
+        "imprimatur.setup.driftRoots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "~/projects"
+          ],
+          "markdownDescription": "Agent setup drift: besides the window's repos, the git repos one level under these folders are compared. A file with the same path in several repos (e.g. `.claude/hooks/x.sh`) shows `differs in N of M repos` when the copies differ."
+        },
+        "imprimatur.setup.driftExclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "CLAUDE.md",
+            "CLAUDE.local.md",
+            ".claude/settings.local.json"
+          ],
+          "markdownDescription": "Agent files left out of drift because they are meant to differ per repo: a file name (`CLAUDE.md`, in any folder), a path (`.claude/settings.json`) or a folder ending in `/` (`.cursor/rules/`)."
         },
         "imprimatur.mermaidDiff": {
           "type": "boolean",
