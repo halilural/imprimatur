@@ -4,14 +4,24 @@
 // another device pushed (pull now) and "tracker" after a GitHub issue changed (run
 // the tracker for that repo). Auth: the same Bearer token as push/pull, in the
 // upgrade request's Authorization header (Node's WebSocket, undici, takes headers).
-// Reconnects with exponential backoff and jitter (1 s → 30 s); a "ping" every 30 s
-// (the Durable Object answers "pong" without waking) finds a dead connection.
+// Reconnects with exponential backoff and jitter (1 s → 30 s), reset only once a
+// connection held 10 s or carried a message; the pull on (re)connect runs at most once
+// per 10 s. A failed connection asks the server why (a plain GET /v1/live): 401/403 →
+// try again every 5 min until the settings change; 404/501 (an older Worker, no live
+// endpoint) → stop, the timed sync goes on. A "ping" every 30 s (the Durable Object
+// answers "pong" without waking) finds a dead connection.
 // No vscode here: unit tests drive it with a fake WebSocket and timers.
 "use strict";
 
 const BACKOFF_MIN_MS = 1_000;
 const BACKOFF_MAX_MS = 30_000;
 const PING_MS = 30_000;
+/** A connection this old (or one that carried a message) resets the backoff. */
+const STABLE_MS = 10_000;
+/** The pull on (re)connect: at most once per this. */
+const PULL_MIN_MS = 10_000;
+/** The token was refused: the next try after this. */
+const AUTH_RETRY_MS = 300_000;
 
 /** The live endpoint for a sync URL: https → wss, http → ws. @param {string} url */
 const liveUrl = (url) => `${url.replace(/\/+$/, "").replace(/^http/i, "ws")}/v1/live`;
@@ -30,11 +40,11 @@ function backoff(attempt, random = Math.random) {
  * @param {{
  *   url: string, token: string, device: string,
  *   onSync?: (m: any) => void, onTracker?: (repo: string) => void,
- *   onState?: (connected: boolean) => void, log?: (line: string) => void,
- *   WebSocket?: any, setTimeout?: typeof setTimeout, clearTimeout?: typeof clearTimeout,
+ *   onState?: (connected: boolean) => void, onPull?: () => void, onUnavailable?: () => void, log?: (line: string) => void,
+ *   WebSocket?: any, fetch?: typeof fetch, now?: () => number, setTimeout?: typeof setTimeout, clearTimeout?: typeof clearTimeout,
  *   setInterval?: typeof setInterval, clearInterval?: typeof clearInterval, random?: () => number, pingMs?: number,
- * }} o
- * @returns {{dispose: () => void, readonly connected: boolean, readonly attempt: number}}
+ * }} o onPull: pull now (on connect, throttled); onUnavailable: the server has no live endpoint, live stopped
+ * @returns {{dispose: () => void, readonly connected: boolean, readonly attempt: number, readonly stopped: boolean}}
  */
 function liveClient(o) {
   const WS = o.WebSocket ?? globalThis.WebSocket;
@@ -45,8 +55,19 @@ function liveClient(o) {
   const stopEvery = o.clearInterval ?? clearInterval;
   const random = o.random ?? Math.random;
   const pingMs = o.pingMs ?? PING_MS;
+  const clock = o.now ?? Date.now;
+  const fetchFn = o.fetch ?? globalThis.fetch;
   const url = liveUrl(o.url);
   let disposed = false;
+  /** No live endpoint on this server: no more tries. */
+  let stopped = false;
+  /** Said the token was refused: not again. */
+  let saidAuth = false;
+  /** @type {any} */
+  let stableTimer;
+  let lastPull = -Infinity;
+  /** @type {any} */
+  let pullTimer;
   let connected = false;
   let attempt = 0;
   /** Said "cannot connect" since the last connection: not again until one works. */
@@ -62,8 +83,36 @@ function liveClient(o) {
 
   if (typeof WS !== "function") {
     log("live: this VS Code has no WebSocket; syncing every minute instead");
-    return { dispose() {}, connected: false, attempt: 0 };
+    return { dispose() {}, connected: false, attempt: 0, stopped: true };
   }
+
+  /** The pull on connect, at most once per PULL_MIN_MS; one inside the window runs at its end. */
+  const pull = () => {
+    if (!o.onPull || pullTimer !== undefined) return;
+    const wait = lastPull + PULL_MIN_MS - clock();
+    const run = () => {
+      pullTimer = undefined;
+      if (disposed || !connected) return;
+      lastPull = clock();
+      o.onPull?.();
+    };
+    if (wait <= 0) run();
+    else pullTimer = later(run, wait);
+  };
+  /**
+   * Why the upgrade failed, by a plain GET: "auth" (401/403), "absent" (404/501: no live
+   * endpoint), else "retry" (426 is a live endpoint refusing a non-upgrade: try again).
+   * @returns {Promise<"auth" | "absent" | "retry">}
+   */
+  const probe = async () => {
+    try {
+      const res = await fetchFn(`${o.url.replace(/\/+$/, "")}/v1/live`, { headers: { authorization: `Bearer ${o.token}` }, signal: AbortSignal.timeout(10_000) });
+      await res.body?.cancel?.().catch?.(() => {});
+      if (res.status === 401 || res.status === 403) return "auth";
+      if (res.status === 404 || res.status === 501) return "absent";
+    } catch {}
+    return "retry";
+  };
 
   const stopPing = () => {
     if (pinger !== undefined) stopEvery(pinger);
@@ -74,6 +123,9 @@ function liveClient(o) {
     if (sock !== ws) return;
     ws = undefined;
     stopPing();
+    if (stableTimer !== undefined) cancel(stableTimer);
+    stableTimer = undefined;
+    const wasConnected = connected;
     try {
       sock.close();
     } catch {}
@@ -87,11 +139,30 @@ function liveClient(o) {
       log(`live: cannot connect (${why}); retrying in the background, syncing every minute meanwhile`);
     }
     if (disposed) return;
-    retry = later(connect, backoff(attempt++, random));
+    if (wasConnected) return void (retry = later(connect, backoff(attempt++, random)));
+    // Never opened: ask why before trying again.
+    retry = true;
+    probe().then((kind) => {
+      if (disposed) return;
+      if (kind === "absent") {
+        stopped = true;
+        retry = undefined;
+        log("live: the sync server has no live endpoint (deploy the Worker again for live updates); syncing every minute");
+        return o.onUnavailable?.();
+      }
+      if (kind === "auth") {
+        if (!saidAuth) log("live: the sync server refused the token; trying again every 5 min");
+        saidAuth = true;
+        retry = later(connect, AUTH_RETRY_MS);
+        return;
+      }
+      retry = later(connect, backoff(attempt++, random));
+    });
   };
   /** @param {any} data */
   const message = (data) => {
     alive = true;
+    attempt = 0;
     if (typeof data !== "string" || data === "pong") return;
     /** @type {any} */
     let m;
@@ -122,9 +193,14 @@ function liveClient(o) {
     sock.onopen = () => {
       if (sock !== ws) return;
       connected = true;
-      attempt = 0;
       saidDown = false;
+      saidAuth = false;
       alive = true;
+      // A connection that drops at once must not reset the backoff (a flapping server).
+      stableTimer = later(() => {
+        stableTimer = undefined;
+        attempt = 0;
+      }, STABLE_MS);
       log("live: connected");
       pinger = every(() => {
         if (!alive) return ended(sock, "no answer to ping");
@@ -134,6 +210,7 @@ function liveClient(o) {
         } catch {}
       }, pingMs);
       o.onState?.(true);
+      pull();
     };
     sock.onmessage = (/** @type {any} */ e) => {
       if (sock === ws) message(e?.data);
@@ -145,7 +222,9 @@ function liveClient(o) {
   return {
     dispose() {
       disposed = true;
-      if (retry !== undefined) cancel(retry);
+      if (retry !== undefined && retry !== true) cancel(retry);
+      if (stableTimer !== undefined) cancel(stableTimer);
+      if (pullTimer !== undefined) cancel(pullTimer);
       stopPing();
       const sock = ws;
       ws = undefined;
@@ -160,7 +239,10 @@ function liveClient(o) {
     get attempt() {
       return attempt;
     },
+    get stopped() {
+      return stopped;
+    },
   };
 }
 
-module.exports = { liveClient, liveUrl, backoff, BACKOFF_MIN_MS, BACKOFF_MAX_MS, PING_MS };
+module.exports = { liveClient, liveUrl, backoff, BACKOFF_MIN_MS, BACKOFF_MAX_MS, PING_MS, STABLE_MS, PULL_MIN_MS, AUTH_RETRY_MS };

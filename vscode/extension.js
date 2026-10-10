@@ -691,12 +691,20 @@ function activate(ctx) {
     if (!db) throw new Error(records.lastError ?? "database not available");
     const cfg = readConfig(db.file);
     if (!cfg) return "sync: not set up (npm run sync -- --setup <url>)";
+    // New address or token: live updates start again with them (a refused token waits for this).
+    if (live && liveKey !== `${cfg.url}\n${cfg.token}`) {
+      live.dispose();
+      live = undefined;
+      startLive(db);
+    }
     return describe(await syncOnce(db, cfg, { log: (line) => log.warn(line) }));
   };
   const SYNC_POLL_MS = 60_000;
   const LIVE_POLL_MS = 300_000;
   /** @type {ReturnType<typeof liveClient> | undefined} */
   let live;
+  /** The settings live runs with. */
+  let liveKey = "";
   /**
    * Live updates (#71): one WebSocket to the sync Worker. Connected: pull now (and on
    * every reconnect), poll every 5 min; another device's push pulls at once; a GitHub
@@ -706,15 +714,16 @@ function activate(ctx) {
   const startLive = (db) => {
     const cfg = readConfig(db.file);
     if (live || !cfg) return;
+    liveKey = `${cfg.url}\n${cfg.token}`;
     live = liveClient({
       url: cfg.url,
       token: cfg.token,
       device: db.deviceId(),
       log: (line) => log.info(line),
-      onState: (up) => {
-        syncer?.setIntervalMs(up ? LIVE_POLL_MS : SYNC_POLL_MS);
-        if (up) syncer?.now();
-      },
+      onState: (up) => syncer?.setIntervalMs(up ? LIVE_POLL_MS : SYNC_POLL_MS),
+      // On every (re)connect, at most once per 10 s (live.js).
+      onPull: () => syncer?.now(),
+      onUnavailable: () => syncer?.setIntervalMs(SYNC_POLL_MS),
       onSync: () => syncer?.now(),
       onTracker: (repo) => {
         try {
@@ -724,8 +733,8 @@ function activate(ctx) {
         } catch {}
       },
     });
-    ctx.subscriptions.push({ dispose: () => live?.dispose() });
   };
+  ctx.subscriptions.push({ dispose: () => live?.dispose() });
   /** Starts the loop once sync is set up (at activation, or later by Sync Now). */
   const startSync = () => {
     const db = records.dbOf();
@@ -808,7 +817,7 @@ function activate(ctx) {
     // a write from the page draws through the same look, once (#71).
     const rc = recordCommands;
     setPanelHooks({ visible: (v) => (v ? rc.backstop.start() : rc.backstop.stop()), afterWrite: () => rc.changed(true) });
-    if (panelState().open) rc.backstop.start();
+    if (panelState().visible) rc.backstop.start();
   } catch (e) {
     log.error(`records: ${e instanceof Error ? e.message : e}`);
   }
@@ -829,6 +838,8 @@ function activate(ctx) {
     // For the integration tests (#68, #69); nothing else uses them: the record commands'
     // prompts, the panel (its view, last page, and its message handler) and the launcher.
     recordUi: recordCommands?.ui,
+    // #71: the database backstop poll, running only while the panel is visible.
+    backstop: recordCommands?.backstop,
     panelState,
     panelMessage,
     launcher,

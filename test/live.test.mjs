@@ -8,12 +8,12 @@ import { createRequire } from "node:module";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { handle, Live, hmacHex, ISSUE_ACTIONS } from "../cloud/src/server.js";
+import { handle, Live, hmacHex, ISSUE_ACTIONS, MAX_BODY, REPLAY_KEEP } from "../cloud/src/server.js";
 import { githubRepos, hookCommand } from "../scripts/github-webhooks.mjs";
 
 const require = createRequire(import.meta.url);
 const { watchFile, changeGate, poller, THROTTLE_MS, POLL_MS } = require("../vscode/watch.js");
-const { liveClient, liveUrl, backoff, BACKOFF_MAX_MS } = require("../vscode/live.js");
+const { liveClient, liveUrl, backoff, BACKOFF_MAX_MS, STABLE_MS, PULL_MIN_MS, AUTH_RETRY_MS } = require("../vscode/live.js");
 const { syncLoop } = require("../vscode/sync.js");
 const { openDb } = require("../vscode/db.js");
 
@@ -159,8 +159,12 @@ test("syncLoop: setIntervalMs moves the period (5 min live, 60 s otherwise)", as
 /** A Durable Object state with the Hibernation API's socket methods. */
 function fakeCtx() {
   const sockets = [];
+  const kv = new Map();
   return {
     sockets,
+    kv,
+    // The object's storage (structured clone, as the runtime does).
+    storage: { get: async (k) => structuredClone(kv.get(k)), put: async (k, v) => void kv.set(k, structuredClone(v)) },
     auto: undefined,
     acceptWebSocket(ws) {
       sockets.push(ws);
@@ -270,12 +274,13 @@ test("push notifies the Live object with the new seq and the pushing device (thr
   assert.equal(res2.status, 200);
 });
 
-/** A GitHub delivery, signed with secret (or a given signature). */
-async function delivery(event, payload, { secret = SECRET, sig } = {}) {
+let deliveries = 0;
+/** A GitHub delivery, signed with secret (or a given signature), with a fresh delivery id unless given. */
+async function delivery(event, payload, { secret = SECRET, sig, id = `d-${++deliveries}`, type = "application/json" } = {}) {
   const body = JSON.stringify(payload);
   return new Request("https://s/v1/github", {
     method: "POST",
-    headers: { "x-github-event": event, "content-type": "application/json", ...(sig !== null && { "x-hub-signature-256": sig ?? `sha256=${await hmacHex(secret, body)}` }) },
+    headers: { "x-github-event": event, "x-github-delivery": id, "content-type": type, ...(sig !== null && { "x-hub-signature-256": sig ?? `sha256=${await hmacHex(secret, body)}` }) },
     body,
   });
 }
@@ -295,22 +300,81 @@ test("/v1/github: HMAC valid → tracker message; invalid, missing or no secret 
   assert.deepEqual(sock.sent.map((t) => JSON.parse(t)), [{ t: "tracker", repo: "halilural/imprimatur" }]);
 
   assert.equal((await handle(await delivery("issues", issue("closed"), { secret: "wrong" }), env)).status, 401, "signed with another secret");
-  assert.equal((await handle(await delivery("issues", issue("closed"), { sig: "sha256=00" }), env)).status, 401, "a bad signature");
+  assert.equal((await handle(await delivery("issues", issue("closed"), { sig: `sha256=${"0".repeat(64)}` }), env)).status, 401, "a wrong signature");
+  assert.equal((await handle(await delivery("issues", issue("closed"), { sig: "sha256=00" }), env)).status, 401, "a malformed signature");
   assert.equal((await handle(await delivery("issues", issue("closed"), { sig: null }), env)).status, 401, "no signature");
   assert.equal((await handle(await delivery("issues", issue("closed")), { ...env, GITHUB_WEBHOOK_SECRET: undefined })).status, 401, "no secret set: nobody gets in");
   // A tampered body with the original signature.
   const good = await delivery("issues", issue("closed"));
-  const tampered = new Request("https://s/v1/github", { method: "POST", headers: good.headers, body: JSON.stringify(issue("reopened")) });
+  const tampered = new Request("https://s/v1/github", { method: "POST", headers: good.headers, body: JSON.stringify({ ...issue("reopened"), x: 1 }) });
   assert.equal((await handle(tampered, env)).status, 401);
 
   assert.deepEqual(await (await handle(await delivery("ping", { zen: "hi" }), env)).json(), { ok: true });
   assert.deepEqual(await (await handle(await delivery("push", { repository: { full_name: "a/b" } }), env)).json(), { ignored: true });
   assert.deepEqual(await (await handle(await delivery("issues", issue("labeled")), env)).json(), { ignored: true });
-  for (const a of ISSUE_ACTIONS) assert.equal((await handle(await delivery("issues", issue(a)), env)).status, 200);
+  for (const a of ISSUE_ACTIONS) assert.equal((await handle(await delivery("issues", { ...issue(a), n: a }), env)).status, 200);
   assert.equal(sock.sent.length, 1 + ISSUE_ACTIONS.length, "only the signed issue changes were sent on");
   // The webhook needs no Bearer token, and a Bearer token alone does not pass it.
   const bearerOnly = new Request("https://s/v1/github", { method: "POST", headers: { ...auth, "x-github-event": "issues" }, body: JSON.stringify(issue("closed")) });
   assert.equal((await handle(bearerOnly, env)).status, 401);
+});
+
+/** A request whose body says whether anyone read it. */
+function watchedBody(headers, chunks) {
+  const state = { read: false };
+  const body = new ReadableStream({
+    pull(c) {
+      state.read = true;
+      const next = chunks.shift();
+      if (next) c.enqueue(next);
+      else c.close();
+    },
+  }, { highWaterMark: 0 });
+  return { state, req: new Request("https://s/v1/github", { method: "POST", headers, body, duplex: "half" }) };
+}
+
+test("/v1/github: no secret, no or malformed signature, or not JSON → refused before the body is read", async () => {
+  const env = { SYNC_TOKEN: TOKEN, GITHUB_WEBHOOK_SECRET: SECRET, DB: {} };
+  const sig = `sha256=${"a".repeat(64)}`;
+  const cases = [
+    [{ "x-github-event": "issues", "content-type": "application/json" }, env, 401],
+    [{ "x-github-event": "issues", "content-type": "application/json", "x-hub-signature-256": "sha1=abc" }, env, 401],
+    [{ "x-github-event": "issues", "content-type": "application/json", "x-hub-signature-256": sig }, { ...env, GITHUB_WEBHOOK_SECRET: undefined }, 401],
+    [{ "x-github-event": "issues", "content-type": "application/x-www-form-urlencoded", "x-hub-signature-256": sig }, env, 415],
+  ];
+  for (const [headers, e, status] of cases) {
+    const { state, req } = watchedBody(headers, [new TextEncoder().encode("{}")]);
+    assert.equal((await handle(req, e)).status, status, JSON.stringify(headers));
+    assert.equal(state.read, false, `body not read: ${JSON.stringify(headers)}`);
+  }
+});
+
+test("/v1/github: the size limit holds while reading, without a content-length", async () => {
+  const env = { SYNC_TOKEN: TOKEN, GITHUB_WEBHOOK_SECRET: SECRET, DB: {} };
+  const chunk = new Uint8Array(256 * 1024).fill(32);
+  const chunks = Array.from({ length: Math.ceil(MAX_BODY / chunk.length) + 4 }, () => chunk);
+  const n = chunks.length;
+  const { req } = watchedBody({ "x-github-event": "issues", "content-type": "application/json", "x-hub-signature-256": `sha256=${"a".repeat(64)}` }, chunks);
+  assert.equal(req.headers.get("content-length"), null);
+  assert.equal((await handle(req, env)).status, 413);
+  assert.ok(chunks.length > 0 && chunks.length < n, "stopped reading past the limit");
+});
+
+test("/v1/github: a repeated delivery id, or the same signed body again, is ignored; the last 500 are kept", async () => {
+  const { ctx, live } = fakeLive();
+  const sock = fakeSocket();
+  ctx.sockets.push(sock);
+  const env = { SYNC_TOKEN: TOKEN, GITHUB_WEBHOOK_SECRET: SECRET, LIVE: liveNs(live), DB: {} };
+  const issue = (n) => ({ action: "edited", n, repository: { full_name: "o/r" } });
+  assert.deepEqual(await (await handle(await delivery("issues", issue(1), { id: "same" }), env)).json(), { ok: true });
+  assert.deepEqual(await (await handle(await delivery("issues", issue(2), { id: "same" }), env)).json(), { ignored: "duplicate" }, "same delivery id");
+  assert.deepEqual(await (await handle(await delivery("issues", issue(1), { id: "other" }), env)).json(), { ignored: "duplicate" }, "same body (a replay with a new id)");
+  assert.equal(sock.sent.length, 1);
+  for (let i = 0; i < REPLAY_KEEP + 5; i++) await live.seen(`id-${i}`, `digest-${i}`);
+  const kept = ctx.kv.get("deliveries");
+  assert.equal(kept.length, REPLAY_KEEP * 2, "500 deliveries: their ids and digests");
+  assert.ok(!kept.includes("id-0") && kept.includes(`id-${REPLAY_KEEP + 4}`), "the oldest go first");
+  assert.equal(REPLAY_KEEP, 500);
 });
 
 // --- the client ---
@@ -397,28 +461,50 @@ test("live client: 'sync' from another device kicks a pull, its own is ignored; 
   c.dispose();
 });
 
-test("live client: reconnects with exponential backoff and jitter, 1 s → 30 s; a connection resets it", () => {
+const flush = () => new Promise((r) => setImmediate(r));
+/** A fetch for the client's probe that answers this status. */
+const answering = (status) => async () => new Response(null, { status });
+
+test("live client: reconnects with exponential backoff and jitter, 1 s → 30 s; reset only after 10 s connected or a message", async () => {
   const f = fakes();
   const logs = [];
   const states = [];
-  const c = liveClient({ url: "https://s", token: "t", device: "me", WebSocket: f.FakeWS, ...f.timers, random: () => 1, log: (l) => logs.push(l), onState: (s) => states.push(s) });
+  const c = liveClient({ url: "https://s", token: "t", device: "me", WebSocket: f.FakeWS, fetch: answering(426), ...f.timers, random: () => 1, log: (l) => logs.push(l), onState: (s) => states.push(s) });
   const delays = [];
   for (let i = 0; i < 8; i++) {
     f.sockets.at(-1).drop();
+    await flush(); // the probe
     delays.push(f.fireTimeout());
   }
   assert.deepEqual(delays, [1000, 2000, 4000, 8000, 16000, 30000, 30000, 30000]);
   assert.equal(f.sockets.length, 9, "one socket per attempt; error then close schedule one retry");
   assert.equal(logs.length, 1, `'cannot connect' said once: ${logs}`);
+  // A flapping server: open, then drop at once → the backoff goes on growing.
   f.sockets.at(-1).open();
-  assert.equal(c.attempt, 0);
+  assert.equal(c.attempt, 8, "not reset by opening alone");
   f.sockets.at(-1).drop();
   assert.deepEqual(states, [true, false]);
   assert.match(logs.at(-1), /^live: disconnected/);
+  assert.equal(f.timeouts.findLast((t) => t.live).ms, 30000, "still backing off");
+  f.fireTimeout();
+  // Held 10 s: reset.
+  f.sockets.at(-1).open();
+  const stable = f.timeouts.findLast((t) => t.live && t.ms === STABLE_MS);
+  assert.ok(stable, "a 10 s stability timer");
+  stable.live = false;
+  stable.fn();
+  assert.equal(c.attempt, 0);
+  f.sockets.at(-1).drop();
   assert.equal(f.timeouts.findLast((t) => t.live).ms, 1000, "back to 1 s");
   f.fireTimeout();
+  // A message resets it too.
   f.sockets.at(-1).open();
-  assert.deepEqual(states, [true, false, true], "every reconnect says connected (the extension pulls then)");
+  f.sockets.at(-1).drop();
+  f.fireTimeout();
+  f.sockets.at(-1).open();
+  assert.ok(c.attempt > 0);
+  f.sockets.at(-1).msg("pong");
+  assert.equal(c.attempt, 0);
   c.dispose();
   // Jitter: half to all of the step.
   for (let n = 0; n < 12; n++) {
@@ -427,6 +513,68 @@ test("live client: reconnects with exponential backoff and jitter, 1 s → 30 s;
     assert.equal(lo * 2, hi);
     assert.ok(hi <= BACKOFF_MAX_MS);
   }
+});
+
+test("live client: the pull on (re)connect runs at most once per 10 s; one inside the window runs at its end", () => {
+  const g = fakes();
+  let clock = 2_000_000;
+  let pulls = 0;
+  const d = liveClient({ url: "https://s", token: "t", device: "me", WebSocket: g.FakeWS, fetch: answering(426), now: () => clock, ...g.timers, random: () => 0, onPull: () => pulls++ });
+  g.sockets.at(-1).open();
+  assert.equal(pulls, 1, "the first connect pulls at once");
+  for (let i = 0; i < 5; i++) {
+    g.sockets.at(-1).drop();
+    clock += 500;
+    const retry = g.timeouts.findLast((t) => t.live && t.ms < PULL_MIN_MS && t.ms !== STABLE_MS);
+    retry.live = false;
+    retry.fn();
+    g.sockets.at(-1).open();
+  }
+  assert.equal(pulls, 1, "five reconnects in 2.5 s: no pull storm");
+  const trailing = g.timeouts.filter((t) => t.live && t.ms > 0 && t.ms <= PULL_MIN_MS && t.ms !== STABLE_MS);
+  assert.equal(trailing.length, 1, "one pull waits for the end of the window");
+  clock += PULL_MIN_MS;
+  trailing[0].live = false;
+  trailing[0].fn();
+  assert.equal(pulls, 2);
+  d.dispose();
+});
+
+test("live client: a refused token (401/403) retries every 5 min, said once; no live endpoint (404/501) stops", async () => {
+  for (const status of [401, 403]) {
+    const f = fakes();
+    const logs = [];
+    const c = liveClient({ url: "https://s", token: "bad", device: "me", WebSocket: f.FakeWS, fetch: answering(status), ...f.timers, log: (l) => logs.push(l) });
+    for (let i = 0; i < 3; i++) {
+      f.sockets.at(-1).drop();
+      await flush();
+      assert.equal(f.fireTimeout(), AUTH_RETRY_MS, `HTTP ${status}: 5 min`);
+    }
+    assert.equal(logs.filter((l) => /refused the token/.test(l)).length, 1, `${logs}`);
+    c.dispose();
+  }
+  for (const status of [404, 501]) {
+    const f = fakes();
+    const logs = [];
+    let unavailable = 0;
+    const c = liveClient({ url: "https://s", token: "t", device: "me", WebSocket: f.FakeWS, fetch: answering(status), ...f.timers, log: (l) => logs.push(l), onUnavailable: () => unavailable++ });
+    f.sockets.at(-1).drop();
+    await flush();
+    assert.equal(unavailable, 1);
+    assert.equal(c.stopped, true);
+    assert.equal(f.timeouts.filter((t) => t.live).length, 0, "no more tries");
+    assert.match(logs.at(-1), /no live endpoint/);
+    c.dispose();
+  }
+  // The probe is a plain GET with the token; a network failure there is an ordinary retry.
+  const f = fakes();
+  const seen = [];
+  const c = liveClient({ url: "https://s/", token: "t", device: "me", WebSocket: f.FakeWS, fetch: async (u, init) => (seen.push([u, init.headers.authorization]), Promise.reject(new Error("offline"))), ...f.timers, random: () => 1 });
+  f.sockets.at(-1).drop();
+  await flush();
+  assert.deepEqual(seen, [["https://s/v1/live", "Bearer t"]]);
+  assert.equal(f.fireTimeout(), 1000);
+  c.dispose();
 });
 
 test("live client: a ping without an answer by the next one reconnects; dispose closes and stops retrying", () => {

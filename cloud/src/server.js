@@ -51,17 +51,39 @@ function invalid(c) {
   return undefined;
 }
 
-/** The body as text, or a Response when too large or unreadable. @param {Request} req @returns {Promise<string | Response>} */
-async function bodyText(req) {
-  if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY) return fail(413, `body over ${MAX_BODY} bytes; push fewer changes at once`);
-  let text;
+/**
+ * The body as text, or a Response when too large or unreadable. The limit holds while the
+ * stream is read (a missing or false content-length does not get past it).
+ * @param {Request} req @param {number} [max] @returns {Promise<string | Response>}
+ */
+export async function bodyText(req, max = MAX_BODY) {
+  const tooBig = () => fail(413, `body over ${max} bytes; push fewer changes at once`);
+  if (Number(req.headers.get("content-length") ?? 0) > max) return tooBig();
+  if (!req.body) return "";
+  const reader = req.body.getReader();
+  const parts = [];
+  let size = 0;
   try {
-    text = await req.text();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > max) {
+        reader.cancel().catch(() => {});
+        return tooBig();
+      }
+      parts.push(value);
+    }
   } catch {
     return fail(400, "body could not be read");
   }
-  if (new TextEncoder().encode(text).byteLength > MAX_BODY) return fail(413, `body over ${MAX_BODY} bytes; push fewer changes at once`);
-  return text;
+  const all = new Uint8Array(size);
+  let at = 0;
+  for (const p of parts) {
+    all.set(p, at);
+    at += p.byteLength;
+  }
+  return new TextDecoder().decode(all);
 }
 
 /** The account's one Live object (#71), or undefined before it is deployed. @param {any} env */
@@ -153,10 +175,12 @@ export const ISSUE_ACTIONS = ["opened", "closed", "reopened", "edited"];
  * @param {Request} req @param {any} env @param {any} [ctx]
  */
 async function github(req, env, ctx) {
+  // Refused before the body is read: no secret, no signature, not JSON.
+  const sig = req.headers.get("x-hub-signature-256") ?? "";
+  if (!env.GITHUB_WEBHOOK_SECRET || !/^sha256=[0-9a-f]{64}$/.test(sig)) return fail(401, "bad signature");
+  if (!/^application\/json\b/i.test(req.headers.get("content-type") ?? "")) return fail(415, "content type must be application/json");
   const text = await bodyText(req);
   if (text instanceof Response) return text;
-  const sig = req.headers.get("x-hub-signature-256") ?? "";
-  if (!env.GITHUB_WEBHOOK_SECRET || !sig.startsWith("sha256=")) return fail(401, "bad signature");
   if (!(await same(sig, `sha256=${await hmacHex(env.GITHUB_WEBHOOK_SECRET, text)}`))) return fail(401, "bad signature");
   const event = req.headers.get("x-github-event") ?? "";
   if (event === "ping") return reply(200, { ok: true });
@@ -168,10 +192,24 @@ async function github(req, env, ctx) {
   }
   const repo = body?.repository?.full_name;
   if (event !== "issues" || !ISSUE_ACTIONS.includes(body?.action) || typeof repo !== "string") return reply(200, { ignored: true });
-  const told = notify(env, { t: "tracker", repo }, ctx);
-  if (!ctx?.waitUntil) await told;
-  return reply(200, { ok: true });
+  // A delivery seen before (GitHub's redelivery, or a replay) is ignored: the Live object keeps
+  // the last REPLAY_KEEP delivery ids and body digests. Answered after it decided.
+  const stub = liveStub(env);
+  if (!stub) return reply(200, { ok: true });
+  const delivery = (req.headers.get("x-github-delivery") ?? "").slice(0, 100);
+  const digest = await hmacHex("imprimatur-delivery", text);
+  let out;
+  try {
+    const res = await stub.fetch("https://live.internal/notify", { method: "POST", body: JSON.stringify({ msg: { t: "tracker", repo }, delivery, digest }) });
+    out = await res.json();
+  } catch {
+    return reply(200, { ok: true });
+  }
+  return reply(200, out?.duplicate ? { ignored: "duplicate" } : { ok: true });
 }
+
+/** Deliveries remembered against replays (#71). */
+export const REPLAY_KEEP = 500;
 
 /** @param {Request} req @param {{DB: any, SYNC_TOKEN?: string, LIVE?: any, GITHUB_WEBHOOK_SECRET?: string}} env @param {any} [ctx] */
 export async function handle(req, env, ctx) {
@@ -234,9 +272,30 @@ export class Live {
       } catch {
         return fail(400, "body must be JSON");
       }
+      // A GitHub delivery: {msg, delivery, digest}; seen before → not sent again.
+      if (msg && typeof msg === "object" && "msg" in msg) {
+        if (await this.seen(msg.delivery, msg.digest)) return reply(200, { duplicate: true, sent: 0 });
+        msg = msg.msg;
+      }
       return reply(200, { sent: this.broadcast(JSON.stringify(msg)) });
     }
     return fail(404, "not found");
+  }
+
+  /**
+   * Whether this delivery id or body digest came before; remembers it (the last REPLAY_KEEP)
+   * in the object's storage. The object runs one request at a time: no race between two.
+   * @param {unknown} delivery @param {unknown} digest
+   */
+  async seen(delivery, digest) {
+    const keys = [delivery, digest].filter((k) => typeof k === "string" && k).map((k) => String(k));
+    if (!keys.length) return false;
+    /** @type {string[]} */
+    const list = (await this.ctx.storage.get("deliveries")) ?? [];
+    if (keys.some((k) => list.includes(k))) return true;
+    list.push(...keys);
+    await this.ctx.storage.put("deliveries", list.slice(-REPLAY_KEEP * 2));
+    return false;
   }
 
   /** Sends text to every connected socket; a dead one is skipped. @param {string} text @returns {number} sockets reached */

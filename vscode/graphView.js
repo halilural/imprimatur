@@ -1102,13 +1102,14 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
     renderedAt = Date.now();
   };
   if (!restored) p.reveal();
-  hooks.visible(p.visible || !restored);
+  // A restored panel may sit in a background tab: follow its view state.
+  hooks.visible(restored ? p.visible : true);
   // Set up after work began: once per project, find what already waited on the user.
   if (!scannedBefore(root) && allowed("scan history")) scanAll();
 }
 
 /** The open panel, for the integration tests: its repo, view, last page and last failed write. */
-const panelState = () => ({ open: !!panel, root: shown, view: { ...view }, html: lastHtml, failed: lastFailed, renders, renderedAt });
+const panelState = () => ({ open: !!panel, visible: !!panel?.visible, root: shown, view: { ...view }, html: lastHtml, failed: lastFailed, renders, renderedAt });
 
 /**
  * What waits on the user, counted once for every place that shows it (the launcher's

@@ -244,6 +244,21 @@ suite("Records on the Imprimatur panel (#60, #69, MT-AR-060…064)", () => {
     assert.equal(lanes[row.lane].title, "Outside writes");
   });
 
+  test("#71 the 500 ms backstop runs only while the panel is visible", async () => {
+    const { panelState, backstop } = await api();
+    await vscode.commands.executeCommand("imprimatur.records.reveal", { root: ROOT, task: "IT-1" });
+    await until(() => panelState().visible, "the panel visible");
+    await until(() => backstop.running, "the backstop running");
+    // Another editor in the panel's column hides it.
+    const doc = await vscode.workspace.openTextDocument({ content: "hide the panel" });
+    await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Active, preview: false });
+    await until(() => !panelState().visible, "the panel hidden");
+    await until(() => !backstop.running, "the backstop stopped");
+    await vscode.commands.executeCommand("workbench.action.revertAndCloseActiveEditor");
+    await vscode.commands.executeCommand("imprimatur.records.reveal", { root: ROOT, task: "IT-1" });
+    await until(() => panelState().visible && backstop.running, "running again once visible");
+  });
+
   test("#71 a record written by another process is on the panel within 500 ms (measured)", async () => {
     const { panelState } = await api();
     const { spawn } = require("node:child_process");

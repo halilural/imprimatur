@@ -338,6 +338,9 @@ stops queueing changes (`--setup` again queues everything, edits made meanwhile 
 - **GitHub issues**: a webhook on each repo (`POST /v1/github`, signed with
   `GITHUB_WEBHOOK_SECRET`) makes VS Code run the tracker sync for that repo within
   seconds of an issue being opened, closed, reopened or edited. The 5-minute run stays as a fallback.
+  A delivery seen before (its id or its exact body, the last 500) is ignored.
+- A Worker deployed before live updates has no `/v1/live`: VS Code notices once
+  and keeps syncing every minute. A refused token is tried again every 5 minutes.
 
 The Worker update (once, in `cloud/`; the Durable Object's migration is applied by `deploy`):
 
