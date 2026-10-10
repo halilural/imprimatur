@@ -6,14 +6,12 @@
 // take a database connection and return a model or HTML; the panel (graphView.js)
 // draws the HTML and sends the user's writes back to applyDocMessage.
 "use strict";
-const { DOC_KINDS } = require("./db.js");
+const { DOC_KINDS, SECTION_BODY_MAX } = require("./db.js");
 
 const DOC_TABS = /** @type {const} */ (["architecture", "product"]);
 const TAB_LABEL = { architecture: "Mimari", product: "Ürün" };
 const WHO_TR = { user: "Sen", agent: "Ajan", hook: "Hook", import: "Eşitleme" };
 const FIELD_TR = { title: "başlık", body: "metin", position: "sıra", status: "durum", records: "katkı veren kayıtlar" };
-/** A section's body from the panel, at most (the MCP tool takes the same). */
-const SECTION_BODY_MAX = 60_000;
 
 /** Lazily: the extension bundles it; a missing one shows the Markdown as text. @type {any} */
 let md;
@@ -128,6 +126,9 @@ function docModel(db, root, kind, view = {}) {
     repoName: repo?.name ?? root.split(/[\\/]/).pop(),
     last: last ? { at: last.at, who: /** @type {any} */ (WHO_TR)[last.actor_kind] ?? last.actor_kind, actor: last.actor } : undefined,
     current, superseded, adding: edit === "new", empty: !sections.length,
+    // The repo's docs/ file someone wrote by hand: the export leaves it alone (#72).
+    manual: require("./docs-export.js").fileState(root, kind) === "manual"
+      ? `docs/${kind === "architecture" ? "ARCHITECTURE" : "PRODUCT"}.md` : undefined,
   };
 }
 
@@ -161,7 +162,7 @@ function sectionHtml(m, s) {
 function docHtml(m) {
   const { icon } = require("./tasksView.js");
   const toc = `<aside class="dtoc" data-k="toc" data-scroll="dtoc" aria-label="İçindekiler"><div class="lbl" data-k="h">İçindekiler</div><ol data-k="list">${m.current.map((s) => `<li data-k="t${s.id}" data-q="${esc(`${s.title} ${s.body}`)}"><a href="#" data-act="docGo" data-key="${esc(s.key)}"><span class="num">${s.n}</span><span>${esc(s.title)}</span></a></li>`).join("") || '<li data-k="none" class="dim">Bölüm yok</li>'}</ol>${m.superseded.length ? `<a href="#" class="dold" data-k="old" data-act="docGo" data-key="__old">Eskimiş bölümler · ${m.superseded.length}</a>` : ""}<button class="dashed" data-k="new" data-act="docEdit" data-kind="${m.kind}" data-id="new">${icon("plus")} Yeni bölüm</button></aside>`;
-  const head = `<section class="dhead" data-k="head"><span class="lbl">${esc(m.label)} · ${esc(m.repoName)}</span><h1>${esc(m.title)}</h1><p class="lead">${m.last ? `Son güncelleme · ${esc(when(m.last.at))} · ${esc(m.last.who)}` : "Henüz güncellenmedi"}</p></section>`;
+  const head = `<section class="dhead" data-k="head"><span class="lbl">${esc(m.label)} · ${esc(m.repoName)}</span><h1>${esc(m.title)}</h1><p class="lead">${m.last ? `Son güncelleme · ${esc(when(m.last.at))} · ${esc(m.last.who)}` : "Henüz güncellenmedi"}</p>${m.manual ? `<p class="dnote">${esc(m.manual)} elle yazılmış, üzerine yazılmadı</p>` : ""}</section>`;
   const empty = m.empty && !m.adding
     ? `<div class="card dempty" data-k="empty"><p>Bu doküman henüz boş. Ajan, bir ${m.kind === "architecture" ? "ADR" : "PDR"} ya da karar eklediğinde ilgili bölümü <span class="mono">doc_section_upsert</span> ile burada yazar ve kaydı bağlar.</p><p class="dim">Sen de soldan "Yeni bölüm" ile bir bölüm ekleyebilirsin. Doküman repoya docs/${m.kind === "architecture" ? "ARCHITECTURE" : "PRODUCT"}.md olarak da yazılır.</p></div>`
     : "";
@@ -223,6 +224,7 @@ const DOCS_CSS = `
   .dold { padding: 4px 8px; font-size: 12px; font-weight: 600; }
   .dpage { flex: 999 1 520px; min-width: 0; max-width: 980px; padding: 22px 30px 48px; display: flex; flex-direction: column; gap: 18px; box-sizing: border-box; }
   .dhead { display: flex; flex-direction: column; gap: 4px; }
+  .dnote { margin: 4px 0 0; font-weight: 600; color: var(--vscode-editorWarning-foreground, var(--acc)); }
   .dempty { display: flex; flex-direction: column; gap: 6px; } .dempty p { margin: 0; }
   .dsec { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); scroll-margin-top: 12px; }
   body.vscode-high-contrast .dsec, body.vscode-high-contrast-light .dsec { border-color: var(--vscode-contrastBorder); }

@@ -67,13 +67,15 @@ async function call(cfg, route, body, fetchFn = fetch) {
 /**
  * A queued change as the Worker takes it: a value over MAX_VALUE is cut (text keeps its
  * start and ends in "…", an object becomes {truncated: true}); undefined when it cannot be sent.
- * The local database keeps the whole value.
+ * The local database keeps the whole value. A design document section's value (#72) is never
+ * cut (a cut body would overwrite the whole one on the other machines): undefined.
  * @param {{entity: string, key: string, field: string, value: string | null, at: number}} r
  */
 function wire(r) {
   if (r.key.length > MAX_KEY) return undefined;
   let value = r.value;
   if (value != null && value.length > MAX_VALUE) {
+    if (r.entity === "section") return undefined;
     let v;
     try {
       v = JSON.parse(value);
@@ -97,16 +99,19 @@ function wire(r) {
 
 /**
  * The next push: oldest queued changes, up to BATCH and BATCH_BYTES, as sent.
- * @param {any} db @returns {{rows: Array<{id: number, change: any}>, unsendable: number[]}}
+ * oversize: the sections' changes among the unsendable ones, said by name (#72).
+ * @param {any} db @returns {{rows: Array<{id: number, change: any}>, unsendable: number[], oversize: string[]}}
  */
 function nextBatch(db) {
   const rows = [];
   const unsendable = [];
+  const oversize = [];
   let bytes = 0;
   for (const r of db.outbox(BATCH)) {
     const change = wire(r);
     if (!change) {
       unsendable.push(r.id);
+      if (r.entity === "section") oversize.push(`${changeName(r)} is ${r.value?.length ?? 0} chars encoded, over the server's ${MAX_VALUE}`);
       continue;
     }
     const size = Buffer.byteLength(JSON.stringify(change)) + 1;
@@ -114,14 +119,25 @@ function nextBatch(db) {
     bytes += size;
     rows.push({ id: r.id, change });
   }
-  return { rows, unsendable };
+  return { rows, unsendable, oversize };
 }
+
+/** A change for a log line: "section github.com/u/p architecture/storage body". @param {{entity: string, key: string, field: string}} c */
+const changeName = (c) => {
+  if (c.entity === "section") {
+    const parts = c.key.split("\t");
+    const key = parts.pop();
+    const kind = parts.pop();
+    return `section ${parts.join(" ")} ${kind}/${key} ${c.field}`;
+  }
+  return `${c.entity} ${c.key.replaceAll("\t", " ")} ${c.field}`;
+};
 
 /**
  * Pushes rows; a batch the Worker refuses (400/413) is split until the one bad change is
  * found, which is dropped (logged) so it cannot hold up the rest. Acks exactly what was sent.
  * @param {any} db @param {{url: string, token: string}} cfg @param {string} device
- * @param {Array<{id: number, change: any}>} rows @param {typeof fetch} fetchFn @param {(line: string) => void} log
+ * @param {Array<{id: number, change: any}>} rows @param {typeof fetch} fetchFn @param {(line: string, loud?: boolean) => void} log
  * @returns {Promise<{pushed: number, dropped: number}>}
  */
 async function pushRows(db, cfg, device, rows, fetchFn, log) {
@@ -134,7 +150,7 @@ async function pushRows(db, cfg, device, rows, fetchFn, log) {
     if (status !== 400 && status !== 413) throw e;
     if (rows.length === 1) {
       const c = rows[0].change;
-      log(`sync: dropped a change the server refused (${c.entity} ${c.key.replace("\t", " ")} ${c.field}): ${/** @type {Error} */ (e).message}`);
+      log(`sync: dropped a change the server refused (${changeName(c)}): ${/** @type {Error} */ (e).message}`, c.entity === "section");
       db.ackOutbox([rows[0].id]);
       return { pushed: 0, dropped: 1 };
     }
@@ -150,7 +166,7 @@ async function pushRows(db, cfg, device, rows, fetchFn, log) {
  * stop the pull; its error is thrown after it. Two syncs at once (two windows) are safe:
  * a change pushed twice changes nothing, and each acks only what it sent.
  * @param {any} db vscode/db.js handle @param {{url: string, token: string}} cfg
- * @param {{fetch?: typeof fetch, log?: (line: string) => void}} [o]
+ * @param {{fetch?: typeof fetch, log?: (line: string, loud?: boolean) => void}} [o]
  * @returns {Promise<{pushed: number, pulled: number, applied: number, pending: number, dropped: number}>}
  */
 async function syncOnce(db, cfg, { fetch: fetchFn = fetch, log = () => {} } = {}) {
@@ -161,7 +177,9 @@ async function syncOnce(db, cfg, { fetch: fetchFn = fetch, log = () => {} } = {}
   let pushError;
   try {
     for (;;) {
-      const { rows, unsendable } = nextBatch(db);
+      const { rows, unsendable, oversize } = nextBatch(db);
+      // Loud: a section's text stays on this machine only.
+      for (const o of oversize) log(`sync: NOT SENT, ${o}; shorten it in the panel (Mimari/Ürün)`, true);
       if (unsendable.length) {
         log(`sync: dropped ${unsendable.length} change${unsendable.length === 1 ? "" : "s"} too large to send`);
         db.ackOutbox(unsendable);
