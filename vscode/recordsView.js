@@ -1,14 +1,12 @@
 // @ts-check
-// Record views in the Imprimatur sidebar (#60): what waits on the user across
-// repos, tasks (repo → task → records, 👉 first), questions, decisions, ADRs
-// and PDRs, from Imprimatur's database (vscode/records.js). Right-click marks
-// done, reopens, drops, moves the 👉, edits the title (an input box), adds a
-// record; a record opens as a read-only Markdown page with its history. The
-// views follow the database file: any writer (an agent through MCP, a hook,
-// another window) shows up at once; nothing polls.
+// Record commands (#60): mark done, reopen, drop, move the 👉, edit the title,
+// add a record, search, and a record as a read-only Markdown page with its
+// history. The records themselves show in the Imprimatur panel's task tabs
+// (tasksView.js, #69), which replaced the sidebar's record views; reveal opens
+// the panel on a task. Follows the database file, so any writer (an agent
+// through MCP, a hook, another window) shows up at once; nothing polls.
 "use strict";
 const os = require("node:os");
-const path = require("node:path");
 const vscode = require("vscode");
 const records = require("./records.js");
 const { watchFile } = require("./watch.js");
@@ -22,165 +20,6 @@ const ui = {
   /** @type {typeof vscode.window.showQuickPick} */
   showQuickPick: (...a) => /** @type {any} */ (vscode.window.showQuickPick)(...a),
 };
-
-/** Icon per kind and status. @param {any} r */
-function iconOf(r) {
-  if (r.pointer) return new vscode.ThemeIcon("arrow-right", new vscode.ThemeColor("charts.orange"));
-  if (r.status === "dropped") return new vscode.ThemeIcon("circle-slash");
-  const done = r.status === "done";
-  switch (r.kind) {
-    case "question": return new vscode.ThemeIcon(done ? "comment-discussion" : "question", done ? undefined : new vscode.ThemeColor("charts.yellow"));
-    case "answer": return new vscode.ThemeIcon("reply");
-    case "decision": return new vscode.ThemeIcon("law");
-    case "note": return new vscode.ThemeIcon("note");
-    case "adr": return new vscode.ThemeIcon("symbol-structure");
-    case "pdr": return new vscode.ThemeIcon("lightbulb");
-    case "test": return new vscode.ThemeIcon("beaker");
-    case "fixme": return new vscode.ThemeIcon(done ? "pass" : "bug", done ? new vscode.ThemeColor("testing.iconPassed") : new vscode.ThemeColor("charts.red"));
-    default: return new vscode.ThemeIcon(done ? "pass-filled" : "circle-large-outline", done ? new vscode.ThemeColor("testing.iconPassed") : undefined);
-  }
-}
-
-const TASK_ICON = { open: "issues", active: "play-circle", done: "issue-closed", dropped: "circle-slash" };
-
-/**
- * One view. mode: asks (the user's open records, every repo), tasks, or a list
- * of record kinds (questions, decisions, adr, pdr), grouped by repo.
- */
-class RecordsView {
-  /**
-   * @param {"asks" | "tasks" | "kinds"} mode @param {string[]} [kinds] @param {() => string[]} [workspaceRoots]
-   * @param {() => boolean} [allRepos] every repo in the database, not only this window's
-   */
-  constructor(mode, kinds = [], workspaceRoots = () => [], allRepos = () => false) {
-    this.mode = mode;
-    this.kinds = kinds;
-    this.workspaceRoots = workspaceRoots;
-    this.allRepos = allRepos;
-    this.changed = new vscode.EventEmitter();
-    this.onDidChangeTreeData = this.changed.event;
-    /** @type {Map<string, any>} id → node, for reveal and getParent */
-    this.nodes = new Map();
-  }
-
-  refresh() {
-    this.changed.fire(undefined);
-  }
-
-  /** This window's repos; with "all repos" on, every repo, this window's first. */
-  repos() {
-    const db = records.dbOf();
-    if (!db) return [];
-    const here = new Set(this.workspaceRoots());
-    const all = db.repos();
-    if (!this.allRepos()) return all.filter((r) => here.has(r.root));
-    return all.sort((a, b) => Number(here.has(b.root)) - Number(here.has(a.root)));
-  }
-
-  /** @param {any} node */
-  keep(node) {
-    this.nodes.set(node.id, node);
-    return node;
-  }
-
-  /** @param {any} [node] */
-  getChildren(node) {
-    const db = records.dbOf();
-    if (!db) return [{ id: "error", type: "message", text: `Imprimatur database: ${records.lastError ?? "not available"}` }];
-    if (!node) {
-      if (this.mode === "asks") {
-        const repos = new Map(this.repos().map((r) => [r.id, r]));
-        const asks = db.openAsks({ limit: 500 }).filter((r) => repos.has(r.repo_id));
-        if (!asks.length) return [{ id: "empty", type: "message", text: this.allRepos() ? "Nothing waits on you." : "Nothing waits on you in this window's repos." }];
-        return asks.map((r) => this.keep({ id: `r${r.id}`, type: "record", record: r, repo: repos.get(r.repo_id), showTask: true }));
-      }
-      const repos = this.repos();
-      if (!repos.length) return [{ id: "empty", type: "message", text: this.allRepos() ? "No records yet: agents add them through Imprimatur's MCP tools." : "No records for this window's repos yet." }];
-      return repos.map((repo) => this.keep({ id: `${this.mode}:repo${repo.id}`, type: "repo", repo }));
-    }
-    if (node.type === "repo" && this.mode === "tasks") {
-      const tasks = db.tasksOf(node.repo.id, { limit: 1000 });
-      const live = tasks.filter((t) => t.status === "open" || t.status === "active");
-      const closed = tasks.filter((t) => t.status === "done" || t.status === "dropped");
-      return [
-        ...live.map((task) => this.keep({ id: `task${task.id}`, type: "task", task, repo: node.repo, parent: node })),
-        ...(closed.length ? [this.keep({ id: `closed${node.repo.id}`, type: "closed", tasks: closed, repo: node.repo, parent: node })] : []),
-      ];
-    }
-    if (node.type === "closed") return node.tasks.map((task) => this.keep({ id: `task${task.id}`, type: "task", task, repo: node.repo, parent: node }));
-    if (node.type === "task") {
-      const list = db.recordsOf(node.task.id);
-      // 👉 first: where the work stopped.
-      list.sort((a, b) => Number(b.pointer) - Number(a.pointer));
-      return list.map((record) => this.keep({ id: `r${record.id}`, type: "record", record, repo: node.repo, parent: node }));
-    }
-    if (node.type === "repo") {
-      const list = db.recordsByKind(node.repo.id, this.kinds);
-      if (this.kinds.includes("question")) {
-        const open = list.filter((r) => r.status === "open");
-        const answered = list.filter((r) => r.status !== "open");
-        return [
-          ...open.map((record) => this.keep({ id: `${this.mode}:r${record.id}`, type: "record", record, repo: node.repo, parent: node, showTask: true })),
-          ...(answered.length ? [this.keep({ id: `${this.mode}:answered${node.repo.id}`, type: "group", label: `Answered (${answered.length})`, list: answered, repo: node.repo, parent: node })] : []),
-        ];
-      }
-      return list.map((record) => this.keep({ id: `${this.mode}:r${record.id}`, type: "record", record, repo: node.repo, parent: node, showTask: true }));
-    }
-    if (node.type === "group") return node.list.map((record) => this.keep({ id: `${this.mode}:g${record.id}`, type: "record", record, repo: node.repo, parent: node, showTask: true }));
-    return [];
-  }
-
-  /** @param {any} node */
-  getParent(node) {
-    return node.parent;
-  }
-
-  /** @param {any} node */
-  getTreeItem(node) {
-    const C = vscode.TreeItemCollapsibleState;
-    if (node.type === "message") {
-      const item = new vscode.TreeItem(node.text, C.None);
-      item.iconPath = new vscode.ThemeIcon(node.id === "error" ? "error" : "info");
-      return item;
-    }
-    if (node.type === "repo") {
-      const here = this.workspaceRoots().includes(node.repo.root);
-      const item = new vscode.TreeItem(node.repo.name || path.basename(node.repo.root), here ? C.Expanded : C.Collapsed);
-      item.id = node.id;
-      item.description = here ? "" : node.repo.root;
-      item.iconPath = new vscode.ThemeIcon("repo");
-      return item;
-    }
-    if (node.type === "closed" || node.type === "group") {
-      const item = new vscode.TreeItem(node.type === "closed" ? `Done (${node.tasks.length})` : node.label, C.Collapsed);
-      item.id = node.id;
-      item.iconPath = new vscode.ThemeIcon("archive");
-      return item;
-    }
-    if (node.type === "task") {
-      const t = node.task;
-      const item = new vscode.TreeItem(`${t.key}${t.title ? ` · ${t.title}` : ""}`, t.status === "active" ? C.Expanded : C.Collapsed);
-      item.id = node.id;
-      item.description = t.summary ? t.summary.split("\n")[0] : t.status;
-      item.tooltip = new vscode.MarkdownString(`**${t.key}** ${t.title ?? ""}\n\n${t.status}${t.summary ? `\n\n${t.summary}` : ""}`);
-      item.iconPath = new vscode.ThemeIcon(TASK_ICON[/** @type {keyof typeof TASK_ICON} */ (t.status)] ?? "issues");
-      item.contextValue = `task-${t.status === "done" || t.status === "dropped" ? "closed" : "live"}`;
-      return item;
-    }
-    const r = node.record;
-    const item = new vscode.TreeItem(r.title, C.None);
-    item.id = node.id;
-    const bits = [node.showTask ? r.task_key ?? "" : "", r.owner === "K" ? "you" : r.owner === "C" ? "agent" : "", r.status !== "open" ? r.status : ""];
-    // Only with every repo shown does a row need to say which one.
-    if (this.mode === "asks" && node.repo && this.allRepos()) bits.unshift(node.repo.name);
-    item.description = bits.filter(Boolean).join(" · ");
-    item.tooltip = new vscode.MarkdownString(`**${r.kind}** · ${r.status}${r.owner ? ` · ${r.owner === "K" ? "you" : "agent"}` : ""}${r.pointer ? " · 👉" : ""}\n\n${r.title}${r.body ? `\n\n---\n\n${r.body}` : ""}`);
-    item.iconPath = iconOf(r);
-    item.contextValue = `record-${r.status}${r.pointer ? "-pointer" : ""}`;
-    item.command = { command: "imprimatur.records.show", title: "Show record", arguments: [node] };
-    return item;
-  }
-}
 
 /** A record as a read-only Markdown page: title, body, links and every version. @param {number} id */
 function pageOf(id) {
@@ -206,44 +45,24 @@ function pageOf(id) {
 }
 
 /**
- * Registers the views and their commands.
- * @param {vscode.ExtensionContext} ctx @param {() => string[]} roots the window's repos
- * @param {(msg: string) => void} log @param {() => void} [onChange] also told when the database changes (the graph)
+ * Registers the record commands (#60; the record views became the panel's task tabs, #69)
+ * and follows the database file: any writer (an agent through MCP, a hook, another
+ * window) shows up at once; nothing polls.
+ * @param {vscode.ExtensionContext} ctx @param {(msg: string) => void} log
+ * @param {() => void} onChange told when the database changes (the panel, the launcher)
+ * @param {(at: {root?: string, task?: string, record?: number}) => unknown} reveal opens the panel on a task or record
+ * @param {(all: boolean) => void} setAllRepos the panel's "every repo" switch
  */
-function registerRecordViews(ctx, roots, log, onChange = () => {}) {
-  // This window's repos by default; a title button shows every repo (kept per workspace).
-  let all = ctx.workspaceState.get("imprimatur.records.allRepos", false);
-  const allRepos = () => all;
-  vscode.commands.executeCommand("setContext", "imprimatur.records.allRepos", all);
-  const views = {
-    asks: new RecordsView("asks", [], roots, allRepos),
-    tasks: new RecordsView("tasks", [], roots, allRepos),
-    questions: new RecordsView("kinds", ["question"], roots, allRepos),
-    decisions: new RecordsView("kinds", ["decision"], roots, allRepos),
-    adr: new RecordsView("kinds", ["adr"], roots, allRepos),
-    pdr: new RecordsView("kinds", ["pdr"], roots, allRepos),
-  };
-  const trees = Object.fromEntries(
-    Object.entries(views).map(([name, provider]) => [name, vscode.window.createTreeView(`imprimatur.records.${name}`, { treeDataProvider: provider, showCollapseAll: name !== "asks" })]),
-  );
-  const refresh = () => Object.values(views).forEach((v) => v.refresh());
-  const badge = () => {
-    const n = records.dbOf() ? views.asks.getChildren().filter((x) => x.type === "record").length : 0;
-    trees.asks.badge = n ? { value: n, tooltip: `${n} waiting on you` } : undefined;
-  };
-
+function registerRecordCommands(ctx, log, onChange, reveal, setAllRepos) {
   // Follow the database file: a write anywhere changes its WAL. Event-driven, debounced;
   // armed again after a watch error, and before the database exists (vscode/watch.js).
   const file = records.dbOf()?.file ?? require("./db.js").dbPath();
   if (file !== ":memory:")
     ctx.subscriptions.push(watchFile(file, () => {
       records.checkFile();
-      refresh();
-      badge();
       refreshPages();
       onChange();
     }, log));
-  badge();
 
   const pages = new vscode.EventEmitter();
   /** Record pages shown: they follow changes too. @type {Set<string>} */
@@ -258,8 +77,6 @@ function registerRecordViews(ctx, roots, log, onChange = () => {}) {
     } catch (e) {
       vscode.window.showErrorMessage(`Imprimatur: ${e instanceof Error ? e.message : e}`);
     }
-    refresh();
-    badge();
     refreshPages();
     onChange();
   };
@@ -275,21 +92,16 @@ function registerRecordViews(ctx, roots, log, onChange = () => {}) {
   ];
 
   ctx.subscriptions.push(
-    ...Object.values(trees),
     vscode.workspace.registerTextDocumentContentProvider(SCHEME, { onDidChange: pages.event, provideTextDocumentContent: (uri) => pageOf(Number(uri.path.replace(/\D/g, ""))) }),
     ...["allRepos", "thisWindow"].map((name) =>
       vscode.commands.registerCommand(`imprimatur.records.${name}`, () => {
-        all = name === "allRepos";
-        ctx.workspaceState.update("imprimatur.records.allRepos", all);
-        vscode.commands.executeCommand("setContext", "imprimatur.records.allRepos", all);
-        refresh();
-        badge();
+        setAllRepos(name === "allRepos");
+        onChange();
       }),
     ),
     vscode.commands.registerCommand("imprimatur.records.refresh", () => {
       records.reset();
-      refresh();
-      badge();
+      onChange();
     }),
     vscode.commands.registerCommand("imprimatur.records.show", async (node) => {
       const r = recordOf(node);
@@ -338,38 +150,14 @@ function registerRecordViews(ctx, roots, log, onChange = () => {}) {
       );
       if (pick) vscode.commands.executeCommand("imprimatur.records.reveal", { root: pick.root, record: pick.record.id });
     }),
-    // From the graph and Waiting on you: show a task or a record in the Tasks view.
-    vscode.commands.registerCommand("imprimatur.records.reveal", async (/** @type {{root?: string, task?: string, record?: number}} */ at) => {
-      const db = records.dbOf();
-      if (!db || !at) return;
-      let task;
-      let record;
-      if (at.record) {
-        record = db.record(at.record);
-        task = record && db.taskById(record.task_id);
-      } else if (at.root && at.task) {
-        task = db.taskByKey(db.repoByRoot(at.root)?.id ?? -1, at.task);
-      }
-      if (!task) return vscode.window.showInformationMessage(`Imprimatur: ${at.task ?? "this record"} has no records yet.`);
-      // Walk the tree down to fill the node map: repo → (Done) → task → record.
-      const view = views.tasks;
-      const repoNode = view.getChildren().find((n) => n.type === "repo" && n.repo.id === task.repo_id);
-      if (!repoNode) return;
-      const level = view.getChildren(repoNode);
-      let taskNode = level.find((n) => n.type === "task" && n.task.id === task.id);
-      if (!taskNode) {
-        const closed = level.find((n) => n.type === "closed");
-        taskNode = closed && view.getChildren(closed).find((n) => n.task.id === task.id);
-      }
-      if (!taskNode) return;
-      const target = record ? view.getChildren(taskNode).find((n) => n.record?.id === record.id) ?? taskNode : taskNode;
-      await trees.tasks.reveal(target, { select: true, focus: true, expand: true });
-      if (record) vscode.commands.executeCommand("imprimatur.records.show", target);
+    // From the graph, Bende bekleyenler and Search: the task (and record) on the panel's Görevler tab.
+    vscode.commands.registerCommand("imprimatur.records.reveal", (/** @type {{root?: string, task?: string, record?: number}} */ at) => {
+      if (!at || !records.dbOf()) return;
+      return reveal(at);
     }),
   );
-  // views, trees and ui: the tree data providers, their views (badges) and the prompts,
-  // handed out by activate for the integration tests (#68).
-  return { refresh, views, trees, ui };
+  // ui: the prompts, handed out by activate for the integration tests (#68).
+  return { ui };
 }
 
-module.exports = { registerRecordViews, RecordsView, pageOf };
+module.exports = { registerRecordCommands, pageOf };

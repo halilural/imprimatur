@@ -601,6 +601,54 @@ class Db {
     return (repoId == null ? this.q(sql).all(limit) : this.q(sql).all(repoId, limit)).map(recordOf);
   }
 
+  /**
+   * Every live record of a repo, few columns, for lists that count per task (#69).
+   * @param {number} repoId
+   */
+  recordsOfRepo(repoId) {
+    return this.q(`SELECT r.id, r.task_id, r.kind, r.owner, r.status, r.pointer, r.title, r.updated_at
+                   FROM records r JOIN tasks t ON t.id = r.task_id
+                   WHERE t.repo_id = ? AND r.status != 'dropped' ORDER BY r.task_id, r.position`).all(repoId)
+      .map((/** @type {any} */ r) => ({ ...r, pointer: !!r.pointer }));
+  }
+
+  /**
+   * A task's record history, newest first, with each record's kind and title (#69).
+   * @param {number} taskId @param {{limit?: number}} [o] @returns {{list: any[], total: number}}
+   */
+  taskVersions(taskId, { limit = 200 } = {}) {
+    const total = /** @type {any} */ (this.q("SELECT count(*) AS n FROM record_versions v JOIN records r ON r.id = v.record_id WHERE r.task_id = ?").get(taskId)).n;
+    const list = this.q(`SELECT v.*, r.kind, r.title FROM record_versions v JOIN records r ON r.id = v.record_id
+                         WHERE r.task_id = ? ORDER BY v.id DESC LIMIT ?`).all(taskId, limit)
+      .map((/** @type {any} */ v) => ({ ...v, before: v.before ? JSON.parse(v.before) : null, after: v.after ? JSON.parse(v.after) : null }));
+    return { list, total };
+  }
+
+  /**
+   * Open manual tests (kind test, not the agent's): what the user checks by eye (#69).
+   * @param {{repoId?: number, limit?: number}} [o]
+   */
+  openTests({ repoId, limit = 200 } = {}) {
+    const sql = `SELECT r.*, t.key AS task_key, t.repo_id FROM records r JOIN tasks t ON t.id = r.task_id
+                 WHERE r.status = 'open' AND r.kind = 'test' AND (r.owner IS NULL OR r.owner = 'K')
+                 ${repoId == null ? "" : "AND t.repo_id = ?"} ORDER BY r.created_at DESC LIMIT ?`;
+    return (repoId == null ? this.q(sql).all(limit) : this.q(sql).all(repoId, limit)).map(recordOf);
+  }
+
+  /**
+   * Records the user closed since a time (status → done by a user actor), newest first (#69).
+   * @param {number} since epoch ms @param {{repoId?: number, limit?: number}} [o]
+   */
+  doneByUserSince(since, { repoId, limit = 100 } = {}) {
+    const sql = `SELECT r.*, t.key AS task_key, t.repo_id, max(v.at) AS done_at FROM record_versions v
+                 JOIN records r ON r.id = v.record_id JOIN tasks t ON t.id = r.task_id
+                 WHERE v.actor_kind = 'user' AND v.at >= ? AND json_extract(v.after, '$.status') = 'done'
+                   AND r.status = 'done' AND r.kind IN ('todo', 'question', 'test')
+                   ${repoId == null ? "" : "AND t.repo_id = ?"}
+                 GROUP BY r.id ORDER BY done_at DESC LIMIT ?`;
+    return (repoId == null ? this.q(sql).all(since, limit) : this.q(sql).all(since, repoId, limit)).map(recordOf);
+  }
+
   // ---- Sync between machines (#61) ----
 
   /** @param {string} k @returns {string | undefined} */

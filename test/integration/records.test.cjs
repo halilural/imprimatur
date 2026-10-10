@@ -1,5 +1,6 @@
-// The record views (#60) in a real extension host: the steps of the manual tests
-// MT-AR-060…064 that need no eyes. Each test seeds its own task through a second
+// Records in a real extension host: the steps of the manual tests MT-AR-060…064
+// that need no eyes, since #69 on the Imprimatur panel's task tabs (its models
+// from tasksView.js, its messages through the panel's own handler). Each test seeds its own task through a second
 // database connection (as the MCP server or another window would), so the tests
 // do not depend on each other's data. Colours, icons' look and layout stay manual.
 "use strict";
@@ -53,38 +54,20 @@ async function until(fn, what, ms = 5000) {
   }
 }
 
-/** Waits until the provider has not fired for quietMs (earlier writes' watcher events are done). */
-async function settle(provider, quietMs = 700) {
-  let last = Date.now();
-  const sub = provider.onDidChangeTreeData(() => (last = Date.now()));
-  try {
-    await until(() => Date.now() - last >= quietMs, "the views to settle", 10_000);
-  } finally {
-    sub.dispose();
-  }
-}
-
-/** The Tasks view's node of a task in the workspace repo (live or under Done). @param {any} view @param {string} key */
-function taskNode(view, key) {
-  const repo = view.getChildren().find((n) => n.type === "repo" && n.repo.root === ROOT);
-  assert.ok(repo, "the workspace repo in Tasks");
-  const level = view.getChildren(repo);
-  const closed = level.find((n) => n.type === "closed");
-  return [...level, ...(closed ? view.getChildren(closed) : [])].find((n) => n.type === "task" && n.task.key === key);
-}
-
 const record = (id) => withDb((db) => db.record(id));
 const lastVersion = (id) => withDb((db) => db.versionsOf(id).at(-1));
-const asksIn = (view) => view.getChildren().filter((n) => n.type === "record");
+const tv = require(path.join(EXT, "tasksView.js"));
+const { waitingSteps } = require(path.join(EXT, "waiting.js"));
+const panelOpen = () => vscode.window.tabGroups.all.flatMap((g) => g.tabs).some((t) => t.input instanceof vscode.TabInputWebview && t.input.viewType.endsWith("imprimatur.graph"));
 
-suite("Record views (#60, MT-AR-060…064)", () => {
+suite("Records on the Imprimatur panel (#60, #69, MT-AR-060…064)", () => {
   suiteSetup(async () => {
     await api();
     await vscode.commands.executeCommand("imprimatur.records.thisWindow");
   });
 
-  test("MT-AR-060 Waiting on me: this window's repo, count and badge, all repos, the record page", async () => {
-    const { recordViews, recordTrees } = await api();
+  test("MT-AR-060 Bende bekleyenler: this window's repo, count and badge, all repos, the record page", async () => {
+    const { launcher } = await api();
     const other = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-it-other-")), "other");
     const otherTitle = `Ask in another repo ${Date.now()}`;
     withDb((db) => {
@@ -97,34 +80,44 @@ suite("Record views (#60, MT-AR-060…064)", () => {
       { kind: "todo", owner: "C", title: "A todo for the agent" },
       { kind: "note", owner: "K", title: "A note, not an ask" },
     ]);
-    await vscode.commands.executeCommand("imprimatur.records.refresh");
 
-    const expected = withDb((db) => db.openAsks({ repoId: db.repoByRoot(ROOT).id, limit: 500 }));
-    const asks = asksIn(recordViews.asks);
-    assert.deepEqual(asks.map((n) => n.record.id).sort(), expected.map((r) => r.id).sort(), "open owner-K todos and questions of this repo");
-    assert.ok(asks.every((n) => n.repo.root === ROOT), "only this window's repo");
-    assert.ok(!asks.some((n) => n.record.title === otherTitle));
-    assert.ok(asks.some((n) => n.record.id === todo.id));
-    assert.ok(!asks.some((n) => n.record.title === "A todo for the agent" || n.record.title === "A note, not an ask"));
-    assert.equal(recordTrees.asks.badge?.value, expected.length, "badge = open asks");
-    assert.match(recordViews.asks.getTreeItem(asks.find((n) => n.record.id === todo.id)).description, /IT-60 · you/);
+    const model = (all) => withDb((db) => tv.inboxModel(db, ROOT, { all }));
+    const items = (m) => m.groups.flatMap((g) => g.items.filter((r) => !r.done));
+    const expected = withDb((db) => {
+      const repoId = db.repoByRoot(ROOT).id;
+      return [...db.openAsks({ repoId, limit: 500 }), ...db.openTests({ repoId, limit: 500 })];
+    });
+    const mine = items(model(false));
+    assert.deepEqual(mine.map((r) => r.id).sort(), expected.map((r) => r.id).sort(), "open owner-K todos and questions (and manual tests) of this repo");
+    assert.ok(!mine.some((r) => r.title === otherTitle));
+    assert.ok(mine.some((r) => r.id === todo.id));
+    assert.ok(!mine.some((r) => r.title === "A todo for the agent" || r.title === "A note, not an ask"));
+    assert.equal(model(false).groups.find((g) => g.task.key === "IT-60").repo.root, ROOT);
 
+    launcher.refresh();
+    const count = withDb((db) => tv.inboxCount(db, ROOT, waitingSteps(ROOT)));
+    assert.equal(launcher.view.badge?.value, count, "the launcher's badge = what waits on you");
+    assert.equal(launcher.getTreeItem(launcher.getChildren().find((r) => r.id === "inbox")).label, `Bende bekleyenler (${count})`);
+
+    const g = model(true).groups.find((x) => x.items.some((r) => r.title === otherTitle));
+    assert.ok(g, "another repo's ask with every repo");
+    assert.equal(g.repo.root, other);
+    assert.equal(g.task.key, "OT-1");
+
+    // The panel's switch is kept like the record views' was.
+    await vscode.commands.executeCommand("imprimatur.openInbox");
+    await until(panelOpen, "the panel open", 10_000);
+    const { panelState } = await api();
     try {
       await vscode.commands.executeCommand("imprimatur.records.allRepos");
-      const all = asksIn(recordViews.asks);
-      const ask = all.find((n) => n.record.title === otherTitle);
-      assert.ok(ask, "another repo's ask with all repos on");
-      assert.equal(ask.repo.root, other);
-      assert.match(recordViews.asks.getTreeItem(ask).description, /^it-other · OT-1 · you/);
-      assert.equal(recordTrees.asks.badge?.value, all.length);
+      assert.equal(panelState().view.all, true);
+      await until(() => panelState().html.includes(otherTitle), "the other repo's ask drawn on Bende bekleyenler");
     } finally {
       await vscode.commands.executeCommand("imprimatur.records.thisWindow");
     }
-    assert.ok(!asksIn(recordViews.asks).some((n) => n.record.title === otherTitle), "back to this window's repo");
+    assert.equal(panelState().view.all, false);
 
-    const node = asks.find((n) => n.record.id === todo.id);
-    assert.equal(recordViews.asks.getTreeItem(node).command.command, "imprimatur.records.show");
-    await vscode.commands.executeCommand("imprimatur.records.show", node);
+    await vscode.commands.executeCommand("imprimatur.records.show", { record: record(todo.id) });
     const doc = await until(
       () => vscode.workspace.textDocuments.find((d) => d.uri.scheme === "imprimatur-record" && d.uri.path === `/record-${todo.id}.md`),
       "the record page opened",
@@ -137,132 +130,108 @@ suite("Record views (#60, MT-AR-060…064)", () => {
     await assert.rejects(Promise.resolve(vscode.workspace.fs.writeFile(doc.uri, Buffer.from("x"))), "the page is read-only");
   });
 
-  test("MT-AR-061 Tasks: repo → task → records, 👉 first, Done (n), the summary's first line", async () => {
-    const { recordViews } = await api();
-    const { records: [, , last] } = seedTask("IT-61", { title: "Tasks view", status: "active", summary: "Status: halfway\nmore lines" }, [
+  test("MT-AR-061 Görevler: the list by status, the task page with its 👉 callout, Bitenleri göster (n), the summary", async () => {
+    await api();
+    const { task, records: [, , last] } = seedTask("IT-61", { title: "Tasks view", status: "active", summary: "Status: halfway\nmore lines" }, [
       { kind: "todo", owner: "C", title: "First record" },
       { kind: "question", owner: "K", title: "Second record" },
-      { kind: "note", title: "Where we left off", pointer: true },
+      { kind: "todo", title: "Where we left off", pointer: true },
+      { kind: "todo", owner: "C", title: "Old work", status: "done" },
     ]);
     seedTask("IT-61-DONE", { title: "Finished", status: "done" }, [{ kind: "todo", title: "Old work", status: "done" }]);
-    const view = recordViews.tasks;
 
-    const repo = view.getChildren().find((n) => n.type === "repo" && n.repo.root === ROOT);
-    assert.equal(view.getTreeItem(repo).collapsibleState, vscode.TreeItemCollapsibleState.Expanded, "this window's repo open");
-    const level = view.getChildren(repo);
-    const live = taskNode(view, "IT-61");
-    assert.ok(level.some((n) => n.id === live.id), "a live task directly under the repo");
-    const item = view.getTreeItem(live);
-    assert.equal(item.label, "IT-61 · Tasks view");
-    assert.equal(item.description, "Status: halfway", "the summary's first line");
-
-    const recs = view.getChildren(live);
-    assert.equal(recs[0].record.id, last.id, "the 👉 record first");
-    assert.equal(recs[0].record.pointer, true);
-    assert.equal(view.getTreeItem(recs[0]).iconPath.id, "arrow-right");
-    assert.match(view.getTreeItem(recs[0]).contextValue, /-pointer$/);
-    assert.deepEqual(recs.slice(1).map((n) => n.record.title), ["First record", "Second record"]);
-
-    const closed = level.find((n) => n.type === "closed");
-    assert.ok(closed, "a Done group");
+    const m = withDb((db) => tv.tasksPage(db, ROOT, { sel: task.id }));
+    const keys = m.groups.flatMap((g) => g.tasks.map((t) => t.key));
+    assert.ok(keys.includes("IT-61"), "a live task under Aktif");
+    assert.ok(!keys.includes("IT-61-DONE"), "done tasks only under Biten");
     const doneCount = withDb((db) => db.tasksOf(db.repoByRoot(ROOT).id, { limit: 1000 }).filter((t) => t.status === "done" || t.status === "dropped").length);
-    assert.equal(view.getTreeItem(closed).label, `Done (${doneCount})`);
-    assert.ok(view.getChildren(closed).some((n) => n.task.key === "IT-61-DONE"));
-    assert.ok(!level.some((n) => n.type === "task" && n.task.key === "IT-61-DONE"), "done tasks only under Done");
-    assert.equal(view.getParent(recs[0]).id, live.id);
+    assert.equal(m.counts.done, doneCount);
+    assert.ok(withDb((db) => tv.tasksPage(db, ROOT, { filter: "done" })).groups.some((g) => g.tasks.some((t) => t.key === "IT-61-DONE")));
+
+    const c = m.cur;
+    assert.equal(c.key, "IT-61");
+    assert.equal(c.summary, "Status: halfway\nmore lines");
+    assert.equal(c.pointer.id, last.id, "Nerede kaldık: the 👉 record");
+    assert.deepEqual(c.todos.map((r) => r.title), ["First record", "Where we left off"]);
+    assert.equal(c.hiddenDone, 1);
+    assert.deepEqual(c.asks.map((r) => r.title), ["Second record"]);
+    const html = withDb((db) => tv.tasksHtml(tv.tasksPage(db, ROOT, { sel: task.id })));
+    assert.ok(html.includes("Bitenleri göster (1)"));
+    assert.ok(html.includes("Nerede kaldık"));
   });
 
-  test("MT-AR-062 context commands write as the user: done, reopen, pointer, drop, edit title, add", async () => {
-    const { recordViews, recordUi } = await api();
-    const { task, records: [rec] } = seedTask("IT-62", { title: "Commands", status: "active" }, [{ kind: "todo", owner: "K", title: "Change me" }]);
-    const node = () => ({ type: "record", record: record(rec.id) });
+  test("MT-AR-062 the panel writes as the user: done, reopen, pointer, answer, quick-add, task status; the commands too", async () => {
+    const { panelMessage, recordUi } = await api();
+    const { task, records: [rec, q] } = seedTask("IT-62", { title: "Commands", status: "active" }, [
+      { kind: "todo", owner: "K", title: "Change me" },
+      { kind: "question", owner: "K", title: "Which one?" },
+    ]);
+    await vscode.commands.executeCommand("imprimatur.records.reveal", { root: ROOT, task: "IT-62" });
     const byUser = (id, what) => {
       const v = lastVersion(id);
       assert.equal(v.actor_kind, "user", `${what}: a version row by the user`);
       return v;
     };
 
-    await vscode.commands.executeCommand("imprimatur.records.done", node());
+    panelMessage({ type: "rec", id: rec.id, op: "done" });
     assert.equal(record(rec.id).status, "done");
     assert.deepEqual(byUser(rec.id, "done").after, { status: "done" });
-    assert.match(recordViews.tasks.getTreeItem({ type: "record", record: record(rec.id) }).contextValue, /^record-done/);
-
-    await vscode.commands.executeCommand("imprimatur.records.reopen", node());
+    panelMessage({ type: "rec", id: rec.id, op: "open" });
     assert.equal(record(rec.id).status, "open");
-    assert.deepEqual(byUser(rec.id, "reopen").after, { status: "open" });
-
-    await vscode.commands.executeCommand("imprimatur.records.pointer", node());
+    panelMessage({ type: "rec", id: rec.id, op: "pointer" });
     assert.equal(record(rec.id).pointer, true);
     assert.deepEqual(byUser(rec.id, "pointer").after, { pointer: true });
 
+    panelMessage({ type: "answer", id: q.id, text: "The first one." });
+    assert.equal(record(q.id).status, "done");
+    const answer = withDb((db) => db.recordsOf(task.id).find((r) => r.kind === "answer" && r.parent_id === q.id));
+    assert.equal(answer?.title, "The first one.");
+    assert.equal(byUser(answer.id, "answer").op, "create");
+
+    panelMessage({ type: "add", task: task.id, text: "@ben Added from the panel" });
+    const added = withDb((db) => db.recordsOf(task.id).find((r) => r.title === "Added from the panel"));
+    assert.deepEqual([added?.kind, added?.owner], ["todo", "K"]);
+    assert.equal(byUser(added.id, "add").op, "create");
+
+    panelMessage({ type: "taskStatus", task: task.id, status: "done" });
+    assert.equal(withDb((db) => db.taskById(task.id).status), "done");
+    panelMessage({ type: "taskStatus", task: task.id, status: "active" });
+
+    // The record commands stay for the palette and other callers.
     const saved = { ...recordUi };
     try {
       recordUi.showInputBox = async (o) => {
         assert.equal(o.value, "Change me", "the box starts with the title");
         return "  Changed title  ";
       };
-      await vscode.commands.executeCommand("imprimatur.records.editTitle", node());
+      await vscode.commands.executeCommand("imprimatur.records.editTitle", { record: record(rec.id) });
       assert.equal(record(rec.id).title, "Changed title");
       assert.deepEqual(byUser(rec.id, "editTitle").after, { title: "Changed title" });
-
-      /** @type {string[]} */
-      const asked = [];
-      recordUi.showQuickPick = async (items) => {
-        const list = await items;
-        asked.push(list.map((i) => i.label).join(","));
-        return list.find((i) => i.label === "todo") ?? list.find((i) => i.label === "K");
-      };
-      recordUi.showInputBox = async () => "Added from the menu";
-      await vscode.commands.executeCommand("imprimatur.records.add", { type: "task", task });
-      assert.equal(asked.length, 2, "kind, then who does it");
-      assert.ok(asked[1].startsWith("K,C"));
-      const added = withDb((db) => db.recordsOf(task.id).find((r) => r.title === "Added from the menu"));
-      assert.ok(added, "the record added");
-      assert.equal(added.kind, "todo");
-      assert.equal(added.owner, "K");
-      assert.equal(byUser(added.id, "add").op, "create");
-
-      // Cancelling the box changes nothing.
-      recordUi.showInputBox = async () => undefined;
-      const before = withDb((db) => db.versionsOf(rec.id).length);
-      await vscode.commands.executeCommand("imprimatur.records.editTitle", node());
-      assert.equal(withDb((db) => db.versionsOf(rec.id).length), before);
     } finally {
       Object.assign(recordUi, saved);
     }
-
-    await vscode.commands.executeCommand("imprimatur.records.drop", node());
+    await vscode.commands.executeCommand("imprimatur.records.drop", { record: record(rec.id) });
     assert.equal(record(rec.id).status, "dropped");
     assert.equal(record(rec.id).pointer, false, "a dropped record loses the 👉");
-    assert.equal(byUser(rec.id, "drop").actor_kind, "user");
-    assert.ok(!recordViews.tasks.getChildren(taskNode(recordViews.tasks, "IT-62")).some((n) => n.record.id === rec.id), "dropped records leave the task");
 
-    // The record page's History says who: the user.
     const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(`imprimatur-record:/record-${rec.id}.md`));
     const history = doc.getText().split("## History")[1];
-    assert.ok(history, "a History section");
     assert.ok((history.match(/· user /g)?.length ?? 0) >= 5, "done, reopen, pointer, title, drop by the user");
     assert.deepEqual(withDb((db) => db.versionsOf(rec.id)).slice(1).filter((v) => v.actor_kind !== "user"), [], "every change after the create by the user");
   });
 
-  test("MT-AR-063 an outside write shows in Tasks without a refresh, and as a record row in the graph", async () => {
-    const { recordViews } = await api();
+  test("MT-AR-063 an outside write redraws the open task page, and shows as a record row in the graph", async () => {
+    const { panelState } = await api();
     const { task } = seedTask("IT-63", { title: "Outside writes", status: "active" }, [{ kind: "todo", owner: "C", title: "Existing" }]);
-    const view = recordViews.tasks;
-    await settle(view);
+    await vscode.commands.executeCommand("imprimatur.records.reveal", { root: ROOT, task: "IT-63" });
+    await until(() => panelState().view.tab === "tasks" && panelState().view.sel === task.id, "the panel on IT-63");
+    await until(() => panelState().html.includes("Outside writes"), "IT-63's page drawn");
 
-    let fired = 0;
-    const sub = view.onDidChangeTreeData(() => fired++);
     const title = `Note from the MCP server ${Date.now()}`;
     const t0 = Date.now();
-    try {
-      withDb((db) => db.addRecord(task.id, { kind: "note", title }, AGENT));
-      await until(() => fired > 0, "the Tasks view told of the change (the database watcher)", 2500);
-    } finally {
-      sub.dispose();
-    }
+    withDb((db) => db.addRecord(task.id, { kind: "note", title }, AGENT));
+    await until(() => panelState().html.includes(title), "the page redrawn with the note (the database watcher)", 2500);
     assert.ok(Date.now() - t0 < 2500, `within ~2 s, took ${Date.now() - t0} ms`);
-    assert.ok(view.getChildren(taskNode(view, "IT-63")).some((n) => n.record.title === title), "the note in its task");
 
     // The graph: a record row "note added: …" in the task's lane, nothing to accept.
     const { graphRows } = require(path.join(EXT, "graph.js"));
@@ -275,27 +244,38 @@ suite("Record views (#60, MT-AR-060…064)", () => {
     assert.equal(lanes[row.lane].title, "Outside writes");
   });
 
-  test("MT-AR-064 an outside owner-K todo shows in Waiting on you, and ticks when marked done", async () => {
-    await api();
-    const { waitingSteps } = require(path.join(EXT, "waiting.js"));
-    // Records sync into Waiting on you while the graph is shown.
-    await vscode.commands.executeCommand("imprimatur.openGraph");
-    await until(
-      () => vscode.window.tabGroups.all.flatMap((g) => g.tabs).some((t) => t.input instanceof vscode.TabInputWebview && t.input.viewType.endsWith("imprimatur.graph")),
-      "the graph open",
-      10_000,
-    );
+  test("MT-AR-064 an outside owner-K todo shows in Bende bekleyenler, and its mirror for the hooks ticks when done", async () => {
+    const { panelState } = await api();
+    await vscode.commands.executeCommand("imprimatur.openInbox");
+    await until(panelOpen, "the panel open", 10_000);
     const { task } = seedTask("IT-64", { title: "Waiting on you", status: "active" });
     const title = `Owner-K todo from the MCP server ${Date.now()}`;
     const rec = withDb((db) => db.addRecord(task.id, { kind: "todo", owner: "K", title }, AGENT));
 
+    await until(() => panelState().html.includes(title), "the todo on Bende bekleyenler");
     const step = () => waitingSteps(ROOT).find((s) => s.text === title);
-    const open = await until(() => step()?.state === "open" && step(), "the todo open in Waiting on you", 5000);
+    const open = await until(() => step()?.state === "open" && step(), "the todo mirrored in the waiting log");
     assert.equal(open.task, "IT-64");
     assert.match(open.title, /^IT-64 · Waiting on you$/);
 
-    await vscode.commands.executeCommand("imprimatur.records.done", { type: "record", record: record(rec.id) });
-    const done = await until(() => step()?.state === "done" && step(), "the step ticked on the next sync", 5000);
+    await vscode.commands.executeCommand("imprimatur.records.done", { record: record(rec.id) });
+    const done = await until(() => step()?.state === "done" && step(), "the step ticked on the next sync");
     assert.match(done.note, /no longer open in Imprimatur \(IT-64\)/);
   });
+
+  test("deep links: reveal by record opens Görevler on its task and lights the record", async () => {
+    const { panelState } = await api();
+    const { task, records: [, rec] } = seedTask("IT-65", { title: "Deep link", status: "open" }, [
+      { kind: "todo", owner: "C", title: "One" },
+      { kind: "decision", title: "Linked decision" },
+    ]);
+    await vscode.commands.executeCommand("imprimatur.records.reveal", { root: ROOT, record: rec.id });
+    await until(() => panelState().view.sel === task.id, "the task selected");
+    const s = panelState();
+    assert.equal(s.view.tab, "tasks");
+    assert.equal(s.view.filter, "open", "the list's filter follows the task's status");
+    assert.equal(s.view.flash, rec.id);
+    await until(() => panelState().html.includes(`id="rec-${rec.id}"`) && panelState().html.includes('class="card dec flash"'), "the record lit");
+  });
 });
+

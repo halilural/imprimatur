@@ -17,11 +17,6 @@ async function api() {
   return ext.isActive ? ext.exports : ext.activate();
 }
 
-/** Every node of a tree data provider, depth first. @param {any} provider @param {any} [node] */
-function walk(provider, node) {
-  return provider.getChildren(node).flatMap((child) => [child, ...walk(provider, child)]);
-}
-
 suite("Imprimatur in the extension host", () => {
   test("activates", async () => {
     const exports = await api();
@@ -43,36 +38,28 @@ suite("Imprimatur in the extension host", () => {
     assert.deepEqual(contributed.filter((c) => !have.has(c)), []);
   });
 
-  test("the records views show the seeded task and the open ask", async () => {
-    const { recordViews } = await api();
-    assert.ok(recordViews, "activate hands out the records views");
-    await vscode.commands.executeCommand("imprimatur.records.refresh");
-    const root = process.env.IMPRIMATUR_IT_ROOT;
-
-    const asks = recordViews.asks.getChildren();
+  test("the launcher opens the panel's tabs; the seeded ask waits on Bende bekleyenler", async () => {
+    const { launcher, panelState } = await api();
+    assert.ok(launcher, "activate hands out the launcher");
+    assert.deepEqual(launcher.getChildren().map((r) => r.command), ["imprimatur.openHome", "imprimatur.openTasks", "imprimatur.openInbox", "imprimatur.openGraph"]);
+    for (const [command, tab] of [["imprimatur.openHome", "home"], ["imprimatur.openTasks", "tasks"], ["imprimatur.openInbox", "inbox"]]) {
+      await vscode.commands.executeCommand(command);
+      assert.equal(panelState().view.tab, tab, command);
+    }
     // Other suites add asks of their own: find the seeded one.
-    const ask = asks.find((n) => n.type === "record" && n.record.title === "Integration ask for the user");
-    assert.ok(ask, `an ask, got ${JSON.stringify(asks.map((n) => n.text ?? n.id))}`);
-    assert.equal(ask.record.title, "Integration ask for the user");
-    assert.equal(ask.record.owner, "K");
-    assert.equal(ask.repo.root, root);
-    assert.equal(recordViews.asks.getTreeItem(ask).label, "Integration ask for the user");
-
-    const tasks = walk(recordViews.tasks);
-    const task = tasks.find((n) => n.type === "task" && n.task.key === "IT-1");
-    assert.ok(task, "the task under its repo");
-    assert.equal(task.task.key, "IT-1");
-    assert.equal(task.repo.root, root);
-    assert.ok(tasks.some((n) => n.type === "record" && n.record.title === "Integration ask for the user"));
-
-    const questions = walk(recordViews.questions);
-    assert.ok(questions.some((n) => n.type === "record" && n.record.kind === "question"));
+    const deadline = Date.now() + 5000;
+    while (!panelState().html.includes("Integration ask for the user") && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
+    assert.ok(panelState().html.includes("Integration ask for the user"), "the seeded ask on Bende bekleyenler");
+    assert.equal(panelState().root, process.env.IMPRIMATUR_IT_ROOT);
   });
 
-  test("records.reveal finds the seeded task", async () => {
-    await api();
-    // Shows the Tasks view and selects the task's records; it must not throw.
+  test("records.reveal opens the seeded task on Görevler", async () => {
+    const { panelState } = await api();
     await vscode.commands.executeCommand("imprimatur.records.reveal", { root: process.env.IMPRIMATUR_IT_ROOT, task: "IT-1" });
+    const s = panelState();
+    assert.equal(s.view.tab, "tasks");
+    assert.ok(s.view.sel, "a task selected");
+    assert.ok(s.html.includes("Integration task"), "its page drawn");
   });
 
   test("opens the Agent Change Graph", async () => {

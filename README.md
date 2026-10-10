@@ -103,16 +103,23 @@ While the plugin is enabled, a plain `npm run setup` writes no hooks.
   it, and scrolls). A Markdown edit shows rendered, as the preview's review: its added
   and changed blocks marked, old text in red boxes, one block of context around each. The status bar's **Agent Graph** button opens it and shows
   how many asks wait on you.
-- **Imprimatur side bar** (its own icon in the activity bar): a row that opens
-  the Agent Change Graph (with edits under review and asks waiting on you),
-  then **Agent setup**: every file in the repo, and in your home folder, that
+- **Imprimatur panel tabs** (#69): next to the edits (**Ajan değişiklikleri**),
+  **Ana sayfa** (progress, where each task was left, the top asks, every task),
+  **Görevler** (the task list by status, this repo or every repo; a task's page:
+  where we left off, what waits on you with an answer box, todos to tick, a
+  quick-add box (`?` question, `!` decision, `#` note, `@ben` your todo),
+  decisions, ADRs, PDRs, manual tests, activity) and **Bende bekleyenler**
+  (everything waiting on you, by task, plus the turn-end asks). Keyboard: j/k,
+  Enter, x, a, /, Esc. Writes go to Imprimatur's database as you.
+- **Imprimatur side bar** (its own icon in the activity bar): rows that open
+  the panel on a tab (the badge counts what waits on you), then **Agent setup**: every file in the repo, and in your home folder, that
   shapes a coding agent, whatever the tool: Claude Code (CLAUDE.md, settings
   hooks and permissions, hook scripts, skills, commands, agents, MCP), Cursor
   rules, Copilot instructions, AGENTS.md, GEMINI.md, Windsurf, Cline, Aider,
   and the git hooks commits run through. Grouped by tool, each with a one-line
   summary (a settings file lists its hooks); files new, changed or removed
   since you last looked are marked until you Mark all as seen. Read only.
-- **Waiting on you**, the graph's second tab: everything the agent asked of
+- **Waiting on you** (now the turn-end part of Bende bekleyenler): everything the agent asked of
   you (questions, commands waiting for permission, "verify / test this" at the
   end of a turn), open ones first. Questions close once you reply; things to go
   and do ("test this", "Reload Window") stay open until you Mark as done or
