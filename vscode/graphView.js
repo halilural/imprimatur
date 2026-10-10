@@ -1,7 +1,7 @@
 // @ts-check
-// The Imprimatur panel (a webview, viewType imprimatur.graph). Four tabs:
+// The Imprimatur panel (a webview, viewType imprimatur.graph). Six tabs:
 // "Ana sayfa", "Görevler" and "Bende bekleyenler" show Imprimatur's task records
-// (tasksView.js, #69); "Ajan değişiklikleri" is the Agent Change Graph: rows from
+// (tasksView.js, #69); "Mimari" and "Ürün" the repo's design documents (docsView.js, #72); "Ajan değişiklikleri" is the Agent Change Graph: rows from
 // graph.js, one colored lane per Claude session, click a row to open that edit's
 // diff, Accept an edit from its row or its right-click menu. Bende bekleyenler
 // also lists what the agent asked at a turn's end (waiting.js), with ticks.
@@ -22,6 +22,7 @@ const { closeDoneTasks } = require("./todo-done.js");
 const { scopeCss } = require("./preview.js");
 const { trustGate } = require("./trust.js");
 const tasksView = require("./tasksView.js");
+const docsView = require("./docsView.js");
 const { githubOf } = require("./tasks.js");
 
 /** Where the graph logs (the extension's output channel). @type {(msg: string) => void} */
@@ -319,6 +320,7 @@ function html(data, root, nonce, waiting = [], opts = {}) {
   header .brand { display: inline-flex; align-items: center; gap: 8px; } header .brand .ic { color: var(--vscode-charts-orange); }
   #filter:focus { outline: 1px solid var(--vscode-focusBorder); }
   ${tasksView.TASKS_CSS}
+  ${docsView.DOCS_CSS}
   .badge { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); border-radius: 8px; padding: 0 6px; font-size: 90%; }
   section[hidden] { display: none; }
   tr.w { cursor: pointer; } tr.w.done { opacity: .6; }
@@ -342,7 +344,7 @@ function html(data, root, nonce, waiting = [], opts = {}) {
   .todo .chat { font-size: 10px; padding: 0 5px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
 </style></head><body>
 <header><span class="brand">${tasksView.icon("stamp", 20)}<strong>Imprimatur</strong><span class="dim">/</span><span>${esc(opts.repoName ?? path.basename(root))}</span></span>
-<nav aria-label="Görünümler"><button data-tab="home">Ana sayfa</button><button data-tab="tasks">Görevler</button><button data-tab="inbox">Bende bekleyenler ${inbox ? `<span class="badge">${inbox}</span>` : ""}</button><button data-tab="edits">Ajan değişiklikleri ${pending ? `<span class="badge">${pending}</span>` : ""}</button></nav>
+<nav aria-label="Görünümler"><button data-tab="home">Ana sayfa</button><button data-tab="tasks">Görevler</button><button data-tab="inbox">Bende bekleyenler ${inbox ? `<span class="badge">${inbox}</span>` : ""}</button><button data-tab="architecture">Mimari</button><button data-tab="product">Ürün</button><button data-tab="edits">Ajan değişiklikleri ${pending ? `<span class="badge">${pending}</span>` : ""}</button></nav>
 <input id="filter" type="search" aria-label="Ara" placeholder="Ara… (/)"><label id="ans" hidden><input type="checkbox" id="answered"> open only</label><button id="audit" class="acc on" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">Audit</button><button id="scan" class="acc on" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">Scan history</button>
 <span class="n" id="count-edits">${data.rows.filter((r) => !r.record && !r.activity).length} edits · ${data.rows.filter((r) => r.activity).length} other calls · ${data.rows.filter((r) => r.record).length} record changes · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span><span class="n" id="count-waiting">${open} open · ${turn.length} steps</span></header>
 <section id="edits"${tab === "edits" ? "" : " hidden"}><div id="kinds">${chips}</div><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
@@ -399,12 +401,12 @@ function html(data, root, nonce, waiting = [], opts = {}) {
   // Tab, filters, the answered toggle, opened rows and half-typed text survive an update.
   // The repo goes into the saved state too: a panel restored after a reload shows the same one.
   // The host's view (tab, selected task, …) wins over the saved one: it opened the page.
-  const state = Object.assign({ tab: "edits", qs: {}, answered: false, expanded: [], kinds: ${JSON.stringify(Object.fromEntries(Object.keys({ edit: 1, record: 1, agent: 1, skill: 1, web: 1, mcp: 1, read: 0, search: 0, bash: 0, other: 0 }).map((k) => [k, ["edit", "record", "agent", "skill", "web", "mcp"].includes(k)])))}, agents: [], drafts: {}, back: [], showDone: [], old: [] }, vscode.getState(), ${JSON.stringify(view).replace(/</g, "\\u003c")}, { root: ${JSON.stringify(root).replace(/</g, "\\u003c")} });
+  const state = Object.assign({ tab: "edits", qs: {}, answered: false, expanded: [], kinds: ${JSON.stringify(Object.fromEntries(Object.keys({ edit: 1, record: 1, agent: 1, skill: 1, web: 1, mcp: 1, read: 0, search: 0, bash: 0, other: 0 }).map((k) => [k, ["edit", "record", "agent", "skill", "web", "mcp"].includes(k)])))}, agents: [], drafts: {}, back: [], showDone: [], old: [], edit: null }, vscode.getState(), ${JSON.stringify(view).replace(/</g, "\\u003c")}, { root: ${JSON.stringify(root).replace(/</g, "\\u003c")} });
   if (typeof state.q === "string") { state.qs.edits = state.qs.edits ?? state.q; delete state.q; }
   const filter = document.getElementById("filter");
   const answered = document.getElementById("answered");
   answered.checked = state.answered;
-  const HINTS = { home: "Görevlerde ara… (/)", tasks: "Görev, karar, soru ara… (/)", inbox: "Bekleyenlerde ara… (/)", edits: "Dosya, istek ya da cevap süz… (/)" };
+  const HINTS = { home: "Görevlerde ara… (/)", tasks: "Görev, karar, soru ara… (/)", inbox: "Bekleyenlerde ara… (/)", architecture: "Bölümlerde ara… (/)", product: "Bölümlerde ara… (/)", edits: "Dosya, istek ya da cevap süz… (/)" };
   const apply = () => {
     vscode.setState(state);
     const tab = state.tab;
@@ -439,7 +441,7 @@ function html(data, root, nonce, waiting = [], opts = {}) {
   const setView = (patch) => {
     Object.assign(state, patch);
     apply();
-    vscode.postMessage({ type: "view", view: { tab: state.tab, sel: state.sel ?? null, filter: state.filter, all: !!state.all, showDone: state.showDone, old: state.old } });
+    vscode.postMessage({ type: "view", view: { tab: state.tab, sel: state.sel ?? null, filter: state.filter, all: !!state.all, showDone: state.showDone, old: state.old, edit: state.edit ?? null } });
   };
   /** Go somewhere Esc comes back from. */
   const go = (patch) => {
@@ -484,6 +486,22 @@ function html(data, root, nonce, waiting = [], opts = {}) {
     input.value = "";
     vscode.setState(state);
   };
+  // Document sections (#72): the editor's title and text are drafts, kept like an answer's.
+  const docKeys = (kind, id) => ["doct-" + kind + "-" + id, "doc-" + kind + "-" + id];
+  const saveDoc = (kind, id) => {
+    const [tk, bk] = docKeys(kind, id);
+    const title = document.querySelector('#pane [data-draft="' + tk + '"]');
+    const body = document.querySelector('#pane [data-draft="' + bk + '"]');
+    if (!title || !body) return;
+    if (id === "new" && !title.value.trim()) return title.focus();
+    vscode.postMessage(id === "new"
+      ? { type: "docNew", kind, title: title.value, body: body.value }
+      : { type: "docSave", kind, id: Number(id), title: title.value, body: body.value });
+    delete state.drafts[tk];
+    delete state.drafts[bk];
+    title.closest(".dsec")?.classList.add("sent");
+    setView({ edit: null });
+  };
   const toggleIn = (list, id) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   /** A click on a task tab's control. */
   const act = (el) => {
@@ -500,6 +518,20 @@ function html(data, root, nonce, waiting = [], opts = {}) {
       case "url": return vscode.postMessage({ type: "openUrl", url: d.url });
       case "newTask": return vscode.postMessage({ type: "newTask" });
       case "answer": return sendAnswer(d.id);
+      case "docEdit": return setView({ edit: d.kind + ":" + d.id });
+      case "docCancel": for (const k of docKeys(d.kind, d.id)) delete state.drafts[k]; return setView({ edit: null });
+      case "docSave": return saveDoc(d.kind, d.id);
+      case "docStatus": return vscode.postMessage({ type: "docStatus", id: Number(d.id), status: d.status });
+      case "docGo": {
+        const sec = document.getElementById("sec-" + d.key);
+        if (!sec) return;
+        if (sec.tagName === "DETAILS") sec.open = true;
+        sec.scrollIntoView({ block: "start" });
+        return sec.focus({ preventScroll: true });
+      }
+      case "showRecord":
+        state.back = [...state.back, { tab: state.tab, sel: state.sel ?? null, filter: state.filter }].slice(-20);
+        return vscode.postMessage({ type: "showRecord", id: Number(d.id) });
       case "rec": {
         // Shown at once; the update that follows confirms it.
         if (el.classList.contains("check")) { el.classList.toggle("on"); el.closest(".trec")?.classList.toggle("done"); }
@@ -567,7 +599,7 @@ function html(data, root, nonce, waiting = [], opts = {}) {
     apply();
   });
   // Keyboard (#69): j/k move in the list, Enter opens, x ticks, a answers, / searches, Esc goes back.
-  const NAV = { tasks: "#pane .rows", inbox: '#pane [data-navgroup="inbox"]', home: '#pane [data-navgroup="home"]' };
+  const NAV = { tasks: "#pane .rows", inbox: '#pane [data-navgroup="inbox"]', home: '#pane [data-navgroup="home"]', architecture: '#pane [data-navgroup="doc"]', product: '#pane [data-navgroup="doc"]' };
   const visible = (el) => !el.hidden && el.offsetParent !== null;
   const move = (step) => {
     const at = document.activeElement?.closest?.("[data-nav]");
@@ -588,7 +620,11 @@ function html(data, root, nonce, waiting = [], opts = {}) {
       return goBack();
     }
     if (typing) {
-      if (t.matches("textarea[data-draft]") && e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return sendAnswer(t.dataset.draft.slice(4)); }
+      if (t.matches("textarea[data-draft]") && e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        const doc = /^doc-(architecture|product)-(new|\\d+)$/.exec(t.dataset.draft);
+        return doc ? saveDoc(doc[1], doc[2]) : sendAnswer(t.dataset.draft.slice(4));
+      }
       if (t.matches("input[data-add]") && e.key === "Enter") { e.preventDefault(); return sendAdd(t); }
       return;
     }
@@ -811,6 +847,14 @@ function html(data, root, nonce, waiting = [], opts = {}) {
     if (e.data?.type === "view") { Object.assign(state, e.data.view); return apply(); }
     // A write that failed: the text the box held goes back into it.
     if (e.data?.type === "failed") {
+      // A section that did not save: its editor opens again with the text.
+      if ((e.data.what === "docSave" || e.data.what === "docNew") && e.data.kind) {
+        const id = e.data.what === "docNew" ? "new" : e.data.id;
+        const [tk, bk] = docKeys(e.data.kind, id);
+        if (e.data.title != null) state.drafts[tk] = e.data.title;
+        if (e.data.text != null) state.drafts[bk] = e.data.text;
+        setView({ edit: e.data.kind + ":" + id });
+      }
       const key = e.data.what === "answer" ? "ans-" + e.data.id : e.data.what === "add" ? "add-" + e.data.task : "";
       if (key && e.data.text) {
         state.drafts[key] = e.data.text;
@@ -868,7 +912,12 @@ const setPanelHooks = (h) => void (hooks = { ...hooks, ...h });
  * repo or this one, tasks with their done todos or old activity open, a record to
  * light up. The page keeps the same in its state; a "view" message changes it.
  */
-const view = { tab: "edits", sel: /** @type {number | null} */ (null), filter: "active", all: false, showDone: /** @type {number[]} */ ([]), old: /** @type {number[]} */ ([]), flash: /** @type {number | null} */ (null) };
+const view = {
+  tab: "edits", sel: /** @type {number | null} */ (null), filter: "active", all: false, showDone: /** @type {number[]} */ ([]), old: /** @type {number[]} */ ([]),
+  flash: /** @type {number | null} */ (null),
+  // Document tabs (#72): the section being edited ("architecture:12", "product:new") and one to light up (its key).
+  edit: /** @type {string | null} */ (null), docFlash: /** @type {string | null} */ (null),
+};
 /** Where "every repo" is kept (extension.js: the workspace state, as the record views kept it). */
 let scopeStore = { get: () => false, set: (/** @type {boolean} */ _v) => {} };
 /** @param {{get: () => boolean, set: (v: boolean) => void}} store */
@@ -877,16 +926,17 @@ function setPanelScope(store) {
   view.all = !!store.get();
 }
 /** The view as the page keeps it. */
-const pageView = () => ({ tab: view.tab, sel: view.sel, filter: view.filter, all: view.all, showDone: view.showDone, old: view.old });
+const pageView = () => ({ tab: view.tab, sel: view.sel, filter: view.filter, all: view.all, showDone: view.showDone, old: view.old, edit: view.edit });
 
 /**
  * Moves the view: a tab, or a task (by key in a repo, or by one of its records) on Görevler.
- * @param {{tab?: string, sel?: number | null, filter?: string, all?: boolean, showDone?: number[], old?: number[], root?: string, task?: string, record?: number}} at
+ * A document tab with `section` (a key) lights that section up (#72).
+ * @param {{tab?: string, sel?: number | null, filter?: string, all?: boolean, showDone?: number[], old?: number[], root?: string, task?: string, record?: number, section?: string, edit?: string | null}} at
  * @returns {boolean} false: the task or record is not in the database
  */
 function moveView(at) {
   const clean = tasksView.cleanView(at);
-  Object.assign(view, clean, { flash: null });
+  Object.assign(view, clean, { flash: null, docFlash: typeof at.section === "string" && at.section ? at.section : null });
   if ("all" in clean) scopeStore.set(view.all);
   if (!at.task && !at.record) return true;
   const db = records.dbOf();
@@ -932,7 +982,7 @@ function onMessage(m) {
     return refresh?.(!toEdits);
   }
   if (m.type === "newTask") return newTask();
-  if (["rec", "answer", "add", "taskStatus"].includes(m.type)) return writeFromPanel(m);
+  if (["rec", "answer", "add", "taskStatus", "docSave", "docNew", "docStatus"].includes(m.type)) return writeFromPanel(m);
   if (m.type === "preview" && shown) {
     let html;
     try {
@@ -958,11 +1008,16 @@ function writeFromPanel(m) {
   const db = records.dbOf();
   if (!db) return void vscode.window.showErrorMessage(`Imprimatur: ${records.lastError ?? "database not available"}`);
   try {
-    tasksView.applyMessage(db, m, tasksView.userActor());
+    tasksView.applyMessage(db, m, tasksView.userActor(), shown);
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     // The page cleared the box when it sent: give the text back.
-    lastFailed = { type: "failed", what: m.type, id: m.id, task: m.task, text: typeof m.text === "string" ? m.text : undefined, error };
+    const doc = m.type === "docSave" || m.type === "docNew";
+    lastFailed = {
+      type: "failed", what: m.type, id: m.id, task: m.task, error,
+      text: typeof m.text === "string" ? m.text : doc && typeof m.body === "string" ? m.body : undefined,
+      ...(doc && { kind: m.kind, title: typeof m.title === "string" ? m.title : undefined }),
+    };
     panel?.webview.postMessage(lastFailed);
     vscode.window.showErrorMessage(error);
   }

@@ -261,8 +261,8 @@ function graphRoot() {
 }
 
 /**
- * Opens the Imprimatur panel, on a tab or a task (#69).
- * @param {{tab?: string, root?: string, task?: string, record?: number, sel?: number | null}} [at]
+ * Opens the Imprimatur panel, on a tab or a task (#69), or a document's section (#72).
+ * @param {{tab?: string, root?: string, task?: string, record?: number, sel?: number | null, section?: string}} [at]
  */
 function showGraph(at) {
   // A task of a repo not open in this window shows in this window's panel (with every repo on).
@@ -513,6 +513,25 @@ function addFolder(folder, ctx) {
   ctx.subscriptions.push(w, w.onDidChange(changed), w.onDidCreate(changed), w.onDidDelete(changed));
 }
 
+/**
+ * Design documents into the repos (#72): 2 s after the database's last change, each open
+ * repo's docs/ARCHITECTURE.md and docs/PRODUCT.md are written from it, when their text
+ * changed (imprimatur.docs.export, on by default). Never committed.
+ */
+const exportSoon = require("./docs-export.js").debounce(() => {
+  const db = records.dbOf();
+  if (!db) return;
+  const { exportDocs } = require("./docs-export.js");
+  for (const root of roots) {
+    if (!vscode.workspace.getConfiguration("imprimatur", vscode.Uri.file(root)).get("docs.export", true)) continue;
+    try {
+      for (const r of exportDocs(db, root)) if (r.written) log.info(`docs: wrote ${r.file}`);
+    } catch (e) {
+      log.warn(`docs: ${root}: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+}, 2000);
+
 /** @param {vscode.ExtensionContext} ctx */
 function activate(ctx) {
   log = vscode.window.createOutputChannel("Imprimatur", { log: true });
@@ -532,6 +551,13 @@ function activate(ctx) {
     vscode.commands.registerCommand("imprimatur.openHome", () => showGraph({ tab: "home" })),
     vscode.commands.registerCommand("imprimatur.openTasks", () => showGraph({ tab: "tasks" })),
     vscode.commands.registerCommand("imprimatur.openInbox", () => showGraph({ tab: "inbox" })),
+    // Design documents (#72): the Mimari and Ürün tabs; docs.reveal opens one on a section.
+    vscode.commands.registerCommand("imprimatur.openArchitecture", () => showGraph({ tab: "architecture" })),
+    vscode.commands.registerCommand("imprimatur.openProduct", () => showGraph({ tab: "product" })),
+    vscode.commands.registerCommand("imprimatur.docs.reveal", (/** @type {{root?: string, kind?: string, section?: string}} */ at) => {
+      const kind = at?.kind === "product" ? "product" : "architecture";
+      return showGraph({ root: at?.root, tab: kind, ...(typeof at?.section === "string" && { section: at.section }) });
+    }),
     vscode.commands.registerCommand("imprimatur.acceptRange", acceptRange),
     // Process checks (#56): a repo turns them on with a committed .claude/imprimatur.json.
     vscode.commands.registerCommand("imprimatur.processOn", async () => {
@@ -801,6 +827,7 @@ function activate(ctx) {
       () => {
         syncRecords();
         updateGraphButton();
+        exportSoon();
         try {
           if (syncer && records.dbOf()?.outboxCount()) syncer.kick();
         } catch {}
@@ -881,4 +908,4 @@ function activate(ctx) {
   };
 }
 
-module.exports = { activate, deactivate() {} };
+module.exports = { activate, deactivate: () => exportSoon.cancel() };

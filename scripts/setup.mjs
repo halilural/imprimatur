@@ -52,7 +52,7 @@ export const wanted = (exts) => [
   // Process checks (#56): they act only in repos with .claude/imprimatur.json.
   ["SessionStart", undefined, "process.mjs", ""],
   ["PreToolUse", "Bash|Edit|Write|MultiEdit|NotebookEdit", "process.mjs", ""],
-  ["PostToolUse", "Edit|Write|MultiEdit|Bash|mcp__imprimatur__task_upsert", "process.mjs", ""],
+  ["PostToolUse", "Edit|Write|MultiEdit|Bash|mcp__imprimatur__task_upsert|mcp__imprimatur__record_add|mcp__imprimatur__record_update", "process.mjs", ""],
   ["Stop", undefined, "process.mjs", ""],
   // Every tool call, in a line (#55): async, the tool never waits for it.
   ["PostToolUse", "*", "activity.mjs", "", { async: true }],
