@@ -8,6 +8,9 @@ const vscode = require("vscode");
 const os = require("node:os");
 const path = require("node:path");
 const { scanSetup, changesSince, snapshotOf } = require("./agent-setup.js");
+const { DriftScanner, driftLabel, DEFAULT_EXCLUDE } = require("./setup-drift.js");
+const { SetupHistory, historyLines } = require("./setup-history.js");
+const { trustGate } = require("./trust.js");
 
 const SEEN_KEY = "imprimatur.setupSeen";
 const ICONS = {
@@ -59,6 +62,50 @@ class SetupView {
     /** @type {vscode.TreeView<Node> | undefined} */
     this.view = undefined;
     this.graph = { edits: 0, waiting: 0 };
+    // Drift across repos (#31) and git history (#32): filled in after the scan, async.
+    this.drift = new DriftScanner();
+    this.history = new SetupHistory({
+      allowed: trustGate(() => vscode.workspace.isTrusted, (msg) => console.log(`Imprimatur: ${msg}`)),
+      lang: () => vscode.workspace.getConfiguration("imprimatur").get("language") || require("./config.js").hookLang() || "English",
+    });
+    this.extrasBusy = false;
+    this.extrasAgain = false;
+  }
+
+  /** Drift and history for the scanned repos; redraws when they arrive. */
+  async extras() {
+    if (this.extrasBusy) return void (this.extrasAgain = true);
+    this.extrasBusy = true;
+    try {
+      const cfg = vscode.workspace.getConfiguration("imprimatur.setup");
+      const repos = this.scopes.filter((s) => !s.global);
+      await this.drift.scan(repos.map((s) => s.root), { driftRoots: cfg.get("driftRoots") ?? ["~/projects"], exclude: cfg.get("driftExclude") ?? DEFAULT_EXCLUDE });
+      for (const s of repos) await this.history.refresh(s.root, s.items.map((i) => i.rel));
+      this.changed.fire(undefined);
+    } catch {
+    } finally {
+      this.extrasBusy = false;
+      if (this.extrasAgain) {
+        this.extrasAgain = false;
+        this.extras();
+      }
+    }
+  }
+
+  /** A file row's tooltip, with drift and history (and the last change explained, when known). @param {Extract<Node, {type: "file"}>} node @param {string} [explained] */
+  fileTooltip(node, explained) {
+    const { item, state } = node;
+    const d = node.scope.global ? undefined : this.drift.driftFor(item.rel, item.abs);
+    const lines = [`**${item.rel}** · ${item.tool} ${item.kind}${state ? ` · _${state} since you last looked_` : ""}`, item.summary];
+    if (d) lines.push(`${driftLabel(d)}: ${d.others.map((v) => `${v.repos.join(", ")} (\`${v.hash.slice(0, 7)}\`)`).join(" · ")}`);
+    if (!node.scope.global) lines.push(historyLines(this.history.info(node.scope.root, item.rel), explained).join("  \n"));
+    return new vscode.MarkdownString(lines.join("\n\n"));
+  }
+
+  /** Hover on a file: explain its last change (lazy, cached; not in an untrusted folder). @param {vscode.TreeItem} it @param {Node} node */
+  async resolveTreeItem(it, node) {
+    if (node.type === "file" && !it.tooltip) it.tooltip = this.fileTooltip(node, await this.history.explain(node.scope.root, node.item.rel));
+    return it;
   }
 
   /** Rescan every scope (cheap: a folder walk and small reads). */
@@ -77,6 +124,7 @@ class SetupView {
       return { ...d, items, ...changesSince(items, seen[d.id]) };
     });
     const fresh = this.scopes.reduce((n, s) => n + Object.keys(s.state).length + s.removed.length, 0);
+    this.extras();
     if (this.view) this.view.badge = fresh ? { value: fresh, tooltip: `${fresh} agent setup change${fresh === 1 ? "" : "s"} since you last looked` } : undefined;
   }
 
@@ -161,8 +209,13 @@ class SetupView {
     if (node.type === "file") {
       const { item, state } = node;
       const it = new vscode.TreeItem(item.label, item.details.length ? T.Collapsed : T.None);
-      it.description = `${state ? `${state} · ` : ""}${item.summary}`;
-      it.tooltip = new vscode.MarkdownString(`**${item.rel}** · ${item.tool} ${item.kind}${state ? ` · _${state} since you last looked_` : ""}\n\n${item.summary}`);
+      const drift = node.scope.global ? undefined : this.drift.driftFor(item.rel, item.abs);
+      it.description = `${state ? `${state} · ` : ""}${drift ? `${driftLabel(drift)} · ` : ""}${item.summary}`;
+      const explained = node.scope.global ? undefined : this.history.explained(node.scope.root, item.rel);
+      // A committed repo file not yet explained gets its tooltip on hover (resolveTreeItem).
+      const lazy = !node.scope.global && !explained && this.history.info(node.scope.root, item.rel);
+      it.tooltip = lazy ? undefined : this.fileTooltip(node, explained);
+      it.contextValue = `setupFile${drift ? "-drift" : ""}${node.scope.global ? "" : "-repo"}`;
       it.iconPath = state
         ? new vscode.ThemeIcon(KIND_ICONS[item.kind] ?? "file", new vscode.ThemeColor(state === "new" ? "gitDecoration.addedResourceForeground" : "gitDecoration.modifiedResourceForeground"))
         : new vscode.ThemeIcon(KIND_ICONS[item.kind] ?? "file");
@@ -213,8 +266,36 @@ function registerSetupView(ctx, roots, counts) {
     vscode.window.onDidChangeWindowState((s) => s.focused && view.visible && soon()),
     vscode.commands.registerCommand("imprimatur.setup.refresh", () => provider.refresh()),
     vscode.commands.registerCommand("imprimatur.setup.markSeen", () => provider.markSeen()),
+    vscode.commands.registerCommand("imprimatur.setup.compareVariant", (node) => compareVariant(provider, node ?? view.selection[0])),
+    vscode.commands.registerCommand("imprimatur.setup.explainLastChange", (node) => explainLastChange(provider, node ?? view.selection[0])),
   );
   return provider;
+}
+
+/** Diff this repo's copy of a drifted file with a variant from another repo (#31). @param {SetupView} provider @param {Node | undefined} node */
+async function compareVariant(provider, node) {
+  if (node?.type !== "file") return void vscode.window.showInformationMessage("Imprimatur: pick an agent file in Agent setup first.");
+  const d = provider.drift.driftFor(node.item.rel, node.item.abs);
+  if (!d) return void vscode.window.showInformationMessage(`Imprimatur: ${node.item.rel} is the same in every repo that has it.`);
+  const pick =
+    d.others.length === 1
+      ? d.others[0]
+      : (await vscode.window.showQuickPick(d.others.map((v) => ({ label: v.repos.join(", "), description: v.hash.slice(0, 7), v })), { title: `Compare ${node.item.rel} with` }))?.v;
+  const other = pick && provider.drift.pathOf(node.item.rel, pick.hash);
+  if (!pick || !other) return;
+  await vscode.commands.executeCommand("vscode.diff", vscode.Uri.file(other), vscode.Uri.file(node.item.abs), `${node.item.rel}: ${pick.repos[0]} ↔ ${node.scope.label}`);
+}
+
+/** "Explain last change": one sentence on the file's last commit (#32). @param {SetupView} provider @param {Node | undefined} node */
+async function explainLastChange(provider, node) {
+  if (node?.type !== "file" || node.scope.global) return void vscode.window.showInformationMessage("Imprimatur: pick an agent file of a repo in Agent setup first.");
+  const { root } = node.scope;
+  if (!provider.history.info(root, node.item.rel)) return void vscode.window.showInformationMessage(`Imprimatur: ${node.item.rel} is not committed yet.`);
+  if (!provider.history.explained(root, node.item.rel) && !vscode.workspace.isTrusted)
+    return void vscode.window.showInformationMessage("Imprimatur: explaining a change asks a model (claude); trust this folder first.");
+  const text = await vscode.window.withProgress({ location: { viewId: "imprimatur.setup" } }, () => provider.history.explain(root, node.item.rel));
+  provider.changed.fire(undefined);
+  vscode.window.showInformationMessage(text ? `${node.item.label}: ${text}` : `Imprimatur: could not explain the last change of ${node.item.rel}.`);
 }
 
 module.exports = { registerSetupView };
