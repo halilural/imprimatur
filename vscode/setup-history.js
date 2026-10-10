@@ -6,6 +6,9 @@
 // <repo>/.claude/imprimatur/setup-history.json by commit + path. No model call
 // in an untrusted workspace.
 "use strict";
+
+/** A commit hash as git prints it: never an option. */
+const HASH = /^[0-9a-f]{7,64}$/;
 const fs = require("node:fs");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
@@ -103,7 +106,10 @@ class SetupHistory {
     r = { head: "", files: {}, explained: {} };
     try {
       const saved = JSON.parse(fs.readFileSync(path.join(root, FILE), "utf8"));
-      r = { head: String(saved.head ?? ""), files: saved.files ?? {}, explained: saved.explained ?? {} };
+      // The cache lives in the repo: a cloned repo could seed it. Only entries whose hashes are hashes.
+      const ok = (h) => !h || (HASH.test(String(h.first?.hash ?? "")) && HASH.test(String(h.last?.hash ?? "")));
+      const files = Object.fromEntries(Object.entries(saved.files ?? {}).filter(([, h]) => ok(h)));
+      r = { head: String(saved.head ?? ""), files, explained: saved.explained ?? {} };
     } catch {}
     this.repos.set(root, r);
     return r;
@@ -178,7 +184,8 @@ class SetupHistory {
     if (this.pending.has(id)) return this.pending.get(id);
     const job = (async () => {
       try {
-        const patch = await this.run(["show", "--format=", "--no-color", "--first-parent", h.last.hash, "--", h.last.path], root);
+        if (!HASH.test(String(h.last.hash))) return undefined;
+        const patch = await this.run(["show", "--format=", "--no-color", "--first-parent", "--end-of-options", h.last.hash, "--", h.last.path], root);
         const diff = capDiff(patch);
         if (!diff.trim()) return undefined;
         const { cleanSentence } = require("./describe.js");

@@ -98,3 +98,19 @@ test("history: no model call in an untrusted workspace", async () => {
   assert.equal(asked, 0);
   assert.equal(gate.length, 1);
 });
+
+test("a cache seeded by the repo cannot pass an option to git as a commit (#32)", async () => {
+  const fsm = await import("node:fs");
+  const os = await import("node:os");
+  const pathm = await import("node:path");
+  const { createRequire } = await import("node:module");
+  const { SetupHistory, FILE } = createRequire(import.meta.url)("../vscode/setup-history.js");
+  const root = fsm.mkdtempSync(pathm.join(os.tmpdir(), "imprimatur-32s-"));
+  fsm.mkdirSync(pathm.dirname(pathm.join(root, FILE)), { recursive: true });
+  const evil = { first: { hash: "--output=/tmp/pwned", path: "a.md" }, last: { hash: "--output=/tmp/pwned", path: "a.md" } };
+  fsm.writeFileSync(pathm.join(root, FILE), JSON.stringify({ head: "abc", files: { "a.md": evil }, explained: {} }));
+  const calls = [];
+  const h = new SetupHistory({ run: async (args) => (calls.push(args), ""), ask: async () => "x" });
+  assert.equal(h.load(root).files["a.md"], undefined, "the bad entry is dropped on load");
+  assert.ok(calls.every((args) => !args.some((a) => String(a).startsWith("--output"))));
+});
