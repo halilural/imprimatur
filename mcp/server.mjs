@@ -345,8 +345,8 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
     case "task_upsert": {
       const rid = repoOf(db, a.repo).id;
       const fields = pick(a, ["title", "status", "summary"]);
-      if (a.epic) fields.epicId = (db.taskByKey(rid, a.epic) ?? db.upsertTask(rid, a.epic)).id;
-      return { task: db.upsertTask(rid, a.key, fields) };
+      if (a.epic) fields.epicId = (db.taskByKey(rid, a.epic) ?? db.upsertTask(rid, a.epic, {}, actor)).id;
+      return { task: db.upsertTask(rid, a.key, fields, actor) };
     }
     case "record_add": {
       if (a.pointer && a.status && a.status !== "open") {
@@ -354,7 +354,7 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
       }
       if (a.parent_id !== undefined) recordOf(db, a.parent_id, "parent_id");
       const rid = repoOf(db, a.repo).id;
-      const task = db.taskByKey(rid, a.task) ?? db.upsertTask(rid, a.task);
+      const task = db.taskByKey(rid, a.task) ?? db.upsertTask(rid, a.task, {}, actor);
       return { record: db.addRecord(task.id, pick(a, ["kind", "title", "body", "owner", "status", "parent_id", "links", "pointer"]), actor) };
     }
     case "record_update":

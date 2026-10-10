@@ -131,8 +131,8 @@ function registerRecordCommands(ctx, log, onChange, reveal, setAllRepos) {
       const owner = kind.label === "question" ? "K" : kind.label === "todo" ? (await ui.showQuickPick([{ label: "K", description: "you do it" }, { label: "C", description: "the agent does it" }], { title: "Who does it?" }))?.label : undefined;
       write(() => records.dbOf().addRecord(task.id, { kind: kind.label, title: title.trim(), ...(owner && { owner }) }, USER));
     }),
-    vscode.commands.registerCommand("imprimatur.records.taskDone", (node) => write(() => records.dbOf().upsertTask(node.task.repo_id, node.task.key, { status: "done" }))),
-    vscode.commands.registerCommand("imprimatur.records.taskReopen", (node) => write(() => records.dbOf().upsertTask(node.task.repo_id, node.task.key, { status: "active" }))),
+    vscode.commands.registerCommand("imprimatur.records.taskDone", (node) => write(() => records.dbOf().upsertTask(node.task.repo_id, node.task.key, { status: "done" }, USER))),
+    vscode.commands.registerCommand("imprimatur.records.taskReopen", (node) => write(() => records.dbOf().upsertTask(node.task.repo_id, node.task.key, { status: "active" }, USER))),
     vscode.commands.registerCommand("imprimatur.records.search", async () => {
       if (!records.dbOf()) return;
       const text = await ui.showInputBox({ prompt: "Search records (title and body, every repo)" });

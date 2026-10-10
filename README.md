@@ -321,6 +321,36 @@ stops queueing changes (`--setup` again queues everything, edits made meanwhile 
 - The server keeps every change it was sent; nothing compacts its `changes`
   table yet. It stays small for one person's records; a new machine replays it all.
 
+### Epics and the issue tracker
+
+A task set done or dropped closes its line in its epic in the same write: the
+epic's open records whose `links.issue` is the task, or whose title starts with
+its key (`#56 …`, `[#56 …](url)`, `PROJ-12 …`), become done with a note
+("#56 bitti (date)"); the epic's 👉 on such a line moves to its next open record.
+Reopening a task leaves those lines closed.
+
+VS Code also keeps task status in step with the issue tracker (on start, every
+5 minutes, a few seconds after a status change; **Imprimatur: Sync with Issue
+Tracker** to force it; not in an untrusted folder):
+
+- **GitHub** (`#N` tasks in a repo whose origin is github.com, with `gh` logged in):
+  a task done closes its issue as completed, dropped closes it as not planned,
+  reopened reopens it, each with a fixed comment ("Imprimatur: tamamlandı" …;
+  nothing of the task's text). An issue closed or reopened on GitHub sets the
+  task's status (the first sync of a repo only notes where issues stand); an open
+  issue without a task gets one (`imprimatur.tracker.createTasks`, at most 50 a run).
+  Network errors and rate limits are retried later; a push that keeps failing
+  otherwise is given up after 5 tries.
+- **Jira** (tasks keyed `PROJ-12`): `config.json` next to the database gets
+  `{"tracker": {"jira": {"baseUrl": "https://you.atlassian.net", "email": "you@…"}}}`
+  and the API token goes in `IMPRIMATUR_JIRA_TOKEN` (or `tracker.jira.token`, with
+  the file at mode 0600; `baseUrl` must be https). Status moves through the issue's
+  transitions (Done / Won't Do by name), its comment posted first.
+
+`npm run tracker` runs it from a terminal (`--all` for every repo, `--dry-run` to
+see what would change). `node scripts/stale-epic-lines.mjs` lists open epic lines
+of tasks already finished, changing nothing.
+
 ### Limits
 
 - No marks in diff tabs (e.g. Working Tree): git already colors those.

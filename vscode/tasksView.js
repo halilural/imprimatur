@@ -516,7 +516,7 @@ function applyMessage(db, m, actor) {
       const task = db.taskById(num(m.task));
       if (!task) throw new Error(`Imprimatur: no task ${m.task}`);
       if (!TASK_STATUSES.includes(m.status)) throw new Error(`Imprimatur: bad task status ${m.status}`);
-      return db.upsertTask(task.repo_id, task.key, { status: m.status });
+      return db.upsertTask(task.repo_id, task.key, { status: m.status }, actor);
     }
     default:
       throw new Error(`Imprimatur: unknown panel message ${m?.type}`);

@@ -151,6 +151,11 @@
         "category": "Imprimatur"
       },
       {
+        "command": "imprimatur.trackerSync",
+        "title": "Sync with Issue Tracker",
+        "category": "Imprimatur"
+      },
+      {
         "command": "imprimatur.records.refresh",
         "title": "Refresh Records",
         "category": "Imprimatur",
@@ -483,6 +488,11 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "Color what the agent changed inside Mermaid flowcharts in the preview (adds style lines to the rendered diagram). Off by default: with two Mermaid preview extensions installed (e.g. Mermaid Chart and Markdown Mermaid Zoom) the diagrams can fail to render."
+        },
+        "imprimatur.tracker.createTasks": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Issue tracker sync: an open GitHub issue with no Imprimatur task gets one (at most 50 per run)."
         },
         "imprimatur.archive.afterDays": {
           "type": "number",

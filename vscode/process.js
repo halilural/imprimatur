@@ -13,7 +13,7 @@
 //                       unopenedSources a docs/market-research file with sources marked "açılmadı"
 //   PostToolUse Bash    issueCreate     after gh issue create: epic, board, milestone, Imprimatur task
 //                       issueFields     …and checks the new issue's milestone and board item
-//   PostToolUse MCP     sweep           a task set done: its GitHub issue still open
+//   PostToolUse MCP     sweep           a task set done: its GitHub issue still open (not while tracker sync, #70, runs)
 //   Stop                status          the answer has no "Neredeyiz" section
 //   SessionStart, Bash  branchFinish    (after git merge/switch/checkout/pull) merged branches left behind
 
@@ -354,7 +354,16 @@ function check(event, input, deps = {}) {
     if (s.issueFields.mode && n) remember(root, input.session_id, "created", n);
   }
 
-  if (event === "PostToolUse" && require("./config.js").imprimaturTool(tool) === "task_upsert" && s.sweep.mode && ti.status === "done" && /^#\d+$/.test(ti.key ?? "")) {
+  // GitHub sync running (#70) and none of this repo's pushes stuck: the extension closes the issue.
+  const trackerOn = () => {
+    try {
+      const records = deps.records ?? require("./records.js");
+      return require("./tracker.js").githubSyncCovers(records.dbOf(), records.repoId(root));
+    } catch {
+      return false;
+    }
+  };
+  if (event === "PostToolUse" && require("./config.js").imprimaturTool(tool) === "task_upsert" && s.sweep.mode && ti.status === "done" && /^#\d+$/.test(ti.key ?? "") && !trackerOn()) {
     if (parse(ghRun(["issue", "view", ti.key.slice(1), "--json", "state"], root))?.state === "OPEN") {
       found(s.sweep, "sweep", `${ti.key} is done in Imprimatur but its GitHub issue is open: close it (gh issue close ${ti.key.slice(1)} -c "…") and move its board item to Done.`);
     }

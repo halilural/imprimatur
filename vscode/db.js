@@ -98,6 +98,35 @@ const MIGRATIONS = [
     PRIMARY KEY (entity, key, field)
   ) WITHOUT ROWID;
   `,
+  // Issue tracker sync (#70): task status changes waiting to be pushed to GitHub or Jira.
+  // Per device, never synced: the device where the change was made pushes it.
+  // tries: failures that count (4xx); fails + next_at: transient ones, retried with backoff;
+  // commented: its comment is posted; claimed_at + claimant: the run pushing it (two windows).
+  // tracker_state: each issue's state at the last pull, so a pull acts on state changes only.
+  `
+  CREATE TABLE tracker_outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('close_done', 'close_dropped', 'reopen')),
+    comment TEXT,
+    at INTEGER NOT NULL,
+    tries INTEGER NOT NULL DEFAULT 0,
+    fails INTEGER NOT NULL DEFAULT 0,
+    next_at INTEGER,
+    commented INTEGER NOT NULL DEFAULT 0,
+    claimed_at INTEGER,
+    claimant TEXT
+  );
+  CREATE INDEX tracker_outbox_task ON tracker_outbox(task_id);
+  CREATE TABLE tracker_state (
+    repo_id INTEGER NOT NULL,
+    key TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    state TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    PRIMARY KEY (repo_id, key)
+  ) WITHOUT ROWID;
+  `,
 ];
 const VERSION = MIGRATIONS.length;
 
@@ -131,12 +160,48 @@ function normOrigin(url) {
   return i < 0 ? s.toLowerCase() : s.slice(0, i).toLowerCase() + s.slice(i);
 }
 
+/** Task statuses that close it (#70). */
+const CLOSED = new Set(["done", "dropped"]);
+/** Task keys an issue tracker knows: a GitHub issue "#12" or a Jira key "PROJ-12" (#70). */
+const TRACKER_KEY = /^(#\d+|[A-Z][A-Z0-9]+-\d+)$/;
+
+/** @param {string} s */
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Whether an epic's record is the line for a task (#70): its links.issue is the task's
+ * number or key, or its title starts with the key ("#56 …", "[#56 …](url)", "PROJ-12 …").
+ * A key mentioned later in the title does not count.
+ * @param {{title: string, links?: any}} rec @param {string} key
+ */
+function refersTo(rec, key) {
+  const bare = (/** @type {unknown} */ v) => String(v ?? "").trim().replace(/^#/, "");
+  const issue = rec.links && typeof rec.links === "object" ? rec.links.issue : undefined;
+  if (issue != null && issue !== "" && bare(issue) === bare(key)) return true;
+  return new RegExp(`^\\s*\\[?${escapeRe(key)}(?!\\w)`).test(rec.title ?? "");
+}
+
+/** YYYY-MM-DD in local time. @param {number} at */
+const day = (at) => {
+  const d = new Date(at);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
 /** Record fields a caller may set; the rest are the database's. */
 const EDITABLE = ["kind", "owner", "status", "title", "body", "position", "parent_id", "links"];
 
-/** The device's database path: IMPRIMATUR_DB, else the platform's data folder. */
+/**
+ * The device's database path: IMPRIMATUR_DB, else the platform's data folder. Under
+ * `node --test` (NODE_TEST_CONTEXT) without IMPRIMATUR_DB: a temp file, never the real
+ * database; set in process.env too, so the hooks a test spawns share it.
+ */
 function dbPath(env = process.env, platform = process.platform, home = os.homedir()) {
   if (env.IMPRIMATUR_DB) return env.IMPRIMATUR_DB;
+  if (env.NODE_TEST_CONTEXT) {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), `imprimatur-test-${process.pid}-`)), "imprimatur.db");
+    env.IMPRIMATUR_DB = file;
+    return file;
+  }
   if (platform === "win32") {
     return path.join(env.LOCALAPPDATA || path.join(home, "AppData", "Local"), "imprimatur", "imprimatur.db");
   }
@@ -330,11 +395,18 @@ class Db {
   }
 
   /**
-   * Creates the task or updates the given fields.
+   * Creates the task or updates the given fields. The single path for a task's status (#70):
+   * - set done or dropped: the epic's open lines for this task close with it, in this
+   *   transaction (refersTo), by the same actor; the epic's 👉 on one of them moves on.
+   *   Reopening does not reopen them.
+   * - a status that crosses open/active ↔ done/dropped is queued for the issue tracker
+   *   (tracker_outbox), unless the writer is an import (the tracker's own pull, Markdown).
+   * Changes pulled from other machines (applyRemote) do not come here: no cascade, no push.
    * @param {number} repoId @param {string} key
    * @param {{title?: string, status?: string, epicId?: number | null, summary?: string | null}} [fields]
+   * @param {Actor} [actor] who writes (the epic lines' version rows); a user by default
    */
-  upsertTask(repoId, key, fields = {}) {
+  upsertTask(repoId, key, fields = {}, actor = { kind: "user" }) {
     return this.tx(() => {
       const now = Date.now();
       const before = this.q("SELECT * FROM tasks WHERE repo_id = ? AND key = ?").get(repoId, key);
@@ -352,8 +424,113 @@ class Db {
       const after = this.q("SELECT * FROM tasks WHERE repo_id = ? AND key = ?").get(repoId, key);
       const col = { title: "title", status: "status", summary: "summary", epic: "epic_id" };
       this.trackTask_(after, SYNC_FIELDS.task.filter((f) => !before || before[col[f]] !== after[col[f]]), now);
+      if (before?.status !== after.status && CLOSED.has(after.status)) this.closeEpicLines_(after, actor, now);
+      // done ↔ dropped changes no issue, unless its close is still waiting (the reason changes).
+      const crosses = before && before.status !== after.status
+        && (CLOSED.has(before.status) !== CLOSED.has(after.status) || this.trackerPending(after.id));
+      if (crosses && actor?.kind !== "import" && TRACKER_KEY.test(key)) {
+        const action = after.status === "done" ? "close_done" : after.status === "dropped" ? "close_dropped" : "reopen";
+        // The latest change wins: a close then a reopen before the push is one reopen.
+        // No comment text kept: the tracker gets a fixed one (no summary leaks to an issue).
+        this.q("DELETE FROM tracker_outbox WHERE task_id = ?").run(after.id);
+        this.q("INSERT INTO tracker_outbox (task_id, action, at) VALUES (?, ?, ?)").run(after.id, action, now);
+      }
       return after;
     });
+  }
+
+  /**
+   * Closes the epic's open records that are this task's line (refersTo), noting why; a 👉 on
+   * one moves to the epic's next open record by position, or goes. Returns their ids.
+   * @param {any} task @param {Actor} actor @param {number} now
+   */
+  closeEpicLines_(task, actor, now) {
+    if (task.epic_id == null || task.epic_id === task.id) return [];
+    const lines = this.q("SELECT * FROM records WHERE task_id = ? AND status = 'open' ORDER BY position").all(task.epic_id)
+      .map(recordOf).filter((r) => refersTo(r, task.key));
+    if (!lines.length) return [];
+    const note = `${task.key} ${task.status === "dropped" ? "bırakıldı" : "bitti"} (${day(now)})`;
+    const held = lines.find((r) => r.pointer);
+    for (const r of lines) this.updateRecord(r.id, { status: "done", body: r.body ? `${r.body}\n\n${note}` : note }, actor);
+    if (held) {
+      const next = this.q("SELECT id FROM records WHERE task_id = ? AND status = 'open' AND position > ? ORDER BY position LIMIT 1").get(task.epic_id, held.position);
+      if (next) this.movePointer(next.id, actor, now);
+    }
+    return lines.map((r) => r.id);
+  }
+
+  // ---- Issue tracker outbox (#70) ----
+
+  /** Queued tracker pushes, oldest first, with their task and repo. @param {number} [limit] */
+  trackerOutbox(limit = 200) {
+    return this.q(`SELECT o.*, t.key, t.status AS task_status, t.repo_id, r.origin, r.root
+                   FROM tracker_outbox o LEFT JOIN tasks t ON t.id = o.task_id LEFT JOIN repos r ON r.id = t.repo_id
+                   ORDER BY o.id LIMIT ?`).all(limit);
+  }
+
+  trackerOutboxCount() {
+    return /** @type {any} */ (this.q("SELECT count(*) AS n FROM tracker_outbox").get()).n;
+  }
+
+  /** @param {number} id */
+  trackerDone(id) {
+    this.q("DELETE FROM tracker_outbox WHERE id = ?").run(id);
+  }
+
+  /** One more failed try that counts (4xx); returns how many. Releases the claim. @param {number} id @returns {number} */
+  trackerFailed(id) {
+    this.q("UPDATE tracker_outbox SET tries = tries + 1, claimed_at = NULL, claimant = NULL WHERE id = ?").run(id);
+    return /** @type {any} */ (this.q("SELECT tries FROM tracker_outbox WHERE id = ?").get(id))?.tries ?? 0;
+  }
+
+  /**
+   * A transient failure (network, 5xx, 429): not counted against the row; it waits
+   * min(30 s · 2^fails, 30 min) before the next try. @param {number} id @param {number} now
+   */
+  trackerBackoff(id, now) {
+    const fails = (/** @type {any} */ (this.q("SELECT fails FROM tracker_outbox WHERE id = ?").get(id))?.fails ?? 0) + 1;
+    this.q("UPDATE tracker_outbox SET fails = ?, next_at = ?, claimed_at = NULL, claimant = NULL WHERE id = ?")
+      .run(fails, now + Math.min(30_000 * 2 ** (fails - 1), 30 * 60_000), id);
+  }
+
+  /** The row's comment is posted (a retry does not post it again). @param {number} id */
+  trackerCommented(id) {
+    this.q("UPDATE tracker_outbox SET commented = 1 WHERE id = ?").run(id);
+  }
+
+  /**
+   * Takes a row for one run, so two windows do not push it twice; a claim older than
+   * 2 minutes (its run died) can be taken over. @param {number} id @param {string} claimant @param {number} now
+   */
+  trackerClaim(id, claimant, now) {
+    return this.q(`UPDATE tracker_outbox SET claimed_at = ?, claimant = ?
+                   WHERE id = ? AND (claimed_at IS NULL OR claimed_at < ? OR claimant = ?)`).run(now, claimant, id, now - 120_000, claimant).changes === 1;
+  }
+
+  /** @param {number} id */
+  trackerRelease(id) {
+    this.q("UPDATE tracker_outbox SET claimed_at = NULL, claimant = NULL WHERE id = ?").run(id);
+  }
+
+  /** Queued pushes of a repo's tasks. @param {number} repoId */
+  trackerRowsOf(repoId) {
+    return this.q(`SELECT o.*, t.key FROM tracker_outbox o JOIN tasks t ON t.id = o.task_id WHERE t.repo_id = ? ORDER BY o.id`).all(repoId);
+  }
+
+  /** Issue states at the last pull: key → state. @param {number} repoId @param {string} provider @returns {Map<string, string>} */
+  trackerStates(repoId, provider) {
+    return new Map(this.q("SELECT key, state FROM tracker_state WHERE repo_id = ? AND provider = ?").all(repoId, provider).map((/** @type {any} */ r) => [r.key, r.state]));
+  }
+
+  /** @param {number} repoId @param {string} key @param {string} provider @param {string} state @param {number} at */
+  setTrackerState(repoId, key, provider, state, at) {
+    this.q(`INSERT INTO tracker_state (repo_id, key, provider, state, at) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (repo_id, key) DO UPDATE SET provider = excluded.provider, state = excluded.state, at = excluded.at`).run(repoId, key, provider, state, at);
+  }
+
+  /** Whether a push for this task still waits (the tracker's pull leaves the task alone). @param {number} taskId */
+  trackerPending(taskId) {
+    return !!this.q("SELECT 1 FROM tracker_outbox WHERE task_id = ?").get(taskId);
   }
 
   /** @param {string} u */
@@ -1121,4 +1298,4 @@ function openDb({ path: file = dbPath(), busyMs = 5000 } = {}) {
   return db;
 }
 
-module.exports = { openDb, dbPath, onWindowsDrive, normOrigin, KINDS, ACTORS, VERSION, MIGRATIONS, SYNC_FIELDS, PLACEHOLDER };
+module.exports = { openDb, dbPath, onWindowsDrive, normOrigin, refersTo, KINDS, ACTORS, VERSION, MIGRATIONS, SYNC_FIELDS, PLACEHOLDER, TRACKER_KEY };
