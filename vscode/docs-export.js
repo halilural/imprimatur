@@ -18,7 +18,8 @@ const inline = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
 
 /**
  * A document as Markdown: the header comment, its title, a table of contents and the
- * current sections in order, each followed by its contributing records.
+ * current sections in order. The contributing records stay in the database and the panel:
+ * listed under every section they made the file read like a decision log.
  * @param {any} db @param {number} docId @returns {string | undefined} undefined: no current section
  */
 function docMarkdown(db, docId) {
@@ -33,10 +34,6 @@ function docMarkdown(db, docId) {
     out.push(`<a id="${s.key}"></a>`, `## ${i + 1}. ${inline(s.title)}`);
     const body = String(s.body ?? "").replace(/\r\n/g, "\n").trim();
     if (body) out.push(body);
-    if (s.contributors.length) {
-      const list = s.contributors.map((/** @type {any} */ r) => `${/** @type {any} */ (KIND_LABEL)[r.kind] ?? r.kind} · ${inline(r.title)} (${r.task_key})`);
-      out.push(`_Katkı veren kayıtlar: ${list.join("; ")}_`);
-    }
   });
   return out.join("\n\n") + "\n";
 }

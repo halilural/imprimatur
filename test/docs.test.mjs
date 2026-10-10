@@ -257,7 +257,7 @@ test("panel model and HTML: numbered TOC, Markdown without raw HTML, contributor
   assert.ok(!html.includes("<script>alert"), "raw HTML stays text");
   assert.ok(!/href="javascript:/i.test(html), "no javascript: link");
   assert.match(html, /href="https:\/\/example.com"/);
-  assert.match(html, /Katkı veren kayıtlar<\/span><a href="#" class="rchip" data-act="showRecord" data-id="\d+"/);
+  assert.match(html, /<details class="contrib"><summary>Dayandığı kayıtlar · 1<\/summary><div class="rchips"><a href="#" class="rchip" data-act="showRecord" data-id="\d+"/);
   assert.match(html, /<span class="num">1<\/span><span>Storage<\/span>/);
   assert.ok(html.indexOf("<summary>Eskimiş bölümler · 1</summary>") > html.indexOf('id="sec-sync"'), "superseded sections at the end");
   assert.match(html, /class="dsec flash" id="sec-sync"/);

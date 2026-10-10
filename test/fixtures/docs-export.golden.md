@@ -18,15 +18,11 @@ SQLite in WAL mode.
 
 - one file per device
 
-_Katkı veren kayıtlar: ADR · SQLite is the source of truth (#72)_
-
 <a id="export"></a>
 
 ## 2. Export [docs]
 
 Generated after a change.
-
-_Katkı veren kayıtlar: ADR · SQLite is the source of truth (#72); Karar · Debounce 2 s (#72)_
 
 <a id="empty"></a>
 

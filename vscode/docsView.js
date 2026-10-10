@@ -167,9 +167,10 @@ function sectionHtml(m, s) {
   const q = esc([s.title, s.body, ...s.contributors.map((/** @type {any} */ r) => `${r.title} ${r.task}`)].join(" "));
   const acts = s.editing ? "" : `<div class="dacts"><button class="ghost" data-act="docEdit" data-kind="${m.kind}" data-id="${s.id}">Düzenle</button><button class="link" data-act="docStatus" data-id="${s.id}" data-status="${s.status === "current" ? "superseded" : "current"}">${s.status === "current" ? "Eskimiş say" : "Güncel yap"}</button></div>`;
   const body = s.editing ? editorHtml(m, s) : s.html ? `<div class="md">${s.html}</div>` : '<p class="empty">Bu bölüm henüz boş.</p>';
-  const contrib = `<div class="contrib"><span class="lbl">Katkı veren kayıtlar</span>${s.contributors.length
-    ? s.contributors.map((/** @type {any} */ r) => `<a href="#" class="rchip${r.status === "dropped" ? " gone" : ""}" data-act="showRecord" data-id="${r.id}" title="Görevler'de göster">${kindChip(r.kind, r.label)}<span class="rt">${esc(r.title)}</span><span class="mono dim">${esc(r.task)}</span></a>`).join("")
-    : '<span class="dim">yok</span>'}</div>`;
+  // Folded by default: the section text is the point, the records are its trail.
+  const contrib = s.contributors.length
+    ? `<details class="contrib"><summary>Dayandığı kayıtlar · ${s.contributors.length}</summary><div class="rchips">${s.contributors.map((/** @type {any} */ r) => `<a href="#" class="rchip${r.status === "dropped" ? " gone" : ""}" data-act="showRecord" data-id="${r.id}" title="Görevler'de göster">${kindChip(r.kind, r.label)}<span class="rt">${esc(r.title)}</span><span class="mono dim">${esc(r.task)}</span></a>`).join("")}</div></details>`
+    : "";
   const hist = s.versions.length
     ? `<details class="hist"><summary>Geçmiş · ${s.versions.length}</summary>${s.versions.map((/** @type {any} */ v) => `<div class="ev"><span class="when">${esc(when(v.at))}</span><span class="who w-${esc(v.kind)}">${esc(v.who)}</span><span class="what">${esc(v.what)}</span></div>`).join("")}</details>`
     : "";
@@ -260,12 +261,11 @@ const DOCS_CSS = `
   .md blockquote { margin: 8px 0; padding: 4px 12px; border-left: 3px solid var(--vscode-textBlockQuote-border, var(--acc)); background: var(--vscode-textBlockQuote-background); }
   .md table { border-collapse: collapse; margin: 8px 0; } .md th, .md td { border: 1px solid var(--line); padding: 4px 10px; text-align: left; }
   .md a { color: var(--vscode-textLink-foreground); }
-  .contrib { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
-  .contrib .lbl { margin-right: 4px; }
+  .rchips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 8px; }
   .rchip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 2px 8px 2px 2px; border: 1px solid var(--line); border-radius: 12px; color: var(--vscode-foreground) !important; font-size: 12px; }
   .rchip:hover { background: var(--vscode-list-hoverBackground); text-decoration: none !important; } .rchip.gone .rt { text-decoration: line-through; }
   .rchip .rt { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 340px; }
-  .hist summary, .dolds summary { cursor: pointer; font-weight: 600; font-size: 12px; color: var(--vscode-descriptionForeground); }
+  .contrib summary, .hist summary, .dolds summary { cursor: pointer; font-weight: 600; font-size: 12px; color: var(--vscode-descriptionForeground); }
   .dolds summary { font-size: 14px; padding: 6px 0; } .dolds > .dsec { margin-top: 10px; }
   .deditor { display: flex; flex-direction: column; gap: 8px; }
   .deditor input, .deditor textarea { padding: 7px 10px; border-radius: 6px; font: inherit; border: 1px solid var(--vscode-input-border, var(--line)); background: var(--vscode-input-background); color: var(--vscode-input-foreground); }
