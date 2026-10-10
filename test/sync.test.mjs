@@ -6,7 +6,7 @@ import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { handle, MAX_CHANGES, MAX_VALUE, MAX_KEY } from "../cloud/src/worker.js";
+import { handle, MAX_CHANGES, MAX_VALUE, MAX_KEY } from "../cloud/src/server.js";
 
 const req = createRequire(import.meta.url);
 const { openDb, normOrigin } = req("../vscode/db.js");
