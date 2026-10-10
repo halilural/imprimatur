@@ -15,7 +15,7 @@ export const MAX_CHANGES = 1000;
 export const MAX_BODY = 1_000_000;
 export const MAX_VALUE = 100_000;
 export const MAX_KEY = 2000;
-const ENTITIES = ["repo", "task", "record"];
+const ENTITIES = ["repo", "task", "record", "section"];
 const ID = /^[A-Za-z0-9._:-]{1,100}$/;
 
 const reply = (status, body) =>

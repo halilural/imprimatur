@@ -1,6 +1,6 @@
 // @ts-check
 // Tasks in the Agent Change Graph panel (#69): the "Ana sayfa", "Görevler" and
-// "Bende bekleyenler" tabs. Pure: every builder takes a database connection
+// "Bende bekleyenler" tabs (the "Mimari" and "Ürün" document tabs: docsView.js, #72). Pure: every builder takes a database connection
 // (vscode/db.js) and returns a model or HTML, so the unit tests run them without
 // VS Code. The panel (graphView.js) renders only the visible tab's HTML, sends
 // the user's clicks back here (applyMessage) and redraws on the database's change.
@@ -11,7 +11,7 @@ const os = require("node:os");
 /** The user, as record versions name them. */
 const userActor = () => ({ kind: /** @type {"user"} */ ("user"), id: os.userInfo().username });
 
-const TABS = ["home", "tasks", "inbox", "edits"];
+const TABS = ["home", "tasks", "inbox", "architecture", "product", "edits"];
 const FILTERS = ["active", "open", "done"];
 const TASK_STATUSES = ["open", "active", "done", "dropped"];
 const STATUS_TR = { active: "Sürüyor", open: "Açık", done: "Bitti", dropped: "Bırakıldı" };
@@ -472,6 +472,10 @@ function paneHtml(db, root, view, o = {}) {
   if (view.tab === "home") return homeHtml(homeModel(db, root, o));
   if (view.tab === "tasks") return tasksHtml(tasksPage(db, root, view, o));
   if (view.tab === "inbox") return inboxHtml(inboxModel(db, root, { all: view.all, waiting: o.waiting, now: o.now }));
+  if (view.tab === "architecture" || view.tab === "product") {
+    const docs = require("./docsView.js");
+    return docs.docHtml(docs.docModel(db, root, view.tab, view));
+  }
   return "";
 }
 
@@ -487,10 +491,15 @@ const num = (/** @type {any} */ v) => {
 /**
  * A write from the panel, as the user: a record's status or 👉, an answer to a
  * question (an answer record under it, the question done), a quick-add, a task's status.
- * @param {any} db @param {any} m the page's message @param {{kind: "user", id?: string}} actor
+ * Document sections (#72) go to docsView.js with the panel's repo.
+ * @param {any} db @param {any} m the page's message @param {{kind: "user", id?: string}} actor @param {string} [root]
  */
-function applyMessage(db, m, actor) {
+function applyMessage(db, m, actor, root) {
   switch (m?.type) {
+    case "docSave":
+    case "docNew":
+    case "docStatus":
+      return require("./docsView.js").applyDocMessage(db, m, actor, root);
     case "rec": {
       const id = num(m.id);
       if (m.op === "pointer") return db.setPointer(id, actor);
@@ -538,6 +547,8 @@ function cleanView(v) {
   if (typeof v.all === "boolean") out.all = v.all;
   if (ids(v.showDone)) out.showDone = ids(v.showDone);
   if (ids(v.old)) out.old = ids(v.old);
+  // The section open for editing on a document tab (#72): "architecture:12", "product:new".
+  if (v.edit === null || (typeof v.edit === "string" && /^(architecture|product):(new|\d+)$/.test(v.edit))) out.edit = v.edit;
   return out;
 }
 
@@ -677,6 +688,6 @@ const TASKS_CSS = `
 `;
 
 module.exports = {
-  TABS, FILTERS, TASKS_CSS, ICON, icon, bucketOf, userActor, parseQuickAdd, isAsk, repoOfRoot, scopeRepos, describeVersion,
+  TABS, FILTERS, TASKS_CSS, ICON, icon, KIND_LABEL, kindChip, bucketOf, userActor, parseQuickAdd, isAsk, repoOfRoot, scopeRepos, describeVersion,
   tasksPage, inboxModel, inboxCount, openTurn, splitText, TITLE_MAX, BODY_MAX, homeModel, tasksHtml, inboxHtml, homeHtml, paneHtml, applyMessage, cleanView, esc,
 };

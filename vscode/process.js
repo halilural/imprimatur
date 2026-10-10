@@ -16,6 +16,8 @@
 //   PostToolUse MCP     sweep           a task set done: its GitHub issue still open (not while tracker sync, #70, runs)
 //   Stop                status          the answer has no "Neredeyiz" section
 //   SessionStart, Bash  branchFinish    (after git merge/switch/checkout/pull) merged branches left behind
+//   PostToolUse MCP,    docUpdate       an ADR/PDR added or changed (record_add/record_update) that no design
+//   Stop, next event                    document section links: told to the agent at its next tool call or session start
 
 "use strict";
 const { spawnSync } = require("node:child_process");
@@ -37,6 +39,7 @@ const DEFAULTS = {
   sweep: "warn",
   status: { mode: "block", word: "neredeyiz" },
   branchFinish: "warn",
+  docUpdate: "warn",
 };
 
 /** The git root at or above a directory, by its .git entry (no git process). @param {string} dir */
@@ -219,6 +222,74 @@ function take(root, session, list) {
   return got;
 }
 
+/** Every session's list, emptied (SessionStart: what earlier sessions left). @param {string} root @param {string} list @returns {string[]} */
+function takeAll(root, list) {
+  const state = readState(root);
+  const got = [...new Set(Object.values(state).flatMap((v) => /** @type {any} */ (v)?.[list] ?? []))];
+  if (got.length) writeState(root, Object.fromEntries(Object.entries(state).map(([k, v]) => [k, { .../** @type {any} */ (v), [list]: [] }])));
+  return got;
+}
+
+/**
+ * The ADR or PDR a record_add or record_update call wrote, from the database: the new
+ * record's id is in the tool's answer ("Added [12] adr/…", or its structured record), else
+ * found by kind and title. A change of status or 👉 alone is not a design change.
+ * @param {string} name @param {any} input @param {any} records @param {string} root
+ */
+function designRecordOf(name, input, records, root) {
+  try {
+    const db = records.dbOf?.();
+    if (!db) return undefined;
+    const ti = input.tool_input ?? {};
+    let id;
+    if (name === "record_update") {
+      if (!["title", "body", "kind"].some((k) => k in ti)) return undefined;
+      id = Number(ti.id);
+    } else {
+      const r = input.tool_response;
+      const text = typeof r === "string" ? r : JSON.stringify(r ?? "");
+      id = Number(/Added \[(\d+)\]/.exec(text)?.[1] ?? /"record"\s*:\s*\{[^{}]*?"id"\s*:\s*(\d+)/.exec(text)?.[1] ?? NaN);
+      if (!Number.isInteger(id) && /^(adr|pdr)$/.test(ti.kind ?? "")) {
+        const repo = records.repoId(root);
+        id = repo === undefined ? undefined : db.recordsByKind(repo, [ti.kind], { limit: 50 }).find((/** @type {any} */ x) => x.title === String(ti.title ?? "").trim())?.id;
+      }
+    }
+    const rec = Number.isInteger(id) ? db.record(id) : undefined;
+    return rec && (rec.kind === "adr" || rec.kind === "pdr") ? rec : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The remembered "id:verb" notes whose record still exists and no document section links.
+ * @param {any} records @param {string[]} notes @returns {Array<{id: number, kind: string, verb: string, note: string}>}
+ */
+function unlinked(records, notes) {
+  if (!notes.length) return [];
+  try {
+    const db = records.dbOf?.();
+    if (!db) return [];
+    const out = [];
+    for (const note of new Set(notes)) {
+      const [id, verb] = note.split(":");
+      const rec = db.record(Number(id));
+      if (rec && rec.status !== "dropped" && (rec.kind === "adr" || rec.kind === "pdr") && !db.sectionsOfRecord(rec.id).length) {
+        out.push({ id: rec.id, kind: rec.kind, verb: verb || "eklendi", note });
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/** @param {{id: number, kind: string, verb: string}} l */
+const docLine = (l) => {
+  const arch = l.kind === "adr";
+  return `${arch ? "ADR" : "PDR"} #${l.id} ${l.verb} ama ${arch ? "mimari" : "ürün"} dokümanı güncellenmedi: doc_section_upsert {kind: "${arch ? "architecture" : "product"}", key, title, body, records: [${l.id}]} ile ilgili bölümü yaz ve kaydı bağla.`;
+};
+
 /**
  * Branches already in main, other than main and the one checked out, touched in the last 14
  * days, that someone committed on: the merge happened, the delete did not.
@@ -366,6 +437,28 @@ function check(event, input, deps = {}) {
   if (event === "PostToolUse" && require("./config.js").imprimaturTool(tool) === "task_upsert" && s.sweep.mode && ti.status === "done" && /^#\d+$/.test(ti.key ?? "") && !trackerOn()) {
     if (parse(ghRun(["issue", "view", ti.key.slice(1), "--json", "state"], root))?.state === "OPEN") {
       found(s.sweep, "sweep", `${ti.key} is done in Imprimatur but its GitHub issue is open: close it (gh issue close ${ti.key.slice(1)} -c "…") and move its board item to Done.`);
+    }
+  }
+
+  // Design documents (#72): an ADR or PDR the session added or changed is remembered; at Stop
+  // the ones no document section links wait, and the agent hears of them at its next tool call
+  // or session start (a Stop warning reaches only the user). "block" stops the Stop instead.
+  if (s.docUpdate.mode) {
+    const records = deps.records ?? require("./records.js");
+    const name = require("./config.js").imprimaturTool(tool);
+    if (event === "PostToolUse" && (name === "record_add" || name === "record_update")) {
+      const rec = designRecordOf(name, input, records, root);
+      if (rec) remember(root, input.session_id, "design", `${rec.id}:${name === "record_add" ? "eklendi" : "güncellendi"}`);
+    }
+    if (event === "Stop" && !input.stop_hook_active) {
+      const left = unlinked(records, take(root, input.session_id, "design"));
+      if (left.length && s.docUpdate.mode === "block") found(s.docUpdate, "docUpdate", left.map(docLine).join(" "));
+      else for (const l of left) remember(root, input.session_id, "docTell", l.note);
+    }
+    if (event === "SessionStart" || event === "PreToolUse" || event === "PostToolUse") {
+      // A new session hears what earlier ones left; a running one, its own.
+      const notes = event === "SessionStart" ? takeAll(root, "docTell") : take(root, input.session_id, "docTell");
+      for (const l of unlinked(records, notes)) found(s.docUpdate, "docUpdate", docLine(l));
     }
   }
 

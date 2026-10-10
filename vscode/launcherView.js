@@ -1,7 +1,7 @@
 // @ts-check
 // The Imprimatur side bar's launcher (#69): rows that open the Imprimatur panel
-// on a tab: Ana sayfa, Görevler, Bende bekleyenler (with what waits on the user)
-// and Ajan değişiklikleri (edits under review). Its badge counts what waits on
+// on a tab: Ana sayfa, Görevler, Bende bekleyenler (with what waits on the user),
+// Mimari and Ürün (the design documents, #72) and Ajan değişiklikleri (edits under review). Its badge counts what waits on
 // the user, as the old "Waiting on me" view's did.
 "use strict";
 const vscode = require("vscode");
@@ -12,6 +12,8 @@ const ROWS = [
   { id: "home", label: "Ana sayfa", icon: "home", command: "imprimatur.openHome", tooltip: "Nerede kaldık, senden beklenenler, görevler" },
   { id: "tasks", label: "Görevler", icon: "checklist", command: "imprimatur.openTasks", tooltip: "Görevler ve kayıtları" },
   { id: "inbox", label: "Bende bekleyenler", icon: "bell", command: "imprimatur.openInbox", tooltip: "Ajanın senden beklediği her şey" },
+  { id: "architecture", label: "Mimari", icon: "symbol-structure", command: "imprimatur.openArchitecture", tooltip: "Mimari tasarım dokümanı: nasıl kurulu" },
+  { id: "product", label: "Ürün", icon: "package", command: "imprimatur.openProduct", tooltip: "Ürün tasarım dokümanı: kullanıcı ne alıyor" },
   { id: "edits", label: "Ajan değişiklikleri", icon: "git-merge", command: "imprimatur.openGraph", tooltip: "Agent Change Graph: ajanın düzenlemeleri" },
 ];
 

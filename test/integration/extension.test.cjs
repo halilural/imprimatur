@@ -41,8 +41,9 @@ suite("Imprimatur in the extension host", () => {
   test("the launcher opens the panel's tabs; the seeded ask waits on Bende bekleyenler", async () => {
     const { launcher, panelState } = await api();
     assert.ok(launcher, "activate hands out the launcher");
-    assert.deepEqual(launcher.getChildren().map((r) => r.command), ["imprimatur.openHome", "imprimatur.openTasks", "imprimatur.openInbox", "imprimatur.openGraph"]);
-    for (const [command, tab] of [["imprimatur.openHome", "home"], ["imprimatur.openTasks", "tasks"], ["imprimatur.openInbox", "inbox"]]) {
+    assert.deepEqual(launcher.getChildren().map((r) => r.command), ["imprimatur.openHome", "imprimatur.openTasks", "imprimatur.openInbox", "imprimatur.openArchitecture", "imprimatur.openProduct", "imprimatur.openGraph"]);
+    // Bende bekleyenler last: the seeded ask is looked for on it.
+    for (const [command, tab] of [["imprimatur.openHome", "home"], ["imprimatur.openTasks", "tasks"], ["imprimatur.openArchitecture", "architecture"], ["imprimatur.openProduct", "product"], ["imprimatur.openInbox", "inbox"]]) {
       await vscode.commands.executeCommand(command);
       assert.equal(panelState().view.tab, tab, command);
     }

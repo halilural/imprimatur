@@ -127,18 +127,67 @@ const MIGRATIONS = [
     PRIMARY KEY (repo_id, key)
   ) WITHOUT ROWID;
   `,
+  // Design documents (#72): one architecture and one product document per repo, in
+  // sections the agent and the user write; records (adr, pdr, decision, …) contribute to
+  // sections. Sections are never deleted (status "superseded"); every change is a version.
+  `
+  CREATE TABLE documents (
+    id INTEGER PRIMARY KEY,
+    uid TEXT NOT NULL UNIQUE,
+    repo_id INTEGER NOT NULL REFERENCES repos(id),
+    kind TEXT NOT NULL CHECK (kind IN ('architecture', 'product')),
+    title TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE (repo_id, kind)
+  );
+  CREATE TABLE doc_sections (
+    id INTEGER PRIMARY KEY,
+    uid TEXT NOT NULL UNIQUE,
+    doc_id INTEGER NOT NULL REFERENCES documents(id),
+    key TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    position REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'current' CHECK (status IN ('current', 'superseded')),
+    updated_at INTEGER NOT NULL,
+    UNIQUE (doc_id, key)
+  );
+  CREATE TABLE doc_section_records (
+    section_id INTEGER NOT NULL REFERENCES doc_sections(id),
+    record_id INTEGER NOT NULL REFERENCES records(id),
+    PRIMARY KEY (section_id, record_id)
+  ) WITHOUT ROWID;
+  CREATE INDEX doc_section_records_record ON doc_section_records(record_id);
+  CREATE TABLE doc_versions (
+    id INTEGER PRIMARY KEY,
+    section_id INTEGER NOT NULL REFERENCES doc_sections(id),
+    at INTEGER NOT NULL,
+    actor_kind TEXT NOT NULL CHECK (actor_kind IN (${ACTORS.map((k) => `'${k}'`).join(", ")})),
+    actor TEXT,
+    before TEXT,
+    after TEXT
+  );
+  CREATE INDEX doc_versions_section ON doc_versions(section_id, at);
+  `,
 ];
 const VERSION = MIGRATIONS.length;
 
 /**
  * Synced fields per entity (#61). Keys: repo = its origin, task = origin + "\t" + task key,
- * record = its uid. "task" comes first: a record seen for the first time needs it.
+ * record = its uid, section = origin + "\t" + document kind + "\t" + section key (#72;
+ * records: the contributing records' uids). "task" comes first: a record seen for the first time needs it.
  */
 const SYNC_FIELDS = {
   repo: ["name"],
   task: ["title", "status", "summary", "epic", "pointer"],
   record: ["task", "kind", "owner", "status", "title", "body", "position", "parent", "links", "created_at"],
+  section: ["title", "body", "position", "status", "records"],
 };
+/** Design documents (#72): kind → the title a new one gets. */
+const DOC_KINDS = { architecture: "Mimari Tasarım Dokümanı", product: "Ürün Tasarım Dokümanı" };
+const SECTION_STATUSES = ["current", "superseded"];
+/** A section's key: a slug, unique in its document. */
+const SECTION_KEY = /^[a-z0-9][a-z0-9-]{0,63}$/;
 /** A repo known only from another machine: root "origin:<origin>" until this machine opens it. */
 const PLACEHOLDER = "origin:";
 const TASK_STATUSES = ["open", "active", "done", "dropped"];
@@ -391,7 +440,36 @@ class Db {
       this.q("UPDATE tasks SET updated_at = max(updated_at, ?) WHERE id = ?").run(t.updated_at, mine.id);
       this.q("DELETE FROM tasks WHERE id = ?").run(t.id);
     }
-    this.q("DELETE FROM repos WHERE id = ? AND NOT EXISTS (SELECT 1 FROM tasks WHERE repo_id = ?)").run(ph.id, ph.id);
+    // Design documents (#72): a kind only the placeholder has moves over; a kind both have
+    // becomes one document, its sections merged by key the same way (the synced value wins).
+    for (const d of this.q("SELECT * FROM documents WHERE repo_id = ?").all(ph.id)) {
+      const mine = this.q("SELECT * FROM documents WHERE repo_id = ? AND kind = ?").get(repo.id, d.kind);
+      if (!mine) {
+        this.q("UPDATE documents SET repo_id = ? WHERE id = ?").run(repo.id, d.id);
+        continue;
+      }
+      for (const s of this.q("SELECT * FROM doc_sections WHERE doc_id = ?").all(d.id)) {
+        const own = this.q("SELECT * FROM doc_sections WHERE doc_id = ? AND key = ?").get(mine.id, s.key);
+        if (!own) {
+          this.q("UPDATE doc_sections SET doc_id = ? WHERE id = ?").run(mine.id, s.id);
+          continue;
+        }
+        const key = `${origin}\t${d.kind}\t${s.key}`;
+        for (const f of ["title", "body", "position", "status"]) {
+          const clock = this.q("SELECT at FROM clock WHERE entity = 'section' AND key = ? AND field = ?").get(key, f);
+          if (clock && clock.at > own.updated_at) this.q(`UPDATE doc_sections SET ${f} = ? WHERE id = ?`).run(s[f], own.id);
+        }
+        this.q("INSERT OR IGNORE INTO doc_section_records (section_id, record_id) SELECT ?, record_id FROM doc_section_records WHERE section_id = ?").run(own.id, s.id);
+        this.q("DELETE FROM doc_section_records WHERE section_id = ?").run(s.id);
+        this.q("UPDATE doc_versions SET section_id = ? WHERE section_id = ?").run(own.id, s.id);
+        this.q("UPDATE doc_sections SET updated_at = max(updated_at, ?) WHERE id = ?").run(s.updated_at, own.id);
+        this.q("DELETE FROM doc_sections WHERE id = ?").run(s.id);
+      }
+      this.q("UPDATE documents SET updated_at = max(updated_at, ?) WHERE id = ?").run(d.updated_at, mine.id);
+      this.q("DELETE FROM documents WHERE id = ?").run(d.id);
+    }
+    this.q(`DELETE FROM repos WHERE id = ? AND NOT EXISTS (SELECT 1 FROM tasks WHERE repo_id = ?)
+            AND NOT EXISTS (SELECT 1 FROM documents WHERE repo_id = ?)`).run(ph.id, ph.id, ph.id);
   }
 
   /**
@@ -867,6 +945,146 @@ class Db {
     return (repoId == null ? this.q(sql).all(since, limit) : this.q(sql).all(since, repoId, limit)).map(recordOf);
   }
 
+  // ---- Design documents (#72) ----
+
+  /** A repo's document of this kind, without creating it. @param {number} repoId @param {string} kind */
+  docFind(repoId, kind) {
+    return this.q("SELECT * FROM documents WHERE repo_id = ? AND kind = ?").get(repoId, kind);
+  }
+
+  /** @param {number} id */
+  docById(id) {
+    return this.q("SELECT * FROM documents WHERE id = ?").get(id);
+  }
+
+  /**
+   * A repo's document of this kind, created on first use with its default title.
+   * @param {number} repoId @param {string} kind "architecture" | "product"
+   */
+  docOf(repoId, kind) {
+    if (!Object.hasOwn(DOC_KINDS, kind)) throw new Error(`Imprimatur: document kind must be one of ${Object.keys(DOC_KINDS).join(", ")}`);
+    const found = this.docFind(repoId, kind);
+    if (found) return found;
+    return this.tx(() => {
+      const now = Date.now();
+      this.q("INSERT OR IGNORE INTO documents (uid, repo_id, kind, title, updated_at) VALUES (?, ?, ?, ?, ?)")
+        .run(uid(), repoId, kind, /** @type {any} */ (DOC_KINDS)[kind], now);
+      return this.docFind(repoId, kind);
+    });
+  }
+
+  /**
+   * A document's sections by position, each with its contributing record ids (records) and
+   * those records' kind, title, status and task (contributors).
+   * @param {number} docId
+   */
+  docSections(docId) {
+    const links = this.q(`SELECT l.section_id, r.id, r.uid, r.kind, r.title, r.status, r.task_id, t.key AS task_key
+                          FROM doc_section_records l JOIN doc_sections s ON s.id = l.section_id
+                          JOIN records r ON r.id = l.record_id JOIN tasks t ON t.id = r.task_id
+                          WHERE s.doc_id = ? ORDER BY r.id`).all(docId);
+    return this.q("SELECT * FROM doc_sections WHERE doc_id = ? ORDER BY position, id").all(docId).map((/** @type {any} */ s) => {
+      const mine = links.filter((/** @type {any} */ l) => l.section_id === s.id).map(({ section_id, ...r }) => r);
+      return { ...s, records: mine.map((r) => r.id), contributors: mine };
+    });
+  }
+
+  /** One section with its records, by document and key. @param {number} docId @param {string} key */
+  docSection(docId, key) {
+    const row = this.q("SELECT id FROM doc_sections WHERE doc_id = ? AND key = ?").get(docId, key);
+    return row ? this.sectionById(row.id) : undefined;
+  }
+
+  /** @param {number} id */
+  sectionById(id) {
+    const s = this.q("SELECT * FROM doc_sections WHERE id = ?").get(id);
+    if (!s) return undefined;
+    const records = this.q("SELECT record_id FROM doc_section_records WHERE section_id = ? ORDER BY record_id").all(id).map((/** @type {any} */ r) => r.record_id);
+    return { ...s, records };
+  }
+
+  /** The sections a record contributes to, with their document's kind. @param {number} recordId */
+  sectionsOfRecord(recordId) {
+    return this.q(`SELECT s.*, d.kind AS doc_kind FROM doc_section_records l JOIN doc_sections s ON s.id = l.section_id
+                   JOIN documents d ON d.id = s.doc_id WHERE l.record_id = ? ORDER BY s.id`).all(recordId);
+  }
+
+  /**
+   * Creates the section or changes the given fields, with a version row of what changed
+   * (no row, no write when nothing did). records: the contributing record ids, replacing
+   * those linked; addRecords: ids linked besides them. A record must be of the document's repo.
+   * @param {number} docId @param {string} key a slug, unique in the document
+   * @param {{title?: string, body?: string | null, position?: number, status?: string, records?: number[], addRecords?: number[]}} fields
+   * @param {Actor} actor
+   */
+  upsertSection(docId, key, fields, actor) {
+    if (!ACTORS.includes(actor?.kind)) throw new Error(`Imprimatur: actor kind must be one of ${ACTORS.join(", ")}`);
+    if (typeof key !== "string" || !SECTION_KEY.test(key)) throw new Error(`Imprimatur: section key "${key}" must be a slug: a-z, 0-9 and -, at most 64 characters`);
+    if (fields.status !== undefined && !SECTION_STATUSES.includes(fields.status)) throw new Error(`Imprimatur: section status must be one of ${SECTION_STATUSES.join(", ")}`);
+    if (fields.position !== undefined && !Number.isFinite(fields.position)) throw new Error("Imprimatur: section position must be a number");
+    if (fields.title !== undefined && (typeof fields.title !== "string" || !fields.title.trim())) throw new Error("Imprimatur: section title must be a non-empty string");
+    return this.tx(() => {
+      const doc = this.docById(docId);
+      if (!doc) throw new Error(`Imprimatur: no document ${docId}`);
+      for (const id of [...(fields.records ?? []), ...(fields.addRecords ?? [])]) {
+        const rec = this.q("SELECT t.repo_id FROM records r JOIN tasks t ON t.id = r.task_id WHERE r.id = ?").get(id);
+        if (!rec) throw new Error(`Imprimatur: no record ${id}`);
+        if (rec.repo_id !== doc.repo_id) throw new Error(`Imprimatur: record ${id} is in another repo than this document`);
+      }
+      const now = Date.now();
+      let old = this.docSection(docId, key);
+      /** @type {Record<string, any>} */ const before = {};
+      /** @type {Record<string, any>} */ const after = {};
+      if (!old) {
+        if (fields.title === undefined) throw new Error(`Imprimatur: a new section needs a title (key ${key})`);
+        const position = fields.position
+          ?? /** @type {any} */ (this.q("SELECT coalesce(max(position), 0) + 1 AS p FROM doc_sections WHERE doc_id = ?").get(docId)).p;
+        this.q(`INSERT INTO doc_sections (uid, doc_id, key, title, body, position, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(uid(), docId, key, fields.title.trim(), fields.body ?? null, position, fields.status ?? "current", now);
+        old = /** @type {any} */ (this.docSection(docId, key));
+        Object.assign(after, { key, title: old.title, body: old.body, position: old.position, status: old.status });
+      } else {
+        for (const f of /** @type {const} */ (["title", "body", "position", "status"])) {
+          if (fields[f] === undefined) continue;
+          const v = f === "title" ? /** @type {string} */ (fields.title).trim() : fields[f] ?? null;
+          if (old[f] === v) continue;
+          before[f] = old[f];
+          after[f] = v;
+          this.q(`UPDATE doc_sections SET ${f} = ? WHERE id = ?`).run(v, old.id);
+        }
+      }
+      const was = old.records;
+      const want = [...new Set([...(fields.records ?? was), ...(fields.addRecords ?? [])])].sort((a, b) => a - b);
+      if (JSON.stringify(was) !== JSON.stringify(want)) {
+        this.q("DELETE FROM doc_section_records WHERE section_id = ?").run(old.id);
+        for (const id of want) this.q("INSERT INTO doc_section_records (section_id, record_id) VALUES (?, ?)").run(old.id, id);
+        if (was.length || Object.keys(before).length) before.records = was;
+        after.records = want;
+      }
+      const changed = Object.keys(after).filter((f) => f !== "key");
+      if (!changed.length) return this.sectionById(old.id);
+      this.q("UPDATE doc_sections SET updated_at = ? WHERE id = ?").run(now, old.id);
+      this.q("UPDATE documents SET updated_at = ? WHERE id = ?").run(now, docId);
+      this.q("INSERT INTO doc_versions (section_id, at, actor_kind, actor, before, after) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(old.id, now, actor.kind, actor.id ?? null, Object.keys(before).length ? JSON.stringify(before) : null, JSON.stringify(after));
+      this.trackSection_(old.id, changed, now);
+      return this.sectionById(old.id);
+    });
+  }
+
+  /** A section's versions, newest first. @param {number} sectionId */
+  sectionVersions(sectionId) {
+    return this.q("SELECT * FROM doc_versions WHERE section_id = ? ORDER BY id DESC").all(sectionId).map((/** @type {any} */ v) => ({
+      ...v, before: v.before ? JSON.parse(v.before) : null, after: v.after ? JSON.parse(v.after) : null,
+    }));
+  }
+
+  /** The document's last change: when and by whom. @param {number} docId */
+  docLastChange(docId) {
+    return this.q(`SELECT v.at, v.actor_kind, v.actor FROM doc_versions v JOIN doc_sections s ON s.id = v.section_id
+                   WHERE s.doc_id = ? ORDER BY v.id DESC LIMIT 1`).get(docId);
+  }
+
   // ---- Sync between machines (#61) ----
 
   /** @param {string} k @returns {string | undefined} */
@@ -958,9 +1176,24 @@ class Db {
     return origin && this.syncRepo_(origin)?.id === repo.id ? `${origin}\t${task.key}` : undefined;
   }
 
-  /** A synced field's value as this database holds it. @param {"repo" | "task" | "record"} entity @param {any} row @param {string} f */
+  /** A section's sync key (#72): origin, document kind and section key; undefined when its repo does not sync. @param {any} section */
+  sectionKey_(section) {
+    const doc = section && this.docById(section.doc_id);
+    const repo = doc && this.q("SELECT id, origin FROM repos WHERE id = ?").get(doc.repo_id);
+    const origin = this.originKey_(repo);
+    return origin && this.syncRepo_(origin)?.id === repo.id ? `${origin}\t${doc.kind}\t${section.key}` : undefined;
+  }
+
+  /** A synced field's value as this database holds it. @param {"repo" | "task" | "record" | "section"} entity @param {any} row @param {string} f */
   syncValue_(entity, row, f) {
     if (entity === "repo") return row.name ?? null;
+    if (entity === "section") {
+      if (f === "records") {
+        return this.q(`SELECT r.uid FROM doc_section_records l JOIN records r ON r.id = l.record_id
+                       WHERE l.section_id = ? ORDER BY r.uid`).all(row.id).map((/** @type {any} */ r) => r.uid);
+      }
+      return row[f] ?? null;
+    }
     if (entity === "task") {
       if (f === "epic") return row.epic_id == null ? null : this.taskById(row.epic_id)?.key ?? null;
       // The 👉 is one field of the task (the record's uid), so two machines cannot each keep their own.
@@ -1012,6 +1245,14 @@ class Db {
     this.enqueue_("record", rec.uid, fields.map((f) => [f, this.syncValue_("record", rec, f)]), at);
   }
 
+  /** @param {number} id @param {string[]} fields @param {number} at */
+  trackSection_(id, fields, at) {
+    if (!fields.length || !this.syncOn()) return;
+    const s = this.q("SELECT * FROM doc_sections WHERE id = ?").get(id);
+    const key = this.sectionKey_(s);
+    if (key) this.enqueue_("section", key, fields.map((f) => [f, this.syncValue_("section", s, f)]), at);
+  }
+
   /**
    * Queues every synced field of the repos with an origin (or one repo), dated by its
    * updated_at. Fields another machine set last stay theirs.
@@ -1045,6 +1286,8 @@ class Db {
       }
       const recs = this.q("SELECT r.* FROM records r JOIN tasks t ON t.id = r.task_id WHERE t.repo_id = ? ORDER BY r.id").all(repo.id);
       for (const rec of recs) put("record", rec.uid, recordOf(rec), rec.updated_at);
+      const secs = this.q("SELECT s.*, d.kind AS doc_kind FROM doc_sections s JOIN documents d ON d.id = s.doc_id WHERE d.repo_id = ? ORDER BY s.id").all(repo.id);
+      for (const s of secs) put("section", `${origin}\t${s.doc_kind}\t${s.key}`, s, s.updated_at);
     }
     return n;
   }
@@ -1084,7 +1327,8 @@ class Db {
    */
   applyRemote(changes, { pullSeq, lastPage = true } = {}) {
     return this.tx(() => {
-      const order = { repo: 0, task: 1, record: 2 };
+      // Sections last: their records field names records by uid.
+      const order = { repo: 0, task: 1, record: 2, section: 3 };
       // A change still waiting after MAX_TRIES syncs (its record never came: say its task was
       // invalid) is dropped. Tries count once per sync, on its last page: during a long pull a
       // 👉 often comes pages before its record.
@@ -1093,16 +1337,18 @@ class Db {
       const dropped = waiting.length - kept.length;
       let todo = [...kept.map((/** @type {any} */ c) => ({ ...c, tries: (c.tries ?? 0) + (lastPage ? 1 : 0) })), ...changes.map((c) => ({ ...c, tries: 0 }))]
         .map((c, i) => /** @type {const} */ ([c, i]))
-        .sort((a, b) => ((/** @type {any} */ (order))[a[0].entity] ?? 3) - ((/** @type {any} */ (order))[b[0].entity] ?? 3) || a[1] - b[1])
+        .sort((a, b) => ((/** @type {any} */ (order))[a[0].entity] ?? 4) - ((/** @type {any} */ (order))[b[0].entity] ?? 4) || a[1] - b[1])
         .map(([c]) => c);
       /** @type {Map<number, {before: any, after: any, device: string, op: string, at: number}>} */
       const versions = new Map();
+      /** Sections changed (#72): id → {before, after, device, at}. @type {Map<number, any>} */
+      const sectionVersions = new Map();
       let applied = 0;
       // A record's parent may come later in the same batch: try again while that helps.
       for (let pass = 0; todo.length && pass < 3; pass++) {
         const later = [];
         for (const c of todo) {
-          const r = this.applyOne_(c, versions);
+          const r = c.entity === "section" ? this.applySection_(c, sectionVersions) : this.applyOne_(c, versions);
           if (r === "later") later.push(c);
           else if (r) applied++;
         }
@@ -1112,6 +1358,11 @@ class Db {
       for (const [id, v] of versions) {
         if (!Object.keys(v.after).length && v.op === "update") continue;
         this.version_(id, { kind: "import", id: `sync:${v.device}` }, v.op, v.op === "create" ? null : v.before, v.after, v.at);
+      }
+      for (const [id, v] of sectionVersions) {
+        if (!Object.keys(v.after).length) continue;
+        this.q("INSERT INTO doc_versions (section_id, at, actor_kind, actor, before, after) VALUES (?, ?, 'import', ?, ?, ?)")
+          .run(id, v.at, `sync:${v.device}`, v.created || !Object.keys(v.before).length ? null : JSON.stringify(v.before), JSON.stringify(v.after));
       }
       this.setMeta("pending", todo.length ? JSON.stringify(todo.slice(-MAX_PENDING)) : null);
       if (pullSeq != null) this.setMeta("pull_seq", pullSeq);
@@ -1191,6 +1442,79 @@ class Db {
     }
     this.q(`INSERT INTO clock (entity, key, field, at, device) VALUES (?, ?, ?, ?, ?)
             ON CONFLICT (entity, key, field) DO UPDATE SET at = excluded.at, device = excluded.device`).run(entity, key, field, at, device);
+    return true;
+  }
+
+  /**
+   * One synced field of a design document's section (#72); the document and the section are
+   * made when missing. records: the contributing records by uid; one not here yet is linked
+   * when it comes (the change waits, like a record's parent).
+   * @param {any} c @param {Map<number, any>} versions @returns {boolean | "later"}
+   */
+  applySection_(c, versions) {
+    const { key, field, at, device } = c;
+    if (!SYNC_FIELDS.section.includes(field) || typeof key !== "string" || !Number.isSafeInteger(at) || typeof device !== "string") return false;
+    let value;
+    try {
+      value = c.value == null ? null : JSON.parse(c.value);
+    } catch {
+      return false;
+    }
+    const parts = key.split("\t");
+    if (parts.length < 3) return false;
+    const skey = /** @type {string} */ (parts.pop());
+    const kind = /** @type {string} */ (parts.pop());
+    const origin = parts.join("\t");
+    if (!origin || !Object.hasOwn(DOC_KINDS, kind) || !SECTION_KEY.test(skey)) return false;
+    const ok = {
+      title: () => typeof value === "string" && value.trim() !== "",
+      body: () => value === null || typeof value === "string",
+      position: () => Number.isFinite(value),
+      status: () => SECTION_STATUSES.includes(value),
+      records: () => Array.isArray(value) && value.every((u) => typeof u === "string"),
+    }[/** @type {"title"} */ (field)];
+    if (!ok()) return false;
+    const clock = this.q("SELECT at, device FROM clock WHERE entity = 'section' AND key = ? AND field = ?").get(key, field);
+    if (clock && (at < clock.at || (at === clock.at && device < clock.device))) return false;
+    const repo = this.repoForOrigin_(origin);
+    if (!this.docFind(repo.id, kind)) {
+      this.q("INSERT INTO documents (uid, repo_id, kind, title, updated_at) VALUES (?, ?, ?, ?, ?)").run(uid(), repo.id, kind, /** @type {any} */ (DOC_KINDS)[kind], at);
+    }
+    const doc = this.docFind(repo.id, kind);
+    let s = this.q("SELECT * FROM doc_sections WHERE doc_id = ? AND key = ?").get(doc.id, skey);
+    if (!s) {
+      const p = /** @type {any} */ (this.q("SELECT coalesce(max(position), 0) + 1 AS p FROM doc_sections WHERE doc_id = ?").get(doc.id)).p;
+      this.q("INSERT INTO doc_sections (uid, doc_id, key, title, position, updated_at) VALUES (?, ?, ?, ?, ?, ?)").run(uid(), doc.id, skey, skey, p, at);
+      s = this.q("SELECT * FROM doc_sections WHERE doc_id = ? AND key = ?").get(doc.id, skey);
+      versions.set(s.id, { before: {}, after: { key: skey }, device, at, created: true });
+    }
+    const v = versions.get(s.id) ?? { before: {}, after: {}, device, at };
+    versions.set(s.id, v);
+    const ids = () => this.q("SELECT record_id FROM doc_section_records WHERE section_id = ? ORDER BY record_id").all(s.id).map((/** @type {any} */ r) => r.record_id);
+    const was = field === "records" ? ids() : s[field] ?? null;
+    let missing = false;
+    if (field === "records") {
+      const found = value.map((/** @type {string} */ u) => this.q("SELECT r.id, t.repo_id FROM records r JOIN tasks t ON t.id = r.task_id WHERE r.uid = ?").get(u));
+      missing = found.some((/** @type {any} */ r) => !r);
+      this.q("DELETE FROM doc_section_records WHERE section_id = ?").run(s.id);
+      for (const r of found) if (r && r.repo_id === repo.id) this.q("INSERT OR IGNORE INTO doc_section_records (section_id, record_id) VALUES (?, ?)").run(s.id, r.id);
+    } else {
+      this.q(`UPDATE doc_sections SET ${field} = ? WHERE id = ?`).run(value, s.id);
+    }
+    this.q("UPDATE doc_sections SET updated_at = max(updated_at, ?) WHERE id = ?").run(at, s.id);
+    this.q("UPDATE documents SET updated_at = max(updated_at, ?) WHERE id = ?").run(at, doc.id);
+    const now = field === "records" ? ids() : value;
+    if (!(field in v.before)) v.before[field] = was;
+    v.after[field] = now;
+    if (!v.created && JSON.stringify(v.before[field]) === JSON.stringify(now)) {
+      delete v.before[field];
+      delete v.after[field];
+    }
+    v.at = Math.max(v.at, at);
+    v.device = device;
+    if (missing) return "later";
+    this.q(`INSERT INTO clock (entity, key, field, at, device) VALUES ('section', ?, ?, ?, ?)
+            ON CONFLICT (entity, key, field) DO UPDATE SET at = excluded.at, device = excluded.device`).run(key, field, at, device);
     return true;
   }
 
@@ -1298,4 +1622,4 @@ function openDb({ path: file = dbPath(), busyMs = 5000 } = {}) {
   return db;
 }
 
-module.exports = { openDb, dbPath, onWindowsDrive, normOrigin, refersTo, KINDS, ACTORS, VERSION, MIGRATIONS, SYNC_FIELDS, PLACEHOLDER, TRACKER_KEY };
+module.exports = { openDb, dbPath, onWindowsDrive, normOrigin, refersTo, KINDS, ACTORS, VERSION, MIGRATIONS, SYNC_FIELDS, PLACEHOLDER, TRACKER_KEY, DOC_KINDS, SECTION_STATUSES, SECTION_KEY };

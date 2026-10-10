@@ -82,6 +82,23 @@
         "icon": "$(bell)"
       },
       {
+        "command": "imprimatur.openArchitecture",
+        "title": "Open Architecture Document (Mimari)",
+        "category": "Imprimatur",
+        "icon": "$(symbol-structure)"
+      },
+      {
+        "command": "imprimatur.openProduct",
+        "title": "Open Product Document (Ürün)",
+        "category": "Imprimatur",
+        "icon": "$(package)"
+      },
+      {
+        "command": "imprimatur.docs.reveal",
+        "title": "Show a Design Document Section",
+        "category": "Imprimatur"
+      },
+      {
         "command": "imprimatur.acceptRange",
         "title": "Accept Agent Changes in Range",
         "category": "Imprimatur"
@@ -291,6 +308,10 @@
     "menus": {
       "commandPalette": [
         {
+          "command": "imprimatur.docs.reveal",
+          "when": "false"
+        },
+        {
           "command": "imprimatur.acceptRange",
           "when": "false"
         },
@@ -499,6 +520,11 @@
           "default": 7,
           "minimum": 0,
           "markdownDescription": "After this many days an agent edit counts as accepted and leaves review; its history, and waiting logs with nothing open, move to `.claude/imprimatur/archive/<date>/` (gzipped, read with `zcat`). Runs once a day per repo; **Imprimatur: Archive Old Agent Edits and Asks Now** runs it at once. `0`: never."
+        },
+        "imprimatur.docs.export": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Write the repo's design documents (the panel's **Mimari** and **Ürün** tabs) to `docs/ARCHITECTURE.md` and `docs/PRODUCT.md`, 2 s after they change. The database stays the source of truth: edit in the panel. Imprimatur never commits them."
         }
       }
     },

@@ -15,7 +15,7 @@ import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-const { openDb, KINDS } = require("../vscode/db.js");
+const { openDb, KINDS, DOC_KINDS, SECTION_STATUSES, SECTION_KEY } = require("../vscode/db.js");
 const { repoRoot } = require("../vscode/review-state.js");
 const { originOf } = require("../vscode/import.js");
 
@@ -37,6 +37,8 @@ export const INSTRUCTIONS = [
   "When work is done, record_update that record with status \"done\" and the result in body.",
   "task_get returns open records by default; status \"all\", kind, limit/offset and full:true give more.",
   "search with repo \"*\" looks in every repo.",
+  "Each repo has two living design documents in sections: architecture (how it is built) and product (what the user gets); doc_get reads them.",
+  "When you add or change an adr/pdr/decision, update the matching section of the architecture/product document with doc_section_upsert and link the record.",
   "Leave _session empty: Imprimatur's hook fills it.",
 ].join(" ");
 
@@ -45,6 +47,10 @@ const RECORD_STATUS = ["open", "done", "dropped"];
 const GET_STATUS = ["open", "done", "dropped", "all"];
 const MAX_TITLE = 300;
 const MAX_BODY = 20_000;
+/** A design document section's body (#72): longer than a record's. */
+const MAX_SECTION_BODY = 60_000;
+const DOC_KIND = { type: "string", enum: Object.keys(DOC_KINDS), description: "architecture (how it is built) or product (what the user gets)" };
+const SECTION_KEY_ARG = { type: "string", maxLength: 64, description: "The section's slug, e.g. \"storage\" (a-z, 0-9, -); unique in the document" };
 const BODY_CUT = 500;
 
 const repoArg = { type: "string", description: "Absolute path inside the repo; default: the project the agent runs in" };
@@ -97,6 +103,20 @@ const LEFT_OFF = {
 };
 const output = (properties, required = Object.keys(properties)) => ({ type: "object", properties, required });
 const RECORD_OUT = output({ record: RECORD });
+const DOCUMENT = {
+  type: "object",
+  properties: { id: int, uid: str, repo_id: int, kind: { type: "string", enum: Object.keys(DOC_KINDS) }, title: str, updated_at: int },
+  required: ["id", "kind", "title", "updated_at"],
+};
+const SECTION = {
+  type: "object",
+  properties: {
+    id: int, uid: str, doc_id: int, key: str, title: str, body: orNull("string"), position: { type: "number" },
+    status: { type: "string", enum: SECTION_STATUSES }, updated_at: int,
+    records: { type: "array", items: int, description: "Ids of the records that contribute to the section" },
+  },
+  required: ["id", "key", "title", "position", "status", "updated_at", "records"],
+};
 
 /**
  * @type {Array<{name: string, title: string, description: string, inputSchema: any, outputSchema: any,
@@ -195,6 +215,39 @@ const TOOLS = [
     outputSchema: output({ records: { type: "array", items: RECORD } }),
     readOnly: true,
   },
+  {
+    name: "doc_get",
+    title: "Read a design document",
+    description: "The repo's architecture or product design document: its table of contents (each section's key, title, status, last update and contributing record ids). section gives that section's body; full:true gives every body.",
+    inputSchema: input({
+      kind: DOC_KIND,
+      repo: repoArg,
+      section: { type: "string", description: "A section key: its body too" },
+      full: { type: "boolean", default: false, description: "Every section's body" },
+    }, ["kind"]),
+    outputSchema: output({
+      document: DOCUMENT, sections: { type: "array", items: SECTION, description: "In order; body only for the asked section (or all with full)" },
+      hint: { type: "string" },
+    }, ["document", "sections"]),
+    readOnly: true,
+  },
+  {
+    name: "doc_section_upsert",
+    title: "Write a design document section",
+    description: "Creates a section of the architecture or product document (title needed) or changes its title, body (Markdown), position or status (superseded: replaced, kept at the end). records: ids of records of this repo (adr, pdr, decision, …) linked as contributors, besides those already linked. Every change is versioned.",
+    inputSchema: input({
+      kind: DOC_KIND,
+      key: SECTION_KEY_ARG,
+      title: { type: "string", maxLength: MAX_TITLE, description: "The section heading" },
+      body: { type: "string", maxLength: MAX_SECTION_BODY, description: "The section's text (Markdown; headings from ### down)" },
+      position: { type: "number", description: "Sort order; a new section goes last" },
+      status: { type: "string", enum: SECTION_STATUSES },
+      records: { type: "array", items: int, description: "Record ids that contribute to the section (linked, never unlinked here)" },
+      repo: repoArg,
+    }, ["kind", "key"]),
+    outputSchema: output({ document: DOCUMENT, section: SECTION, created: { type: "boolean" } }),
+    idempotent: true,
+  },
 ];
 
 class ToolError extends Error {}
@@ -257,6 +310,7 @@ const TYPES = {
   number: Number.isFinite,
   boolean: (v) => typeof v === "boolean",
   object: isObject,
+  array: Array.isArray,
 };
 
 /** Checks the arguments the tools rely on; the schema is advisory to clients. @param {any} tool @param {any} a */
@@ -268,13 +322,13 @@ function validate(tool, a) {
   }
   for (const [k, p] of Object.entries(props)) {
     if (a[k] === undefined || TYPES[p.type]?.(a[k]) !== false) continue;
-    const what = { integer: ["id", "parent_id"].includes(k) ? "an integer record id" : "an integer", object: "an object" }[p.type] ?? `a ${p.type}`;
+    const what = { integer: ["id", "parent_id"].includes(k) ? "an integer record id" : "an integer", object: "an object", array: "an array" }[p.type] ?? `a ${p.type}`;
     throw new ToolError(`${k} must be ${what}`);
   }
-  for (const k of ["key", "task", "kind", "title", "text"]) {
+  for (const k of ["key", "task", "kind", "title", "text", "section"]) {
     if (a[k] !== undefined && !a[k].trim()) throw new ToolError(`${k} must be a non-empty string`);
   }
-  for (const k of ["key", "task", "epic"]) if (typeof a[k] === "string") a[k] = a[k].trim();
+  for (const k of ["key", "task", "epic", "section"]) if (typeof a[k] === "string") a[k] = a[k].trim();
   for (const [k, p] of Object.entries(props)) {
     if (p.enum && a[k] !== undefined && !p.enum.includes(a[k])) {
       throw new ToolError(`${k} must be one of: ${p.enum.join(", ")} (got ${JSON.stringify(a[k])})`);
@@ -283,8 +337,15 @@ function validate(tool, a) {
   if (a.title !== undefined && a.title.length > MAX_TITLE) {
     throw new ToolError(`title is ${a.title.length} chars; the limit is ${MAX_TITLE}. Keep it to one line and put the rest in body.`);
   }
-  if (a.body !== undefined && a.body.length > MAX_BODY) {
-    throw new ToolError(`body is ${a.body.length} chars; the limit is ${MAX_BODY}. Split it across records or link a file.`);
+  const maxBody = props.body?.maxLength ?? MAX_BODY;
+  if (a.body !== undefined && a.body.length > maxBody) {
+    throw new ToolError(`body is ${a.body.length} chars; the limit is ${maxBody}. Split it across ${maxBody === MAX_BODY ? "records" : "sections"} or link a file.`);
+  }
+  if (a.records !== undefined && !a.records.every((v) => Number.isSafeInteger(v) && v > 0)) {
+    throw new ToolError("records must be an array of integer record ids");
+  }
+  if (tool.name.startsWith("doc_") && a.key !== undefined && !SECTION_KEY.test(a.key)) {
+    throw new ToolError(`key ${JSON.stringify(a.key)} must be a slug: lower-case a-z, 0-9 and -, starting with a letter or digit, at most 64 chars (e.g. "storage", "sync-model")`);
   }
   if (a.limit !== undefined) a.limit = Math.min(Math.max(a.limit, 1), 100);
   if (a.offset !== undefined && a.offset < 0) throw new ToolError("offset must be 0 or more");
@@ -319,6 +380,40 @@ function taskRecords(db, task, a) {
   if (hidden) hints.push(`${hidden} done/dropped record${hidden === 1 ? "" : "s"} not shown: status "all" shows them`);
   if (hints.length) out.hint = hints.join("; ");
   return out;
+}
+
+/** doc_get: the document's table of contents, with the asked bodies. @param {any} db @param {{id: number, root: string}} repo @param {any} a */
+function docGet(db, repo, a) {
+  const found = db.docFind(repo.id, a.kind);
+  // Not made by a read: an empty document until something is written.
+  const document = found ?? { id: 0, repo_id: repo.id, kind: a.kind, title: DOC_KINDS[a.kind], updated_at: 0 };
+  const all = found ? db.docSections(found.id) : [];
+  if (a.section !== undefined && !all.some((s) => s.key === a.section)) {
+    throw new ToolError(`no section ${JSON.stringify(a.section)} in the ${a.kind} document. ${all.length ? `Sections: ${all.map((s) => s.key).join(", ")}.` : "It has no sections yet."} doc_section_upsert with this key and a title creates it.`);
+  }
+  const sections = all.map(({ contributors, ...s }) => (a.full || s.key === a.section ? s : { ...s, body: undefined }));
+  /** @type {any} */
+  const out = { document, sections: sections.map((s) => Object.fromEntries(Object.entries(s).filter(([, v]) => v !== undefined))) };
+  if (!all.length) out.hint = `empty: write its first section with doc_section_upsert {kind: "${a.kind}", key, title, body, records}`;
+  else if (!a.full && a.section === undefined) out.hint = "bodies left out: section:<key> gives one, full:true all";
+  return out;
+}
+
+/** doc_section_upsert: records must be this repo's. @param {any} db @param {{id: number, root: string}} repo @param {any} a @param {any} actor */
+function docUpsert(db, repo, a, actor) {
+  for (const id of a.records ?? []) {
+    const rec = recordOf(db, id, "records");
+    if (db.taskById(rec.task_id)?.repo_id !== repo.id) {
+      throw new ToolError(`record ${id} belongs to another repo; a section links only records of ${repo.root}`);
+    }
+  }
+  const doc = db.docOf(repo.id, a.kind);
+  const created = !db.docSection(doc.id, a.key);
+  if (created && a.title === undefined) {
+    throw new ToolError(`no section ${JSON.stringify(a.key)} in the ${a.kind} document yet: give a title to create it (doc_get lists the sections)`);
+  }
+  const section = db.upsertSection(doc.id, a.key, { ...pick(a, ["title", "body", "position", "status"]), addRecords: a.records ?? [] }, actor);
+  return { document: db.docById(doc.id), section, created };
 }
 
 /**
@@ -371,6 +466,10 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
       }
       return { record: db.setPointer(a.id, actor) };
     }
+    case "doc_get":
+      return docGet(db, repoOf(db, a.repo), a);
+    case "doc_section_upsert":
+      return docUpsert(db, repoOf(db, a.repo), a, actor);
     case "search":
       return { records: db.search(a.text, { repoId: a.repo === "*" ? undefined : repoOf(db, a.repo).id, kind: a.kind, limit: a.limit }) };
     default:
@@ -420,6 +519,27 @@ export function digest(name, out, a = {}) {
       return `Updated ${recordLine(out.record)}`;
     case "pointer_set":
       return `👉 now on ${recordLine(out.record)}`;
+    case "doc_get": {
+      const d = out.document;
+      const live = out.sections.filter((s) => s.status === "current");
+      const old = out.sections.filter((s) => s.status !== "current");
+      const lines = [`${d.title} (${d.kind}): ${plural(live.length, "section")}${old.length ? `, ${old.length} superseded` : ""}${d.updated_at ? `, updated ${new Date(d.updated_at).toISOString().slice(0, 10)}` : ""}`];
+      const line = (s, i) => `${i} ${s.key} — ${s.title}${s.status !== "current" ? ` [${s.status}]` : ""} (updated ${new Date(s.updated_at).toISOString().slice(0, 10)}${s.records.length ? `; records ${s.records.join(", ")}` : ""})`;
+      live.forEach((s, i) => {
+        lines.push(line(s, `${i + 1}.`));
+        if (s.body != null) lines.push(s.body.replace(/^/gm, "    "));
+      });
+      old.forEach((s) => {
+        lines.push(line(s, "-"));
+        if (s.body != null) lines.push(s.body.replace(/^/gm, "    "));
+      });
+      if (out.hint) lines.push(`(${out.hint})`);
+      return lines.join("\n");
+    }
+    case "doc_section_upsert": {
+      const s = out.section;
+      return `${out.created ? "Created" : "Saved"} ${out.document.kind} section ${s.key} — ${s.title} [${s.status}]${s.records.length ? `; records ${s.records.join(", ")}` : "; no records linked"}`;
+    }
     case "search":
       if (!out.records.length) return `No records match ${JSON.stringify(a.text ?? "")}.`;
       return [`${plural(out.records.length, "record")}:`, ...out.records.map((r) =>
