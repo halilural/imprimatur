@@ -1,7 +1,7 @@
 {
   "name": "imprimatur",
   "displayName": "Imprimatur",
-  "version": "0.41.0",
+  "version": "0.42.0",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it: Claude Code hooks that record each edit and what the agent waits on you for, and an MCP server for tasks and records. Pair it with the Imprimatur VS Code extension (npm run setup -- --plugin).",
   "author": {
     "name": "halilural",
