@@ -8,6 +8,17 @@ const vscode = require("vscode");
 const os = require("node:os");
 const path = require("node:path");
 const { scanSetup, changesSince, snapshotOf } = require("./agent-setup.js");
+const { withScopes, inEffectFor, effectTree } = require("./setup-scope.js");
+const { readSources, mergeSettings, mergedTree } = require("./setup-merged.js");
+
+/** "For <active file>" (#28): what is in effect for the file, from the scope holding it. @param {any[]} scopes @param {string | undefined} file */
+function forFileNode(scopes, file) {
+  if (!file) return undefined;
+  const repo = scopes.filter((s) => !s.global && !path.relative(s.root, file).startsWith("..") && !path.isAbsolute(path.relative(s.root, file))).sort((a, b) => b.root.length - a.root.length)[0];
+  const glob = scopes.find((s) => s.global);
+  const e = inEffectFor(file, { root: repo?.root ?? path.dirname(file), items: repo?.items ?? [], globalItems: glob?.items ?? [], hooks: repo?.merged?.hooks });
+  return effectTree(e, path.basename(file));
+}
 
 const SEEN_KEY = "imprimatur.setupSeen";
 const ICONS = {
@@ -36,10 +47,23 @@ const KIND_ICONS = { settings: "settings-gear", "hook script": "zap", skill: "mo
 /**
  * @typedef {{type: "graph"} | {type: "scope", scope: Scope} | {type: "tool", scope: Scope, tool: string} | {type: "kind", scope: Scope, tool: string, kind: string}
  *   | {type: "file", scope: Scope, item: ReturnType<typeof scanSetup>[number], state?: string} | {type: "detail", text: string}
- *   | {type: "removed", scope: Scope, rel: string}} Node
- * @typedef {{id: string, label: string, root: string, global: boolean,
- *   items: ReturnType<typeof scanSetup>, state: Record<string, string>, removed: string[]}} Scope
+ *   | {type: "removed", scope: Scope, rel: string} | PlainNode} Node
+ * @typedef {{type: "group" | "leaf", label: string, description?: string, tooltip?: string, icon?: string, abs?: string, children?: any[]}} PlainNode
+ *   "For <file>" and "Effective settings" rows, built by setup-scope.js / setup-merged.js
+ * @typedef {{id: string, label: string, root: string, global: boolean, merged?: ReturnType<typeof mergeSettings>,
+ *   items: Array<ReturnType<typeof scanSetup>[number] & {scope?: {label: string}}>, state: Record<string, string>, removed: string[]}} Scope
  */
+
+/** A plain group / leaf row. @param {PlainNode} node @returns {vscode.TreeItem} */
+function plainItem(node) {
+  const T = vscode.TreeItemCollapsibleState;
+  const it = new vscode.TreeItem(node.label, node.type === "group" ? (node.label.startsWith("For ") ? T.Expanded : T.Collapsed) : T.None);
+  it.description = node.description;
+  it.tooltip = node.tooltip;
+  if (node.icon) it.iconPath = new vscode.ThemeIcon(node.icon);
+  if (node.type === "leaf" && node.abs) it.command = { command: "vscode.open", title: "Open", arguments: [vscode.Uri.file(node.abs)] };
+  return it;
+}
 
 class SetupView {
   /**
@@ -59,6 +83,8 @@ class SetupView {
     /** @type {vscode.TreeView<Node> | undefined} */
     this.view = undefined;
     this.graph = { edits: 0, waiting: 0 };
+    /** @type {string | undefined} the active editor's file, for "For <file>" */
+    this.activeFile = undefined;
   }
 
   /** Rescan every scope (cheap: a folder walk and small reads). */
@@ -68,13 +94,14 @@ class SetupView {
     const home = os.homedir();
     const defs = [...this.roots().map((r) => ({ id: r, label: path.basename(r), root: r, global: false })), { id: "~", label: "Global (~)", root: home, global: true }];
     this.scopes = defs.map((d) => {
-      const items = scanSetup(d.root, { global: d.global });
+      const items = withScopes(scanSetup(d.root, { global: d.global }), { global: d.global });
       // First look at a scope: remember it, mark nothing.
       if (!seen[d.id]) {
         seen[d.id] = snapshotOf(items);
         this.ctx.globalState.update(SEEN_KEY, seen);
       }
-      return { ...d, items, ...changesSince(items, seen[d.id]) };
+      const merged = d.global ? undefined : mergeSettings(readSources({ root: d.root, home }));
+      return { ...d, items, merged, ...changesSince(items, seen[d.id]) };
     });
     const fresh = this.scopes.reduce((n, s) => n + Object.keys(s.state).length + s.removed.length, 0);
     if (this.view) this.view.badge = fresh ? { value: fresh, tooltip: `${fresh} agent setup change${fresh === 1 ? "" : "s"} since you last looked` } : undefined;
@@ -100,11 +127,16 @@ class SetupView {
 
   /** @param {Node} [node] @returns {Node[]} */
   getChildren(node) {
-    if (!node) return [{ type: "graph" }, ...this.scopes.map((scope) => /** @type {Node} */ ({ type: "scope", scope }))];
+    if (!node) {
+      const forFile = forFileNode(this.scopes, this.activeFile);
+      return [{ type: "graph" }, ...(forFile ? [/** @type {Node} */ (forFile)] : []), ...this.scopes.map((scope) => /** @type {Node} */ ({ type: "scope", scope }))];
+    }
+    if (node.type === "group") return node.children;
     if (node.type === "scope") {
       const tools = [...new Set(node.scope.items.map((i) => i.tool))];
       return [
         ...tools.map((tool) => /** @type {Node} */ ({ type: "tool", scope: node.scope, tool })),
+        ...(node.scope.merged ? [/** @type {Node} */ (mergedTree(node.scope.merged))] : []),
         ...node.scope.removed.map((rel) => /** @type {Node} */ ({ type: "removed", scope: node.scope, rel })),
       ];
     }
@@ -123,6 +155,7 @@ class SetupView {
   /** @param {Node} node @returns {vscode.TreeItem} */
   getTreeItem(node) {
     const T = vscode.TreeItemCollapsibleState;
+    if (node.type === "group" || node.type === "leaf") return plainItem(node);
     if (node.type === "graph") {
       const { edits, waiting } = this.graph;
       const it = new vscode.TreeItem("Agent Change Graph", T.None);
@@ -161,7 +194,9 @@ class SetupView {
     if (node.type === "file") {
       const { item, state } = node;
       const it = new vscode.TreeItem(item.label, item.details.length ? T.Collapsed : T.None);
-      it.description = `${state ? `${state} · ` : ""}${item.summary}`;
+      // When it applies (#28), unless the summary already says it (.mdc).
+      const when = item.scope && !item.summary.startsWith(item.scope.label) ? `${item.scope.label} · ` : "";
+      it.description = `${state ? `${state} · ` : ""}${when}${item.summary}`;
       it.tooltip = new vscode.MarkdownString(`**${item.rel}** · ${item.tool} ${item.kind}${state ? ` · _${state} since you last looked_` : ""}\n\n${item.summary}`);
       it.iconPath = state
         ? new vscode.ThemeIcon(KIND_ICONS[item.kind] ?? "file", new vscode.ThemeColor(state === "new" ? "gitDecoration.addedResourceForeground" : "gitDecoration.modifiedResourceForeground"))
@@ -214,7 +249,33 @@ function registerSetupView(ctx, roots, counts) {
     vscode.commands.registerCommand("imprimatur.setup.refresh", () => provider.refresh()),
     vscode.commands.registerCommand("imprimatur.setup.markSeen", () => provider.markSeen()),
   );
+  followActiveEditor(ctx, provider);
   return provider;
+}
+
+/**
+ * "For <file>" follows the active editor (debounced: switching tabs fast
+ * redraws once). Only files on disk count.
+ * @param {vscode.ExtensionContext} ctx @param {SetupView} provider
+ */
+function followActiveEditor(ctx, provider) {
+  /** @type {NodeJS.Timeout | undefined} */
+  let timer;
+  const update = () => {
+    const doc = vscode.window.activeTextEditor?.document;
+    const file = doc?.uri.scheme === "file" ? doc.uri.fsPath : undefined;
+    if (file === provider.activeFile) return;
+    provider.activeFile = file;
+    provider.changed.fire(undefined);
+  };
+  update();
+  ctx.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(() => {
+      clearTimeout(timer);
+      timer = setTimeout(update, 300);
+    }),
+    { dispose: () => clearTimeout(timer) },
+  );
 }
 
 module.exports = { registerSetupView };
