@@ -31,8 +31,20 @@ let logLine = () => {};
 const allowed = trustGate(() => vscode.workspace.isTrusted, (msg) => logLine(msg));
 /** @param {(msg: string) => void} fn */
 const setGraphLog = (fn) => void (logLine = fn);
-/** Options of the panel's webview: scripts, and no local files to load (everything is inline). */
-const WEBVIEW_OPTIONS = { enableScripts: true, localResourceRoots: [] };
+/** The extension's folder (activate sets it): the page loads mermaid from its dist/ (#72). @type {vscode.Uri | undefined} */
+let extensionUri;
+/** @param {vscode.Uri} uri */
+const setGraphExtensionUri = (uri) => void (extensionUri = uri);
+/** Options of the panel's webview: scripts, and local files only from the extension's dist/ (mermaid.min.js). */
+const webviewOptions = () => ({ enableScripts: true, localResourceRoots: extensionUri ? [vscode.Uri.joinPath(extensionUri, "dist")] : [] });
+/**
+ * The page's mermaid script: its webview URI and the CSP source that allows it (the webview's
+ * cspSource: a URI's "file+" host is no valid CSP host, and localResourceRoots leaves only dist/).
+ * Undefined while no extension folder is known.
+ * @param {vscode.Webview} webview
+ */
+const mermaidSrc = (webview) =>
+  extensionUri ? { src: webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, "dist", "mermaid.min.js")).toString(), csp: webview.cspSource } : undefined;
 
 /** The preview's marks (preview.css), for the hover's rendered review (#50); read once. */
 let reviewCss;
@@ -182,7 +194,7 @@ function waitingBody(steps, sessions, root) {
  * "edits", the turn-end asks on "inbox", the task tabs' HTML (opts.pane) on theirs.
  * @param {ReturnType<typeof graphRows>} data @param {string} root @param {string} nonce
  * @param {ReturnType<typeof waitingSteps>} [waiting]
- * @param {{view?: Record<string, any>, pane?: string, inbox?: number, repoName?: string}} [opts]
+ * @param {{view?: Record<string, any>, pane?: string, inbox?: number, repoName?: string, mermaid?: {src: string, csp: string}}} [opts] mermaid: dist/mermaid.min.js as a webview URI, and the webview's cspSource
  */
 function html(data, root, nonce, waiting = [], opts = {}) {
   const view = { tab: "edits", ...opts.view };
@@ -259,7 +271,8 @@ function html(data, root, nonce, waiting = [], opts = {}) {
     : `<tr><td colspan="8" class="empty">No agent edits recorded in ${esc(root)} yet.</td></tr>`;
   const pending = data.rows.filter((r) => !r.accepted).length;
   return `<!doctype html><html><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; form-action 'none'; base-uri 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'${opts.mermaid ? ` ${esc(opts.mermaid.csp)}` : ""}; form-action 'none'; base-uri 'none';">
+${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.src)}">` : ""}
 <style>
   body { font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); padding: 0 12px; }
   header { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 0; }
@@ -407,6 +420,102 @@ function html(data, root, nonce, waiting = [], opts = {}) {
   const answered = document.getElementById("answered");
   answered.checked = state.answered;
   const HINTS = { home: "Görevlerde ara… (/)", tasks: "Görev, karar, soru ara… (/)", inbox: "Bekleyenlerde ara… (/)", architecture: "Bölümlerde ara… (/)", product: "Bölümlerde ara… (/)", edits: "Dosya, istek ya da cevap süz… (/)" };
+  // The document tabs' mermaid blocks (#72): drawn with the extension's mermaid, loaded
+  // once on the first block, into a shadow root of their div. The block patching compares
+  // outerHTML, which leaves a shadow root out: a refresh neither redraws nor flickers, and a
+  // swapped block gets its SVG back from the cache (by the block's key) at once.
+  const MERMAID_SRC = document.querySelector('meta[name="imprimatur-mermaid"]')?.content;
+  const NONCE = document.currentScript?.nonce;
+  /** key → {svg} or {error}, for the theme in diagramTheme. */
+  const diagrams = new Map();
+  /** div → the theme it shows. */
+  const diagramOf = new WeakMap();
+  let mermaidState = ""; // "", "loading", "ready", "failed"
+  let diagramTheme = "";
+  let mermaidTheme = "";
+  let diagramSeq = 0;
+  let drawing = false;
+  const HC = (fg, bg) => ({ darkMode: bg === "#000000", background: bg, mainBkg: bg, primaryColor: bg, secondaryColor: bg, tertiaryColor: bg, primaryTextColor: fg, secondaryTextColor: fg, tertiaryTextColor: fg, textColor: fg, titleColor: fg, lineColor: fg, primaryBorderColor: fg, secondaryBorderColor: fg, tertiaryBorderColor: fg, nodeBorder: fg, clusterBkg: bg, clusterBorder: fg, edgeLabelBackground: bg, noteBkgColor: bg, noteTextColor: fg, noteBorderColor: fg, actorBkg: bg, actorBorder: fg, actorTextColor: fg, signalColor: fg, signalTextColor: fg });
+  const themeOf = () => {
+    const cl = document.body.classList;
+    if (cl.contains("vscode-high-contrast-light")) return { key: "hc-light", theme: "base", themeVariables: HC("#000000", "#ffffff") };
+    if (cl.contains("vscode-high-contrast")) return { key: "hc", theme: "base", themeVariables: HC("#ffffff", "#000000") };
+    if (cl.contains("vscode-light")) return { key: "light", theme: "default" };
+    return { key: "dark", theme: "dark" };
+  };
+  const loadMermaid = () => {
+    mermaidState = "loading";
+    const s = document.createElement("script");
+    if (NONCE) s.nonce = NONCE;
+    s.src = MERMAID_SRC;
+    s.onload = () => { mermaidState = window.mermaid ? "ready" : "failed"; drawDiagrams(); };
+    s.onerror = () => { mermaidState = "failed"; };
+    document.head.appendChild(s);
+  };
+  const DIAGRAM_CSS = ":host { display: block; overflow-x: auto; } svg { max-width: 100%; height: auto; } .err { margin: 0 0 6px; font-weight: 600; color: var(--vscode-errorForeground); } pre { margin: 0; padding: 10px 12px; border-radius: 6px; background: var(--vscode-textCodeBlock-background); font-family: var(--vscode-editor-font-family); font-size: 12.5px; white-space: pre-wrap; overflow-x: auto; }";
+  const showDiagram = (div, entry) => {
+    const root = div.shadowRoot || div.attachShadow({ mode: "open" });
+    const style = document.createElement("style");
+    style.textContent = DIAGRAM_CSS;
+    if (entry.svg) {
+      // The SVG mermaid made in strict mode (sanitised): parsed by a template, never pasted into the page's HTML.
+      const t = document.createElement("template");
+      t.innerHTML = entry.svg;
+      return root.replaceChildren(style, t.content);
+    }
+    const err = document.createElement("p");
+    err.className = "err";
+    err.textContent = "Diyagram çizilemedi: " + entry.error;
+    const pre = document.createElement("pre");
+    pre.textContent = div.textContent;
+    root.replaceChildren(style, err, pre);
+  };
+  async function drawDiagrams() {
+    if (!MERMAID_SRC) return;
+    const blocks = () => [...document.querySelectorAll("#pane .mermaid-src[data-key]")];
+    if (!blocks().length) return;
+    const th = themeOf();
+    if (th.key !== diagramTheme) { diagramTheme = th.key; diagrams.clear(); }
+    const todo = [];
+    for (const div of blocks()) {
+      if (diagramOf.get(div) === diagramTheme) continue;
+      const hit = diagrams.get(div.dataset.key);
+      if (hit) { showDiagram(div, hit); diagramOf.set(div, diagramTheme); } else todo.push(div);
+    }
+    if (!todo.length) return;
+    if (mermaidState === "") return loadMermaid();
+    if (mermaidState !== "ready" || drawing) return;
+    drawing = true;
+    try {
+      if (mermaidTheme !== diagramTheme) {
+        mermaidTheme = diagramTheme;
+        const font = getComputedStyle(document.body).getPropertyValue("--vscode-font-family").trim() || "sans-serif";
+        window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: th.theme, ...(th.themeVariables ? { themeVariables: th.themeVariables } : {}), fontFamily: font });
+      }
+      for (const div of todo) {
+        let entry = diagrams.get(div.dataset.key);
+        if (!entry) {
+          const id = "imprimatur-mmd-" + ++diagramSeq;
+          try {
+            entry = { svg: (await window.mermaid.render(id, div.textContent)).svg };
+          } catch (e) {
+            entry = { error: String((e && e.message) || e).replace(/\\s+/g, " ").trim().slice(0, 200) };
+            document.getElementById("d" + id)?.remove();
+            document.getElementById(id)?.remove();
+          }
+          // The theme changed while it drew: the next pass draws again in the new one.
+          if (themeOf().key !== diagramTheme) break;
+          diagrams.set(div.dataset.key, entry);
+        }
+        if (div.isConnected) { showDiagram(div, entry); diagramOf.set(div, diagramTheme); }
+      }
+    } finally {
+      drawing = false;
+    }
+    // Blocks that came (or a theme that changed) while it drew.
+    if (blocks().some((d) => diagramOf.get(d) !== themeOf().key)) drawDiagrams();
+  }
+  new MutationObserver(() => { if (themeOf().key !== diagramTheme) drawDiagrams(); }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
   const apply = () => {
     vscode.setState(state);
     const tab = state.tab;
@@ -436,6 +545,7 @@ function html(data, root, nonce, waiting = [], opts = {}) {
     // The task tabs: the search hides tasks, records and asks that do not say it.
     document.querySelectorAll("#pane [data-q]").forEach((el) => { el.hidden = !!q && !el.dataset.q.toLowerCase().includes(q); });
     document.getElementById("none").hidden = !state.answered || !!q || document.querySelector("tr.w.s-open") !== null;
+    drawDiagrams();
   };
   /** Change the view: the host draws the tab anew (it draws only the visible one). */
   const setView = (patch) => {
@@ -1074,8 +1184,8 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
     return panel.reveal();
   }
   if (!panel) {
-    if (restored) restored.webview.options = WEBVIEW_OPTIONS;
-    panel = restored ?? vscode.window.createWebviewPanel("imprimatur.graph", "Imprimatur", vscode.ViewColumn.Active, WEBVIEW_OPTIONS);
+    if (restored) restored.webview.options = webviewOptions();
+    panel = restored ?? vscode.window.createWebviewPanel("imprimatur.graph", "Imprimatur", vscode.ViewColumn.Active, webviewOptions());
     panel.title = "Imprimatur";
     panel.webview.onDidReceiveMessage(onMessage);
     // A hidden webview is torn down and gets no messages: shown again, it reloads from the html, so make that current.
@@ -1136,7 +1246,7 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
       pane = `<p class="empty" data-k="error">Imprimatur: ${esc(e instanceof Error ? e.message : String(e))}</p>`;
     }
     const repoName = (db && tasksView.repoOfRoot(db, root)?.name) || path.basename(root);
-    return html(edits, root, nonce, waiting, { view: pageView(), pane, inbox, repoName });
+    return html(edits, root, nonce, waiting, { view: pageView(), pane, inbox, repoName, mermaid: mermaidSrc(p.webview) });
   };
   // An edit refreshes three times (extension.js refreshSoon): send only what changed.
   let sent = "";
@@ -1363,4 +1473,4 @@ const graphCommands = {
   "imprimatur.graph.copyAsk": (c) => vscode.env.clipboard.writeText(c.text ?? ""),
 };
 
-module.exports = { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setPanelScope, setPanelHooks, panelState, inboxNow, panelMessage: onMessage, laneSvg, html, cssPaths, WEBVIEW_OPTIONS };
+module.exports = { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setPanelScope, setPanelHooks, panelState, inboxNow, panelMessage: onMessage, laneSvg, html, cssPaths, webviewOptions, setGraphExtensionUri };

@@ -35,6 +35,7 @@ function renderMarkdown(text) {
       md = new MarkdownIt({ html: false, linkify: true, typographer: false });
       const valid = md.validateLink.bind(md);
       md.validateLink = (/** @type {string} */ url) => valid(url) && /^(https?:|mailto:|#)/i.test(url.trim());
+      md.renderer.rules.fence = mermaidFence(md.renderer.rules.fence);
     }
     out = md.render(src);
   } catch {
@@ -46,6 +47,24 @@ function renderMarkdown(text) {
   rendered.set(src, out);
   return out;
 }
+
+/**
+ * A fence renderer that leaves a ```mermaid block as its escaped source in a
+ * <div class="mermaid-src" data-key="…"><pre>: the panel draws it as a diagram (graphView.js)
+ * into the div's shadow root (a <pre> cannot have one),
+ * from a cache by key. Every other fence goes to markdown-it's own renderer.
+ * @param {Function} fallback markdown-it's fence rule
+ */
+function mermaidFence(fallback) {
+  return (/** @type {any[]} */ tokens, /** @type {number} */ idx, /** @type {any} */ options, /** @type {any} */ env, /** @type {any} */ self) => {
+    const t = tokens[idx];
+    if (String(t.info ?? "").trim().split(/\s+/)[0].toLowerCase() !== "mermaid") return fallback(tokens, idx, options, env, self);
+    return `<div class="mermaid-src" data-key="${mermaidKey(t.content)}"><pre>${esc(t.content)}</pre></div>\n`;
+  };
+}
+
+/** A short, stable key of a diagram's source. @param {string} src */
+const mermaidKey = (src) => require("node:crypto").createHash("sha1").update(String(src)).digest("hex").slice(0, 16);
 
 const esc = (/** @type {unknown} */ s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -236,6 +255,7 @@ const DOCS_CSS = `
   .md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
   .md h1, .md h2, .md h3, .md h4 { font-size: 15px; margin: 14px 0 6px; font-weight: 700; }
   .md code { font-family: var(--vscode-editor-font-family); font-size: 12.5px; padding: 1px 4px; border-radius: 4px; background: var(--vscode-textCodeBlock-background); }
+  .mermaid-src > pre { white-space: pre-wrap; }
   .md pre { padding: 10px 12px; border-radius: 6px; background: var(--vscode-textCodeBlock-background); overflow-x: auto; } .md pre code { padding: 0; background: none; }
   .md blockquote { margin: 8px 0; padding: 4px 12px; border-left: 3px solid var(--vscode-textBlockQuote-border, var(--acc)); background: var(--vscode-textBlockQuote-background); }
   .md table { border-collapse: collapse; margin: 8px 0; } .md th, .md td { border: 1px solid var(--line); padding: 4px 10px; text-align: left; }
@@ -253,4 +273,4 @@ const DOCS_CSS = `
   .deditor .acts { align-items: center; flex-wrap: wrap; }
 `;
 
-module.exports = { DOC_TABS, TAB_LABEL, DOCS_CSS, SECTION_BODY_MAX, docModel, docHtml, applyDocMessage, renderMarkdown, slugify, editOf, describeSectionVersion };
+module.exports = { DOC_TABS, TAB_LABEL, DOCS_CSS, SECTION_BODY_MAX, docModel, docHtml, applyDocMessage, renderMarkdown, mermaidKey, slugify, editOf, describeSectionVersion };

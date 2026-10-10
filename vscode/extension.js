@@ -8,7 +8,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { review, acceptHunk, acceptLines, acceptGroups } = require("./diff.js");
 const { markdownItPlugin, markdownBlocks, reviewHtml } = require("./preview.js");
-const { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setPanelScope, setPanelHooks, panelState, panelMessage, inboxNow: panelInbox } = require("./graphView.js");
+const { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setGraphExtensionUri, setPanelScope, setPanelHooks, panelState, panelMessage, inboxNow: panelInbox } = require("./graphView.js");
 const { WAITING_DIR, waitingSteps } = require("./waiting.js");
 const { acceptEdit, spotsOf, graphRows } = require("./graph.js");
 const { registerSetupView } = require("./setupView.js");
@@ -545,6 +545,7 @@ function activate(ctx) {
   log = vscode.window.createOutputChannel("Imprimatur", { log: true });
   ctx.subscriptions.push(log);
   setGraphLog((msg) => log.info(msg));
+  setGraphExtensionUri(ctx.extensionUri);
   status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
   graphButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 48);
   graphButton.command = "imprimatur.openGraph";
