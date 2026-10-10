@@ -8,6 +8,7 @@ const vscode = require("vscode");
 const os = require("node:os");
 const path = require("node:path");
 const { scanSetup, changesSince, snapshotOf } = require("./agent-setup.js");
+const { checkHealth } = require("./setup-health.js");
 
 const SEEN_KEY = "imprimatur.setupSeen";
 const ICONS = {
@@ -36,9 +37,10 @@ const KIND_ICONS = { settings: "settings-gear", "hook script": "zap", skill: "mo
 /**
  * @typedef {{type: "graph"} | {type: "scope", scope: Scope} | {type: "tool", scope: Scope, tool: string} | {type: "kind", scope: Scope, tool: string, kind: string}
  *   | {type: "file", scope: Scope, item: ReturnType<typeof scanSetup>[number], state?: string} | {type: "detail", text: string}
- *   | {type: "removed", scope: Scope, rel: string}} Node
+ *   | {type: "removed", scope: Scope, rel: string}
+ *   | {type: "health"} | {type: "problem", scope: Scope, problem: ReturnType<typeof checkHealth>[number]}} Node
  * @typedef {{id: string, label: string, root: string, global: boolean,
- *   items: ReturnType<typeof scanSetup>, state: Record<string, string>, removed: string[]}} Scope
+ *   items: ReturnType<typeof scanSetup>, state: Record<string, string>, removed: string[], health: ReturnType<typeof checkHealth>}} Scope
  */
 
 class SetupView {
@@ -74,7 +76,7 @@ class SetupView {
         seen[d.id] = snapshotOf(items);
         this.ctx.globalState.update(SEEN_KEY, seen);
       }
-      return { ...d, items, ...changesSince(items, seen[d.id]) };
+      return { ...d, items, ...changesSince(items, seen[d.id]), health: checkHealth(items, { root: d.root, global: d.global }) };
     });
     const fresh = this.scopes.reduce((n, s) => n + Object.keys(s.state).length + s.removed.length, 0);
     if (this.view) this.view.badge = fresh ? { value: fresh, tooltip: `${fresh} agent setup change${fresh === 1 ? "" : "s"} since you last looked` } : undefined;
@@ -100,7 +102,8 @@ class SetupView {
 
   /** @param {Node} [node] @returns {Node[]} */
   getChildren(node) {
-    if (!node) return [{ type: "graph" }, ...this.scopes.map((scope) => /** @type {Node} */ ({ type: "scope", scope }))];
+    if (!node) return [{ type: "graph" }, ...healthRoot(this.scopes), ...this.scopes.map((scope) => /** @type {Node} */ ({ type: "scope", scope }))];
+    if (node.type === "health") return healthChildren(this.scopes);
     if (node.type === "scope") {
       const tools = [...new Set(node.scope.items.map((i) => i.tool))];
       return [
@@ -116,7 +119,7 @@ class SetupView {
       return kinds.map((kind) => /** @type {Node} */ ({ type: "kind", scope: node.scope, tool: node.tool, kind }));
     }
     if (node.type === "kind") return node.scope.items.filter((i) => i.tool === node.tool && i.kind === node.kind).map(fileNode);
-    if (node.type === "file") return node.item.details.map((text) => ({ type: "detail", text }));
+    if (node.type === "file") return [...node.item.details.map((text) => /** @type {Node} */ ({ type: "detail", text })), ...(node.item.children ?? []).map(fileNode)];
     return [];
   }
 
@@ -160,7 +163,7 @@ class SetupView {
     }
     if (node.type === "file") {
       const { item, state } = node;
-      const it = new vscode.TreeItem(item.label, item.details.length ? T.Collapsed : T.None);
+      const it = new vscode.TreeItem(item.label, item.details.length || item.children?.length ? T.Collapsed : T.None);
       it.description = `${state ? `${state} · ` : ""}${item.summary}`;
       it.tooltip = new vscode.MarkdownString(`**${item.rel}** · ${item.tool} ${item.kind}${state ? ` · _${state} since you last looked_` : ""}\n\n${item.summary}`);
       it.iconPath = state
@@ -168,8 +171,10 @@ class SetupView {
         : new vscode.ThemeIcon(KIND_ICONS[item.kind] ?? "file");
       it.resourceUri = vscode.Uri.file(item.abs);
       it.command = { command: "vscode.open", title: "Open", arguments: [vscode.Uri.file(item.abs)] };
+      markHealth(it, node.scope.health.filter((p) => p.file === item.abs));
       return it;
     }
+    if (node.type === "health" || node.type === "problem") return healthItem(node, this.scopes);
     if (node.type === "removed") {
       const it = new vscode.TreeItem(node.rel, T.None);
       it.description = "removed since you last looked";
@@ -180,6 +185,63 @@ class SetupView {
     it.iconPath = new vscode.ThemeIcon("debug-breakpoint-log");
     return it;
   }
+}
+
+// Kinds from the wider scan (#27): auto memory, @imports, managed policy, Cursor hooks.
+Object.assign(KIND_NAMES, { memory: "Auto memory", import: "Imports", "managed policy": "Managed policy", hooks: "Hooks" });
+Object.assign(KIND_ICONS, { memory: "notebook", import: "references", "managed policy": "shield", hooks: "zap" });
+KIND_ORDER.splice(KIND_ORDER.indexOf("settings"), 0, "managed policy");
+KIND_ORDER.splice(KIND_ORDER.indexOf("hook script"), 0, "hooks", "memory");
+
+/**
+ * Health (#30): one "Health (n)" row on top while any scope has a problem.
+ * @param {Scope[]} scopes @returns {Node[]}
+ */
+function healthRoot(scopes) {
+  return scopes.some((s) => s.health.length) ? [{ type: "health" }] : [];
+}
+
+/** The problems, errors first. @param {Scope[]} scopes @returns {Node[]} */
+function healthChildren(scopes) {
+  const all = scopes.flatMap((scope) => scope.health.map((problem) => /** @type {Node} */ ({ type: "problem", scope, problem })));
+  return all.sort((a, b) => (a.type === "problem" && b.type === "problem" ? (a.problem.level === b.problem.level ? 0 : a.problem.level === "error" ? -1 : 1) : 0));
+}
+
+/** @param {Node & {type: "health" | "problem"}} node @param {Scope[]} [scopes] */
+function healthItem(node, scopes) {
+  const T = vscode.TreeItemCollapsibleState;
+  if (node.type === "health") {
+    const it = new vscode.TreeItem("Health", T.Collapsed);
+    it.iconPath = new vscode.ThemeIcon("pulse");
+    it.id = "imprimatur.setup.health";
+    if (scopes) {
+      const all = scopes.flatMap((s) => s.health);
+      const errors = all.filter((p) => p.level === "error").length;
+      it.label = `Health (${all.length})`;
+      it.description = [errors && `${errors} error${errors === 1 ? "" : "s"}`, all.length - errors && `${all.length - errors} warning${all.length - errors === 1 ? "" : "s"}`].filter(Boolean).join(" · ");
+      it.iconPath = new vscode.ThemeIcon(errors ? "error" : "warning", new vscode.ThemeColor(errors ? "problemsErrorIcon.foreground" : "problemsWarningIcon.foreground"));
+    }
+    return it;
+  }
+  const { problem, scope } = node;
+  const rel = path.relative(scope.root, problem.file);
+  const it = new vscode.TreeItem(path.basename(problem.file), T.None);
+  it.description = problem.message;
+  it.tooltip = `${rel.startsWith("..") ? problem.file : rel}: ${problem.message}`;
+  it.iconPath = new vscode.ThemeIcon(problem.level === "error" ? "error" : "warning", new vscode.ThemeColor(problem.level === "error" ? "problemsErrorIcon.foreground" : "problemsWarningIcon.foreground"));
+  const line = Math.max(0, (problem.line ?? 1) - 1);
+  it.command = { command: "vscode.open", title: "Open", arguments: [vscode.Uri.file(problem.file), { selection: new vscode.Range(line, 0, line, 0) }] };
+  return it;
+}
+
+/** A file row with problems: error/warning icon, problems in the tooltip. @param {vscode.TreeItem} it @param {Scope["health"]} problems */
+function markHealth(it, problems) {
+  if (!problems.length) return;
+  const error = problems.some((p) => p.level === "error");
+  it.iconPath = new vscode.ThemeIcon(error ? "error" : "warning", new vscode.ThemeColor(error ? "problemsErrorIcon.foreground" : "problemsWarningIcon.foreground"));
+  const md = /** @type {vscode.MarkdownString} */ (it.tooltip);
+  md.appendMarkdown(`\n\n${problems.map((p) => `${p.level === "error" ? "$(error)" : "$(warning)"} ${p.message}`).join("\n\n")}`);
+  md.supportThemeIcons = true;
 }
 
 /**
