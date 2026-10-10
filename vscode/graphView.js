@@ -46,6 +46,9 @@ const reviewStyle = () => (reviewCss ??= (() => {
   return "";
 })());
 
+/** A table's rows until the host draws its tab (it draws only the visible one). @param {number} cols */
+const LOADING = (cols) => `<tr class="loading"><td colspan="${cols}" class="empty">Yükleniyor…</td></tr>`;
+
 /** Row kinds of the graph's filter (#55): badge and label. */
 const ACTIVITY = {
   edit: ["✎", "Edits"],
@@ -236,7 +239,7 @@ function html(data, root, nonce, waiting = [], opts = {}) {
     .filter(([k]) => kindCount.get(k))
     .map(([k, [icon, label]]) => `<button class="chip" data-kind="${k}" title="Show or hide: ${esc(label)}">${icon} ${esc(label)} <span class="n">${kindCount.get(k)}</span></button>`)
     .join("");
-  const body = tab !== "edits" ? "" : data.rows.length
+  const body = tab !== "edits" ? LOADING(8) : data.rows.length
     ? data.rows
         .map(
           (r, i) => r.record ? recordRow(r, i) : r.activity ? activityRow(r, i) : `<tr data-kind="edit"${r.gone || r.outside ? ` class="${[r.gone && "gone", r.outside && "outside"].filter(Boolean).join(" ")}"` : ""} data-file="${esc(r.file)}" data-n="${r.n}" data-i="${i}" data-q="${esc([r.file, r.intent, r.summary, r.prompt, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}"
@@ -345,10 +348,10 @@ function html(data, root, nonce, waiting = [], opts = {}) {
 <section id="edits"${tab === "edits" ? "" : " hidden"}><div id="kinds">${chips}</div><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
 <tbody>${body}</tbody></table>
 <script type="application/json" id="rows">${JSON.stringify((tab === "edits" ? data.rows : []).map((r) => (r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview, file: r.file, n: r.n, md: /\.mdx?$/i.test(r.file) } : null))).replace(/</g, "\\u003c")}</script></section>
-<section id="pane" data-tab="${tab}"${tab === "edits" ? " hidden" : ""}>${opts.pane ?? ""}</section>
+<section id="pane" data-tab="${tab}"${tab === "edits" ? " hidden" : ""}>${tab === "edits" ? '<p class="empty loading" data-k="loading">Yükleniyor…</p>' : opts.pane ?? ""}</section>
 <section id="waiting"${tab === "inbox" ? "" : " hidden"}><div class="legend"><span>☐ open: tick when done</span><span><span class="badge-ok">✓</span> done</span><span><span class="badge-gone">replaced</span> asked again later</span><span><span class="pill">Answered</span> question you answered</span></div>
 <table><thead><tr><th>Status</th><th></th><th>Waiting for</th><th>Request</th><th>Date</th><th>Session</th><th>By</th></tr></thead>
-<tbody>${tab === "inbox" ? waitingBody(waiting, data.sessions, root) : ""}</tbody></table><p class="empty" id="none" hidden>Nothing open right now.</p></section>
+<tbody>${tab === "inbox" ? waitingBody(waiting, data.sessions, root) : LOADING(7)}</tbody></table><p class="empty" id="none" hidden>Nothing open right now.</p></section>
 <div id="pop"></div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
@@ -406,7 +409,11 @@ function html(data, root, nonce, waiting = [], opts = {}) {
     vscode.setState(state);
     const tab = state.tab;
     document.getElementById("edits").hidden = tab !== "edits";
-    document.getElementById("pane").hidden = tab === "edits";
+    const paneEl = document.getElementById("pane");
+    paneEl.hidden = tab === "edits";
+    // Drawn for another tab: dimmed, saying it loads, until the host's page comes.
+    if (tab !== "edits" && paneEl.dataset.tab !== tab) paneEl.className = "stale";
+    else paneEl.removeAttribute("class");
     document.getElementById("waiting").hidden = tab !== "inbox";
     document.getElementById("count-edits").hidden = tab !== "edits";
     document.getElementById("count-waiting").hidden = tab !== "inbox";
@@ -802,6 +809,18 @@ function html(data, root, nonce, waiting = [], opts = {}) {
     if (e.data?.type === "preview") return showReview(e.data);
     // The host moved the page (a link from elsewhere): its tab and task.
     if (e.data?.type === "view") { Object.assign(state, e.data.view); return apply(); }
+    // A write that failed: the text the box held goes back into it.
+    if (e.data?.type === "failed") {
+      const key = e.data.what === "answer" ? "ans-" + e.data.id : e.data.what === "add" ? "add-" + e.data.task : "";
+      if (key && e.data.text) {
+        state.drafts[key] = e.data.text;
+        vscode.setState(state);
+        const box = document.querySelector('#pane [data-draft="' + key + '"]');
+        if (box && !box.value) box.value = e.data.text;
+      }
+      document.querySelectorAll("#pane .sent").forEach((el) => el.classList.remove("sent"));
+      return;
+    }
     if (e.data?.type !== "render") return;
     reviews.clear(); // edits changed: their rendered reviews may have too
     next = e.data.html;
@@ -824,10 +843,14 @@ let reload;
 let shown;
 /** @type {{openDiff: (file: string, n: number) => unknown, acceptEdit: (file: string, n: number) => unknown, goTo: (file: string, n: number) => unknown} | undefined} */
 let actions;
+/** A refresh came while the panel was not visible. */
+let missed = false;
 /** @type {(file: string, n: number) => string | undefined} */
 let renderEditOf = () => undefined;
 /** The last page sent (the integration tests read it). */
 let lastHtml = "";
+/** The last write the page sent that failed: its text goes back to the page. @type {any} */
+let lastFailed;
 
 /**
  * What the panel shows (#69): its tab, the selected task, the list's filter, every
@@ -926,7 +949,11 @@ function writeFromPanel(m) {
   try {
     tasksView.applyMessage(db, m, tasksView.userActor());
   } catch (e) {
-    vscode.window.showErrorMessage(e instanceof Error ? e.message : String(e));
+    const error = e instanceof Error ? e.message : String(e);
+    // The page cleared the box when it sent: give the text back.
+    lastFailed = { type: "failed", what: m.type, id: m.id, task: m.task, text: typeof m.text === "string" ? m.text : undefined, error };
+    panel?.webview.postMessage(lastFailed);
+    vscode.window.showErrorMessage(error);
   }
   try {
     if (shown) {
@@ -990,7 +1017,11 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
       if (!webviewPanel.visible) hidden = true;
       else if (hidden) {
         hidden = false;
+        missed = false;
         reload?.();
+      } else if (missed) {
+        missed = false;
+        refresh?.(false);
       }
     });
     panel.onDidDispose(() => {
@@ -1029,7 +1060,7 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
     let pane = "";
     let inbox;
     try {
-      inbox = db ? tasksView.inboxCount(db, root, waiting) : undefined;
+      inbox = tasksView.inboxCount(db, root, waiting, { all: view.all });
       // Only the visible tab is drawn.
       if (view.tab !== "edits") pane = tasksView.paneHtml(db, root, view, { waiting, linkOf, error: records.lastError });
     } catch (e) {
@@ -1048,7 +1079,8 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
   };
   reload();
   refresh = (waitingOnly = false) => {
-    if (!p.visible) return;
+    // Not drawn while hidden, but not forgotten: drawn when it shows (onDidChangeViewState).
+    if (!p.visible) return void (missed = true);
     const next = page("", waitingOnly);
     if (next !== sent) p.webview.postMessage({ type: "render", html: (sent = lastHtml = next) });
   };
@@ -1057,8 +1089,25 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
   if (!scannedBefore(root) && allowed("scan history")) scanAll();
 }
 
-/** The open panel, for the integration tests: its repo, view and last page. */
-const panelState = () => ({ open: !!panel, root: shown, view: { ...view }, html: lastHtml });
+/** The open panel, for the integration tests: its repo, view, last page and last failed write. */
+const panelState = () => ({ open: !!panel, root: shown, view: { ...view }, html: lastHtml, failed: lastFailed });
+
+/**
+ * What waits on the user, counted once for every place that shows it (the launcher's
+ * badge, the status bar, the panel's tab badge, Bende bekleyenler): the open panel's
+ * repo and scope, else this root's repo.
+ * @param {string | undefined} root the window's repo when no panel is open
+ */
+function inboxNow(root) {
+  const where = shown ?? root;
+  if (!where) return 0;
+  const waiting = waitingSteps(where);
+  try {
+    return tasksView.inboxCount(records.dbOf(), where, waiting, { all: shown ? view.all : !!scopeStore.get() });
+  } catch {
+    return tasksView.openTurn(waiting).length;
+  }
+}
 
 /** The folder was trusted: describe what is shown, run the first scan if it never ran. */
 function graphTrusted() {
@@ -1240,4 +1289,4 @@ const graphCommands = {
   "imprimatur.graph.copyAsk": (c) => vscode.env.clipboard.writeText(c.text ?? ""),
 };
 
-module.exports = { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setPanelScope, panelState, panelMessage: onMessage, laneSvg, html, cssPaths, WEBVIEW_OPTIONS };
+module.exports = { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setPanelScope, panelState, inboxNow, panelMessage: onMessage, laneSvg, html, cssPaths, WEBVIEW_OPTIONS };

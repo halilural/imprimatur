@@ -48,11 +48,12 @@ const icon = (name, size = 16) => `<svg class="ic" width="${size}" height="${siz
  * @param {string} text @returns {{kind: string, title: string, owner?: string} | undefined}
  */
 function parseQuickAdd(text) {
-  const t = String(text ?? "").trim();
+  if (typeof text !== "string") return undefined;
+  const t = text.trim();
   /** @param {string} kind @param {string} rest @param {string} [owner] */
   const mk = (kind, rest, owner) => {
-    const title = rest.trim();
-    return title ? { kind, title, ...(owner && { owner }) } : undefined;
+    const parts = splitText(rest);
+    return parts ? { kind, ...parts, ...(owner && { owner }) } : undefined;
   };
   if (!t) return undefined;
   if (t[0] === "?") return mk("question", t.slice(1), "K");
@@ -61,6 +62,22 @@ function parseQuickAdd(text) {
   const me = /^@ben\b\s*/i.exec(t);
   if (me) return mk("todo", t.slice(me[0].length), "K");
   return mk("todo", t, "C");
+}
+
+const TITLE_MAX = 300;
+const BODY_MAX = 20_000;
+/**
+ * Typed text as a record's title and body: the first line (at most TITLE_MAX
+ * characters) is the title; the whole text, when it says more, the body (at most BODY_MAX).
+ * @param {unknown} text @returns {{title: string, body?: string} | undefined}
+ */
+function splitText(text) {
+  if (typeof text !== "string") return undefined;
+  const t = text.trim();
+  if (!t) return undefined;
+  const first = t.split("\n")[0].trim();
+  const title = first.length > TITLE_MAX ? `${first.slice(0, TITLE_MAX - 1)}…` : first;
+  return t === title ? { title } : { title, body: t.slice(0, BODY_MAX) };
 }
 
 /** What waits on the user: an open todo or question of theirs, or an open manual test. @param {any} r */
@@ -104,11 +121,28 @@ const today = (now) => {
   return d.getTime();
 };
 
+/** Reads kept until the database changes (db.changeStamp): a redraw that changed nothing reads nothing again. @type {WeakMap<any, {stamp: string, values: Map<string, any>}>} */
+const memo = new WeakMap();
+/** @template T @param {any} db @param {string} key @param {() => T} read @returns {T} */
+function cached(db, key, read) {
+  if (typeof db.changeStamp !== "function") return read();
+  const stamp = db.changeStamp();
+  let m = memo.get(db);
+  if (!m || m.stamp !== stamp) memo.set(db, (m = { stamp, values: new Map() }));
+  if (!m.values.has(key)) m.values.set(key, read());
+  return m.values.get(key);
+}
+
 /**
  * Each task of a repo with its counts for lists: open asks, todos, where we left off.
  * @param {any} db @param {any} repo
  */
 function taskSummaries(db, repo) {
+  return cached(db, `summaries:${repo.id}`, () => readSummaries(db, repo));
+}
+
+/** @param {any} db @param {any} repo */
+function readSummaries(db, repo) {
   const tasks = db.tasksOf(repo.id, { limit: 2000 });
   /** @type {Map<number, any[]>} */
   const by = new Map();
@@ -163,7 +197,7 @@ function taskPage(db, task, view, opts) {
   const flash = view.flash ? recs.find((/** @type {any} */ r) => r.id === view.flash) : undefined;
   const todoAll = live.filter((/** @type {any} */ r) => TODO_KINDS.includes(r.kind));
   const showDone = (view.showDone ?? []).includes(task.id) || (flash && TODO_KINDS.includes(flash.kind) && flash.status !== "open");
-  const creator = (/** @type {any} */ r) => db.versionsOf(r.id)[0];
+  const creators = cached(db, `creators:${task.id}`, () => db.creatorsOf(task.id));
   const answers = live.filter((/** @type {any} */ r) => r.kind === "answer");
   const showOld = (view.old ?? []).includes(task.id);
   const { list: versions, total } = db.taskVersions(task.id, { limit: showOld ? 300 : 12 });
@@ -191,8 +225,8 @@ function taskPage(db, task, view, opts) {
     hiddenDone: todoAll.filter((/** @type {any} */ r) => r.status !== "open" && !r.pointer).length,
     showDone: !!showDone,
     decisions: live.filter((/** @type {any} */ r) => DESIGN_KINDS.includes(r.kind)).map((/** @type {any} */ r) => {
-      const c = creator(r);
-      return { ...r, date: day(r.created_at), who: c ? (c.actor_kind === "user" ? "sen" : c.actor_kind === "agent" ? "ajan" : c.actor_kind) : "" };
+      const c = creators.get(r.id);
+      return { ...r, date: day(r.created_at), who: c ? (c === "user" ? "sen" : c === "agent" ? "ajan" : c) : "" };
     }),
     tests: recs.filter((/** @type {any} */ r) => r.kind === "test"),
     notes: live
@@ -252,9 +286,11 @@ function tasksPage(db, root, view = {}, opts = {}) {
 function inboxModel(db, root, { all = false, waiting = [], now = Date.now() } = {}) {
   const repos = scopeRepos(db, root, all);
   const byRepo = new Map(repos.map((r) => [r.id, r]));
-  const open = [...db.openAsks({ limit: 1000 }), ...db.openTests({ limit: 1000 })].filter((r) => byRepo.has(r.repo_id));
-  const done = db.doneByUserSince(today(now), { limit: 200 }).filter((/** @type {any} */ r) => byRepo.has(r.repo_id));
-  const turn = waiting.filter((w) => w.session !== "todo-files" && w.state === "open");
+  // One repo: asked of the database for that repo, so no limit cuts its records off.
+  const repoId = all ? undefined : repos[0]?.id ?? -1;
+  const open = [...db.openAsks({ repoId, limit: 5000 }), ...db.openTests({ repoId, limit: 5000 })].filter((r) => byRepo.has(r.repo_id));
+  const done = db.doneByUserSince(today(now), { repoId, limit: 1000 }).filter((/** @type {any} */ r) => byRepo.has(r.repo_id));
+  const turn = openTurn(waiting);
   const n = (/** @type {string} */ k) => open.filter((r) => r.kind === k).length;
   const buckets = [
     { id: "question", n: n("question") + turn.filter((w) => w.kind === "question").length, label: "Cevap bekliyor", hint: "ajan bir karar için duruyor" },
@@ -275,13 +311,18 @@ function inboxModel(db, root, { all = false, waiting = [], now = Date.now() } = 
   return { all, buckets, groups: [...groups.values()], count: open.length + turn.length, records: open.length, turn: turn.length };
 }
 
-/** How many things wait on the user in this root's repo: open asks and tests, and open turn-end asks. @param {any} db @param {string} root @param {any[]} [waiting] */
-function inboxCount(db, root, waiting = []) {
-  const turn = waiting.filter((w) => w.session !== "todo-files" && w.state === "open").length;
-  if (!db) return turn;
-  const repo = repoOfRoot(db, root);
-  if (!repo) return turn;
-  return db.openAsks({ repoId: repo.id, limit: 1000 }).length + db.openTests({ repoId: repo.id, limit: 1000 }).length + turn;
+/** Turn-end asks still open; the todo-files log only mirrors records, which count themselves. @param {Array<{session: string, state: string}>} waiting */
+const openTurn = (waiting) => waiting.filter((w) => w.session !== "todo-files" && w.state === "open");
+
+/**
+ * How many things wait on the user: the one count the launcher's badge, the status
+ * bar, the panel's tab badge and Bende bekleyenler show. Records of this root's repo
+ * (or every repo), and open turn-end asks; without a database, the asks alone.
+ * @param {any} db @param {string} root @param {any[]} [waiting] @param {{all?: boolean}} [o]
+ */
+function inboxCount(db, root, waiting = [], { all = false } = {}) {
+  if (!db) return openTurn(waiting).length;
+  return inboxModel(db, root, { all, waiting }).count;
 }
 
 /**
@@ -327,16 +368,18 @@ const openTask = (id, status, key, cls = "mono key") => `<a href="#" class="${cl
  * @param {any} r @param {{flash?: number}} [o]
  */
 function askCard(r, o = {}) {
+  // On a task page an open todo of yours shows twice (here and in Yapılacaklar): this copy gets its own id.
+  const id = `${o.prefix ?? "rec"}-${r.id}`;
   const k = r.kind === "test" ? "test" : r.kind;
   const head = `<div class="row1">${kindChip(k)}<span class="ttl">${esc(r.title)}</span><span class="age">${esc(r.age ?? "")}</span></div>`;
   const body = r.body ? `<div class="body">${esc(r.body)}</div>` : "";
   const q = `data-q="${esc([r.title, r.body, r.task_key].filter(Boolean).join(" "))}"`;
   if (r.done)
-    return `<article class="card ask done" id="rec-${r.id}" data-k="r${r.id}" data-nav tabindex="0" ${q}>${head}<span class="okline">${icon("check", 14)} Tamamlandı — ajan bir sonraki turda görecek · <a href="#" data-act="rec" data-op="open" data-id="${r.id}">geri al</a></span></article>`;
+    return `<article class="card ask done" id="${id}" data-k="r${r.id}" data-nav tabindex="0" ${q}>${head}<span class="okline">${icon("check", 14)} Tamamlandı — ajan bir sonraki turda görecek · <a href="#" data-act="rec" data-op="open" data-id="${r.id}">geri al</a></span></article>`;
   const action = r.kind === "question"
     ? `<div class="answer"><textarea rows="2" data-draft="ans-${r.id}" placeholder="Cevabını yaz (Ctrl+Enter gönderir)" aria-label="Cevabın"></textarea><button class="primary" data-act="answer" data-id="${r.id}">Cevapla</button></div>`
     : `<div class="acts"><button class="primary" data-act="rec" data-op="done" data-id="${r.id}">${r.kind === "test" ? "Geçti" : "Yaptım"}</button></div>`;
-  return `<article class="card ask${o.flash === r.id ? " flash" : ""}" id="rec-${r.id}" data-k="r${r.id}" data-nav data-rec="${r.id}" tabindex="0" ${q}>${head}${body}${action}</article>`;
+  return `<article class="card ask${o.flash === r.id ? " flash" : ""}" id="${id}" data-k="r${r.id}" data-nav data-rec="${r.id}" tabindex="0" ${q}>${head}${body}${action}</article>`;
 }
 
 /** @param {ReturnType<typeof tasksPage>} m */
@@ -360,7 +403,7 @@ function taskBlocks(c) {
   const head = `<section class="thead" data-k="head-${c.id}"><div class="meta"><span class="mono key">${esc(c.key)}</span>${statusChip(c.status)}${c.epic ? `<span class="dim">Epic ${openTask(c.epic.id, c.epic.status, c.epic.key, "mono")}</span>` : ""}${c.url ? `<a href="#" class="ext" data-act="url" data-url="${esc(c.url)}">GitHub'da aç ${icon("external", 13)}</a>` : ""}</div>
 <h1>${esc(c.title || c.key)}</h1>${c.summary ? `<p class="sum">${esc(c.summary)}</p>` : ""}${c.pointer ? `<div class="callout${fl(c.pointer.id)}" id="ptr-${c.pointer.id}">${icon("arrow", 20)}<div><span class="lbl">Nerede kaldık</span><span class="ptitle">${esc(c.pointer.title)}</span><span class="dim">${c.pointer.owner === "K" ? "Senin işin" : c.pointer.owner === "C" ? "Ajanın işi" : esc(KIND_TR[/** @type {keyof typeof KIND_TR} */ (c.pointer.kind)] ?? c.pointer.kind)} · ${esc(day(c.pointer.at))}</span></div></div>` : ""}</section>`;
   const asks = c.asks.length
-    ? `<section class="blk" data-k="asks" data-navgroup="asks" aria-label="Senden beklenen"><h2><span class="odot" aria-hidden="true"></span>Senden beklenen <span class="dim">· ${c.asks.length}</span></h2>${c.asks.map((r) => askCard(r, { flash: c.flash })).join("")}</section>`
+    ? `<section class="blk" data-k="asks" data-navgroup="asks" aria-label="Senden beklenen"><h2><span class="odot" aria-hidden="true"></span>Senden beklenen <span class="dim">· ${c.asks.length}</span></h2>${c.asks.map((r) => askCard(r, { prefix: "ask", flash: TODO_KINDS.includes(r.kind) ? undefined : c.flash })).join("")}</section>`
     : "";
   const todo = (/** @type {any} */ r) => {
     const done = r.status !== "open";
@@ -432,6 +475,9 @@ function paneHtml(db, root, view, o = {}) {
   return "";
 }
 
+/** Record actions from the page and the status each sets (a Map: no inherited keys). */
+const RECORD_OPS = new Map([["done", "done"], ["open", "open"], ["drop", "dropped"]]);
+
 const num = (/** @type {any} */ v) => {
   const n = Number(v);
   if (!Number.isInteger(n) || n <= 0) throw new Error(`Imprimatur: bad id ${v}`);
@@ -448,20 +494,16 @@ function applyMessage(db, m, actor) {
     case "rec": {
       const id = num(m.id);
       if (m.op === "pointer") return db.setPointer(id, actor);
-      const status = { done: "done", open: "open", drop: "dropped" }[/** @type {"done" | "open" | "drop"} */ (m.op)];
-      if (!status) throw new Error(`Imprimatur: unknown record action ${m.op}`);
+      const status = RECORD_OPS.get(m.op);
+      if (!status) throw new Error(`Imprimatur: unknown record action ${String(m.op)}`);
       return db.updateRecord(id, { status }, actor);
     }
     case "answer": {
-      const q = db.record(num(m.id));
-      if (!q) throw new Error(`Imprimatur: no record ${m.id}`);
-      const text = String(m.text ?? "").trim();
-      if (!text) throw new Error("Imprimatur: the answer is empty");
-      const first = text.split("\n")[0].trim();
-      const title = first.length > 200 ? `${first.slice(0, 199)}…` : first;
-      const answer = db.addRecord(q.task_id, { kind: "answer", title, body: text !== title ? text : null, parent_id: q.id }, actor);
-      if (q.status === "open") db.updateRecord(q.id, { status: "done" }, actor);
-      return answer;
+      const id = num(m.id);
+      const parts = splitText(m.text);
+      if (!parts) throw new Error("Imprimatur: the answer is empty");
+      // The answer and the question's "done" commit together, or neither does.
+      return db.answerQuestion(id, parts, actor);
     }
     case "add": {
       const task = db.taskById(num(m.task));
@@ -591,6 +633,8 @@ const TASKS_CSS = `
   .note { display: flex; align-items: flex-start; gap: 10px; padding: 4px 10px; } .ncol { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .ans { display: block; padding-left: 4px; color: var(--vscode-foreground); } .ans .ic { color: var(--acc); } .ans .body { display: block; }
   #waiting { max-width: 1000px; margin: 0 auto; }
+  #pane.stale > * { opacity: .4; pointer-events: none; }
+  #pane.stale::before { content: "Yükleniyor…"; display: block; padding: 12px 0; color: var(--vscode-descriptionForeground); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
   .dec summary { cursor: pointer; list-style: none; display: flex; flex-direction: column; gap: 6px; } .dec summary::-webkit-details-marker { display: none; }
   .dec .meta { display: flex; gap: 8px; align-items: center; } .dec .ttl { font-weight: 600; } .dec .body { margin: 8px 0 0; }
@@ -634,5 +678,5 @@ const TASKS_CSS = `
 
 module.exports = {
   TABS, FILTERS, TASKS_CSS, ICON, icon, bucketOf, userActor, parseQuickAdd, isAsk, repoOfRoot, scopeRepos, describeVersion,
-  tasksPage, inboxModel, inboxCount, homeModel, tasksHtml, inboxHtml, homeHtml, paneHtml, applyMessage, cleanView, esc,
+  tasksPage, inboxModel, inboxCount, openTurn, splitText, TITLE_MAX, BODY_MAX, homeModel, tasksHtml, inboxHtml, homeHtml, paneHtml, applyMessage, cleanView, esc,
 };
