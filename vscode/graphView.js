@@ -851,6 +851,17 @@ let renderEditOf = () => undefined;
 let lastHtml = "";
 /** The last write the page sent that failed: its text goes back to the page. @type {any} */
 let lastFailed;
+/** Pages posted, and when the last one was (the integration tests time a write with them, #71). */
+let renders = 0;
+let renderedAt = 0;
+/**
+ * extension.js (#71): visible(true/false) as the panel shows and hides (it starts the
+ * database backstop poll); afterWrite() after the page wrote to the database (it draws
+ * and kicks sync once, so the database watcher's look at that write draws nothing).
+ */
+let hooks = { visible: (/** @type {boolean} */ _v) => {}, afterWrite: /** @type {(() => void) | undefined} */ (undefined) };
+/** @param {Partial<typeof hooks>} h */
+const setPanelHooks = (h) => void (hooks = { ...hooks, ...h });
 
 /**
  * What the panel shows (#69): its tab, the selected task, the list's filter, every
@@ -955,6 +966,7 @@ function writeFromPanel(m) {
     panel?.webview.postMessage(lastFailed);
     vscode.window.showErrorMessage(error);
   }
+  if (hooks.afterWrite) return hooks.afterWrite();
   try {
     if (shown) {
       closeDoneTasks(shown);
@@ -1014,6 +1026,7 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
     // A hidden webview is torn down and gets no messages: shown again, it reloads from the html, so make that current.
     let hidden = false;
     panel.onDidChangeViewState(({ webviewPanel }) => {
+      hooks.visible(webviewPanel.visible);
       if (!webviewPanel.visible) hidden = true;
       else if (hidden) {
         hidden = false;
@@ -1025,6 +1038,7 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
       }
     });
     panel.onDidDispose(() => {
+      hooks.visible(false);
       panel = undefined;
       refresh = undefined;
       reload = undefined;
@@ -1082,15 +1096,19 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
     // Not drawn while hidden, but not forgotten: drawn when it shows (onDidChangeViewState).
     if (!p.visible) return void (missed = true);
     const next = page("", waitingOnly);
-    if (next !== sent) p.webview.postMessage({ type: "render", html: (sent = lastHtml = next) });
+    if (next === sent) return;
+    p.webview.postMessage({ type: "render", html: (sent = lastHtml = next) });
+    renders++;
+    renderedAt = Date.now();
   };
   if (!restored) p.reveal();
+  hooks.visible(p.visible || !restored);
   // Set up after work began: once per project, find what already waited on the user.
   if (!scannedBefore(root) && allowed("scan history")) scanAll();
 }
 
 /** The open panel, for the integration tests: its repo, view, last page and last failed write. */
-const panelState = () => ({ open: !!panel, root: shown, view: { ...view }, html: lastHtml, failed: lastFailed });
+const panelState = () => ({ open: !!panel, root: shown, view: { ...view }, html: lastHtml, failed: lastFailed, renders, renderedAt });
 
 /**
  * What waits on the user, counted once for every place that shows it (the launcher's
@@ -1289,4 +1307,4 @@ const graphCommands = {
   "imprimatur.graph.copyAsk": (c) => vscode.env.clipboard.writeText(c.text ?? ""),
 };
 
-module.exports = { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setPanelScope, panelState, inboxNow, panelMessage: onMessage, laneSvg, html, cssPaths, WEBVIEW_OPTIONS };
+module.exports = { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setPanelScope, setPanelHooks, panelState, inboxNow, panelMessage: onMessage, laneSvg, html, cssPaths, WEBVIEW_OPTIONS };

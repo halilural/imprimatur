@@ -8,7 +8,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { review, acceptHunk, acceptLines, acceptGroups } = require("./diff.js");
 const { markdownItPlugin, markdownBlocks, reviewHtml } = require("./preview.js");
-const { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setPanelScope, panelState, panelMessage, inboxNow: panelInbox } = require("./graphView.js");
+const { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setPanelScope, setPanelHooks, panelState, panelMessage, inboxNow: panelInbox } = require("./graphView.js");
 const { WAITING_DIR, waitingSteps } = require("./waiting.js");
 const { acceptEdit, spotsOf, graphRows } = require("./graph.js");
 const { registerSetupView } = require("./setupView.js");
@@ -16,7 +16,8 @@ const { registerRecordCommands } = require("./recordsView.js");
 const { registerLauncher } = require("./launcherView.js");
 const records = require("./records.js");
 const { readConfig, syncOnce, syncLoop, describe } = require("./sync.js");
-const { trackerOnce, describe: describeTracker } = require("./tracker.js");
+const { trackerOnce, describe: describeTracker, githubRepo } = require("./tracker.js");
+const { liveClient } = require("./live.js");
 const { trustGate } = require("./trust.js");
 
 /** @type {ReturnType<typeof registerSetupView> | undefined} */
@@ -680,7 +681,8 @@ function activate(ctx) {
   /** @type {{ui: Record<string, any>} | undefined} */
   let recordCommands;
   // Sync between machines (#61), when set up (config.json next to the database): now,
-  // every 60 s, and 5 s after a local write. Only queued local changes start a sync:
+  // every 60 s (5 min while live updates are connected, #71), at once when the Worker
+  // says another device pushed, and 5 s after a local write. Only queued local changes start a sync:
   // applying pulled changes queues nothing, so the change it makes to the file ends there.
   /** @type {ReturnType<typeof syncLoop> | undefined} */
   let syncer;
@@ -691,12 +693,46 @@ function activate(ctx) {
     if (!cfg) return "sync: not set up (npm run sync -- --setup <url>)";
     return describe(await syncOnce(db, cfg, { log: (line) => log.warn(line) }));
   };
+  const SYNC_POLL_MS = 60_000;
+  const LIVE_POLL_MS = 300_000;
+  /** @type {ReturnType<typeof liveClient> | undefined} */
+  let live;
+  /**
+   * Live updates (#71): one WebSocket to the sync Worker. Connected: pull now (and on
+   * every reconnect), poll every 5 min; another device's push pulls at once; a GitHub
+   * issue change runs the tracker when it is one of this window's repos. Closed on deactivate.
+   * @param {any} db
+   */
+  const startLive = (db) => {
+    const cfg = readConfig(db.file);
+    if (live || !cfg) return;
+    live = liveClient({
+      url: cfg.url,
+      token: cfg.token,
+      device: db.deviceId(),
+      log: (line) => log.info(line),
+      onState: (up) => {
+        syncer?.setIntervalMs(up ? LIVE_POLL_MS : SYNC_POLL_MS);
+        if (up) syncer?.now();
+      },
+      onSync: () => syncer?.now(),
+      onTracker: (repo) => {
+        try {
+          const ids = new Set([...roots].map((r) => records.repoId(r)).filter((id) => id !== undefined));
+          const mine = records.dbOf()?.repos().some((/** @type {any} */ r) => ids.has(r.id) && githubRepo(r.origin)?.toLowerCase() === repo.toLowerCase());
+          if (mine) trackerer.now();
+        } catch {}
+      },
+    });
+    ctx.subscriptions.push({ dispose: () => live?.dispose() });
+  };
   /** Starts the loop once sync is set up (at activation, or later by Sync Now). */
   const startSync = () => {
     const db = records.dbOf();
     if (syncer || !db || !readConfig(db.file)) return false;
-    syncer = syncLoop(runSync, (line, error) => (error ? log.warn(line) : log.info(line)));
+    syncer = syncLoop(runSync, (line, error) => (error ? log.warn(line) : log.info(line)), { intervalMs: SYNC_POLL_MS });
     ctx.subscriptions.push({ dispose: () => syncer?.dispose() });
+    startLive(db);
     // Said once: a second clone of an origin does not sync (the first one by id does).
     for (const r of db.unsyncedClones()) log.info(`sync: ${r.root} is a second clone of ${r.origin}; only the first one syncs`);
     return true;
@@ -768,6 +804,11 @@ function activate(ctx) {
       (at) => showGraph({ ...at, tab: "tasks" }),
       (all) => panelMessage({ type: "view", view: { all } }),
     );
+    // While the panel is visible, a 500 ms look at the database backs up the file watcher;
+    // a write from the page draws through the same look, once (#71).
+    const rc = recordCommands;
+    setPanelHooks({ visible: (v) => (v ? rc.backstop.start() : rc.backstop.stop()), afterWrite: () => rc.changed(true) });
+    if (panelState().open) rc.backstop.start();
   } catch (e) {
     log.error(`records: ${e instanceof Error ? e.message : e}`);
   }

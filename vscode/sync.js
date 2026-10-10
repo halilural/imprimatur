@@ -12,7 +12,7 @@ const BATCH = 1000;
 /** Under the Worker's 1 MB body limit, with room for the envelope. */
 const BATCH_BYTES = 900_000;
 const TIMEOUT_MS = 30_000;
-/** The Worker's limits (cloud/src/worker.js): a value or key over them is refused. */
+/** The Worker's limits (cloud/src/server.js): a value or key over them is refused. */
 const MAX_VALUE = 100_000;
 const MAX_KEY = 2000;
 
@@ -247,10 +247,21 @@ function syncLoop(run, log, { intervalMs = 60_000, debounceMs = 5_000, name = "s
     clearTimeout(timer);
     timer = setTimeout(now, debounceMs);
   };
-  const every = setInterval(now, intervalMs);
+  let period = intervalMs;
+  let every = setInterval(now, period);
   return {
     now,
     kick,
+    /** A new period from now (#71: 5 min while live updates are connected, else the default). @param {number} ms */
+    setIntervalMs(ms) {
+      if (disposed || ms === period) return;
+      period = ms;
+      clearInterval(every);
+      every = setInterval(now, period);
+    },
+    get intervalMs() {
+      return period;
+    },
     dispose() {
       disposed = true;
       clearTimeout(timer);

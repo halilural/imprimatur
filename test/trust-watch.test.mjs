@@ -27,17 +27,20 @@ test("trust: untrusted skips with one log line per kind of work; trusted runs", 
   assert.equal(lines.length, 2);
 });
 
-test("watch: a change to the file or its WAL fires once, debounced; other names do not", async () => {
+test("watch: a change to the file or its WAL fires at once, then once more after the burst; other names do not", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-watch-"));
   const file = path.join(dir, "imprimatur.db");
   let n = 0;
-  const w = watchFile(file, () => n++, () => {}, { debounceMs: 30 });
+  const w = watchFile(file, () => n++, () => {}, { throttleMs: 30 });
   try {
     fs.writeFileSync(path.join(dir, "other.txt"), "x");
+    await sleep(60);
+    assert.equal(n, 0, "another name in the folder");
     fs.writeFileSync(`${file}-wal`, "a");
     fs.writeFileSync(`${file}-wal`, "b");
     await sleep(150);
-    assert.equal(n, 1);
+    // Leading call, then (fs.watch may report the writes as one event or several) at most one trailing.
+    assert.ok(n >= 1 && n <= 2, `fired ${n} times`);
   } finally {
     w.dispose();
     fs.rmSync(dir, { recursive: true, force: true });
@@ -48,12 +51,13 @@ test("watch: a folder not there yet is made and watched", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-watch-"));
   const file = path.join(root, "a", "b", "imprimatur.db");
   let n = 0;
-  const w = watchFile(file, () => n++, () => {}, { debounceMs: 20 });
+  const w = watchFile(file, () => n++, () => {}, { throttleMs: 20 });
   try {
     assert.ok(fs.existsSync(path.dirname(file)));
     fs.writeFileSync(file, "x");
     await sleep(120);
-    assert.equal(n, 1);
+    // Creating a file is one or two fs.watch events: the leading call, at most one trailing.
+    assert.ok(n >= 1 && n <= 2, `fired ${n} times`);
   } finally {
     w.dispose();
     fs.rmSync(root, { recursive: true, force: true });
@@ -70,7 +74,7 @@ test("watch: an error closes the watcher and arms it again, at most once per rea
   };
   const logs = [];
   let changes = 0;
-  const w = watchFile("/x/imprimatur.db", () => changes++, (m) => logs.push(m), { watch: /** @type {any} */ (fakeWatch), mkdir: () => {}, debounceMs: 5, rearmMs: 80 });
+  const w = watchFile("/x/imprimatur.db", () => changes++, (m) => logs.push(m), { watch: /** @type {any} */ (fakeWatch), mkdir: () => {}, throttleMs: 5, rearmMs: 80 });
   try {
     assert.equal(made.length, 1);
     made[0].emit("error", new Error("EPERM"));

@@ -13,6 +13,14 @@
       "database_id": "8baea550-1bbe-42e6-8d58-c1d36e92db68",
       "migrations_dir": "migrations"
     }
-  ]
-  // Secret: `npx wrangler secret put SYNC_TOKEN` (never in this file).
+  ],
+  // Live updates (#71): one SQLite-backed Durable Object per account holds every
+  // device's WebSocket (hibernating); the Free plan has only SQLite-backed classes.
+  "durable_objects": {
+    "bindings": [{ "name": "LIVE", "class_name": "Live" }]
+  },
+  // Applied by `wrangler deploy` (no separate step); a tag is never edited once deployed.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Live"] }]
+  // Secrets: `npx wrangler secret put SYNC_TOKEN` and, for GitHub's webhook,
+  // `npx wrangler secret put GITHUB_WEBHOOK_SECRET` (never in this file).
 }

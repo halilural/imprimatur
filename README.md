@@ -304,8 +304,9 @@ Then on each machine: `npm run sync -- --setup https://imprimatur-sync.<you>.wor
 It asks for the token (or reads `IMPRIMATUR_SYNC_TOKEN`; never put it on the
 command line, where shell history keeps it), saves the address and token next to
 the database (`config.json`, readable only by you), turns sync on and sends what
-is already there. VS Code then syncs on start, every minute and a few seconds
-after each change (**Imprimatur: Sync Now** to force it; one line per sync in the
+is already there. VS Code then syncs on start, every minute (every 5 minutes
+while live updates are connected, see below), at once when another machine
+pushed, and a few seconds after each change (**Imprimatur: Sync Now** to force it; one line per sync in the
 Imprimatur output). `npm run sync` syncs from a terminal; `npm run sync -- --off`
 stops queueing changes (`--setup` again queues everything, edits made meanwhile included).
 
@@ -320,6 +321,34 @@ stops queueing changes (`--setup` again queues everything, edits made meanwhile 
   in "…"; the machine that wrote it keeps it whole.
 - The server keeps every change it was sent; nothing compacts its `changes`
   table yet. It stays small for one person's records; a new machine replays it all.
+
+### Live updates
+
+- **On this machine** the Imprimatur panel follows the database file: a record
+  written by an agent, a hook or another window shows in tens of milliseconds
+  (the first change draws at once, a burst at most every 50 ms). While the panel
+  is visible it also looks at the database every 500 ms, in case the file watch
+  missed something.
+- **Between machines**, once sync is set up, VS Code keeps one WebSocket open to
+  the sync Worker (`GET /v1/live`, the same token). After another machine pushes,
+  the Worker tells every connection and they pull at once (about a second end to
+  end). While connected the timed sync runs every 5 minutes instead of every
+  minute; it reconnects by itself (1 s up to 30 s apart) and pulls on every
+  reconnect. One line in the Imprimatur output when it connects or drops.
+- **GitHub issues**: a webhook on each repo (`POST /v1/github`, signed with
+  `GITHUB_WEBHOOK_SECRET`) makes VS Code run the tracker sync for that repo within
+  seconds of an issue being opened, closed, reopened or edited. The 5-minute run stays as a fallback.
+
+The Worker update (once, in `cloud/`; the Durable Object's migration is applied by `deploy`):
+
+```sh
+npx wrangler secret put GITHUB_WEBHOOK_SECRET   # e.g. `openssl rand -hex 32`; only for GitHub webhooks
+npx wrangler deploy
+```
+
+Then add the webhooks: `node scripts/github-webhooks.mjs` prints one `gh api …/hooks`
+command per GitHub repo in the database (it runs nothing). Export
+`GITHUB_WEBHOOK_SECRET` with the same value in your shell and run them.
 
 ### Epics and the issue tracker
 

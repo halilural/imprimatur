@@ -4,12 +4,13 @@
 // history. The records themselves show in the Imprimatur panel's task tabs
 // (tasksView.js, #69), which replaced the sidebar's record views; reveal opens
 // the panel on a task. Follows the database file, so any writer (an agent
-// through MCP, a hook, another window) shows up at once; nothing polls.
+// through MCP, a hook, another window) shows up at once (#71: within ~50 ms);
+// while the panel is visible a 500 ms look at the change stamp backs that up.
 "use strict";
 const os = require("node:os");
 const vscode = require("vscode");
 const records = require("./records.js");
-const { watchFile } = require("./watch.js");
+const { watchFile, changeGate, poller } = require("./watch.js");
 
 const SCHEME = "imprimatur-record";
 const USER = { kind: /** @type {"user"} */ ("user"), id: os.userInfo().username };
@@ -54,15 +55,23 @@ function pageOf(id) {
  * @param {(all: boolean) => void} setAllRepos the panel's "every repo" switch
  */
 function registerRecordCommands(ctx, log, onChange, reveal, setAllRepos) {
-  // Follow the database file: a write anywhere changes its WAL. Event-driven, debounced;
-  // armed again after a watch error, and before the database exists (vscode/watch.js).
+  // Follow the database file: a write anywhere changes its WAL. Event-driven, throttled
+  // (50 ms); armed again after a watch error, and before the database exists (vscode/watch.js).
+  // Each look draws only when the change stamp moved: a checkpoint, or the watcher after
+  // this window's own write (drawn already), draws nothing (#71).
+  const moved = changeGate(() => records.dbOf()?.changeStamp());
+  /** @param {boolean} [force] */
+  const changed = (force = false) => {
+    const reopened = records.checkFile();
+    if (!moved(force || reopened)) return;
+    refreshPages();
+    onChange();
+  };
   const file = records.dbOf()?.file ?? require("./db.js").dbPath();
-  if (file !== ":memory:")
-    ctx.subscriptions.push(watchFile(file, () => {
-      records.checkFile();
-      refreshPages();
-      onChange();
-    }, log));
+  if (file !== ":memory:") ctx.subscriptions.push(watchFile(file, () => changed(), log));
+  // The backstop while the panel is visible (extension.js starts and stops it).
+  const backstop = poller(() => changed());
+  ctx.subscriptions.push(backstop);
 
   const pages = new vscode.EventEmitter();
   /** Record pages shown: they follow changes too. @type {Set<string>} */
@@ -77,8 +86,8 @@ function registerRecordCommands(ctx, log, onChange, reveal, setAllRepos) {
     } catch (e) {
       vscode.window.showErrorMessage(`Imprimatur: ${e instanceof Error ? e.message : e}`);
     }
-    refreshPages();
-    onChange();
+    // Drawn now; the watcher's look at the same change then draws nothing.
+    changed(true);
   };
   const KIND_PICK = [
     { label: "todo", description: "something to do" },
@@ -157,7 +166,8 @@ function registerRecordCommands(ctx, log, onChange, reveal, setAllRepos) {
     }),
   );
   // ui: the prompts, handed out by activate for the integration tests (#68).
-  return { ui };
+  // backstop: started while the panel is visible. changed: look at the database now.
+  return { ui, backstop, changed };
 }
 
 module.exports = { registerRecordCommands, pageOf };

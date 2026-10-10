@@ -244,6 +244,43 @@ suite("Records on the Imprimatur panel (#60, #69, MT-AR-060…064)", () => {
     assert.equal(lanes[row.lane].title, "Outside writes");
   });
 
+  test("#71 a record written by another process is on the panel within 500 ms (measured)", async () => {
+    const { panelState } = await api();
+    const { spawn } = require("node:child_process");
+    const { task } = seedTask("IT-71", { title: "Live panel", status: "active" }, [{ kind: "todo", owner: "C", title: "Existing" }]);
+    await vscode.commands.executeCommand("imprimatur.records.reveal", { root: ROOT, task: "IT-71" });
+    await until(() => panelState().view.tab === "tasks" && panelState().view.sel === task.id, "the panel on IT-71");
+    await until(() => panelState().html.includes("Live panel"), "IT-71's page drawn");
+    // Another process (as the MCP server or a hook): it prints the time right after its commit.
+    const child = `const {openDb}=require(${JSON.stringify(path.join(EXT, "db.js"))});const db=openDb({path:process.env.IMPRIMATUR_DB});` +
+      `db.addRecord(${task.id},{kind:"note",title:process.argv[1]},{kind:"agent",id:"it-71"});process.stdout.write(String(Date.now()));db.close();`;
+    /** @param {string} title @returns {Promise<number>} the commit time */
+    const writeElsewhere = (title) => new Promise((resolve, reject) => {
+      const p = spawn(process.execPath, ["-e", child, title], { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, stdio: ["ignore", "pipe", "pipe"] });
+      let out = "";
+      let err = "";
+      p.stdout.on("data", (d) => (out += d));
+      p.stderr.on("data", (d) => (err += d));
+      p.on("close", (code) => (code === 0 && out ? resolve(Number(out)) : reject(new Error(`writer exited ${code}: ${err}`))));
+    });
+    const took = [];
+    for (let i = 0; i < 5; i++) {
+      const title = `Live note ${i} ${Date.now()}`;
+      const committed = writeElsewhere(title);
+      const deadline = Date.now() + 5000;
+      while (!panelState().html.includes(title)) {
+        if (Date.now() > deadline) assert.fail(`note ${i} not drawn within 5 s`);
+        await new Promise((r) => setTimeout(r, 2));
+      }
+      const posted = panelState().renderedAt;
+      took.push(posted - (await committed));
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    const sorted = [...took].sort((a, b) => a - b);
+    console.log(`      #71 local latency, commit in another process → panel page posted: ${took.join(", ")} ms (median ${sorted[2]} ms)`);
+    for (const ms of took) assert.ok(ms < 500, `under 500 ms, took ${ms} ms`);
+  });
+
   test("MT-AR-064 an outside owner-K todo shows in Bende bekleyenler, and its mirror for the hooks ticks when done", async () => {
     const { panelState } = await api();
     await vscode.commands.executeCommand("imprimatur.openInbox");
