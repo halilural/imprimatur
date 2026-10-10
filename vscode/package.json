@@ -20,6 +20,7 @@
   "main": "./dist/extension.js",
   "files": [
     "dist/extension.js",
+    "dist/mermaid.min.js",
     "preview.css",
     "preview-markers.js",
     "media/imprimatur.svg",

@@ -59,6 +59,12 @@ suite("Design documents on the Imprimatur panel (#72)", () => {
     assert.match(html, /<button data-tab="inbox">[^]*<button data-tab="architecture">Mimari<\/button><button data-tab="product">Ürün<\/button><button data-tab="edits">/);
     assert.match(html, /<strong>SQLite<\/strong> in WAL mode\./);
     assert.ok(html.includes(`data-act="showRecord" data-id="${adr.id}"`), "the contributing ADR as a chip");
+    // ```mermaid blocks: the page may load the extension's own mermaid (dist/), by the nonce or the webview's cspSource, nothing else.
+    const csp = html.match(/Content-Security-Policy" content="([^"]*)"/)[1];
+    assert.match(csp, /^default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-[0-9a-f]*'( 'self')? https:\/\/[^;' ]+; form-action 'none'; base-uri 'none';$/, csp);
+    const src = html.match(/<meta name="imprimatur-mermaid" content="([^"]+)">/)?.[1];
+    assert.match(src ?? "", /^https:\/\/.+\/dist\/mermaid\.min\.js$/, "mermaid from the extension's dist/");
+    assert.ok(fs.existsSync(path.join(EXT, "dist", "mermaid.min.js")), "the build put mermaid next to the bundle");
 
     // Düzenle → the editor; Kaydet → written as the user, drawn again.
     panelMessage({ type: "view", view: { tab: "architecture", edit: `architecture:${section.id}` } });
