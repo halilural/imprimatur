@@ -1,45 +1,74 @@
 // @ts-check
 // Issue tracker sync (#70): task status between Imprimatur and GitHub Issues or Jira.
 // - Push: status changes made here wait in the database's tracker_outbox (db.upsertTask
-//   queues them) and close or reopen the issue: GitHub through `gh`, Jira through its REST API.
-// - Pull: issues closed or reopened there set the task's status here (as actor
-//   tracker:<provider>, which closes the epic's lines and queues no push); an open GitHub
-//   issue with no task gets one.
+//   queues them) and close or reopen the issue: GitHub through `gh`, Jira through its REST
+//   API, with a fixed comment (nothing from the task's text). A row whose task changed
+//   status since is dropped; one being pushed by another window (claimed) is left to it.
+//   Transient failures (network, 5xx, 429, rate limits) wait with backoff and never use up
+//   the row's tries; other failures count, and the row goes after MAX_TRIES.
+// - Pull: acts only on an issue whose STATE changed since the last pull (tracker_state);
+//   the first pull of a repo records the states and changes no task. A change sets the
+//   task's status as actor tracker:<provider> (which closes the epic's lines and queues no
+//   push). Open GitHub issues without a task get one (createTasks, at most MAX_CREATE a run).
 // Which tracker a task uses: "#N" in a repo whose origin is github.com, and gh works →
 // github; a Jira key ("PROJ-12") with config.json {tracker: {jira: {baseUrl, email}}} and a
-// token (IMPRIMATUR_JIRA_TOKEN, or tracker.jira.token in a 0600 config.json) → jira; else none.
-// Another tracker (Linear …) is one more entry in PROVIDERS: {match, available, push, pull}.
+// token (IMPRIMATUR_JIRA_TOKEN, or tracker.jira.token in a 0600 config.json) → jira. A row
+// whose tracker is not available now waits; another tracker (Linear …) is one more key
+// shape here with its own push and pull.
 // No vscode here: the extension, scripts/tracker.mjs and the tests share it.
 "use strict";
 const { execFile } = require("node:child_process");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { normOrigin } = require("./db.js");
 
 const GH_KEY = /^#(\d+)$/;
 const JIRA_KEY = /^[A-Z][A-Z0-9]+-\d+$/;
-/** A queued push is dropped after this many failed tries. */
+/** A queued push is dropped after this many failures that count (not transient ones). */
 const MAX_TRIES = 5;
 const TIMEOUT_MS = 30_000;
 const JIRA_BATCH = 50;
-/** The sweep warning (process.js) stays quiet while a tracker sync ran this recently. */
+/** Tasks made from open issues, at most, per run. */
+const MAX_CREATE = 50;
+/** The sweep warning (process.js) stays quiet while a tracker sync ran this recently... */
 const ACTIVE_MS = 15 * 60_000;
+/** ...and no push of the repo waits longer than this or has failed. */
+const STUCK_MS = 10 * 60_000;
 /** Jira resolutions that mean "not done, given up": the task becomes dropped. */
 const JIRA_DROPPED = /won'?t|declin|duplicate|cancel|reject|not planned|obsolete/i;
+/** The comment each push leaves: fixed, so nothing private reaches the issue. */
+const COMMENT = { close_done: "Imprimatur: tamamlandı", close_dropped: "Imprimatur: bırakıldı", reopen: "Imprimatur: yeniden açıldı" };
+/** The task status a queued action stands for: else the row is stale. */
+const WANTS = {
+  close_done: (/** @type {string} */ s) => s === "done",
+  close_dropped: (/** @type {string} */ s) => s === "dropped",
+  reopen: (/** @type {string} */ s) => s === "open" || s === "active",
+};
+/** gh's words for a failure that passes by itself. */
+const GH_TRANSIENT = /timed? ?out|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|network|connection|could not connect|rate limit|abuse|HTTP (5\d\d|429)|\b(502|503|504)\b|Bad Gateway|Service Unavailable/i;
 
 /** @param {string} provider */
 const actorOf = (provider) => ({ kind: /** @type {"import"} */ ("import"), id: `tracker:${provider}` });
 const CLOSED = new Set(["done", "dropped"]);
 
+/** Whether a failure passes by itself (retry later, no try used). @param {unknown} e */
+function isTransient(e) {
+  const t = /** @type {any} */ (e)?.transient;
+  if (typeof t === "boolean") return t;
+  return GH_TRANSIENT.test(e instanceof Error ? e.message : String(e));
+}
+
 /**
- * Runs gh; resolves stdout, rejects with stderr. @param {string[]} args
- * @returns {Promise<string>}
+ * Runs gh; resolves stdout, rejects with stderr (transient when it timed out or says so).
+ * @param {string[]} args @returns {Promise<string>}
  */
 function ghExec(args) {
   return new Promise((resolve, reject) => {
     execFile("gh", args, { encoding: "utf8", timeout: TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
-      if (err) reject(new Error(`gh ${args.slice(0, 2).join(" ")}: ${String(stderr || err.message).trim().split("\n")[0]}`));
-      else resolve(stdout);
+      if (!err) return resolve(stdout);
+      const msg = `gh ${args.slice(0, 2).join(" ")}: ${String(stderr || err.message).trim().split("\n")[0]}`;
+      reject(Object.assign(new Error(msg), { transient: Boolean(/** @type {any} */ (err).killed) || GH_TRANSIENT.test(msg) }));
     });
   });
 }
@@ -52,149 +81,180 @@ function githubRepo(origin) {
 }
 
 /**
- * The Jira settings, or undefined (with why, for the log).
+ * The Jira settings, or undefined (with why, for the log). https only (http for localhost);
+ * a token in config.json only when it is a plain file only this user can read.
  * @param {string} dbFile @param {NodeJS.ProcessEnv} [env] @param {string} [platform]
  * @returns {{jira?: {baseUrl: string, email: string, token: string}, why?: string}}
  */
 function readJira(dbFile, env = process.env, platform = process.platform) {
   const file = path.join(path.dirname(dbFile), "config.json");
   let jira;
+  let st;
   try {
+    st = fs.lstatSync(file);
+    if (st.isSymbolicLink()) return { why: `${file} is a symlink; Jira settings are read only from a plain file` };
     jira = JSON.parse(fs.readFileSync(file, "utf8"))?.tracker?.jira;
   } catch {
     return {};
   }
   if (!jira || typeof jira.baseUrl !== "string" || typeof jira.email !== "string" || !jira.baseUrl || !jira.email) return {};
+  const baseUrl = jira.baseUrl.trim().replace(/\/+$/, "");
+  if (!/^https:\/\/[^/\s]+/i.test(baseUrl) && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(baseUrl)) {
+    return { why: `Jira baseUrl must be https (${baseUrl})` };
+  }
   let token = env.IMPRIMATUR_JIRA_TOKEN?.trim();
   if (!token && typeof jira.token === "string" && jira.token) {
-    // A token in the file only when only this user can read it.
-    if (platform !== "win32" && (fs.statSync(file).mode & 0o077) !== 0) return { why: `${file} holds a Jira token but is readable by others (chmod 600 it)` };
+    if (platform !== "win32" && (st.mode & 0o077) !== 0) return { why: `${file} holds a Jira token but is readable by others (chmod 600 it)` };
     token = jira.token;
   }
   if (!token) return { why: "Jira is set up but has no token (IMPRIMATUR_JIRA_TOKEN or tracker.jira.token)" };
-  return { jira: { baseUrl: jira.baseUrl.replace(/\/+$/, ""), email: jira.email, token } };
+  return { jira: { baseUrl, email: jira.email, token } };
 }
 
 /**
- * One Jira REST call. @param {{baseUrl: string, email: string, token: string}} jira
+ * One Jira REST call; a network failure, 5xx or 429 is transient.
+ * @param {{baseUrl: string, email: string, token: string}} jira
  * @param {string} route @param {any} [body] POST when given @param {typeof fetch} [fetchFn]
  */
 async function jiraCall(jira, route, body, fetchFn = fetch) {
-  const res = await fetchFn(`${jira.baseUrl}${route}`, {
-    method: body ? "POST" : "GET",
-    headers: {
-      authorization: `Basic ${Buffer.from(`${jira.email}:${jira.token}`).toString("base64")}`,
-      accept: "application/json",
-      ...(body && { "content-type": "application/json" }),
-    },
-    ...(body && { body: JSON.stringify(body) }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
+  let res;
+  try {
+    res = await fetchFn(`${jira.baseUrl}${route}`, {
+      method: body ? "POST" : "GET",
+      headers: {
+        authorization: `Basic ${Buffer.from(`${jira.email}:${jira.token}`).toString("base64")}`,
+        accept: "application/json",
+        ...(body && { "content-type": "application/json" }),
+      },
+      ...(body && { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+  } catch (e) {
+    throw Object.assign(new Error(`jira ${route.split("?")[0]}: ${e instanceof Error ? e.message : e}`), { transient: true });
+  }
   const text = await res.text();
-  if (!res.ok) throw Object.assign(new Error(`jira ${route.split("?")[0]}: HTTP ${res.status} ${text.slice(0, 200)}`.trim()), { status: res.status });
+  if (!res.ok) {
+    throw Object.assign(new Error(`jira ${route.split("?")[0]}: HTTP ${res.status} ${text.slice(0, 200)}`.trim()), {
+      status: res.status, transient: res.status >= 500 || res.status === 429,
+    });
+  }
   return text ? JSON.parse(text) : {};
 }
 
 /** Text as Jira's comment body (Atlassian Document Format). @param {string} text */
 const adf = (text) => ({ type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text }] }] });
 
-/** Jira's "2026-10-01T12:00:00.000+0000" → epoch ms. @param {string} s */
-const jiraTime = (s) => Date.parse(String(s ?? "").replace(/([+-]\d\d)(\d\d)$/, "$1:$2"));
-
 /**
- * The task status an issue's state asks for, or undefined when it is already there.
- * @param {any} task @param {"open" | "done" | "dropped"} state @param {number} updatedAt
+ * The task status an issue's new state asks for, or undefined when the task is there already.
+ * @param {string} status the task's @param {"open" | "done" | "dropped"} state the issue's
  */
-function statusFor(task, state, updatedAt) {
-  // Only an issue changed after the task: a change made here and not pushed yet wins.
-  if (!(updatedAt > task.updated_at)) return undefined;
-  if (state !== "open" && !CLOSED.has(task.status)) return state;
-  if (state === "open" && CLOSED.has(task.status)) return "active";
-  return undefined;
+function statusFor(status, state) {
+  if (state === "open") return CLOSED.has(status) ? "active" : undefined;
+  return status === state ? undefined : state;
 }
 
 /**
- * Pulls one GitHub repo's issues into its tasks.
- * @param {any} db @param {any} repo @param {string} slug owner/name
- * @param {{gh: (args: string[]) => Promise<string>, dryRun?: boolean, log: (line: string) => void}} o
+ * Applies one repo's issue states: only state changes since the last pull; the first pull
+ * records them. @param {any} db @param {any} repo @param {string} provider
+ * @param {Array<{key: string, state: "open" | "done" | "dropped", title?: string}>} issues
+ * @param {{dryRun?: boolean, log: (line: string) => void, now: number, create?: {left: number, skipped: number}, label: (key: string) => string}} o
  */
-async function pullGithub(db, repo, slug, { gh, dryRun, log }) {
+function applyStates(db, repo, provider, issues, { dryRun, log, now, create, label }) {
   const out = { changes: 0, created: 0 };
-  const issues = JSON.parse(await gh(["issue", "list", "-R", slug, "--state", "all", "--limit", "500", "--json", "number,title,state,stateReason,updatedAt,milestone"]));
-  const actor = actorOf("github");
+  const actor = actorOf(provider);
+  const baseline = `tracker_baseline:${provider}:${repo.id}`;
+  const first = !db.meta(baseline);
+  const seen = db.trackerStates(repo.id, provider);
+  const record = (/** @type {string} */ key, /** @type {string} */ state) => {
+    if (!dryRun) db.setTrackerState(repo.id, key, provider, state, now);
+  };
   for (const issue of issues) {
-    const key = `#${issue.number}`;
-    const task = db.taskByKey(repo.id, key);
+    const task = db.taskByKey(repo.id, issue.key);
     if (!task) {
-      if (issue.state !== "OPEN") continue;
-      if (dryRun) log(`tracker github: would add ${slug}${key} ${issue.title}`);
-      else db.upsertTask(repo.id, key, { title: issue.title ?? "", status: "open" }, actor);
-      out.created++;
+      if (issue.state === "open" && create) {
+        if (create.left > 0) {
+          create.left--;
+          if (dryRun) log(`tracker ${provider}: would add ${label(issue.key)} ${issue.title ?? ""}`);
+          else db.upsertTask(repo.id, issue.key, { title: issue.title ?? "", status: "open" }, actor);
+          out.created++;
+        } else {
+          create.skipped++;
+        }
+      }
+      record(issue.key, issue.state);
       continue;
     }
+    // A push of this task still waits: what is here wins; its state is looked at again later.
     if (db.trackerPending(task.id)) continue;
-    const state = issue.state === "CLOSED" ? (issue.stateReason === "NOT_PLANNED" ? "dropped" : "done") : "open";
+    const prev = seen.get(issue.key);
     /** @type {{status?: string, title?: string}} */
     const fields = {};
-    const status = statusFor(task, state, Date.parse(issue.updatedAt));
-    if (status) fields.status = status;
+    if (!first && prev !== undefined && prev !== issue.state) {
+      const status = statusFor(task.status, issue.state);
+      if (status) fields.status = status;
+    }
     if (!task.title && issue.title) fields.title = issue.title;
-    if (!Object.keys(fields).length) continue;
-    if (dryRun) log(`tracker github: would set ${slug}${key} ${JSON.stringify(fields)}`);
-    else db.upsertTask(repo.id, key, fields, actor);
-    out.changes++;
+    if (Object.keys(fields).length) {
+      if (dryRun) log(`tracker ${provider}: would set ${label(issue.key)} ${JSON.stringify(fields)}`);
+      else db.upsertTask(repo.id, issue.key, fields, actor);
+      out.changes++;
+    }
+    record(issue.key, issue.state);
   }
+  if (!dryRun && first) db.setMeta(baseline, now);
   return out;
 }
 
 /**
- * Pulls Jira issues into the tasks keyed by them.
- * @param {any} db @param {any[]} tasks @param {{jira: any, fetch?: typeof fetch, dryRun?: boolean, log: (line: string) => void}} o
+ * Pulls one GitHub repo's issues. @param {any} db @param {any} repo @param {string} slug owner/name
+ * @param {{gh: (args: string[]) => Promise<string>, dryRun?: boolean, log: (line: string) => void, now: number, create?: {left: number, skipped: number}}} o
  */
-async function pullJira(db, tasks, { jira, fetch: fetchFn, dryRun, log }) {
-  const out = { changes: 0, created: 0 };
-  const actor = actorOf("jira");
+async function pullGithub(db, repo, slug, o) {
+  const list = JSON.parse(await o.gh(["issue", "list", "-R", slug, "--state", "all", "--limit", "500", "--json", "number,title,state,stateReason,updatedAt,milestone"]));
+  const issues = list.map((/** @type {any} */ i) => ({
+    key: `#${i.number}`,
+    title: i.title,
+    state: /** @type {"open" | "done" | "dropped"} */ (i.state === "CLOSED" ? (i.stateReason === "NOT_PLANNED" ? "dropped" : "done") : "open"),
+  }));
+  return applyStates(db, repo, "github", issues, { ...o, label: (k) => `${slug}${k}` });
+}
+
+/**
+ * Pulls the Jira issues of one repo's Jira-keyed tasks (no task is made from Jira).
+ * @param {any} db @param {any} repo @param {any[]} tasks
+ * @param {{jira: any, fetch?: typeof fetch, dryRun?: boolean, log: (line: string) => void, now: number}} o
+ */
+async function pullJira(db, repo, tasks, o) {
   const fields = ["summary", "status", "updated", "resolution"];
+  const found = [];
   for (let i = 0; i < tasks.length; i += JIRA_BATCH) {
     const batch = tasks.slice(i, i + JIRA_BATCH);
-    let issues;
     try {
-      issues = (await jiraCall(jira, "/rest/api/3/search/jql", { jql: `key in (${batch.map((t) => t.key).join(",")})`, fields, maxResults: JIRA_BATCH }, fetchFn)).issues ?? [];
+      found.push(...((await jiraCall(o.jira, "/rest/api/3/search/jql", { jql: `key in (${batch.map((t) => t.key).join(",")})`, fields, maxResults: JIRA_BATCH }, o.fetch)).issues ?? []));
     } catch (e) {
       // A key Jira does not know fails the whole query: ask one by one, skipping the unknown.
       if (/** @type {any} */ (e).status !== 400) throw e;
-      issues = [];
       for (const t of batch) {
         try {
-          issues.push(await jiraCall(jira, `/rest/api/3/issue/${encodeURIComponent(t.key)}?fields=${fields.join(",")}`, undefined, fetchFn));
+          found.push(await jiraCall(o.jira, `/rest/api/3/issue/${encodeURIComponent(t.key)}?fields=${fields.join(",")}`, undefined, o.fetch));
         } catch (err) {
           if (/** @type {any} */ (err).status !== 404) throw err;
         }
       }
     }
-    for (const issue of issues) {
-      const task = batch.find((t) => t.key === issue.key);
-      if (!task || db.trackerPending(task.id)) continue;
-      const now = db.taskById(task.id);
-      const cat = issue.fields?.status?.statusCategory?.key;
-      const state = cat === "done" ? (JIRA_DROPPED.test(issue.fields?.resolution?.name ?? "") ? "dropped" : "done") : "open";
-      /** @type {{status?: string, title?: string}} */
-      const set = {};
-      const status = statusFor(now, state, jiraTime(issue.fields?.updated));
-      if (status) set.status = status;
-      if (!now.title && issue.fields?.summary) set.title = issue.fields.summary;
-      if (!Object.keys(set).length) continue;
-      if (dryRun) log(`tracker jira: would set ${task.key} ${JSON.stringify(set)}`);
-      else db.upsertTask(now.repo_id, task.key, set, actor);
-      out.changes++;
-    }
   }
-  return out;
+  const issues = found.map((/** @type {any} */ issue) => ({
+    key: String(issue.key),
+    title: issue.fields?.summary,
+    state: /** @type {"open" | "done" | "dropped"} */ (issue.fields?.status?.statusCategory?.key === "done"
+      ? (JIRA_DROPPED.test(issue.fields?.resolution?.name ?? "") ? "dropped" : "done") : "open"),
+  }));
+  return applyStates(db, repo, "jira", issues, { ...o, create: undefined, label: (k) => k });
 }
 
 /**
- * Closes or reopens one GitHub issue; "already" when it is in that state.
- * @param {{action: string, comment?: string | null}} row @param {string} slug @param {string} n
+ * Closes or reopens one GitHub issue with the fixed comment; "already" when it is in that state.
+ * @param {{action: string}} row @param {string} slug @param {string} n
  * @param {(args: string[]) => Promise<string>} gh @param {boolean} [dryRun]
  */
 async function pushGithub(row, slug, n, gh, dryRun) {
@@ -202,34 +262,52 @@ async function pushGithub(row, slug, n, gh, dryRun) {
   const close = row.action !== "reopen";
   if (close ? state === "CLOSED" : state === "OPEN") return "already";
   if (dryRun) return "would";
-  if (close) {
-    await gh(["issue", "close", n, "-R", slug, "--reason", row.action === "close_dropped" ? "not planned" : "completed", "--comment", `Imprimatur: ${row.comment ?? ""}`.trim()]);
-  } else {
-    await gh(["issue", "reopen", n, "-R", slug]);
-  }
+  const comment = /** @type {any} */ (COMMENT)[row.action];
+  if (close) await gh(["issue", "close", n, "-R", slug, "--reason", row.action === "close_dropped" ? "not planned" : "completed", "--comment", comment]);
+  else await gh(["issue", "reopen", n, "-R", slug, "--comment", comment]);
   return "done";
 }
 
 /**
- * Moves one Jira issue to a done (close) or new/in-progress (reopen) status, with a comment.
- * @param {{action: string, key: string, comment?: string | null}} row @param {any} jira
+ * The Jira transition for an action: by the target's name (Done/Closed/Resolved; Won't Do/
+ * Cancelled/Rejected), else the first into a done status; reopen: in progress, else to do.
+ * @param {any[]} transitions @param {string} action
+ */
+function pickTransition(transitions, action) {
+  const cat = (/** @type {any} */ t) => t.to?.statusCategory?.key;
+  const named = (/** @type {RegExp} */ re) => transitions.find((t) => re.test(String(t.to?.name ?? "")) || re.test(String(t.name ?? "")));
+  if (action === "reopen") return transitions.find((t) => cat(t) === "indeterminate") ?? transitions.find((t) => cat(t) === "new");
+  const byName = action === "close_dropped" ? named(/^(won'?t do|cancell?ed|rejected)$/i) : named(/^(done|closed|resolved)$/i);
+  return byName ?? transitions.find((t) => cat(t) === "done");
+}
+
+/**
+ * Moves one Jira issue with the fixed comment, posted first and once per row (a retry
+ * posts it if an earlier try did not).
+ * @param {any} db @param {{id: number, action: string, key: string, commented?: number, tries?: number, fails?: number}} row @param {any} jira
  * @param {typeof fetch | undefined} fetchFn @param {boolean} [dryRun]
  */
-async function pushJira(row, jira, fetchFn, dryRun) {
+async function pushJira(db, row, jira, fetchFn, dryRun) {
   const key = encodeURIComponent(row.key);
+  const comment = async () => {
+    if (row.commented) return;
+    await jiraCall(jira, `/rest/api/3/issue/${key}/comment`, { body: adf(/** @type {any} */ (COMMENT)[row.action]) }, fetchFn);
+    db.trackerCommented(row.id);
+    row.commented = 1;
+  };
   const issue = await jiraCall(jira, `/rest/api/3/issue/${key}?fields=status`, undefined, fetchFn);
   const close = row.action !== "reopen";
-  const isDone = issue.fields?.status?.statusCategory?.key === "done";
-  if (close === isDone) return "already";
+  if (close === (issue.fields?.status?.statusCategory?.key === "done")) {
+    // Moved by an earlier try whose comment did not go out: it goes now.
+    if (!dryRun && (row.tries || row.fails)) await comment();
+    return "already";
+  }
   const { transitions = [] } = await jiraCall(jira, `/rest/api/3/issue/${key}/transitions`, undefined, fetchFn);
-  const cat = (/** @type {any} */ t) => t.to?.statusCategory?.key;
-  const pick = close ? transitions.find((t) => cat(t) === "done")
-    : transitions.find((t) => cat(t) === "indeterminate") ?? transitions.find((t) => cat(t) === "new");
-  if (!pick) throw new Error(`jira ${row.key}: no transition to a ${close ? "done" : "open"} status`);
+  const pick = pickTransition(transitions, row.action);
+  if (!pick) throw Object.assign(new Error(`jira ${row.key}: no transition to a ${close ? "done" : "open"} status`), { transient: false });
   if (dryRun) return "would";
+  await comment();
   await jiraCall(jira, `/rest/api/3/issue/${key}/transitions`, { transition: { id: pick.id } }, fetchFn);
-  const text = close ? `Imprimatur: ${row.comment ?? ""}`.trim() : `Imprimatur: reopened${row.comment ? ` (${row.comment})` : ""}`;
-  await jiraCall(jira, `/rest/api/3/issue/${key}/comment`, { body: adf(text) }, fetchFn);
   return "done";
 }
 
@@ -237,12 +315,23 @@ async function pushJira(row, jira, fetchFn, dryRun) {
  * One tracker sync: push the queued status changes, then pull the repos' issues.
  * @param {any} db vscode/db.js handle
  * @param {{repos?: any[], gh?: (args: string[]) => Promise<string>, fetch?: typeof fetch, env?: NodeJS.ProcessEnv,
- *   originOf?: (root: string) => string | undefined, dryRun?: boolean, log?: (line: string) => void, now?: () => number}} [o]
+ *   originOf?: (root: string) => string | undefined, dryRun?: boolean, createTasks?: boolean, maxCreate?: number,
+ *   log?: (line: string) => void, now?: () => number}} [o]
  *   repos: whose issues are pulled (pushes go out for every repo)
  */
 async function trackerOnce(db, o = {}) {
-  const { repos = [], gh = ghExec, fetch: fetchFn, env = process.env, originOf, dryRun = false, log = () => {}, now = Date.now } = o;
-  const result = { providers: /** @type {Set<string>} */ (new Set()), pushed: 0, already: 0, failed: 0, dropped: 0, changes: 0, created: 0, errors: /** @type {string[]} */ ([]) };
+  const { repos = [], gh = ghExec, fetch: fetchFn, env = process.env, originOf, dryRun = false, createTasks = true, maxCreate = MAX_CREATE, log = () => {}, now = Date.now } = o;
+  const result = {
+    providers: /** @type {Set<string>} */ (new Set()), pushed: 0, already: 0, stale: 0, waiting: 0, failed: 0, dropped: 0, changes: 0, created: 0,
+    errors: /** @type {string[]} */ ([]),
+  };
+  /** @type {Record<string, number>} */
+  const failedBy = {};
+  const fail = (/** @type {string} */ provider, /** @type {unknown} */ e) => {
+    result.errors.push(e instanceof Error ? e.message : String(e));
+    failedBy[provider] = (failedBy[provider] ?? 0) + 1;
+  };
+  const claimant = crypto.randomUUID();
   /** @type {boolean | undefined} */
   let ghOk;
   const ghWorks = async () => {
@@ -272,29 +361,45 @@ async function trackerOnce(db, o = {}) {
 
   // Push.
   for (const row of db.trackerOutbox()) {
-    if (!row.key) {
+    // Its task is gone, or its key fits no tracker: it can never be pushed.
+    if (!row.key || (!GH_KEY.test(row.key) && !JIRA_KEY.test(row.key))) {
       if (!dryRun) db.trackerDone(row.id);
+      continue;
+    }
+    // The task's status changed since (and the change queued its own row, or needs none).
+    if (!/** @type {any} */ (WANTS)[row.action]?.(row.task_status)) {
+      if (!dryRun) db.trackerDone(row.id);
+      result.stale++;
+      continue;
+    }
+    if (row.next_at && row.next_at > now()) {
+      result.waiting++;
       continue;
     }
     /** @type {() => Promise<string>} */
     let push;
     let provider;
     const gk = GH_KEY.exec(row.key);
-    const slug = gk && slugOf({ id: row.repo_id, origin: row.origin, root: row.root });
-    if (gk && slug) {
-      // gh missing or logged out: the change waits, no try counted.
-      if (!(await ghWorks())) continue;
+    if (gk) {
+      const slug = slugOf({ id: row.repo_id, origin: row.origin, root: row.root });
+      // Not a GitHub repo here (yet), or gh missing / logged out: the row waits.
+      if (!slug || !(await ghWorks())) {
+        result.waiting++;
+        continue;
+      }
       provider = "github";
       push = () => pushGithub(row, slug, gk[1], gh, dryRun);
-    } else if (JIRA_KEY.test(row.key) && jira) {
-      provider = "jira";
-      push = () => pushJira(row, jira, fetchFn, dryRun);
     } else {
-      // No tracker for this task: nothing to push to.
-      if (!dryRun) db.trackerDone(row.id);
-      continue;
+      if (!jira) {
+        result.waiting++;
+        continue;
+      }
+      provider = "jira";
+      push = () => pushJira(db, row, jira, fetchFn, dryRun);
     }
     result.providers.add(provider);
+    // Another window is pushing it.
+    if (!dryRun && !db.trackerClaim(row.id, claimant, now())) continue;
     try {
       const r = await push();
       if (r === "would") log(`tracker ${provider}: would ${row.action.replace("_", " ")} ${row.key}`);
@@ -302,71 +407,91 @@ async function trackerOnce(db, o = {}) {
       if (r === "already") result.already++;
       else result.pushed++;
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
       result.failed++;
-      result.errors.push(msg);
+      fail(provider, e);
       if (dryRun) continue;
+      if (isTransient(e)) {
+        db.trackerBackoff(row.id, now());
+        continue;
+      }
       const tries = db.trackerFailed(row.id);
       if (tries >= MAX_TRIES) {
         db.trackerDone(row.id);
         result.dropped++;
-        log(`tracker ${provider}: gave up on ${row.action} ${row.key} after ${tries} tries: ${msg}`);
+        log(`tracker ${provider}: gave up on ${row.action} ${row.key} after ${tries} tries: ${e instanceof Error ? e.message : e}`);
       }
     }
   }
 
   // Pull.
-  const jiraTasks = [];
+  const create = createTasks ? { left: maxCreate, skipped: 0 } : undefined;
   for (const repo of repos) {
     const slug = slugOf(repo);
     if (slug && (await ghWorks())) {
       result.providers.add("github");
       try {
-        const r = await pullGithub(db, repo, slug, { gh, dryRun, log });
+        const r = await pullGithub(db, repo, slug, { gh, dryRun, log, now: now(), create });
         result.changes += r.changes;
         result.created += r.created;
       } catch (e) {
-        result.errors.push(e instanceof Error ? e.message : String(e));
+        fail("github", e);
       }
     }
-    if (jira) jiraTasks.push(...db.tasksOf(repo.id, { limit: 100_000 }).filter((/** @type {any} */ t) => JIRA_KEY.test(t.key)));
-  }
-  if (jira && jiraTasks.length) {
-    result.providers.add("jira");
-    try {
-      const r = await pullJira(db, jiraTasks, { jira, fetch: fetchFn, dryRun, log });
-      result.changes += r.changes;
-    } catch (e) {
-      result.errors.push(e instanceof Error ? e.message : String(e));
+    const jiraTasks = jira ? db.tasksOf(repo.id, { limit: 100_000 }).filter((/** @type {any} */ t) => JIRA_KEY.test(t.key)) : [];
+    if (jiraTasks.length) {
+      result.providers.add("jira");
+      try {
+        const r = await pullJira(db, repo, jiraTasks, { jira, fetch: fetchFn, dryRun, log, now: now() });
+        result.changes += r.changes;
+      } catch (e) {
+        fail("jira", e);
+      }
     }
   }
-  if (!dryRun && result.providers.size && !result.errors.length) db.setMeta("tracker_ok_at", now());
+  if (create?.skipped) log(`tracker github: ${create.skipped} more open issue${create.skipped === 1 ? "" : "s"} without a task; at most ${maxCreate} tasks are made per run`);
+  if (!dryRun) for (const p of result.providers) if (!failedBy[p]) db.setMeta(`tracker_ok_at:${p}`, now());
   return result;
 }
 
 /** One line for the log. @param {Awaited<ReturnType<typeof trackerOnce>>} r */
 function describe(r) {
-  if (!r.providers.size) return "tracker: no issue tracker for these repos";
+  if (!r.providers.size) return `tracker: no issue tracker for these repos${r.waiting ? ` (${r.waiting} push${r.waiting === 1 ? "" : "es"} waiting)` : ""}`;
   const parts = [`pushed ${r.pushed}`];
   if (r.already) parts.push(`${r.already} already there`);
   parts.push(`pulled ${r.changes} change${r.changes === 1 ? "" : "s"}`, `${r.created} new task${r.created === 1 ? "" : "s"}`);
+  if (r.stale) parts.push(`${r.stale} outdated`);
+  if (r.waiting) parts.push(`${r.waiting} waiting`);
   if (r.failed) parts.push(`${r.failed} failed`);
   if (r.dropped) parts.push(`${r.dropped} given up`);
   const line = `tracker ${[...r.providers].sort().join("+")}: ${parts.join(", ")}`;
   return r.errors.length ? `${line} (${r.errors[0]}${r.errors.length > 1 ? ` and ${r.errors.length - 1} more` : ""})` : line;
 }
 
-/**
- * Whether tracker sync ran lately on this device: then it closes the issue of a task set
- * done, and the sweep warning is not needed. @param {any} db @param {number} [now]
- */
-function trackerActive(db, now = Date.now()) {
+/** Whether a provider's sync succeeded lately on this device. @param {any} db @param {string} provider @param {number} [now] */
+function trackerActive(db, provider, now = Date.now()) {
   try {
-    const at = Number(db?.meta?.("tracker_ok_at"));
+    const at = Number(db?.meta?.(`tracker_ok_at:${provider}`));
     return Number.isFinite(at) && now - at < ACTIVE_MS;
   } catch {
     return false;
   }
 }
 
-module.exports = { trackerOnce, describe, trackerActive, githubRepo, readJira, statusFor, jiraTime, ghExec, MAX_TRIES, ACTIVE_MS, JIRA_KEY, GH_KEY };
+/**
+ * Whether the sweep warning (task done, GitHub issue open) can stay quiet for a repo:
+ * GitHub sync ran lately and none of the repo's GitHub pushes is stuck (failed, or
+ * waiting over STUCK_MS). @param {any} db @param {number | undefined} repoId @param {number} [now]
+ */
+function githubSyncCovers(db, repoId, now = Date.now()) {
+  if (repoId === undefined || !trackerActive(db, "github", now)) return false;
+  try {
+    return !db.trackerRowsOf(repoId).some((/** @type {any} */ r) => GH_KEY.test(r.key) && (r.tries > 0 || r.fails > 0 || now - r.at > STUCK_MS));
+  } catch {
+    return false;
+  }
+}
+
+module.exports = {
+  trackerOnce, describe, trackerActive, githubSyncCovers, githubRepo, readJira, statusFor, pickTransition, isTransient, ghExec,
+  MAX_TRIES, MAX_CREATE, ACTIVE_MS, STUCK_MS, COMMENT, JIRA_KEY, GH_KEY,
+};

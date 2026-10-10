@@ -354,10 +354,11 @@ function check(event, input, deps = {}) {
     if (s.issueFields.mode && n) remember(root, input.session_id, "created", n);
   }
 
-  // With issue tracker sync running (#70) the extension closes the issue itself: no warning.
+  // GitHub sync running (#70) and none of this repo's pushes stuck: the extension closes the issue.
   const trackerOn = () => {
     try {
-      return require("./tracker.js").trackerActive((deps.records ?? require("./records.js")).dbOf());
+      const records = deps.records ?? require("./records.js");
+      return require("./tracker.js").githubSyncCovers(records.dbOf(), records.repoId(root));
     } catch {
       return false;
     }

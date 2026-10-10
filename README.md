@@ -334,13 +334,18 @@ VS Code also keeps task status in step with the issue tracker (on start, every
 Tracker** to force it; not in an untrusted folder):
 
 - **GitHub** (`#N` tasks in a repo whose origin is github.com, with `gh` logged in):
-  a task done closes its issue as completed with a comment, dropped closes it as
-  not planned, reopened reopens it. Issues closed or reopened on GitHub after the
-  task last changed set the task's status; an open issue without a task gets one.
+  a task done closes its issue as completed, dropped closes it as not planned,
+  reopened reopens it, each with a fixed comment ("Imprimatur: tamamlandı" …;
+  nothing of the task's text). An issue closed or reopened on GitHub sets the
+  task's status (the first sync of a repo only notes where issues stand); an open
+  issue without a task gets one (`imprimatur.tracker.createTasks`, at most 50 a run).
+  Network errors and rate limits are retried later; a push that keeps failing
+  otherwise is given up after 5 tries.
 - **Jira** (tasks keyed `PROJ-12`): `config.json` next to the database gets
   `{"tracker": {"jira": {"baseUrl": "https://you.atlassian.net", "email": "you@…"}}}`
   and the API token goes in `IMPRIMATUR_JIRA_TOKEN` (or `tracker.jira.token`, with
-  the file at mode 0600). Status moves through the issue's transitions.
+  the file at mode 0600; `baseUrl` must be https). Status moves through the issue's
+  transitions (Done / Won't Do by name), its comment posted first.
 
 `npm run tracker` runs it from a terminal (`--all` for every repo, `--dry-run` to
 see what would change). `node scripts/stale-epic-lines.mjs` lists open epic lines

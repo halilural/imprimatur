@@ -725,7 +725,8 @@ function activate(ctx) {
     if (!trackerAllowed("issue tracker sync")) return "tracker: skipped (untrusted workspace)";
     const ids = new Set([...roots].map((r) => records.repoId(r)).filter((id) => id !== undefined));
     const repos = db.repos().filter((/** @type {any} */ r) => ids.has(r.id));
-    return describeTracker(await trackerOnce(db, { repos, originOf: (root) => require("./import.js").originOf(root), log: (line) => log.warn(line) }));
+    const createTasks = vscode.workspace.getConfiguration("imprimatur").get("tracker.createTasks", true);
+    return describeTracker(await trackerOnce(db, { repos, createTasks, originOf: (root) => require("./import.js").originOf(root), log: (line) => log.warn(line) }));
   };
   const trackerer = syncLoop(runTracker, (line, error) => (error ? log.warn(line) : log.info(line)), { intervalMs: 300_000, name: "tracker sync" });
   ctx.subscriptions.push({ dispose: () => trackerer.dispose() });

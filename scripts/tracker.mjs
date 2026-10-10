@@ -4,6 +4,7 @@
 //   npm run tracker                  push queued status changes, pull this repo's issues
 //   npm run tracker -- --all         ...pull every repo in the database
 //   npm run tracker -- --dry-run     say what would change; write nothing (gh/Jira are only read)
+//   npm run tracker -- --no-create   make no task from an open issue without one
 //
 // Jira: <database folder>/config.json {tracker: {jira: {baseUrl, email}}} and the token in
 // IMPRIMATUR_JIRA_TOKEN (or tracker.jira.token, with the file at mode 0600).
@@ -17,9 +18,9 @@ const { trackerOnce, describe } = require("../vscode/tracker.js");
 const { originOf } = require("../vscode/import.js");
 
 const argv = process.argv.slice(2);
-const unknown = argv.filter((a) => !["--all", "--dry-run"].includes(a));
+const unknown = argv.filter((a) => !["--all", "--dry-run", "--no-create"].includes(a));
 if (unknown.length) {
-  console.error(`Imprimatur: unknown option ${unknown[0]} (use --all, --dry-run)`);
+  console.error(`Imprimatur: unknown option ${unknown[0]} (use --all, --dry-run, --no-create)`);
   process.exit(2);
 }
 const dryRun = argv.includes("--dry-run");
@@ -38,7 +39,7 @@ try {
     if (!repo) console.log(`note: ${root ?? process.cwd()} has no tasks in Imprimatur; pushing only (--all pulls every repo)`);
     repos = repo ? [repo] : [];
   }
-  const r = await trackerOnce(db, { repos, originOf, dryRun, log: (line) => console.log(line) });
+  const r = await trackerOnce(db, { repos, originOf, dryRun, createTasks: !argv.includes("--no-create"), log: (line) => console.log(line) });
   console.log(`${describe(r)}${dryRun ? " (dry run: nothing written)" : ""}`);
   if (r.errors.length) code = 1;
 } catch (e) {
