@@ -16,6 +16,8 @@ const { registerRecordCommands } = require("./recordsView.js");
 const { registerLauncher } = require("./launcherView.js");
 const records = require("./records.js");
 const { readConfig, syncOnce, syncLoop, describe } = require("./sync.js");
+const { trackerOnce, describe: describeTracker } = require("./tracker.js");
+const { trustGate } = require("./trust.js");
 
 /** @type {ReturnType<typeof registerSetupView> | undefined} */
 let setupView;
@@ -714,6 +716,28 @@ function activate(ctx) {
     if (error) vscode.window.showErrorMessage(`Imprimatur ${error}`);
     else if (line) vscode.window.setStatusBarMessage(`Imprimatur ${line}`, 5000);
   }));
+  // Issue tracker sync (#70): task status to and from GitHub Issues / Jira. Now, every
+  // 5 min, and 5 s after a status change queues a push. Not in an untrusted folder (gh, fetch).
+  const trackerAllowed = trustGate(() => vscode.workspace.isTrusted, (msg) => log.info(msg));
+  const runTracker = async () => {
+    const db = records.dbOf();
+    if (!db) throw new Error(records.lastError ?? "database not available");
+    if (!trackerAllowed("issue tracker sync")) return "tracker: skipped (untrusted workspace)";
+    const ids = new Set([...roots].map((r) => records.repoId(r)).filter((id) => id !== undefined));
+    const repos = db.repos().filter((/** @type {any} */ r) => ids.has(r.id));
+    return describeTracker(await trackerOnce(db, { repos, originOf: (root) => require("./import.js").originOf(root), log: (line) => log.warn(line) }));
+  };
+  const trackerer = syncLoop(runTracker, (line, error) => (error ? log.warn(line) : log.info(line)), { intervalMs: 300_000, name: "tracker sync" });
+  ctx.subscriptions.push({ dispose: () => trackerer.dispose() });
+  const trackerStart = setTimeout(() => trackerer.now(), 3_000);
+  ctx.subscriptions.push({ dispose: () => clearTimeout(trackerStart) });
+  /** Pushes waiting last time we looked: a new one starts a run. */
+  let trackerQueued = 0;
+  ctx.subscriptions.push(vscode.commands.registerCommand("imprimatur.trackerSync", async () => {
+    const { line, error } = await trackerer.now();
+    if (error) vscode.window.showErrorMessage(`Imprimatur ${error}`);
+    else if (line) vscode.window.setStatusBarMessage(`Imprimatur ${line}`, 5000);
+  }));
   try {
     // The repos as git spells them: roots are normalised (lower case on Windows).
     // The panel's "every repo" switch, kept per workspace as the record views kept it.
@@ -733,6 +757,11 @@ function activate(ctx) {
         updateGraphButton();
         try {
           if (syncer && records.dbOf()?.outboxCount()) syncer.kick();
+        } catch {}
+        try {
+          const n = records.dbOf()?.trackerOutboxCount() ?? 0;
+          if (n > trackerQueued) trackerer.kick();
+          trackerQueued = n;
         } catch {}
       },
       (at) => showGraph({ ...at, tab: "tasks" }),

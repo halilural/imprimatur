@@ -207,9 +207,9 @@ const describe = (r) =>
  * process: now() during a run queues one more run and resolves when that one ends.
  * @param {() => Promise<string>} run returns the line to log
  * @param {(line: string, error?: boolean) => void} log
- * @param {{intervalMs?: number, debounceMs?: number}} [o]
+ * @param {{intervalMs?: number, debounceMs?: number, name?: string}} [o] name: the log line's word for a failed run
  */
-function syncLoop(run, log, { intervalMs = 60_000, debounceMs = 5_000 } = {}) {
+function syncLoop(run, log, { intervalMs = 60_000, debounceMs = 5_000, name = "sync" } = {}) {
   let disposed = false;
   /** @type {Promise<{line?: string, error?: string}> | undefined} */
   let current;
@@ -223,7 +223,7 @@ function syncLoop(run, log, { intervalMs = 60_000, debounceMs = 5_000 } = {}) {
       log(line);
       return { line };
     } catch (e) {
-      const error = `sync failed: ${e instanceof Error ? e.message : e}`;
+      const error = `${name} failed: ${e instanceof Error ? e.message : e}`;
       log(error, true);
       return { error };
     }

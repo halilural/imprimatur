@@ -151,6 +151,11 @@
         "category": "Imprimatur"
       },
       {
+        "command": "imprimatur.trackerSync",
+        "title": "Sync with Issue Tracker",
+        "category": "Imprimatur"
+      },
+      {
         "command": "imprimatur.records.refresh",
         "title": "Refresh Records",
         "category": "Imprimatur",

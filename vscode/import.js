@@ -288,10 +288,10 @@ function importRepo(db, root, { dryRun = false, origin = originOf(root) } = {}) 
     if (dryRun) continue;
 
     const { task: t } = parsed;
-    const epicId = t.epic ? (db.taskByKey(repo.id, t.epic) ?? db.upsertTask(repo.id, t.epic)).id : undefined;
+    const epicId = t.epic ? (db.taskByKey(repo.id, t.epic) ?? db.upsertTask(repo.id, t.epic, {}, ACTOR)).id : undefined;
     const task = db.upsertTask(repo.id, t.key, {
       ...(t.title && { title: t.title }), status: t.status, ...(t.summary != null && { summary: t.summary }), ...(epicId && { epicId }),
-    });
+    }, ACTOR);
     // Same text twice in a file: the n-th copy gets its own uid.
     const count = new Map();
     const uidOf = (/** @type {any} */ r) => {

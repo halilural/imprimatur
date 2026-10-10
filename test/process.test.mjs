@@ -128,11 +128,11 @@ test("issueCreate reminds; issueFields names what the new issue lacks", () => {
 
 test("sweep: a task set done while its issue is open", () => {
   const root = repo({ process: {} });
-  const call = (state) => check("PostToolUse", { cwd: root, tool_name: "mcp__imprimatur__task_upsert", tool_input: { key: "#56", status: "done" } }, { gh: () => JSON.stringify({ state }) });
+  const call = (state) => check("PostToolUse", { cwd: root, tool_name: "mcp__imprimatur__task_upsert", tool_input: { key: "#56", status: "done" } }, { gh: () => JSON.stringify({ state }), records: noRecords });
   assert.match(call("OPEN").context[0], /#56 is done in Imprimatur but its GitHub issue is open/);
   assert.deepEqual(call("CLOSED"), {});
   // The plugin's server names the tool mcp__plugin_imprimatur_imprimatur__task_upsert (#67).
-  const plugin = check("PostToolUse", { cwd: root, tool_name: "mcp__plugin_imprimatur_imprimatur__task_upsert", tool_input: { key: "#56", status: "done" } }, { gh: () => JSON.stringify({ state: "OPEN" }) });
+  const plugin = check("PostToolUse", { cwd: root, tool_name: "mcp__plugin_imprimatur_imprimatur__task_upsert", tool_input: { key: "#56", status: "done" } }, { gh: () => JSON.stringify({ state: "OPEN" }), records: noRecords });
   assert.match(plugin.context[0], /#56 is done in Imprimatur/);
 });
 
