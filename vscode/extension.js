@@ -8,16 +8,20 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { review, acceptHunk, acceptLines, acceptGroups } = require("./diff.js");
 const { markdownItPlugin, markdownBlocks, reviewHtml } = require("./preview.js");
-const { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog } = require("./graphView.js");
+const { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setPanelScope, panelState, panelMessage } = require("./graphView.js");
 const { WAITING_DIR, waitingSteps } = require("./waiting.js");
 const { acceptEdit, spotsOf, graphRows } = require("./graph.js");
 const { registerSetupView } = require("./setupView.js");
-const { registerRecordViews } = require("./recordsView.js");
+const { registerRecordCommands } = require("./recordsView.js");
+const { registerLauncher } = require("./launcherView.js");
+const { inboxCount } = require("./tasksView.js");
 const records = require("./records.js");
 const { readConfig, syncOnce, syncLoop, describe } = require("./sync.js");
 
 /** @type {ReturnType<typeof registerSetupView> | undefined} */
 let setupView;
+/** @type {ReturnType<typeof registerLauncher> | undefined} */
+let launcher;
 const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, historyEdits } = require("./review-state.js");
 const { toolCallIn, linkIn } = require("./calls.js");
 const { archiveRepo, archiveDue } = require("./archive.js");
@@ -254,10 +258,26 @@ function graphRoot() {
   return (active?.scheme === "file" && rootOf(active.fsPath)) || [...roots][0];
 }
 
-function showGraph() {
+/**
+ * Opens the Imprimatur panel, on a tab or a task (#69).
+ * @param {{tab?: string, root?: string, task?: string, record?: number, sel?: number | null}} [at]
+ */
+function showGraph(at) {
+  // A task of a repo not open in this window shows in this window's panel (with every repo on).
+  const root = (at?.root && roots.has(norm(at.root)) ? at.root : undefined) ?? graphRoot();
+  if (!root) return void vscode.window.showInformationMessage("Imprimatur: no folder open.");
+  openGraph(root, openEditDiff, currentText, acceptEditOf, goToEdit, renderEdit, undefined, at);
+}
+
+/** What waits on the user in the graph's repo: open asks and tests, and turn-end asks. */
+function inboxNow() {
   const root = graphRoot();
-  if (!root) return void vscode.window.showInformationMessage("Agent Change Graph: no folder open.");
-  openGraph(root, openEditDiff, currentText, acceptEditOf, goToEdit, renderEdit);
+  if (!root) return 0;
+  try {
+    return inboxCount(records.dbOf(), root, waitingSteps(root));
+  } catch {
+    return waitingSteps(root).filter((w) => w.state === "open").length;
+  }
 }
 
 /**
@@ -269,15 +289,17 @@ async function restoreGraph(panel, state) {
   const saved = typeof state?.root === "string" && state.root;
   const root = saved && (roots.has(norm(saved)) || fs.existsSync(saved)) ? saved : graphRoot();
   if (!root) return void panel.dispose();
-  openGraph(root, openEditDiff, currentText, acceptEditOf, goToEdit, renderEdit, panel);
+  // Its tab, task and filters too (#69); graphView keeps only what it knows.
+  const { tab, sel, filter, all, showDone, old } = state ?? {};
+  openGraph(root, openEditDiff, currentText, acceptEditOf, goToEdit, renderEdit, panel, { tab, sel, filter, all, showDone, old });
 }
 
 /** Status bar button, always there like Git Graph's: opens the graph, shows open asks. */
 function updateGraphButton() {
   const root = graphRoot();
   if (!root) return graphButton.hide();
-  const open = waitingSteps(root).filter((w) => w.state === "open").length;
-  setupView?.refreshCounts();
+  const open = inboxNow();
+  launcher?.refresh();
   graphButton.text = open ? `$(git-merge) Agent Graph $(bell-dot) ${open}` : "$(git-merge) Agent Graph";
   graphButton.tooltip = open ? `Open the Agent Change Graph · ${open} waiting on you` : "Open the Agent Change Graph";
   graphButton.show();
@@ -512,7 +534,10 @@ function activate(ctx) {
     ...Object.values(types),
     vscode.workspace.registerTextDocumentContentProvider(SCHEME, { provideTextDocumentContent: historyContent }),
     vscode.commands.registerCommand("imprimatur.showHistory", showHistory),
-    vscode.commands.registerCommand("imprimatur.openGraph", showGraph),
+    vscode.commands.registerCommand("imprimatur.openGraph", () => showGraph({ tab: "edits" })),
+    vscode.commands.registerCommand("imprimatur.openHome", () => showGraph({ tab: "home" })),
+    vscode.commands.registerCommand("imprimatur.openTasks", () => showGraph({ tab: "tasks" })),
+    vscode.commands.registerCommand("imprimatur.openInbox", () => showGraph({ tab: "inbox" })),
     vscode.commands.registerCommand("imprimatur.acceptRange", acceptRange),
     // Process checks (#56): a repo turns them on with a committed .claude/imprimatur.json.
     vscode.commands.registerCommand("imprimatur.processOn", async () => {
@@ -659,8 +684,8 @@ function activate(ctx) {
     }),
   );
   // The side bar: records (Imprimatur's database), then a way to the graph and every file that shapes the agent.
-  /** @type {{views: Record<string, any>, trees: Record<string, any>, ui: Record<string, any>} | undefined} */
-  let recordViews;
+  /** @type {{ui: Record<string, any>} | undefined} */
+  let recordCommands;
   // Sync between machines (#61), when set up (config.json next to the database): now,
   // every 60 s, and 5 s after a local write. Only queued local changes start a sync:
   // applying pulled changes queues nothing, so the change it makes to the file ends there.
@@ -700,34 +725,47 @@ function activate(ctx) {
   }));
   try {
     // The repos as git spells them: roots are normalised (lower case on Windows).
-    recordViews = registerRecordViews(ctx, () => [...roots].map((r) => repoRoot(r) ?? r), (msg) => log.warn(msg), () => {
-      syncRecords();
-      setupView?.refreshCounts();
-      try {
-        if (syncer && records.dbOf()?.outboxCount()) syncer.kick();
-      } catch {}
+    // The panel's "every repo" switch, kept per workspace as the record views kept it.
+    setPanelScope({
+      get: () => ctx.workspaceState.get("imprimatur.records.allRepos", false),
+      set: (v) => void ctx.workspaceState.update("imprimatur.records.allRepos", v),
     });
+    recordCommands = registerRecordCommands(
+      ctx,
+      (msg) => log.warn(msg),
+      () => {
+        syncRecords();
+        updateGraphButton();
+        try {
+          if (syncer && records.dbOf()?.outboxCount()) syncer.kick();
+        } catch {}
+      },
+      (at) => showGraph({ ...at, tab: "tasks" }),
+      (all) => panelMessage({ type: "view", view: { all } }),
+    );
   } catch (e) {
-    log.error(`records views: ${e instanceof Error ? e.message : e}`);
+    log.error(`records: ${e instanceof Error ? e.message : e}`);
   }
-  setupView = registerSetupView(ctx, () => [...roots], () => {
+  // The side bar's launcher (#69): the panel's tabs, what waits on the user as its badge.
+  launcher = registerLauncher(ctx, () => {
     const root = graphRoot();
-    if (!root) return { edits: 0, waiting: 0 };
-    return {
-      edits: graphRows(root, currentText).rows.filter((r) => !r.accepted && !r.gone).length,
-      waiting: waitingSteps(root).filter((w) => w.state === "open").length,
-    };
+    if (!root) return { edits: 0, inbox: 0 };
+    return { edits: graphRows(root, currentText).rows.filter((r) => !r.accepted && !r.gone).length, inbox: inboxNow() };
   });
+  // Its graph row moved to the launcher (#69): no counts to keep.
+  setupView = registerSetupView(ctx, () => [...roots], () => ({ edits: 0, waiting: 0 }));
   renderAll();
   updateGraphButton();
   // Load the markdown extension's plugins now, so Accept units use its parser before any preview opens.
   vscode.commands.executeCommand("markdown.api.render", "").then(undefined, () => {});
   // Markdown preview: the built-in markdown extension calls this with its markdown-it.
   return {
-    // The records views' data providers, read by the integration tests (#68); nothing else uses them.
-    recordViews: recordViews?.views,
-    recordTrees: recordViews?.trees,
-    recordUi: recordViews?.ui,
+    // For the integration tests (#68, #69); nothing else uses them: the record commands'
+    // prompts, the panel (its view, last page, and its message handler) and the launcher.
+    recordUi: recordCommands?.ui,
+    panelState,
+    panelMessage,
+    launcher,
     extendMarkdownIt: (md) => {
       markdownIt = md;
       codeLensChanged.fire();

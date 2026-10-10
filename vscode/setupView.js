@@ -1,6 +1,6 @@
 // @ts-check
-// The Imprimatur side bar (activity bar icon): a link to the Agent Change
-// Graph on top, then "Agent setup": every file that shapes the agent, per repo
+// The Imprimatur side bar (activity bar icon), under the launcher (launcherView.js):
+// "Agent setup": every file that shapes the agent, per repo
 // and global, grouped by tool, marked new / changed / removed since the user
 // last looked (Mark all as seen). Read only: it never edits the files.
 "use strict";
@@ -179,7 +179,7 @@ class SetupView {
   getChildren(node) {
     if (!node) {
       const forFile = forFileNode(this.scopes, this.activeFile);
-      return [{ type: "graph" }, ...healthRoot(this.scopes), ...(forFile ? [/** @type {Node} */ (forFile)] : []), ...this.scopes.map((scope) => /** @type {Node} */ ({ type: "scope", scope }))];
+      return [...healthRoot(this.scopes), ...(forFile ? [/** @type {Node} */ (forFile)] : []), ...this.scopes.map((scope) => /** @type {Node} */ ({ type: "scope", scope }))];
     }
     if (node.type === "group") return node.children;
     if (node.type === "health") return healthChildren(this.scopes);

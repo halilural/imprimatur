@@ -64,6 +64,24 @@
         "icon": "$(git-merge)"
       },
       {
+        "command": "imprimatur.openHome",
+        "title": "Open Home (Ana sayfa)",
+        "category": "Imprimatur",
+        "icon": "$(home)"
+      },
+      {
+        "command": "imprimatur.openTasks",
+        "title": "Open Tasks (Görevler)",
+        "category": "Imprimatur",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "imprimatur.openInbox",
+        "title": "Open Waiting on Me (Bende bekleyenler)",
+        "category": "Imprimatur",
+        "icon": "$(bell)"
+      },
+      {
         "command": "imprimatur.acceptRange",
         "title": "Accept Agent Changes in Range",
         "category": "Imprimatur"
@@ -381,23 +399,13 @@
         },
         {
           "command": "imprimatur.records.search",
-          "when": "view =~ /^imprimatur\\.records\\./",
+          "when": "view == imprimatur.launcher",
           "group": "navigation@1"
         },
         {
           "command": "imprimatur.records.refresh",
-          "when": "view =~ /^imprimatur\\.records\\./",
+          "when": "view == imprimatur.launcher",
           "group": "navigation@2"
-        },
-        {
-          "command": "imprimatur.records.allRepos",
-          "when": "view =~ /^imprimatur\\.records\\./ && !imprimatur.records.allRepos",
-          "group": "navigation@3"
-        },
-        {
-          "command": "imprimatur.records.thisWindow",
-          "when": "view =~ /^imprimatur\\.records\\./ && imprimatur.records.allRepos",
-          "group": "navigation@3"
         }
       ],
       "view/item/context": [
@@ -415,61 +423,6 @@
           "command": "imprimatur.setup.explainLastChange",
           "when": "view == imprimatur.setup && viewItem =~ /^setupFile.*-repo/",
           "group": "1_setup@2"
-        },
-        {
-          "command": "imprimatur.records.done",
-          "when": "view =~ /^imprimatur\\.records\\./ && viewItem =~ /^record-open/",
-          "group": "inline@1"
-        },
-        {
-          "command": "imprimatur.records.done",
-          "when": "view =~ /^imprimatur\\.records\\./ && viewItem =~ /^record-open/",
-          "group": "1_state@1"
-        },
-        {
-          "command": "imprimatur.records.reopen",
-          "when": "view =~ /^imprimatur\\.records\\./ && viewItem =~ /^record-(done|dropped)/",
-          "group": "1_state@2"
-        },
-        {
-          "command": "imprimatur.records.drop",
-          "when": "view =~ /^imprimatur\\.records\\./ && viewItem =~ /^record-open/",
-          "group": "1_state@3"
-        },
-        {
-          "command": "imprimatur.records.pointer",
-          "when": "view =~ /^imprimatur\\.records\\./ && viewItem == record-open",
-          "group": "1_state@4"
-        },
-        {
-          "command": "imprimatur.records.editTitle",
-          "when": "view =~ /^imprimatur\\.records\\./ && viewItem =~ /^record-/",
-          "group": "2_edit@1"
-        },
-        {
-          "command": "imprimatur.records.add",
-          "when": "view =~ /^imprimatur\\.records\\./ && viewItem =~ /^(record-|task-)/",
-          "group": "2_edit@2"
-        },
-        {
-          "command": "imprimatur.records.copy",
-          "when": "view =~ /^imprimatur\\.records\\./ && viewItem =~ /^record-/",
-          "group": "3_copy@1"
-        },
-        {
-          "command": "imprimatur.records.add",
-          "when": "view =~ /^imprimatur\\.records\\./ && viewItem =~ /^task-/",
-          "group": "inline@1"
-        },
-        {
-          "command": "imprimatur.records.taskDone",
-          "when": "view =~ /^imprimatur\\.records\\./ && viewItem == task-live",
-          "group": "1_state@1"
-        },
-        {
-          "command": "imprimatur.records.taskReopen",
-          "when": "view =~ /^imprimatur\\.records\\./ && viewItem == task-closed",
-          "group": "1_state@1"
         }
       ]
     },
@@ -554,38 +507,9 @@
     "views": {
       "imprimatur": [
         {
-          "id": "imprimatur.records.asks",
-          "name": "Waiting on me",
+          "id": "imprimatur.launcher",
+          "name": "Imprimatur",
           "contextualTitle": "Imprimatur"
-        },
-        {
-          "id": "imprimatur.records.tasks",
-          "name": "Tasks",
-          "contextualTitle": "Imprimatur"
-        },
-        {
-          "id": "imprimatur.records.questions",
-          "name": "Questions",
-          "contextualTitle": "Imprimatur",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "imprimatur.records.decisions",
-          "name": "Decisions",
-          "contextualTitle": "Imprimatur",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "imprimatur.records.adr",
-          "name": "Architecture (ADR)",
-          "contextualTitle": "Imprimatur",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "imprimatur.records.pdr",
-          "name": "Product (PDR)",
-          "contextualTitle": "Imprimatur",
-          "visibility": "collapsed"
         },
         {
           "id": "imprimatur.setup",

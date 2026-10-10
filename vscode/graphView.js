@@ -1,8 +1,10 @@
 // @ts-check
-// The Agent Change Graph panel (a webview): rows from graph.js, one colored
-// lane per Claude session, click a row to open that edit's diff, Accept an
-// edit from its row or its right-click menu. A second tab, "Waiting on you",
-// lists what the agent asked of the user (waiting.js), its asks as a list.
+// The Imprimatur panel (a webview, viewType imprimatur.graph). Four tabs:
+// "Ana sayfa", "Görevler" and "Bende bekleyenler" show Imprimatur's task records
+// (tasksView.js, #69); "Ajan değişiklikleri" is the Agent Change Graph: rows from
+// graph.js, one colored lane per Claude session, click a row to open that edit's
+// diff, Accept an edit from its row or its right-click menu. Bende bekleyenler
+// also lists what the agent asked at a turn's end (waiting.js), with ticks.
 "use strict";
 const vscode = require("vscode");
 const fs = require("node:fs");
@@ -19,6 +21,8 @@ const { scanTodos } = require("./history.js");
 const { closeDoneTasks } = require("./todo-done.js");
 const { scopeCss } = require("./preview.js");
 const { trustGate } = require("./trust.js");
+const tasksView = require("./tasksView.js");
+const { githubOf } = require("./tasks.js");
 
 /** Where the graph logs (the extension's output channel). @type {(msg: string) => void} */
 let logLine = () => {};
@@ -56,7 +60,9 @@ const ACTIVITY = {
   other: ["·", "Other"],
 };
 
-const KINDS = { question: ["❓", "Question"], command: ["⚙", "Command"], verify: ["👀", "Verify / test"], input: ["✋", "Input"] };
+const KINDS = { question: [tasksView.icon("question"), "Question"], command: [tasksView.icon("terminal"), "Command"], verify: [tasksView.icon("eye"), "Verify / test"], input: [tasksView.icon("hand"), "Input"] };
+/** The waiting log that mirrors the user's open records (history.js): the records show in Bende bekleyenler themselves. */
+const FILES_SESSION = "todo-files";
 
 const COLORS = ["#4fc1ff", "#c586c0", "#dcdcaa", "#4ec9b0", "#ce9178", "#9cdcfe", "#f48771", "#b5cea8"];
 const LANE = 16;
@@ -112,7 +118,8 @@ const STATES = {
 function waitingBody(steps, sessions, root) {
   const sessions_ = records.sessionTasks(root);
   const cache = new Map();
-  if (!steps.length) return `<tr><td colspan="7" class="empty">Nothing asked of you yet.</td></tr>`;
+  steps = steps.filter((w) => w.session !== FILES_SESSION);
+  if (!steps.length) return `<tr><td colspan="7" class="empty">No turn-end asks yet.</td></tr>`;
   const order = sessions.map((l) => l.session);
   const titles = new Map(sessions.map((l) => [l.session, l.title]));
   const color = (s) => {
@@ -137,14 +144,12 @@ function waitingBody(steps, sessions, root) {
       // The task and its record (vscode/tasks.js): the key opens its issue or Jira page, the record icon shows the record.
       const place = placeOf(root, w, sessions_, cache);
       const open = (cls, attrs, label, title) => `<a href="#" class="task ${cls}" ${attrs} title="${esc(title)}">${label}</a>`;
-      // No page: the key shows the task in Imprimatur's Tasks view.
-      const key = place.task
-        ? open("key", place.url ? `data-url="${esc(place.url)}"` : `data-task="${esc(place.task)}"`, esc(place.task), place.url ?? `Show ${place.task} in Tasks`)
-        : "";
+      // The key shows the task in Görevler (its GitHub or Jira page is a click away there).
+      const key = place.task ? open("key", `data-task="${esc(place.task)}"`, esc(place.task), `Show ${place.task} in Görevler`) : "";
       // The badge names the task: the text need not start with it too ("LATD-13937: …").
       const stepText = place.task && w.text.startsWith(place.task) ? w.text.slice(place.task.length).replace(/^[\s:–—-]+/, "") || w.text : w.text;
       // Before the text: a long text is cut at the end of the cell (…), and the icon must stay.
-      const file = place.record ? open("file", `data-record="${place.record}"`, "📄", `Show the record in ${place.task}`) : "";
+      const file = place.record ? open("file", `data-record="${place.record}"`, tasksView.icon("file", 14), `Show the record in ${place.task}`) : "";
       const more = [
         w.why ? `<div class="why">${esc(w.why)}</div>` : "",
         w.detail && w.detail !== w.text ? `<details><summary>Full message</summary><pre>${esc(w.detail)}</pre></details>` : "",
@@ -169,24 +174,28 @@ function waitingBody(steps, sessions, root) {
 }
 
 /**
+ * The whole page. Only the visible tab's rows are drawn (#69): the edits table on
+ * "edits", the turn-end asks on "inbox", the task tabs' HTML (opts.pane) on theirs.
  * @param {ReturnType<typeof graphRows>} data @param {string} root @param {string} nonce
  * @param {ReturnType<typeof waitingSteps>} [waiting]
+ * @param {{view?: Record<string, any>, pane?: string, inbox?: number, repoName?: string}} [opts]
  */
-function html(data, root, nonce, waiting = []) {
-  const open = waiting.filter((w) => w.state === "open").length;
+function html(data, root, nonce, waiting = [], opts = {}) {
+  const view = { tab: "edits", ...opts.view };
+  const tab = tasksView.TABS.includes(view.tab) ? view.tab : "edits";
+  const turn = waiting.filter((w) => w.session !== FILES_SESSION);
+  const open = turn.filter((w) => w.state === "open").length;
+  const inbox = opts.inbox ?? open;
   // One task draws one straight line: the lanes only say something with several.
   const lanes = data.lanes.length > 1;
   const cols = columnsOf(data.lanes);
   const time = (t) => new Date(t).toLocaleString();
   const sessionTitle = new Map(data.sessions.map((s) => [s.session, s.title]));
-  // Each lane's task, as in Waiting on you: the key opens its issue or Jira page (else the task in Tasks), then its title.
-  const cache = new Map();
+  // Each lane's task, as in Bende bekleyenler: the key opens the task in Görevler, then its title.
   const taskCell = data.lanes.map((l, k) => {
     const color = `style="color:${COLORS[k % COLORS.length]}"`;
     if (!l.task) return `<span class="none" ${color} title="No todos/ file, branch or key names its task">No task</span>`;
-    const place = placeOf(root, { session: "", text: "", task: l.task }, new Map(), cache);
-    const target = place.url ? `data-url="${esc(place.url)}"` : `data-task="${esc(l.task)}"`;
-    const key = `<a href="#" class="task key" ${target} title="${esc(place.url ?? `Show ${l.task} in Tasks`)}">${esc(l.task)}</a>`;
+    const key = `<a href="#" class="task key" data-task="${esc(l.task)}" title="${esc(`Show ${l.task} in Görevler`)}">${esc(l.task)}</a>`;
     return `${key}<span ${color}>${esc(l.title ?? "")}</span>`;
   });
   // A record change: shown in its task's lane; it opens the record, nothing to accept (#60).
@@ -227,7 +236,7 @@ function html(data, root, nonce, waiting = []) {
     .filter(([k]) => kindCount.get(k))
     .map(([k, [icon, label]]) => `<button class="chip" data-kind="${k}" title="Show or hide: ${esc(label)}">${icon} ${esc(label)} <span class="n">${kindCount.get(k)}</span></button>`)
     .join("");
-  const body = data.rows.length
+  const body = tab !== "edits" ? "" : data.rows.length
     ? data.rows
         .map(
           (r, i) => r.record ? recordRow(r, i) : r.activity ? activityRow(r, i) : `<tr data-kind="edit"${r.gone || r.outside ? ` class="${[r.gone && "gone", r.outside && "outside"].filter(Boolean).join(" ")}"` : ""} data-file="${esc(r.file)}" data-n="${r.n}" data-i="${i}" data-q="${esc([r.file, r.intent, r.summary, r.prompt, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}"
@@ -302,7 +311,11 @@ function html(data, root, nonce, waiting = []) {
   #pop .review .imprimatur-old { padding: 4px 9px; }
   ${reviewStyle()}
   nav { display: flex; gap: 4px; } nav button { background: none; color: var(--vscode-foreground); border: none; border-bottom: 2px solid transparent; padding: 4px 8px; cursor: pointer; opacity: .75; font: inherit; }
-  nav button.on { border-bottom-color: var(--vscode-focusBorder); opacity: 1; font-weight: 600; }
+  nav button.on { border-bottom-color: var(--vscode-charts-orange); opacity: 1; font-weight: 600; }
+  nav button:focus-visible, #filter:focus-visible, .chip:focus-visible, button.acc:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 1px; }
+  header .brand { display: inline-flex; align-items: center; gap: 8px; } header .brand .ic { color: var(--vscode-charts-orange); }
+  #filter:focus { outline: 1px solid var(--vscode-focusBorder); }
+  ${tasksView.TASKS_CSS}
   .badge { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); border-radius: 8px; padding: 0 6px; font-size: 90%; }
   section[hidden] { display: none; }
   tr.w { cursor: pointer; } tr.w.done { opacity: .6; }
@@ -325,16 +338,17 @@ function html(data, root, nonce, waiting = []) {
   .task.file { margin-right: 6px; opacity: .7; } a.task.file:hover { opacity: 1; }
   .todo .chat { font-size: 10px; padding: 0 5px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
 </style></head><body>
-<header><strong>Agent Change Graph</strong>
-<nav><button data-tab="edits">Edits ${pending ? `<span class="badge">${pending}</span>` : ""}</button><button data-tab="waiting">Waiting on you ${open ? `<span class="badge">${open}</span>` : ""}</button></nav>
-<input id="filter" placeholder="Filter by file, request or answer"><label id="ans" hidden><input type="checkbox" id="answered"> open only</label><button id="audit" class="acc on" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">Audit</button><button id="scan" class="acc on" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">Scan history</button>
-<span class="n" id="count-edits">${data.rows.filter((r) => !r.record && !r.activity).length} edits · ${data.rows.filter((r) => r.activity).length} other calls · ${data.rows.filter((r) => r.record).length} record changes · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span><span class="n" id="count-waiting">${open} open · ${waiting.length} steps</span></header>
-<section id="edits"><div id="kinds">${chips}</div><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
+<header><span class="brand">${tasksView.icon("stamp", 20)}<strong>Imprimatur</strong><span class="dim">/</span><span>${esc(opts.repoName ?? path.basename(root))}</span></span>
+<nav aria-label="Görünümler"><button data-tab="home">Ana sayfa</button><button data-tab="tasks">Görevler</button><button data-tab="inbox">Bende bekleyenler ${inbox ? `<span class="badge">${inbox}</span>` : ""}</button><button data-tab="edits">Ajan değişiklikleri ${pending ? `<span class="badge">${pending}</span>` : ""}</button></nav>
+<input id="filter" type="search" aria-label="Ara" placeholder="Ara… (/)"><label id="ans" hidden><input type="checkbox" id="answered"> open only</label><button id="audit" class="acc on" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">Audit</button><button id="scan" class="acc on" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">Scan history</button>
+<span class="n" id="count-edits">${data.rows.filter((r) => !r.record && !r.activity).length} edits · ${data.rows.filter((r) => r.activity).length} other calls · ${data.rows.filter((r) => r.record).length} record changes · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span><span class="n" id="count-waiting">${open} open · ${turn.length} steps</span></header>
+<section id="edits"${tab === "edits" ? "" : " hidden"}><div id="kinds">${chips}</div><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
 <tbody>${body}</tbody></table>
-<script type="application/json" id="rows">${JSON.stringify(data.rows.map((r) => (r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview, file: r.file, n: r.n, md: /\.mdx?$/i.test(r.file) } : null))).replace(/</g, "\\u003c")}</script></section>
-<section id="waiting"><div class="legend"><span>☐ open: tick when done</span><span><span class="badge-ok">✓</span> done</span><span><span class="badge-gone">replaced</span> asked again later</span><span><span class="pill">Answered</span> question you answered</span></div>
+<script type="application/json" id="rows">${JSON.stringify((tab === "edits" ? data.rows : []).map((r) => (r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview, file: r.file, n: r.n, md: /\.mdx?$/i.test(r.file) } : null))).replace(/</g, "\\u003c")}</script></section>
+<section id="pane" data-tab="${tab}"${tab === "edits" ? " hidden" : ""}>${opts.pane ?? ""}</section>
+<section id="waiting"${tab === "inbox" ? "" : " hidden"}><div class="legend"><span>☐ open: tick when done</span><span><span class="badge-ok">✓</span> done</span><span><span class="badge-gone">replaced</span> asked again later</span><span><span class="pill">Answered</span> question you answered</span></div>
 <table><thead><tr><th>Status</th><th></th><th>Waiting for</th><th>Request</th><th>Date</th><th>Session</th><th>By</th></tr></thead>
-<tbody>${waitingBody(waiting, data.sessions, root)}</tbody></table><p class="empty" id="none" hidden>Nothing open right now.</p></section>
+<tbody>${tab === "inbox" ? waitingBody(waiting, data.sessions, root) : ""}</tbody></table><p class="empty" id="none" hidden>Nothing open right now.</p></section>
 <div id="pop"></div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
@@ -379,40 +393,127 @@ function html(data, root, nonce, waiting = []) {
       hideSoon();
     }
   });
-  // Tab, filter, the answered toggle and opened rows survive an update.
+  // Tab, filters, the answered toggle, opened rows and half-typed text survive an update.
   // The repo goes into the saved state too: a panel restored after a reload shows the same one.
-  const state = Object.assign({ tab: "edits", q: "", answered: false, expanded: [], kinds: ${JSON.stringify(Object.fromEntries(Object.keys({ edit: 1, record: 1, agent: 1, skill: 1, web: 1, mcp: 1, read: 0, search: 0, bash: 0, other: 0 }).map((k) => [k, ["edit", "record", "agent", "skill", "web", "mcp"].includes(k)])))}, agents: [] }, vscode.getState(), { root: ${JSON.stringify(root).replace(/</g, "\\u003c")} });
+  // The host's view (tab, selected task, …) wins over the saved one: it opened the page.
+  const state = Object.assign({ tab: "edits", qs: {}, answered: false, expanded: [], kinds: ${JSON.stringify(Object.fromEntries(Object.keys({ edit: 1, record: 1, agent: 1, skill: 1, web: 1, mcp: 1, read: 0, search: 0, bash: 0, other: 0 }).map((k) => [k, ["edit", "record", "agent", "skill", "web", "mcp"].includes(k)])))}, agents: [], drafts: {}, back: [], showDone: [], old: [] }, vscode.getState(), ${JSON.stringify(view).replace(/</g, "\\u003c")}, { root: ${JSON.stringify(root).replace(/</g, "\\u003c")} });
+  if (typeof state.q === "string") { state.qs.edits = state.qs.edits ?? state.q; delete state.q; }
   const filter = document.getElementById("filter");
   const answered = document.getElementById("answered");
-  filter.value = state.q;
   answered.checked = state.answered;
+  const HINTS = { home: "Görevlerde ara… (/)", tasks: "Görev, karar, soru ara… (/)", inbox: "Bekleyenlerde ara… (/)", edits: "Dosya, istek ya da cevap süz… (/)" };
   const apply = () => {
     vscode.setState(state);
-    for (const t of ["edits", "waiting"]) {
-      document.getElementById(t).hidden = state.tab !== t;
-      document.getElementById("count-" + t).hidden = state.tab !== t;
-      document.querySelector('nav [data-tab="' + t + '"]').classList.toggle("on", state.tab === t);
-    }
-    document.getElementById("ans").hidden = state.tab !== "waiting";
-    document.getElementById("audit").hidden = state.tab !== "waiting";
-    document.getElementById("scan").hidden = state.tab !== "waiting";
-    const q = state.q.toLowerCase();
+    const tab = state.tab;
+    document.getElementById("edits").hidden = tab !== "edits";
+    document.getElementById("pane").hidden = tab === "edits";
+    document.getElementById("waiting").hidden = tab !== "inbox";
+    document.getElementById("count-edits").hidden = tab !== "edits";
+    document.getElementById("count-waiting").hidden = tab !== "inbox";
+    document.querySelectorAll("nav [data-tab]").forEach((b) => { b.classList.toggle("on", b.dataset.tab === tab); b.setAttribute("aria-current", b.dataset.tab === tab ? "page" : "false"); });
+    for (const id of ["ans", "audit", "scan"]) document.getElementById(id).hidden = tab !== "inbox";
+    filter.placeholder = HINTS[tab] || "";
+    if (document.activeElement !== filter) filter.value = state.qs[tab] || "";
+    const q = (state.qs[tab] || "").toLowerCase();
     document.querySelectorAll("#kinds .chip").forEach((b) => b.classList.toggle("on", state.kinds[b.dataset.kind] !== false));
     document.querySelectorAll("a.grp").forEach((a) => (a.textContent = (state.agents.includes(a.dataset.agent) ? "▾" : "▸") + a.textContent.slice(1)));
-    document.querySelectorAll("tr[data-q]").forEach((tr) => {
+    document.querySelectorAll("#edits tr[data-q], #waiting tr[data-q]").forEach((tr) => {
       // A subagent's call shows with its open Agent row, whatever its kind; other rows by kind.
       const kindOn = tr.dataset.parent ? state.agents.includes(tr.dataset.parent) : !tr.dataset.kind || state.kinds[tr.dataset.kind] !== false;
       const show = kindOn && tr.dataset.q.toLowerCase().includes(q) && (!state.answered || !("done" in tr.dataset));
       tr.style.display = show ? "" : "none";
       if (tr.nextElementSibling?.classList.contains("x")) tr.nextElementSibling.hidden = !show || !state.expanded.includes(tr.dataset.key);
     });
-    document.getElementById("none").hidden = !state.answered || !!state.q || document.querySelector("tr.w.s-open") !== null;
+    // The task tabs: the search hides tasks, records and asks that do not say it.
+    document.querySelectorAll("#pane [data-q]").forEach((el) => { el.hidden = !!q && !el.dataset.q.toLowerCase().includes(q); });
+    document.getElementById("none").hidden = !state.answered || !!q || document.querySelector("tr.w.s-open") !== null;
   };
-  filter.addEventListener("input", () => { state.q = filter.value; apply(); });
+  /** Change the view: the host draws the tab anew (it draws only the visible one). */
+  const setView = (patch) => {
+    Object.assign(state, patch);
+    apply();
+    vscode.postMessage({ type: "view", view: { tab: state.tab, sel: state.sel ?? null, filter: state.filter, all: !!state.all, showDone: state.showDone, old: state.old } });
+  };
+  /** Go somewhere Esc comes back from. */
+  const go = (patch) => {
+    state.back = [...state.back, { tab: state.tab, sel: state.sel ?? null, filter: state.filter }].slice(-20);
+    setView(patch);
+  };
+  const goBack = () => {
+    const prev = state.back.pop();
+    if (prev) return setView(prev);
+    // On a task page: back to its row in the list.
+    const row = document.querySelector("#pane .trow.on");
+    if (state.tab === "tasks" && row && !row.contains(document.activeElement)) row.focus();
+  };
+  filter.addEventListener("input", () => { state.qs[state.tab] = filter.value; apply(); });
+  // Half-typed answers and quick-adds: kept in the state, put back after an update or a reload.
+  const restoreDrafts = (root) => {
+    const els = [...(root.matches?.("[data-draft]") ? [root] : []), ...root.querySelectorAll("[data-draft]")];
+    for (const el of els) if (state.drafts[el.dataset.draft] != null && el.value !== state.drafts[el.dataset.draft]) el.value = state.drafts[el.dataset.draft];
+  };
+  document.addEventListener("input", (e) => {
+    const d = e.target.dataset?.draft;
+    if (!d) return;
+    if (e.target.value) state.drafts[d] = e.target.value;
+    else delete state.drafts[d];
+    vscode.setState(state);
+  });
+  const sendAnswer = (id) => {
+    const ta = document.querySelector('#pane textarea[data-draft="ans-' + id + '"]');
+    const text = (ta?.value || "").trim();
+    if (!text) return ta?.focus();
+    vscode.postMessage({ type: "answer", id: Number(id), text });
+    delete state.drafts["ans-" + id];
+    ta.value = "";
+    ta.closest(".card")?.classList.add("sent");
+    vscode.setState(state);
+  };
+  const sendAdd = (input) => {
+    const text = input.value.trim();
+    if (!text) return;
+    vscode.postMessage({ type: "add", task: Number(input.dataset.task), text });
+    delete state.drafts[input.dataset.draft];
+    input.value = "";
+    vscode.setState(state);
+  };
+  const toggleIn = (list, id) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+  /** A click on a task tab's control. */
+  const act = (el) => {
+    const d = el.dataset;
+    switch (d.act) {
+      case "filter": return setView({ filter: d.f, sel: null });
+      case "scope": return setView({ all: d.all === "1" });
+      case "sel": return setView({ sel: Number(d.id) });
+      case "open": return go({ tab: "tasks", sel: Number(d.id), filter: d.f || state.filter });
+      case "tab": return go({ tab: d.tab });
+      case "showDone": return setView({ showDone: toggleIn(state.showDone, Number(d.task)) });
+      case "old": return setView({ old: toggleIn(state.old, Number(d.task)) });
+      case "edits": state.qs.edits = d.key; return go({ tab: "edits" });
+      case "url": return vscode.postMessage({ type: "openUrl", url: d.url });
+      case "newTask": return vscode.postMessage({ type: "newTask" });
+      case "answer": return sendAnswer(d.id);
+      case "rec": {
+        // Shown at once; the update that follows confirms it.
+        if (el.classList.contains("check")) { el.classList.toggle("on"); el.closest(".trec")?.classList.toggle("done"); }
+        else el.closest(".card")?.classList.add("sent");
+        return vscode.postMessage({ type: "rec", id: Number(d.id), op: d.op });
+      }
+    }
+  };
+  document.addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.matches?.('#pane select[data-change="taskStatus"]')) vscode.postMessage({ type: "taskStatus", task: Number(t.dataset.task), status: t.value });
+  });
   document.addEventListener("click", (e) => {
     const t = e.target;
     const tab = t.closest("nav button");
-    if (tab) { state.tab = tab.dataset.tab; return apply(); }
+    if (tab) return go({ tab: tab.dataset.tab });
+    const control = t.closest("#pane [data-act]");
+    if (control) {
+      e.preventDefault();
+      return act(control);
+    }
     const task = t.closest("a.task");
     if (task) {
       e.preventDefault();
@@ -457,6 +558,48 @@ function html(data, root, nonce, waiting = []) {
     const k = w.dataset.key;
     state.expanded = state.expanded.includes(k) ? state.expanded.filter((x) => x !== k) : [...state.expanded, k];
     apply();
+  });
+  // Keyboard (#69): j/k move in the list, Enter opens, x ticks, a answers, / searches, Esc goes back.
+  const NAV = { tasks: "#pane .rows", inbox: '#pane [data-navgroup="inbox"]', home: '#pane [data-navgroup="home"]' };
+  const visible = (el) => !el.hidden && el.offsetParent !== null;
+  const move = (step) => {
+    const at = document.activeElement?.closest?.("[data-nav]");
+    const group = document.activeElement?.closest?.("[data-navgroup]") || document.querySelector(NAV[state.tab] || "#none-such");
+    if (!group) return;
+    const items = [...group.querySelectorAll("[data-nav]")].filter(visible);
+    if (!items.length) return;
+    const i = items.indexOf(at);
+    const next = items[i < 0 ? 0 : Math.max(0, Math.min(items.length - 1, i + step))];
+    next.focus();
+    next.scrollIntoView({ block: "nearest" });
+  };
+  document.addEventListener("keydown", (e) => {
+    const t = e.target;
+    const typing = t.matches?.("input, textarea, select");
+    if (e.key === "Escape") {
+      if (typing) return t.blur();
+      return goBack();
+    }
+    if (typing) {
+      if (t.matches("textarea[data-draft]") && e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return sendAnswer(t.dataset.draft.slice(4)); }
+      if (t.matches("input[data-add]") && e.key === "Enter") { e.preventDefault(); return sendAdd(t); }
+      return;
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === "/") { e.preventDefault(); filter.focus(); return filter.select(); }
+    if (state.tab === "edits") return;
+    if (e.key === "j" || e.key === "k") { e.preventDefault(); return move(e.key === "j" ? 1 : -1); }
+    const item = t.closest?.("[data-nav]");
+    if (e.key === "Enter" && item && !t.matches("button, a")) { e.preventDefault(); return (item.matches("[data-act]") ? item : item.querySelector("[data-act]"))?.click(); }
+    if (e.key === "x" && item) {
+      const done = item.querySelector('.check, button[data-op="done"]');
+      if (done) { e.preventDefault(); done.click(); }
+      return;
+    }
+    if (e.key === "a") {
+      const box = item?.querySelector("textarea") || [...document.querySelectorAll("#pane textarea[data-draft]")].find(visible);
+      if (box) { e.preventDefault(); box.focus(); }
+    }
   });
   // A tick shows at once and stays shown: an update made before the log had it
   // must not untick it. Each is timed, click to confirmed, for the perf log.
@@ -523,6 +666,9 @@ function html(data, root, nonce, waiting = []) {
     }
     patchRows("edits", doc);
     patchRows("waiting", doc);
+    const freshPane = doc.getElementById("pane");
+    if (freshPane) morph(document.getElementById("pane"), freshPane);
+    showFlash();
     const data = doc.getElementById("rows")?.textContent;
     if (data) { document.getElementById("rows").textContent = data; rows = JSON.parse(data); }
     // Drawn from the log (the attribute) as ticked: confirmed. Not yet: keep the click's state.
@@ -597,15 +743,74 @@ function html(data, root, nonce, waiting = []) {
     pop.scrollTop = 0;
     if (hoveredRow?.isConnected) place(hoveredRow);
   };
+  // The task tabs: blocks with a data-k key are swapped only when they changed, so
+  // a half-typed answer, the focus and the list's scroll stay; a swapped block gets
+  // its drafts, focus and scroll back.
+  const keyed = (el) => el.children.length > 0 && [...el.children].every((c) => c.dataset.k);
+  const attrs = (el) => [...el.attributes].map((a) => a.name + "=" + a.value).sort().join(" ");
+  const swap = (a, b) => {
+    const act = document.activeElement;
+    const inside = act && act !== document.body && a.contains(act);
+    const focus = inside && { draft: act.dataset?.draft, id: act.id, s: act.selectionStart, e: act.selectionEnd };
+    const scrolls = [a, ...a.querySelectorAll("[data-scroll]")].filter((x) => x.dataset?.scroll).map((x) => [x.dataset.scroll, x.scrollTop]);
+    a.replaceWith(b);
+    restoreDrafts(b);
+    for (const [k, top] of scrolls) {
+      const x = b.dataset?.scroll === k ? b : b.querySelector('[data-scroll="' + k + '"]');
+      if (x) x.scrollTop = top;
+    }
+    if (focus) {
+      const again = focus.draft ? b.querySelector('[data-draft="' + focus.draft + '"]') : focus.id ? document.getElementById(focus.id) : null;
+      if (again) {
+        again.focus({ preventScroll: true });
+        if (focus.s != null && again.setSelectionRange) try { again.setSelectionRange(focus.s, focus.e); } catch {}
+      }
+    }
+    return b;
+  };
+  const morph = (a, b) => {
+    if (a.outerHTML === b.outerHTML) return a;
+    if (a.tagName !== b.tagName || attrs(a) !== attrs(b) || !keyed(a) || !keyed(b)) return swap(a, b);
+    const old = new Map([...a.children].map((c) => [c.dataset.k, c]));
+    let prev = null;
+    for (const nb of [...b.children]) {
+      let cur = old.get(nb.dataset.k);
+      if (cur) {
+        old.delete(nb.dataset.k);
+        cur = morph(cur, nb);
+      } else cur = nb;
+      const want = prev ? prev.nextElementSibling : a.firstElementChild;
+      if (cur !== want) {
+        a.insertBefore(cur, want);
+        restoreDrafts(cur);
+      }
+      prev = cur;
+    }
+    old.forEach((c) => c.remove());
+    return a;
+  };
+  /** A record a link pointed at: scrolled to and lit once. */
+  let flashed = "";
+  const showFlash = () => {
+    const el = document.querySelector("#pane .flash");
+    const id = el && el.id;
+    if (!id || id === flashed) return;
+    flashed = id;
+    el.scrollIntoView({ block: "center" });
+  };
   addEventListener("message", (e) => {
     if (e.data?.type === "preview") return showReview(e.data);
+    // The host moved the page (a link from elsewhere): its tab and task.
+    if (e.data?.type === "view") { Object.assign(state, e.data.view); return apply(); }
     if (e.data?.type !== "render") return;
     reviews.clear(); // edits changed: their rendered reviews may have too
     next = e.data.html;
     update();
   });
   addEventListener("scroll", hide);
+  restoreDrafts(document.body);
   apply();
+  showFlash();
 </script></body></html>`;
 }
 
@@ -619,8 +824,141 @@ let reload;
 let shown;
 /** @type {{openDiff: (file: string, n: number) => unknown, acceptEdit: (file: string, n: number) => unknown, goTo: (file: string, n: number) => unknown} | undefined} */
 let actions;
+/** @type {(file: string, n: number) => string | undefined} */
+let renderEditOf = () => undefined;
+/** The last page sent (the integration tests read it). */
+let lastHtml = "";
 
 /**
+ * What the panel shows (#69): its tab, the selected task, the list's filter, every
+ * repo or this one, tasks with their done todos or old activity open, a record to
+ * light up. The page keeps the same in its state; a "view" message changes it.
+ */
+const view = { tab: "edits", sel: /** @type {number | null} */ (null), filter: "active", all: false, showDone: /** @type {number[]} */ ([]), old: /** @type {number[]} */ ([]), flash: /** @type {number | null} */ (null) };
+/** Where "every repo" is kept (extension.js: the workspace state, as the record views kept it). */
+let scopeStore = { get: () => false, set: (/** @type {boolean} */ _v) => {} };
+/** @param {{get: () => boolean, set: (v: boolean) => void}} store */
+function setPanelScope(store) {
+  scopeStore = store;
+  view.all = !!store.get();
+}
+/** The view as the page keeps it. */
+const pageView = () => ({ tab: view.tab, sel: view.sel, filter: view.filter, all: view.all, showDone: view.showDone, old: view.old });
+
+/**
+ * Moves the view: a tab, or a task (by key in a repo, or by one of its records) on Görevler.
+ * @param {{tab?: string, sel?: number | null, filter?: string, all?: boolean, showDone?: number[], old?: number[], root?: string, task?: string, record?: number}} at
+ * @returns {boolean} false: the task or record is not in the database
+ */
+function moveView(at) {
+  const clean = tasksView.cleanView(at);
+  Object.assign(view, clean, { flash: null });
+  if ("all" in clean) scopeStore.set(view.all);
+  if (!at.task && !at.record) return true;
+  const db = records.dbOf();
+  if (!db) return false;
+  const rec = at.record ? db.record(Number(at.record)) : undefined;
+  const repoId = records.repoId(at.root ?? shown ?? "");
+  const task = rec ? db.taskById(rec.task_id) : at.task && repoId !== undefined ? db.taskByKey(repoId, at.task) : undefined;
+  if (!task) return false;
+  Object.assign(view, { tab: "tasks", sel: task.id, filter: tasksView.bucketOf(task.status), flash: rec?.id ?? null });
+  // A task of another repo shows with every repo on.
+  if (task.repo_id !== repoId) {
+    view.all = true;
+    scopeStore.set(true);
+  }
+  return true;
+}
+
+/** A task's issue or Jira page: GitHub for #n, else a Jira address the repo's records know. @param {string} root @param {string} key */
+function linkOf(root, key) {
+  if (key.startsWith("#")) {
+    const gh = githubOf(root);
+    return gh && /^#\d+$/.test(key) ? `${gh}/issues/${key.slice(1)}` : undefined;
+  }
+  return records.jiraLink(root, key);
+}
+
+/**
+ * A message from the page: a click on an edit, a tick, a write to a record, a view change.
+ * The integration tests send the same through panelMessage.
+ * @param {any} m
+ */
+function onMessage(m) {
+  if (m.type === "check") return timed("tick", m, () => tick(m));
+  if (m.type === "perf") return perfLog(m);
+  if (m.type === "audit") return auditAll();
+  if (m.type === "openUrl" && /^https?:\/\//.test(m.url)) return vscode.env.openExternal(vscode.Uri.parse(m.url));
+  if (m.type === "showRecord" && shown) return showIn({ root: shown, record: Number(m.id) });
+  if (m.type === "showTask" && shown) return showIn({ root: shown, task: String(m.task) });
+  if (m.type === "scan") return scanAll();
+  if (m.type === "view") {
+    const toEdits = m.view?.tab === "edits" && view.tab !== "edits";
+    moveView(m.view ?? {});
+    return refresh?.(!toEdits);
+  }
+  if (m.type === "newTask") return newTask();
+  if (["rec", "answer", "add", "taskStatus"].includes(m.type)) return writeFromPanel(m);
+  if (m.type === "preview" && shown) {
+    let html;
+    try {
+      html = renderEditOf(path.join(shown, m.file), m.n);
+    } catch {
+      // the line diff stays
+    }
+    return void panel?.webview.postMessage({ type: "preview", file: m.file, n: m.n, html });
+  }
+  if (m.type === "accept") return timed("accept", m, () => actions?.acceptEdit(m.file, m.n));
+  if (m.type === "open") return actions?.openDiff(m.file, m.n);
+}
+
+/** Show a task (or record) of the open panel's repo on Görevler. @param {{root: string, task?: string, record?: number}} at */
+function showIn(at) {
+  if (!moveView(at)) return void vscode.window.showInformationMessage(`Imprimatur: ${at.task ?? "this record"} has no records yet.`);
+  panel?.webview.postMessage({ type: "view", view: pageView() });
+  refresh?.(true);
+}
+
+/** A record or task written from the page, as the user; then the page redraws (the database watcher does it again, unchanged). @param {any} m */
+function writeFromPanel(m) {
+  const db = records.dbOf();
+  if (!db) return void vscode.window.showErrorMessage(`Imprimatur: ${records.lastError ?? "database not available"}`);
+  try {
+    tasksView.applyMessage(db, m, tasksView.userActor());
+  } catch (e) {
+    vscode.window.showErrorMessage(e instanceof Error ? e.message : String(e));
+  }
+  try {
+    if (shown) {
+      closeDoneTasks(shown);
+      scanTodos(shown);
+    }
+  } catch {
+    // a waiting log being written: the next change catches up
+  }
+  refresh?.(true);
+}
+
+/** "Yeni görev": a key and a title, then the task opens. */
+async function newTask() {
+  const root = shown;
+  if (!root || !records.dbOf()) return;
+  const key = (await vscode.window.showInputBox({ prompt: "Görev anahtarı (#70, PROJ-12 …)", validateInput: (v) => (v.trim() ? undefined : "Boş olamaz") }))?.trim();
+  if (!key) return;
+  const db = records.dbOf();
+  const repo = db?.repoOf(root);
+  if (!repo) return;
+  let task = db.taskByKey(repo.id, key);
+  if (!task) {
+    const title = await vscode.window.showInputBox({ prompt: `${key} başlığı` });
+    if (title === undefined) return;
+    task = db.upsertTask(repo.id, key, { title: title.trim(), status: "active" });
+  }
+  showIn({ root, record: undefined, task: key });
+}
+
+/**
+ * Opens the panel (or brings it forward), on a tab or a task when `at` says so.
  * @param {string} root repo root
  * @param {(file: string, n: number) => unknown} openDiff
  * @param {(file: string) => string | undefined} currentText
@@ -628,32 +966,24 @@ let actions;
  * @param {(file: string, n: number) => unknown} goTo
  * @param {(file: string, n: number) => string | undefined} [renderEdit] an edit as a rendered Markdown review (#50)
  * @param {vscode.WebviewPanel} [restored] a panel VS Code brought back after a reload (the serializer)
+ * @param {{tab?: string, sel?: number | null, filter?: string, all?: boolean, task?: string, record?: number, root?: string}} [at] where to open it
  */
-function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = () => undefined, restored) {
+function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = () => undefined, restored, at) {
   // One graph panel: a restored one while another is open goes away.
   if (restored && panel && restored !== panel) restored.dispose();
+  renderEditOf = renderEdit;
+  // Open on this repo already: move it, no reload (the page keeps what is typed).
+  if (panel && !restored && shown === root && refresh) {
+    if (at && !moveView(at)) vscode.window.showInformationMessage(`Imprimatur: ${at.task ?? "this record"} has no records yet.`);
+    panel.webview.postMessage({ type: "view", view: pageView() });
+    refresh(view.tab !== "edits");
+    return panel.reveal();
+  }
   if (!panel) {
     if (restored) restored.webview.options = WEBVIEW_OPTIONS;
-    panel = restored ?? vscode.window.createWebviewPanel("imprimatur.graph", "Agent Change Graph", vscode.ViewColumn.Active, WEBVIEW_OPTIONS);
-    panel.webview.onDidReceiveMessage((m) => {
-      if (m.type === "check") return timed("tick", m, () => tick(m));
-      if (m.type === "perf") return perfLog(m);
-      if (m.type === "audit") return auditAll();
-      if (m.type === "openUrl" && /^https?:\/\//.test(m.url)) return vscode.env.openExternal(vscode.Uri.parse(m.url));
-      if (m.type === "showRecord" && shown) return vscode.commands.executeCommand("imprimatur.records.reveal", { root: shown, record: m.id });
-      if (m.type === "showTask" && shown) return vscode.commands.executeCommand("imprimatur.records.reveal", { root: shown, task: m.task });
-      if (m.type === "scan") return scanAll();
-      if (m.type === "preview" && shown) {
-        let html;
-        try {
-          html = renderEdit(path.join(shown, m.file), m.n);
-        } catch {
-          // the line diff stays
-        }
-        return void panel?.webview.postMessage({ type: "preview", file: m.file, n: m.n, html });
-      }
-      return m.type === "accept" ? timed("accept", m, () => actions?.acceptEdit(m.file, m.n)) : actions?.openDiff(m.file, m.n);
-    });
+    panel = restored ?? vscode.window.createWebviewPanel("imprimatur.graph", "Imprimatur", vscode.ViewColumn.Active, WEBVIEW_OPTIONS);
+    panel.title = "Imprimatur";
+    panel.webview.onDidReceiveMessage(onMessage);
     // A hidden webview is torn down and gets no messages: shown again, it reloads from the html, so make that current.
     let hidden = false;
     panel.onDidChangeViewState(({ webviewPanel }) => {
@@ -672,6 +1002,7 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
   }
   const p = panel;
   shown = root;
+  if (at && !moveView(at)) vscode.window.showInformationMessage(`Imprimatur: ${at.task ?? "this record"} has no records yet.`);
   actions = {
     openDiff: (file, n) => openDiff(path.join(root, file), n),
     acceptEdit: (file, n) => acceptEdit(path.join(root, file), n),
@@ -690,9 +1021,22 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
   const page = (nonce = crypto.randomBytes(16).toString("hex"), waitingOnly = false) => {
     if (!(waitingOnly && edits)) {
       edits = graphRows(root, currentText);
-      describeShown(root, edits.rows);
+      // Descriptions cost model calls: only for edits on screen.
+      if (view.tab === "edits") describeShown(root, edits.rows);
     }
-    return html(edits, root, nonce, waitingSteps(root));
+    const waiting = waitingSteps(root);
+    const db = records.dbOf();
+    let pane = "";
+    let inbox;
+    try {
+      inbox = db ? tasksView.inboxCount(db, root, waiting) : undefined;
+      // Only the visible tab is drawn.
+      if (view.tab !== "edits") pane = tasksView.paneHtml(db, root, view, { waiting, linkOf, error: records.lastError });
+    } catch (e) {
+      pane = `<p class="empty" data-k="error">Imprimatur: ${esc(e instanceof Error ? e.message : String(e))}</p>`;
+    }
+    const repoName = (db && tasksView.repoOfRoot(db, root)?.name) || path.basename(root);
+    return html(edits, root, nonce, waiting, { view: pageView(), pane, inbox, repoName });
   };
   // An edit refreshes three times (extension.js refreshSoon): send only what changed.
   let sent = "";
@@ -700,18 +1044,21 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
   // setting the html reloads it, and a click during a reload is lost.
   reload = () => {
     sent = "";
-    p.webview.html = page();
+    p.webview.html = lastHtml = page();
   };
   reload();
   refresh = (waitingOnly = false) => {
     if (!p.visible) return;
     const next = page("", waitingOnly);
-    if (next !== sent) p.webview.postMessage({ type: "render", html: (sent = next) });
+    if (next !== sent) p.webview.postMessage({ type: "render", html: (sent = lastHtml = next) });
   };
   if (!restored) p.reveal();
   // Set up after work began: once per project, find what already waited on the user.
   if (!scannedBefore(root) && allowed("scan history")) scanAll();
 }
+
+/** The open panel, for the integration tests: its repo, view and last page. */
+const panelState = () => ({ open: !!panel, root: shown, view: { ...view }, html: lastHtml });
 
 /** The folder was trusted: describe what is shown, run the first scan if it never ran. */
 function graphTrusted() {
@@ -893,4 +1240,4 @@ const graphCommands = {
   "imprimatur.graph.copyAsk": (c) => vscode.env.clipboard.writeText(c.text ?? ""),
 };
 
-module.exports = { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, laneSvg, html, cssPaths, WEBVIEW_OPTIONS };
+module.exports = { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setPanelScope, panelState, panelMessage: onMessage, laneSvg, html, cssPaths, WEBVIEW_OPTIONS };
