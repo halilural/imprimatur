@@ -456,11 +456,21 @@ async function setFinding(provider, node, status) {
   if (!rec) return;
   /** @type {Record<string, any>} */
   const patch = { status };
+  const { REASON_LABELS, reasonOf } = require("./setup-audit-tree.js");
+  const audit = { ...(rec.links?.audit ?? {}) };
   if (status === "dropped") {
-    const why = await vscode.window.showInputBox({ title: `Dismiss ${rec.links?.audit?.rule ?? "finding"}`, prompt: "Why? (kept with the record; the finding will not come back)", placeHolder: "e.g. false alarm: VS Code settings are JSONC" });
-    if (why === undefined) return;
-    if (why.trim()) patch.body = `${rec.body ?? ""}\n\n_Dismissed:_ ${why.trim()}`;
-  }
+    // Why, from a short list: dismissed findings group by it (#77).
+    const guess = reasonOf(rec);
+    const picks = Object.entries(REASON_LABELS).map(([key, [label]]) => ({ label, key, picked: key === guess }))
+      .sort((a, b) => Number(b.picked) - Number(a.picked));
+    const pick = await vscode.window.showQuickPick(picks, { title: `Dismiss ${audit.rule ?? "finding"}: why?`, placeHolder: "It will not come back" });
+    if (!pick) return;
+    const note = await vscode.window.showInputBox({ title: `Dismiss ${audit.rule ?? "finding"}: ${pick.label}`, prompt: "A note (optional), kept with the record", placeHolder: "e.g. VS Code settings are JSONC" });
+    if (note === undefined) return;
+    audit.reason = pick.key;
+    patch.body = `${rec.body ?? ""}\n\n_Dismissed (${pick.label})${note.trim() ? `:_ ${note.trim()}` : "._"}`;
+  } else delete audit.reason;
+  patch.links = { ...(rec.links ?? {}), audit };
   db.updateRecord(rec.id, patch, { kind: "user" });
   provider.refresh();
 }

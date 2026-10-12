@@ -144,7 +144,7 @@ async function explainRulesAsync(bin, report, rules) {
 /**
  * Where a file's finding belongs: the repo itself, the user's own setup (~/.claude and
  * the like), a plugin (named) or an agent worktree.
- * @param {string} abs @param {{home?: string}} [o] @returns {{group: "project" | "user" | "plugin" | "worktree", owner?: string}}
+ * @param {string} abs @param {{home?: string}} [o] @returns {{group: "project" | "user" | "synced" | "plugin" | "worktree", owner?: string}}
  */
 function groupOf(abs, { home = os.homedir() } = {}) {
   const p = slash(abs);
@@ -154,6 +154,8 @@ function groupOf(abs, { home = os.homedir() } = {}) {
     const owner = name ?? sub ?? mkt;
     return { group: "plugin", owner: /^temp_git_/.test(market ?? "") ? "temp" : owner };
   }
+  // Skills claude.ai syncs down: overwritten on every sync, fixed on claude.ai.
+  if (/\/\.claude\/skills\/synced\//.test(p)) return { group: "synced" };
   if (/\/\.claude\/worktrees\/[^/]+\//.test(p)) return { group: "worktree", owner: p.match(/\/\.claude\/worktrees\/([^/]+)\//)?.[1] };
   const h = slash(home);
   const same = (/** @type {string} */ a, /** @type {string} */ b) => (process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b);
@@ -223,10 +225,20 @@ function bodyOf(f, rule) {
   return lines.join("\n");
 }
 
-/** The fields an audit record links: enough to group and open it without the body. @param {Finding} f */
-const linksOf = (f) => ({
-  audit: { fp: f.fp, rule: f.rule, level: f.level, category: f.category, group: f.group, ...(f.owner ? { owner: f.owner } : {}), file: f.file, line: f.line, agnix: AGNIX },
+/** The fields an audit record links: enough to group and open it without the body. @param {Finding} f @param {Rule} [rule] */
+const linksOf = (f, rule) => ({
+  audit: {
+    fp: f.fp, rule: f.rule, ...(rule?.name ? { ruleName: rule.name } : {}), level: f.level, category: f.category, group: f.group,
+    ...(f.owner ? { owner: f.owner } : {}), file: f.file, line: f.line, agnix: AGNIX,
+  },
 });
+
+/**
+ * Why a finding was dismissed (#77): kept in links.audit.reason so dismissed findings
+ * group by it. plugin: a third-party plugin's file; synced: a skill claude.ai syncs;
+ * false: agnix is wrong; local: true of this machine only; other.
+ */
+const REASONS = ["plugin", "synced", "false", "local", "other"];
 
 /**
  * What a run changes in the AUDIT task's records: a pure plan.
@@ -246,7 +258,7 @@ function reconcile(findings, records) {
     if (!r) plan.add.push(f);
     else if (r.status === "dropped") plan.dismissed++;
     else if (r.status === "done") plan.reopen.push({ id: r.id, f });
-    else if (r.links.audit.line !== f.line || r.title !== titleOf(f)) plan.update.push({ id: r.id, f });
+    else if (r.links.audit.line !== f.line || r.title !== titleOf(f) || r.links.audit.group !== f.group) plan.update.push({ id: r.id, f });
   }
   for (const r of byFp.values()) if (r.status === "open" && !found.has(r.links.audit.fp)) plan.resolve.push(r.id);
   plan.open = findings.length - plan.dismissed;
@@ -301,9 +313,9 @@ function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = 
     const { task, plan } = read();
     const summary = summaryOf(plan);
     const t = task ?? db.upsertTask(repo.id, TASK, { title: TASK_TITLE, status: "active" }, ACTOR);
-    for (const f of plan.add) db.addRecord(t.id, { kind: "fixme", title: titleOf(f), body: bodyOf(f, ruleOf(f.rule)), links: linksOf(f) }, ACTOR);
-    for (const { id, f } of plan.reopen) db.updateRecord(id, { status: "open", title: titleOf(f), body: `${bodyOf(f, ruleOf(f.rule))}\n\n_Found again ${day}._`, links: linksOf(f) }, ACTOR);
-    for (const { id, f } of plan.update) db.updateRecord(id, { title: titleOf(f), body: bodyOf(f, ruleOf(f.rule)), links: linksOf(f) }, ACTOR);
+    for (const f of plan.add) db.addRecord(t.id, { kind: "fixme", title: titleOf(f), body: bodyOf(f, ruleOf(f.rule)), links: linksOf(f, ruleOf(f.rule)) }, ACTOR);
+    for (const { id, f } of plan.reopen) db.updateRecord(id, { status: "open", title: titleOf(f), body: `${bodyOf(f, ruleOf(f.rule))}\n\n_Found again ${day}._`, links: linksOf(f, ruleOf(f.rule)) }, ACTOR);
+    for (const { id, f } of plan.update) db.updateRecord(id, { title: titleOf(f), body: bodyOf(f, ruleOf(f.rule)), links: linksOf(f, ruleOf(f.rule)) }, ACTOR);
     for (const id of plan.resolve) {
       const r = db.record(id);
       db.updateRecord(id, { status: "done", body: `${r.body ?? ""}\n\n_Applied: gone in the audit of ${day}._` }, ACTOR);
@@ -359,4 +371,4 @@ const exists = (p) => {
   }
 };
 
-module.exports = { AGNIX, TASK, ACTOR, locateAgnix, runAgnix, locateAgnixAsync, runAgnixAsync, explainRule, groupOf, findingsOf, titleOf, bodyOf, linksOf, reconcile, auditRoot, summaryLine, globalPaths, pathsOf, fpPath, explainRulesAsync, describeSummary, describeCounts, countBy, exists };
+module.exports = { AGNIX, TASK, ACTOR, REASONS, locateAgnix, runAgnix, locateAgnixAsync, runAgnixAsync, explainRule, groupOf, findingsOf, titleOf, bodyOf, linksOf, reconcile, auditRoot, summaryLine, globalPaths, pathsOf, fpPath, explainRulesAsync, describeSummary, describeCounts, countBy, exists };

@@ -555,23 +555,27 @@ Editör işaretleri ve önizleme gibi görsel davranışların elle testleri `TE
 
 ## 18. Agent setup denetimi (agnix)
 
-`vscode/setup-audit.js` ajan kurulumunu [agnix](https://github.com/agent-sh/agnix) ile denetler ve bulguları kayıt olarak tutar; kural ya da dosya kesilmez. `setup-audit-tree.js` kayıtlardan Agent Setup'taki **Recommendations** ağacını kurar.
+`vscode/setup-audit.js` ajan kurulumunu [agnix](https://github.com/agent-sh/agnix) ile denetler ve bulguları kayıt olarak tutar; kural ya da dosya kesilmez. `setup-audit-tree.js` kayıtları gruplar (`auditGroups`); Agent Setup'taki **Recommendations** ağacı ve Görevler sekmesindeki AUDIT sayfası aynı gruplamayı kullanır.
 
 ### Çalıştırma
 
-- agnix sürümü sabittir (`agnix@0.57.0`, JSON biçimi onunla). `npx -y -p agnix@0.57.0` bir kez çalışıp (geçici bir betik dosyasıyla; Windows'ta `node -e` kabukta bölünürdü) Rust binary'sinin yolunu verir; sonraki çağrılar doğrudan binary'ye gider (`explain` ~7 ms; npx çağrısı ~1,4 sn). `AGNIX_BIN` yolu ezer (testler sahte bir agnix kullanır).
-- Repo için repo kökü; global için yalnız home'daki ajan klasörleri (`~/.claude` plugin'leriyle, `~/.cursor`, `~/.codex`, `~/.gemini`, `~/.kiro`, …). Tüm home taranmaz: her projeyi okurdu; home'un kendisi repo olarak açıksa o da taranmaz.
+- agnix sürümü sabittir (`agnix@0.57.0`, JSON biçimi onunla). `npx -y -p agnix@0.57.0` bir kez çalışıp (yalnız sahibinin okuyabildiği geçici bir klasördeki betikle; Windows'ta `node -e` kabukta bölünürdü) Rust binary'sinin yolunu verir; sonraki çağrılar doğrudan binary'ye gider (`explain` ~7 ms; npx çağrısı ~1,4 sn). `AGNIX_BIN` yolu ezer (testler sahte bir agnix kullanır).
+- Repo için repo kökü; global için yalnız home'daki ajan klasörleri (`~/.claude` plugin'leriyle, `~/.cursor`, `~/.codex`, `~/.gemini`, `~/.kiro`, …). Tüm home taranmaz: her projeyi okurdu; home'un kendisi repo olarak açıksa o da taranmaz. Kökteki `.agnix.toml` (repoda ve home'da) Claude Code sürümünü sabitler.
 - Çıkış kodu 1 "bulgu var" demektir, hata değil; JSON okunamazsa hata.
 - Yüzeyler: `npm run audit -- [repo …] [--global] [--dry-run]`, MCP `setup_audit` (`global`, `dry_run`), Agent Setup başlığındaki ampul. Eklenti agnix'i ve kural açıklamalarını asenkron çalıştırır (host donmaz) ve güvenilmeyen klasörde çalıştırmaz.
 
 ### Kayıtlar
 
-- Her kökün `AUDIT` görevi; global bulgular home'un repo satırında ("~"). `AUDIT` bir kayıt kabıdır (ADR, PDR, TEST gibi): `where_we_left_off`'ta ve görev listelerinde iş sayılmaz. İlk denetimde `active` açılır; sonra yalnız özeti, o da değiştiyse yazılır (kullanıcı kapattıysa yeniden açılmaz, boş tur eşitlemeye bir şey yollamaz).
-- Her bulgu bir `fixme`. Başlık `KURAL: mesaj`; gövde dosya:satır, seviye, öneri, varsayım, kuralın adı, normatif düzeyi, kaynak türü, doğrulama tarihi ve doküman linkleri (`agnix explain`, çalıştırma başına önbellekli). `links.audit`: `fp`, kural, seviye, kategori, grup (`project` / `user` / `plugin` / `worktree`), sahip (plugin ya da worktree adı), dosya, satır.
-- Grup: `~/.claude/plugins/…` → plugin; `.claude/worktrees/<ad>/` → worktree; home'daki ajan klasörleri → user; gerisi project.
+- Her kökün `AUDIT` görevi; global bulgular home'un repo satırında ("~"). `AUDIT` bir kayıt kabıdır (ADR, PDR, TEST gibi): `where_we_left_off`'ta iş sayılmaz. Global AUDIT her repoda geçerli olduğu için Görevler sekmesinde "Bu repo"da da, ayrı bir **Global (~)** grubunda listelenir. İlk denetimde `active` açılır; sonra yalnız özeti (`N open (seviyeler) · N applied · N dismissed`), o da değiştiyse yazılır.
+- Her bulgu bir `fixme`. Başlık `KURAL: mesaj`; gövde dosya:satır, seviye, öneri, varsayım, kuralın adı, normatif düzeyi, kaynak türü, doğrulama tarihi ve doküman linkleri (`agnix explain`, çalıştırma başına önbellekli). `links.audit`: `fp`, kural, kural adı, seviye, agnix kategorisi, kaynak (`project` / `user` / `synced` / `plugin` / `worktree`), sahip (plugin ya da worktree adı), dosya, satır; reddedilmişse `reason`.
+- Kaynak: `~/.claude/plugins/…` → plugin; `~/.claude/skills/synced/…` (claude.ai'den eşitlenen skill'ler) → synced; `.claude/worktrees/<ad>/` → worktree; home'daki ajan klasörleri → user; gerisi project. Kaynağı değişen açık kayıt bir sonraki denetimde güncellenir.
+- Reddetme gerekçesi (`reason`): `plugin` (üçüncü taraf plugin), `synced` (eşitlenen skill), `false` (yanlış alarm), `local` (bu makineye özel), `other`. Yoksa kaynaktan çıkarılır (plugin → plugin, synced → synced), o da yoksa other.
 - Parmak izi sha1(kural, yol, mesaj, kaçıncı tekrar). Satır numarası yoktur: üste eklenen bir satır bulguyu yeni yapmaz. Plugin önbelleğindeki dosyanın yolu sürüm klasörü (ya da `temp_git_*` kopyası) atılarak alınır: plugin güncellenince bulguları "uygulandı" sayılıp yeniden açılmaz, reddedilen reddedilmiş kalır.
-- Okuma, uzlaştırma (`reconcile`, saf) ve yazma tek işlemde: başka bir süreçten (MCP, CLI) aynı anda yapılan denetim kaydı ikilemez, az önce reddedileni açmaz. Yeni → `open`; kaybolan `open` → `done` (gövdeye "Applied" notu); `done` tekrar çıkarsa → `open`; `dropped` (kullanıcı gerekçeyle reddetti) hiç değişmez. Görevin özeti reddedilmemiş bulguları seviyeye göre sayar.
+- Okuma, uzlaştırma (`reconcile`, saf) ve yazma tek işlemde: başka bir süreçten (MCP, CLI) aynı anda yapılan denetim kaydı ikilemez, az önce reddedileni açmaz. Yeni → `open`; kaybolan `open` → `done` (gövdeye "Applied" notu); `done` tekrar çıkarsa → `open`; `dropped` hiç değişmez.
 
 ### Görünüm
 
-Recommendations → denetlenen kök → grup (Project, Your setup, Plugins → plugin, Worktrees → worktree) → kategori → bulgu (hatalar önce); kökün altında ayrıca Applied ve Dismissed. Bulgu dosyayı satırında açar, ipucu kaydın gövdesidir; açık bulguda **Dismiss…** (gerekçe sorar), kapalıda **Reopen**. Hiç denetim yoksa satır denetimi başlatır.
+Tek gruplama: **durum** (Açık / Uygulandı / Reddedildi) → [reddedilenlerde **gerekçe**] → **kaynak** (Project, Your setup, Synced skills, Plugins → plugin, Worktrees → worktree) → **agnix kategorisi** (claude-hooks, agent-skills, cross-platform, …) → **kural** (kimlik + ad) → bulgu (hatalar önce). Her grup sayısını ve seviyelerini gösterir.
+
+- Agent Setup: Recommendations → denetlenen kök → gruplar; Açık ile Project / Your setup açık gelir. Bulgu dosyayı satırında açar, ipucu kaydın gövdesidir. Açık bulguda **Dismiss…** gerekçeyi listeden seçtirir (kaynağa göre önerilen önde) ve isteğe bağlı not alır; kapalıda **Reopen** gerekçeyi siler. Hiç denetim yoksa satır denetimi başlatır.
+- Görevler sekmesi: AUDIT sayfasında düz "Yapılacaklar" listesi yerine "Denetim bulguları", iç içe açılır bölümler (`<details>`), Türkçe etiketlerle.

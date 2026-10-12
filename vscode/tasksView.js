@@ -252,6 +252,8 @@ function taskPage(db, task, view, opts) {
     openCount: live.filter((/** @type {any} */ r) => r.status === "open").length,
     recordCount: live.length,
     flash: flash?.id,
+    // The audit's findings (#77): grouped like Agent setup's Recommendations, not a flat todo list.
+    audit: task.key === "AUDIT" ? require("./setup-audit-tree.js").auditGroups(recs, { lang: "tr" }) : undefined,
   };
 }
 
@@ -445,7 +447,27 @@ function taskBlocks(c) {
     }).join("")}</section>`
     : "";
   const activity = `<section class="blk" data-k="act" aria-label="Etkinlik"><h2>Etkinlik</h2>${c.activity.map((v, i) => `<div class="ev" data-k="e${i}"><span class="when">${esc(when(v.at))}</span><span class="who w-${esc(v.kind)}">${esc(v.who)}</span><span class="what">${esc(v.what)}</span></div>`).join("") || '<p class="empty" data-k="none">Henüz olay yok.</p>'}${c.older || c.showOld ? `<button class="link" data-k="more" data-act="old" data-task="${c.id}">${c.showOld ? "Eski olayları gizle" : `${c.older} eski olayı göster`}</button>` : ""}</section>`;
-  return head + asks + todos + notes + decisions + tests + activity;
+  return head + asks + (c.audit ? auditBlock(c.audit) : todos) + notes + decisions + tests + activity;
+}
+
+const AUDIT_LEVEL_TR = { error: "hata", warning: "uyarı", info: "bilgi" };
+/**
+ * The AUDIT task's findings (#77): durum → (gerekçe) → kaynak → kategori → kural → bulgu,
+ * as nested <details>; the open findings start unfolded.
+ * @param {any[]} groups auditGroups(…, {lang: "tr"})
+ */
+function auditBlock(groups) {
+  const levels = (/** @type {Record<string, number>} */ n) =>
+    ["error", "warning", "info"].filter((l) => n[l]).map((l) => `<span class="alv a-${l}">${n[l]} ${AUDIT_LEVEL_TR[/** @type {keyof typeof AUDIT_LEVEL_TR} */ (l)]}</span>`).join("");
+  const finding = (/** @type {any} */ r) => {
+    const a = r.links.audit;
+    const where = `${String(a.file).replace(/^.*?[\\/]\.claude[\\/]/, "~/.claude/")}${a.line ? `:${a.line}` : ""}`;
+    return `<div class="afind s-${esc(r.status)}" id="rec-${r.id}" data-k="r${r.id}" data-q="${esc(r.title)}"${r.body ? ` title="${esc(r.body)}"` : ""}><span class="adot a-${esc(a.level)}" aria-hidden="true"></span><span class="ttl">${esc(r.title.replace(/^[^:]+:\s*/, ""))}</span><span class="mono dim">${esc(where)}</span></div>`;
+  };
+  const group = (/** @type {any} */ g, /** @type {number} */ depth) =>
+    `<details class="agrp d${depth}" data-k="${esc(g.key)}"${g.key === "st:open" || (depth === 1 && g.key.startsWith("src:") && g.count <= 50) ? " open" : ""}><summary><span class="alabel">${esc(g.label)}</span><span class="dim">${g.count}</span>${levels(g.levels)}</summary><div class="abody">${g.children ? g.children.map((c) => group(c, depth + 1)).join("") : g.records.map(finding).join("")}</div></details>`;
+  const open = groups.find((g) => g.key === "st:open")?.count ?? 0;
+  return `<section class="blk" data-k="audit" aria-label="Denetim bulguları"><h2>Denetim bulguları <span class="dim">· ${open} açık</span></h2>${groups.map((g) => group(g, 0)).join("") || '<p class="empty" data-k="none">Bulgu yok.</p>'}</section>`;
 }
 
 /** The properties rail. @param {NonNullable<ReturnType<typeof tasksPage>["cur"]>} c */
@@ -664,6 +686,12 @@ const TASKS_CSS = `
   #pane.stale > * { opacity: .4; pointer-events: none; }
   #pane.stale::before { content: "Yükleniyor…"; display: block; padding: 12px 0; color: var(--vscode-descriptionForeground); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+  .agrp { margin: 2px 0; } .agrp > summary { cursor: pointer; display: flex; gap: 8px; align-items: baseline; padding: 4px 0; font-weight: 600; }
+  .agrp .agrp { margin-left: 16px; } .agrp.d0 > summary { font-size: 1.05em; } .abody { padding-left: 2px; }
+  .afind { display: flex; gap: 8px; align-items: baseline; padding: 3px 0 3px 16px; } .afind .ttl { flex: 1; } .afind.s-done .ttl, .afind.s-dropped .ttl { opacity: .7; }
+  .adot { width: 8px; height: 8px; border-radius: 50%; flex: none; align-self: center; } .adot.a-error { background: var(--vscode-problemsErrorIcon-foreground); }
+  .adot.a-warning { background: var(--vscode-problemsWarningIcon-foreground); } .adot.a-info { background: var(--vscode-problemsInfoIcon-foreground); }
+  .alv { font-size: .85em; font-weight: 500; } .alv.a-error { color: var(--vscode-problemsErrorIcon-foreground); } .alv.a-warning { color: var(--vscode-problemsWarningIcon-foreground); } .alv.a-info { color: var(--vscode-problemsInfoIcon-foreground); }
   .dec summary { cursor: pointer; list-style: none; display: flex; flex-direction: column; gap: 6px; } .dec summary::-webkit-details-marker { display: none; }
   .dec .meta { display: flex; gap: 8px; align-items: center; } .dec .ttl { font-weight: 600; } .dec .body { margin: 8px 0 0; }
   .test { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 6px; } .test .ttl { flex: 1 1 240px; min-width: 0; }
