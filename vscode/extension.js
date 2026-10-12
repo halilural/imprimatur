@@ -514,25 +514,28 @@ function addFolder(folder, ctx) {
 }
 
 /**
- * Design documents into the repos (#72): 2 s after the database's last change, each open
- * repo's docs/ARCHITECTURE.md and docs/PRODUCT.md are written from it, when their text
- * changed (imprimatur.docs.export, on by default). Never committed.
+ * Design documents and their files in the repos (#72, #73): 2 s after the database's last
+ * change, or after one of the files is saved, each open repo's documents and
+ * <docs dir>/ARCHITECTURE.md and PRODUCT.md are synced (docs-sync.js): a file's edits
+ * taken in, a hand-written file adopted, the file written when its text changed
+ * (imprimatur.docs.export, on by default; {"docs": {"sync": false}} in the repo turns it off).
  */
-/** Files a skip was logged for (once each, until the window reloads). @type {Set<string>} */
+/** Conflicts and skips already logged (once each, until the window reloads). @type {Set<string>} */
 const exportSkips = new Set();
 const exportSoon = require("./docs-export.js").debounce(() => {
   const db = records.dbOf();
   if (!db) return;
-  const { exportDocs } = require("./docs-export.js");
+  const { syncOn } = require("./docs-export.js");
+  const { syncDocs, describe } = require("./docs-sync.js");
   for (const root of roots) {
-    if (!vscode.workspace.getConfiguration("imprimatur", vscode.Uri.file(root)).get("docs.export", true)) continue;
+    if (!vscode.workspace.getConfiguration("imprimatur", vscode.Uri.file(root)).get("docs.export", true) || !syncOn(root)) continue;
     try {
-      for (const r of exportDocs(db, root)) {
-        if (r.written) log.info(`docs: wrote ${r.file}`);
-        if (r.skipped && !exportSkips.has(`${r.skipped}\t${r.file}`)) {
-          exportSkips.add(`${r.skipped}\t${r.file}`);
-          log.warn(r.skipped === "manual" ? `docs: ${r.file} is hand-written (no Imprimatur header): not overwritten` : `docs: ${r.file} leads outside the repo (symlink): not written`);
-        }
+      for (const r of syncDocs(db, root)) {
+        const [line] = describe([r], root);
+        if (r.conflicts.length || r.skipped) {
+          if (!exportSkips.has(line)) log.warn(`docs: ${line}`);
+          exportSkips.add(line);
+        } else if (r.written || r.adopted || r.imported.length || r.superseded.length) log.info(`docs: ${line}`);
       }
     } catch (e) {
       log.warn(`docs: ${root}: ${e instanceof Error ? e.message : e}`);
@@ -679,7 +682,11 @@ function activate(ctx) {
       else status.hide();
       updateGraphButton();
     }),
-    vscode.workspace.onDidSaveTextDocument(renderAll),
+    vscode.workspace.onDidSaveTextDocument((doc) => {
+      renderAll();
+      // A design document's file saved by hand: taken into the database (#73).
+      if (/(?:^|[\\/])(?:ARCHITECTURE|PRODUCT)\.md$/.test(doc.uri.fsPath)) exportSoon();
+    }),
     vscode.workspace.onDidChangeTextDocument((ev) => {
       clearTimeout(timer);
       timer = setTimeout(() => {
@@ -854,6 +861,8 @@ function activate(ctx) {
     const rc = recordCommands;
     setPanelHooks({ visible: (v) => (v ? rc.backstop.start() : rc.backstop.stop()), afterWrite: () => rc.changed(true) });
     if (panelState().visible) rc.backstop.start();
+    // Documents and files out of step since the last window (edited, pulled, hand-written): synced once.
+    exportSoon();
   } catch (e) {
     log.error(`records: ${e instanceof Error ? e.message : e}`);
   }

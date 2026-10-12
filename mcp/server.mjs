@@ -18,6 +18,8 @@ const require = createRequire(import.meta.url);
 const { openDb, KINDS, DOC_KINDS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX } = require("../vscode/db.js");
 const { repoRoot } = require("../vscode/review-state.js");
 const { originOf } = require("../vscode/import.js");
+const { syncDocs } = require("../vscode/docs-sync.js");
+const { syncOn: docsSyncOn } = require("../vscode/docs-export.js");
 
 const MODERN = "2026-07-28";
 const LEGACY = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
@@ -245,7 +247,14 @@ const TOOLS = [
       records: { type: "array", items: int, description: "Record ids that contribute to the section (linked, never unlinked here)" },
       repo: repoArg,
     }, ["kind", "key"]),
-    outputSchema: output({ document: DOCUMENT, section: SECTION, created: { type: "boolean" } }),
+    outputSchema: output({
+      document: DOCUMENT, section: SECTION, created: { type: "boolean" },
+      file: {
+        type: "object", description: "The repo's Markdown file of the document, synced after the write (#73)",
+        properties: { path: str, written: { type: "boolean" }, conflicts: { type: "array", items: str }, error: str },
+        required: ["path", "written", "conflicts"],
+      },
+    }, ["document", "section", "created"]),
     idempotent: true,
   },
 ];
@@ -413,7 +422,18 @@ function docUpsert(db, repo, a, actor) {
     throw new ToolError(`no section ${JSON.stringify(a.key)} in the ${a.kind} document yet: give a title to create it (doc_get lists the sections)`);
   }
   const section = db.upsertSection(doc.id, a.key, { ...pick(a, ["title", "body", "position", "status"]), addRecords: a.records ?? [] }, actor);
-  return { document: db.docById(doc.id), section, created };
+  /** @type {any} */
+  const out = { document: db.docById(doc.id), section, created };
+  // The repo's file follows (#73); a section also edited in the file is a conflict, told back.
+  if (docsSyncOn(repo.root)) {
+    try {
+      const r = syncDocs(db, repo.root).find((x) => x.kind === a.kind);
+      if (r) out.file = { path: path.relative(repo.root, r.file), written: r.written, conflicts: r.conflicts };
+    } catch (e) {
+      out.file = { path: "", written: false, conflicts: [], error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+  return out;
 }
 
 /**
@@ -538,7 +558,11 @@ export function digest(name, out, a = {}) {
     }
     case "doc_section_upsert": {
       const s = out.section;
-      return `${out.created ? "Created" : "Saved"} ${out.document.kind} section ${s.key} — ${s.title} [${s.status}]${s.records.length ? `; records ${s.records.join(", ")}` : "; no records linked"}`;
+      const f = out.file;
+      const fileNote = !f ? "" : f.error ? `; file not synced: ${f.error}`
+        : f.conflicts.length ? `; ${f.path} NOT written: ${f.conflicts.join(", ")} also changed in the file (npm run docs -- sync --take file|db)`
+        : f.written ? `; ${f.path} written` : "";
+      return `${out.created ? "Created" : "Saved"} ${out.document.kind} section ${s.key} — ${s.title} [${s.status}]${s.records.length ? `; records ${s.records.join(", ")}` : "; no records linked"}${fileNote}`;
     }
     case "search":
       if (!out.records.length) return `No records match ${JSON.stringify(a.text ?? "")}.`;

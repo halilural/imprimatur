@@ -1,10 +1,11 @@
 // @ts-check
-// Design documents as Markdown in the repo (#72): docs/ARCHITECTURE.md and
-// docs/PRODUCT.md, generated from the database (the source of truth) after a
-// change. The extension calls exportDocs, debounced; a file is written only when
-// its text changed, and never committed. Superseded sections are left out.
-// Never overwritten: a file someone wrote by hand (its first line is not HEADER), and
-// anything outside the repo (docs/ or the file a symlink that leads elsewhere).
+// Design documents as Markdown in the repo (#72): <docs dir>/ARCHITECTURE.md and
+// PRODUCT.md (docs/ unless .claude/imprimatur.json says otherwise, #73), generated
+// from the database (the source of truth). docs-sync.js decides when, and takes a
+// file's own edits (and a hand-written file, adopted) into the database first.
+// A file is written only when its text changed; superseded sections are left out.
+// exportDocs alone never overwrites a hand-written file (its first line is not HEADER),
+// nor anything outside the repo (the folder or the file a symlink that leads elsewhere).
 "use strict";
 const fs = require("node:fs");
 const path = require("node:path");
@@ -38,8 +39,32 @@ function docMarkdown(db, docId) {
   return out.join("\n\n") + "\n";
 }
 
-/** The repo's file for a kind: <root>/docs/ARCHITECTURE.md or PRODUCT.md. @param {string} root @param {string} kind */
-const fileOf = (root, kind) => path.join(root, "docs", /** @type {any} */ (FILES)[kind]);
+/**
+ * The repo's folder for the documents (#73): .claude/imprimatur.json {"docs": {"dir": "docs/design"}},
+ * relative to the repo; "docs" when unset or not a plain relative path.
+ * @param {string} root
+ */
+function dirOf(root) {
+  const dir = docsSettings(root).dir;
+  if (typeof dir !== "string" || !dir.trim() || path.isAbsolute(dir) || dir.split(/[\\/]/).includes("..")) return path.join(root, "docs");
+  return path.join(root, dir.trim());
+}
+
+/** The repo's "docs" settings in .claude/imprimatur.json, {} without. @param {string} root @returns {{dir?: unknown, sync?: unknown}} */
+function docsSettings(root) {
+  try {
+    const docs = JSON.parse(fs.readFileSync(path.join(root, ".claude", "imprimatur.json"), "utf8"))?.docs;
+    return docs && typeof docs === "object" ? docs : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Whether the documents and their files are synced in this repo: unless {"docs": {"sync": false}}. @param {string} root */
+const syncOn = (root) => docsSettings(root).sync !== false;
+
+/** The repo's file for a kind: <root>/<docs dir>/ARCHITECTURE.md or PRODUCT.md. @param {string} root @param {string} kind */
+const fileOf = (root, kind) => path.join(dirOf(root), /** @type {any} */ (FILES)[kind]);
 
 /** Whether the file is there and was not written by Imprimatur (its first line is not HEADER). @param {string} file */
 function handWritten(file) {
@@ -99,7 +124,7 @@ function exportDocs(db, root) {
     const doc = db.docFind(repo.id, kind);
     const text = doc && docMarkdown(db, doc.id);
     if (!text) continue;
-    const file = path.join(root, "docs", name);
+    const file = path.join(dirOf(root), name);
     if (!inside(root, file)) {
       out.push({ kind, file, written: false, skipped: /** @type {const} */ ("outside") });
       continue;
@@ -145,4 +170,4 @@ function debounce(fn, ms = 2000) {
   return call;
 }
 
-module.exports = { docMarkdown, exportDocs, debounce, fileState, FILES, HEADER };
+module.exports = { docMarkdown, exportDocs, debounce, fileState, fileOf, dirOf, docsSettings, syncOn, handWritten, inside, FILES, HEADER };
