@@ -15,6 +15,8 @@ const TABS = ["home", "tasks", "inbox", "architecture", "product", "edits"];
 const FILTERS = ["active", "open", "done"];
 const TASK_STATUSES = ["open", "active", "done", "dropped"];
 const STATUS_TR = { active: "Sürüyor", open: "Açık", done: "Bitti", dropped: "Bırakıldı" };
+/** Tasks the importer opens to hold records (#59), not work (#75); db.whereWeLeftOff leaves them out too. */
+const CONTAINERS = ["ADR", "PDR", "TEST"];
 const KIND_TR = { todo: "yapılacak", question: "soru", answer: "cevap", decision: "karar", note: "not", fixme: "hata", adr: "ADR", pdr: "PDR", test: "test" };
 const WHO_TR = { user: "Sen", agent: "Ajan", hook: "Hook", import: "İçe aktarma" };
 const TODO_KINDS = ["todo", "fixme"];
@@ -255,7 +257,9 @@ function tasksPage(db, root, view = {}, opts = {}) {
   const filter = FILTERS.includes(view.filter ?? "") ? /** @type {string} */ (view.filter) : "active";
   const counts = { active: 0, open: 0, done: 0 };
   for (const t of tasks) counts[/** @type {keyof typeof counts} */ (bucketOf(t.status))]++;
-  const list = tasks.filter((t) => bucketOf(t.status) === filter);
+  // Record containers (#75) after the work, in each repo's list.
+  const list = tasks.filter((t) => bucketOf(t.status) === filter)
+    .sort((a, b) => Number(CONTAINERS.includes(a.key)) - Number(CONTAINERS.includes(b.key)));
   let task = view.sel ? db.taskById(Number(view.sel)) : undefined;
   if (!task) {
     const first = list[0] ?? tasks.find((t) => t.status === "active") ?? tasks[0];
@@ -340,15 +344,17 @@ function homeModel(db, root, { now = Date.now() } = {}) {
     .sort((a, b) => b.created_at - a.created_at);
   const order = { active: 0, open: 1, done: 2, dropped: 3 };
   const byId = new Map(tasks.map((t) => [t.key, t]));
+  // The importer's record containers (ADR, PDR, TEST) are no work: last, and not counted (#75).
+  const box = (/** @type {any} */ t) => Number(CONTAINERS.includes(t.key));
   return {
     repoName: repo.name,
-    total: live.length, done,
+    total: live.filter((t) => !box(t)).length, done,
     active: tasks.filter((t) => t.status === "active").length,
-    open: tasks.filter((t) => t.status === "open").length,
+    open: tasks.filter((t) => t.status === "open" && !box(t)).length,
     pointers: left.slice(0, 6).map((/** @type {any} */ t) => ({ id: byId.get(t.key)?.id, key: t.key, task: t.title, next: t.pointer_title, record: t.pointer_id, mine: t.pointer_owner === "K", status: t.status })),
     asks: asks.slice(0, 5).map((r) => ({ id: r.id, task: r.task_id, kind: r.kind, title: r.title, key: r.task_key, status: byId.get(r.task_key)?.status })),
     askCount: asks.length,
-    rows: [...tasks].sort((a, b) => (order[/** @type {keyof typeof order} */ (a.status)] - order[/** @type {keyof typeof order} */ (b.status)]) || b.updated_at - a.updated_at)
+    rows: [...tasks].sort((a, b) => box(a) - box(b) || (order[/** @type {keyof typeof order} */ (a.status)] - order[/** @type {keyof typeof order} */ (b.status)]) || b.updated_at - a.updated_at)
       .map((t) => ({ ...t, when: day(t.updated_at), age: age(t.updated_at, now) })),
   };
 }

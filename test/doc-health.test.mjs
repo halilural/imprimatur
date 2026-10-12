@@ -94,3 +94,13 @@ test("where_we_left_off leaves out the importer's record containers (ADR, PDR, T
   db.setPointer(t.id, agent);
   assert.deepEqual(callTool(db, "where_we_left_off", { repo: root }).tasks.map((x) => x.key).sort(), ["#74", "TEST"]);
 });
+
+test("panel home: the record containers go last in the task table and are not counted as open (#75)", () => {
+  const { root, db, repo } = setup();
+  const { homeModel } = req("../vscode/tasksView.js");
+  db.upsertTask(repo.id, "#80", { title: "Work" });
+  for (const key of ["ADR", "PDR"]) db.addRecord(db.upsertTask(repo.id, key, {}).id, { kind: "adr", title: `x ${key}` }, agent);
+  const m = homeModel(db, root);
+  assert.deepEqual(m.rows.slice(-2).map((r) => r.key).sort(), ["ADR", "PDR"]);
+  assert.equal(m.open, 2, "#74 and #80, not the containers");
+});
