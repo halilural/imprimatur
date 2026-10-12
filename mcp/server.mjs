@@ -10,6 +10,7 @@
 //   Code's calls; other clients are named by their clientInfo.
 import fs from "node:fs";
 import { createRequire } from "node:module";
+import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
@@ -20,6 +21,7 @@ const { repoRoot } = require("../vscode/review-state.js");
 const { originOf } = require("../vscode/import.js");
 const { syncDocs, health: docsHealth } = require("../vscode/docs-sync.js");
 const { syncOn: docsSyncOn } = require("../vscode/docs-export.js");
+const { locateAgnix, auditRoot, describeSummary } = require("../vscode/setup-audit.js");
 
 const MODERN = "2026-07-28";
 const LEGACY = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
@@ -264,6 +266,30 @@ const TOOLS = [
     }, ["document", "section", "created"]),
     idempotent: true,
   },
+  {
+    name: "setup_audit",
+    title: "Audit the agent setup",
+    description: "Lints the repo's agent setup (CLAUDE.md, AGENTS.md, .claude/ settings, hooks, skills, subagents, MCP, plugins, Cursor/Codex/Copilot files) with agnix, whose rules cite the tools' docs; global: true also audits the home's agent folders (~/.claude with its plugins, ~/.cursor, ~/.codex, ...). Every finding is a fixme record of the AUDIT task: new ones open, gone ones done (applied), dismissed (dropped) ones stay dropped. Read them with task_get key \"AUDIT\"; dismiss one with record_update status \"dropped\" and the reason in body.",
+    inputSchema: input({
+      repo: repoArg,
+      global: { type: "boolean", default: false, description: "Also audit the home's agent folders" },
+      dry_run: { type: "boolean", default: false, description: "Count only; write no records" },
+    }),
+    outputSchema: output({
+      audits: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            root: str, files: int, findings: int, open: int, added: int, resolved: int, reopened: int, dismissed: int,
+            groups: { type: "object", additionalProperties: int }, levels: { type: "object", additionalProperties: int },
+          },
+          required: ["root", "files", "findings", "open", "added", "resolved", "reopened", "dismissed", "groups", "levels"],
+        },
+      },
+    }),
+    idempotent: true,
+  },
 ];
 
 class ToolError extends Error {}
@@ -500,6 +526,17 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
       return docGet(db, repoOf(db, a.repo), a);
     case "doc_section_upsert":
       return docUpsert(db, repoOf(db, a.repo), a, actor);
+    case "setup_audit": {
+      const root = repoOf(db, a.repo).root;
+      const scopes = [{ root }, ...(a.global ? [{ root: os.homedir(), global: true }] : [])];
+      try {
+        const bin = locateAgnix();
+        const rules = new Map();
+        return { audits: scopes.map((scope) => auditRoot(db, scope, { bin, rules, dryRun: Boolean(a.dry_run) })) };
+      } catch (e) {
+        throw new ToolError(`audit failed: ${e instanceof Error ? e.message : e}`);
+      }
+    }
     case "search":
       return { records: db.search(a.text, { repoId: a.repo === "*" ? undefined : repoOf(db, a.repo).id, kind: a.kind, limit: a.limit }) };
     default:
@@ -576,6 +613,8 @@ export function digest(name, out, a = {}) {
         : f.written ? `; ${f.path} written` : "";
       return `${out.created ? "Created" : "Saved"} ${out.document.kind} section ${s.key} — ${s.title} [${s.status}]${s.records.length ? `; records ${s.records.join(", ")}` : "; no records linked"}${fileNote}`;
     }
+    case "setup_audit":
+      return [...out.audits.map(describeSummary), a.dry_run ? "Dry run: nothing written." : 'Open findings: task_get key "AUDIT" (repo for the home: its path).'].join("\n");
     case "search":
       if (!out.records.length) return `No records match ${JSON.stringify(a.text ?? "")}.`;
       return [`${plural(out.records.length, "record")}:`, ...out.records.map((r) =>

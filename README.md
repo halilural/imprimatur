@@ -119,6 +119,14 @@ While the plugin is enabled, a plain `npm run setup` writes no hooks.
   and the git hooks commits run through. Grouped by tool, each with a one-line
   summary (a settings file lists its hooks); files new, changed or removed
   since you last looked are marked until you Mark all as seen. Read only.
+- **Recommendations** (Agent setup, the lightbulb): audits the agent setup with
+  [agnix](https://github.com/agent-sh/agnix), whose rules each cite the tools'
+  docs: the repo, and your home's agent folders with their plugins. Nothing is
+  filtered out; findings are grouped by project, your setup, plugin and
+  worktree, then by category. Each finding is a record that stays: open, applied
+  (gone in a later audit) or dismissed with a reason (it does not come back).
+  Also `npm run audit -- [repo] [--global] [--dry-run]` and the `setup_audit`
+  MCP tool.
 - **Waiting on you** (now the turn-end part of Bende bekleyenler): everything the agent asked of
   you (questions, commands waiting for permission, "verify / test this" at the
   end of a turn), open ones first. Questions close once you reply; things to go

@@ -18,7 +18,8 @@
     "sync": "node scripts/sync.mjs",
     "tracker": "node scripts/tracker.mjs",
     "build": "node scripts/build.mjs",
-    "plugin": "node scripts/plugin.mjs"
+    "plugin": "node scripts/plugin.mjs",
+    "audit": "node scripts/audit.mjs"
   },
   "devDependencies": {
     "@vscode/test-cli": "0.0.15",

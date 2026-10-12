@@ -154,6 +154,24 @@
         "icon": "$(sparkle)"
       },
       {
+        "command": "imprimatur.setup.audit",
+        "title": "Audit Agent Setup (agnix)",
+        "category": "Imprimatur",
+        "icon": "$(lightbulb)"
+      },
+      {
+        "command": "imprimatur.setup.dismissFinding",
+        "title": "Dismiss Recommendation…",
+        "category": "Imprimatur",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "imprimatur.setup.reopenFinding",
+        "title": "Reopen Recommendation",
+        "category": "Imprimatur",
+        "icon": "$(issue-reopened)"
+      },
+      {
         "command": "imprimatur.importMarkdown",
         "title": "Import Markdown Records (TODO.md, design, product, tests)",
         "category": "Imprimatur"
@@ -309,6 +327,14 @@
     "menus": {
       "commandPalette": [
         {
+          "command": "imprimatur.setup.dismissFinding",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.setup.reopenFinding",
+          "when": "false"
+        },
+        {
           "command": "imprimatur.docs.reveal",
           "when": "false"
         },
@@ -425,6 +451,11 @@
           "group": "navigation@3"
         },
         {
+          "command": "imprimatur.setup.audit",
+          "when": "view == imprimatur.setup",
+          "group": "navigation@4"
+        },
+        {
           "command": "imprimatur.records.search",
           "when": "view == imprimatur.launcher",
           "group": "navigation@1"
@@ -450,6 +481,26 @@
           "command": "imprimatur.setup.explainLastChange",
           "when": "view == imprimatur.setup && viewItem =~ /^setupFile.*-repo/",
           "group": "1_setup@2"
+        },
+        {
+          "command": "imprimatur.setup.dismissFinding",
+          "when": "view == imprimatur.setup && viewItem == auditFinding-open",
+          "group": "inline@1"
+        },
+        {
+          "command": "imprimatur.setup.dismissFinding",
+          "when": "view == imprimatur.setup && viewItem == auditFinding-open",
+          "group": "1_setup@3"
+        },
+        {
+          "command": "imprimatur.setup.reopenFinding",
+          "when": "view == imprimatur.setup && viewItem =~ /^auditFinding-(done|dropped)$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "imprimatur.setup.reopenFinding",
+          "when": "view == imprimatur.setup && viewItem =~ /^auditFinding-(done|dropped)$/",
+          "group": "1_setup@3"
         }
       ]
     },
