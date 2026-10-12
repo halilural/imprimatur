@@ -23,6 +23,7 @@ function forFileNode(scopes, file) {
   return effectTree(e, path.basename(file));
 }
 const { checkHealth } = require("./setup-health.js");
+const { recommendationsRow } = require("./setup-audit-tree.js");
 
 const SEEN_KEY = "imprimatur.setupSeen";
 const ICONS = {
@@ -53,8 +54,9 @@ const KIND_ICONS = { settings: "settings-gear", "hook script": "zap", skill: "mo
  *   | {type: "file", scope: Scope, item: ReturnType<typeof scanSetup>[number], state?: string} | {type: "detail", text: string}
  *   | {type: "removed", scope: Scope, rel: string} | PlainNode
  *   | {type: "health"} | {type: "problem", scope: Scope, problem: ReturnType<typeof checkHealth>[number]}} Node
- * @typedef {{type: "group" | "leaf", label: string, description?: string, tooltip?: string, icon?: string, abs?: string, children?: any[]}} PlainNode
- *   "For <file>" and "Effective settings" rows, built by setup-scope.js / setup-merged.js
+ * @typedef {{type: "group" | "leaf", label: string, description?: string, tooltip?: string, markdown?: boolean, icon?: string, color?: string, abs?: string,
+ *   line?: number, context?: string, recordId?: number, command?: string, expanded?: boolean, children?: any[]}} PlainNode
+ *   "For <file>", "Effective settings" and "Recommendations" rows, built by setup-scope.js / setup-merged.js / setup-audit-tree.js
  * @typedef {{id: string, label: string, root: string, global: boolean, merged?: ReturnType<typeof mergeSettings>,
  *   items: Array<ReturnType<typeof scanSetup>[number] & {scope?: {label: string}}>, state: Record<string, string>, removed: string[], health: ReturnType<typeof checkHealth>}} Scope
  */
@@ -62,11 +64,16 @@ const KIND_ICONS = { settings: "settings-gear", "hook script": "zap", skill: "mo
 /** A plain group / leaf row. @param {PlainNode} node @returns {vscode.TreeItem} */
 function plainItem(node) {
   const T = vscode.TreeItemCollapsibleState;
-  const it = new vscode.TreeItem(node.label, node.type === "group" ? (node.label.startsWith("For ") ? T.Expanded : T.Collapsed) : T.None);
+  const it = new vscode.TreeItem(node.label, node.type === "group" ? (node.expanded || node.label.startsWith("For ") ? T.Expanded : T.Collapsed) : T.None);
   it.description = node.description;
-  it.tooltip = node.tooltip;
-  if (node.icon) it.iconPath = new vscode.ThemeIcon(node.icon);
-  if (node.type === "leaf" && node.abs) it.command = { command: "vscode.open", title: "Open", arguments: [vscode.Uri.file(node.abs)] };
+  it.tooltip = node.markdown && node.tooltip ? new vscode.MarkdownString(node.tooltip) : node.tooltip;
+  if (node.icon) it.iconPath = new vscode.ThemeIcon(node.icon, node.color ? new vscode.ThemeColor(node.color) : undefined);
+  if (node.context) it.contextValue = node.context;
+  if (node.command) it.command = { command: node.command, title: node.label };
+  else if (node.type === "leaf" && node.abs) {
+    const line = Math.max(0, (node.line ?? 1) - 1);
+    it.command = { command: "vscode.open", title: "Open", arguments: [vscode.Uri.file(node.abs), ...(node.line ? [{ selection: new vscode.Range(line, 0, line, 0) }] : [])] };
+  }
   return it;
 }
 
@@ -96,6 +103,27 @@ class SetupView {
     });
     this.extrasBusy = false;
     this.extrasAgain = false;
+    /** @type {any} the Recommendations row (#77), from the AUDIT records */
+    this.audit = undefined;
+    this.auditing = false;
+  }
+
+  /** The AUDIT records of the window's repos and of the home, as the Recommendations row (#77). */
+  loadAudit() {
+    try {
+      const records = require("./records.js");
+      const { TASK } = require("./setup-audit.js");
+      const db = records.dbOf();
+      if (!db) return void (this.audit = undefined);
+      this.audit = recommendationsRow(this.scopes.map((s) => {
+        const repo = db.repoByRoot(s.root);
+        const task = repo && db.taskByKey(repo.id, TASK);
+        return { label: s.label, root: s.root, records: task ? db.recordsOf(task.id, { dropped: true }) : [], summary: task?.summary };
+      }));
+    } catch (e) {
+      console.log(`Imprimatur: audit records: ${e instanceof Error ? e.message : e}`);
+      this.audit = undefined;
+    }
   }
 
   /** Drift and history for the scanned repos; redraws when they arrive. */
@@ -153,6 +181,7 @@ class SetupView {
       return { ...d, items, merged, ...changesSince(items, seen[d.id]), health: checkHealth(items, { root: d.root, global: d.global }) };
     });
     const fresh = this.scopes.reduce((n, s) => n + Object.keys(s.state).length + s.removed.length, 0);
+    this.loadAudit();
     this.extras();
     if (this.view) this.view.badge = fresh ? { value: fresh, tooltip: `${fresh} agent setup change${fresh === 1 ? "" : "s"} since you last looked` } : undefined;
   }
@@ -179,7 +208,7 @@ class SetupView {
   getChildren(node) {
     if (!node) {
       const forFile = forFileNode(this.scopes, this.activeFile);
-      return [...healthRoot(this.scopes), ...(forFile ? [/** @type {Node} */ (forFile)] : []), ...this.scopes.map((scope) => /** @type {Node} */ ({ type: "scope", scope }))];
+      return [...healthRoot(this.scopes), ...(this.audit ? [/** @type {Node} */ (this.audit)] : []), ...(forFile ? [/** @type {Node} */ (forFile)] : []), ...this.scopes.map((scope) => /** @type {Node} */ ({ type: "scope", scope }))];
     }
     if (node.type === "group") return node.children;
     if (node.type === "health") return healthChildren(this.scopes);
@@ -368,9 +397,72 @@ function registerSetupView(ctx, roots, counts) {
     vscode.commands.registerCommand("imprimatur.setup.markSeen", () => provider.markSeen()),
     vscode.commands.registerCommand("imprimatur.setup.compareVariant", (node) => compareVariant(provider, node ?? view.selection[0])),
     vscode.commands.registerCommand("imprimatur.setup.explainLastChange", (node) => explainLastChange(provider, node ?? view.selection[0])),
+    vscode.commands.registerCommand("imprimatur.setup.audit", () => runAudit(provider)),
+    vscode.commands.registerCommand("imprimatur.setup.dismissFinding", (node) => setFinding(provider, node ?? view.selection[0], "dropped")),
+    vscode.commands.registerCommand("imprimatur.setup.reopenFinding", (node) => setFinding(provider, node ?? view.selection[0], "open")),
   );
   followActiveEditor(ctx, provider);
   return provider;
+}
+
+/**
+ * "Audit agent setup" (#77): agnix over each repo of the window and the home's agent
+ * folders; the findings land in each root's AUDIT task. agnix runs a downloaded binary:
+ * not in an untrusted folder.
+ * @param {SetupView} provider
+ */
+async function runAudit(provider) {
+  if (!vscode.workspace.isTrusted) return void vscode.window.showInformationMessage("Imprimatur: the audit runs agnix (fetched with npx); trust this folder first.");
+  if (provider.auditing) return;
+  const db = require("./records.js").dbOf();
+  if (!db) return void vscode.window.showErrorMessage(`Imprimatur: no database for the audit records (${require("./records.js").lastError ?? "unknown"}).`);
+  const { locateAgnixAsync, runAgnixAsync, explainRulesAsync, auditRoot, pathsOf, describeSummary } = require("./setup-audit.js");
+  provider.auditing = true;
+  try {
+    const lines = await vscode.window.withProgress({ location: { viewId: "imprimatur.setup" }, title: "Auditing the agent setup" }, async () => {
+      const bin = await locateAgnixAsync();
+      const rules = new Map();
+      const out = [];
+      for (const s of provider.scopes) {
+        const scope = { root: s.root, global: s.global };
+        const paths = pathsOf(scope);
+        const report = paths.length ? await runAgnixAsync(bin, s.root, { paths }) : { files_checked: 0, diagnostics: [] };
+        // Rules explained here, not in auditRoot: its spawnSync would block the extension host.
+        await explainRulesAsync(bin, report, rules);
+        out.push(describeSummary(auditRoot(db, scope, { bin, rules, report })));
+      }
+      return out;
+    });
+    for (const l of lines) console.log(`Imprimatur audit: ${l}`);
+    provider.refresh();
+    const open = provider.audit?.open ?? 0;
+    vscode.window.showInformationMessage(`Imprimatur: agent setup audited, ${open} open recommendation${open === 1 ? "" : "s"}. See Recommendations in Agent setup.`);
+  } catch (e) {
+    vscode.window.showErrorMessage(`Imprimatur audit failed: ${e instanceof Error ? e.message : e}`);
+  } finally {
+    provider.auditing = false;
+  }
+}
+
+/**
+ * Dismiss a finding (with why; it never comes back) or reopen one.
+ * @param {SetupView} provider @param {any} node @param {"open" | "dropped"} status
+ */
+async function setFinding(provider, node, status) {
+  if (!node?.recordId) return void vscode.window.showInformationMessage("Imprimatur: pick a recommendation first.");
+  const db = require("./records.js").dbOf();
+  if (!db) return;
+  const rec = db.record(node.recordId);
+  if (!rec) return;
+  /** @type {Record<string, any>} */
+  const patch = { status };
+  if (status === "dropped") {
+    const why = await vscode.window.showInputBox({ title: `Dismiss ${rec.links?.audit?.rule ?? "finding"}`, prompt: "Why? (kept with the record; the finding will not come back)", placeHolder: "e.g. false alarm: VS Code settings are JSONC" });
+    if (why === undefined) return;
+    if (why.trim()) patch.body = `${rec.body ?? ""}\n\n_Dismissed:_ ${why.trim()}`;
+  }
+  db.updateRecord(rec.id, patch, { kind: "user" });
+  provider.refresh();
 }
 
 /** Diff this repo's copy of a drifted file with a variant from another repo (#31). @param {SetupView} provider @param {Node | undefined} node */

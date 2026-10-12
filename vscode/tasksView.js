@@ -16,7 +16,7 @@ const FILTERS = ["active", "open", "done"];
 const TASK_STATUSES = ["open", "active", "done", "dropped"];
 const STATUS_TR = { active: "Sürüyor", open: "Açık", done: "Bitti", dropped: "Bırakıldı" };
 /** Tasks the importer opens to hold records (#59), not work (#75); db.whereWeLeftOff leaves them out too. */
-const CONTAINERS = ["ADR", "PDR", "TEST"];
+const CONTAINERS = ["ADR", "PDR", "TEST", "AUDIT"];
 const KIND_TR = { todo: "yapılacak", question: "soru", answer: "cevap", decision: "karar", note: "not", fixme: "hata", adr: "ADR", pdr: "PDR", test: "test" };
 const WHO_TR = { user: "Sen", agent: "Ajan", hook: "Hook", import: "İçe aktarma" };
 const TODO_KINDS = ["todo", "fixme"];

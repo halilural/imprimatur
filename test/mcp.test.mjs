@@ -80,7 +80,7 @@ test("legacy handshake: initialize, initialized, tools/list", async () => {
   assert.equal(list.result.resultType, undefined);
   assert.equal(list.result.ttlMs, undefined, "legacy results stay as they were");
   const names = list.result.tools.map((t) => t.name);
-  assert.deepEqual(names.sort(), ["doc_get", "doc_section_upsert", "pointer_set", "record_add", "record_update", "search", "task_get", "task_list", "task_upsert", "where_we_left_off"]);
+  assert.deepEqual(names.sort(), ["doc_get", "doc_section_upsert", "pointer_set", "record_add", "record_update", "search", "setup_audit", "task_get", "task_list", "task_upsert", "where_we_left_off"]);
   for (const t of list.result.tools) {
     assert.equal(t.inputSchema.type, "object");
     assert.equal(typeof t.annotations.readOnlyHint, "boolean");
@@ -320,7 +320,7 @@ test("tools: title, annotations, closed input schemas that still take _session, 
   const ro = Object.fromEntries(tools.map((t) => [t.name, t.annotations.readOnlyHint]));
   assert.deepEqual(ro, {
     where_we_left_off: true, task_list: true, task_get: true, search: true,
-    task_upsert: false, record_add: false, record_update: false, pointer_set: false, doc_get: true, doc_section_upsert: false,
+    task_upsert: false, record_add: false, record_update: false, pointer_set: false, doc_get: true, doc_section_upsert: false, setup_audit: false,
   });
   // The hook's _session passes the closed schema.
   assert.equal((await call(s, "task_list", { _session: "S1" })).isError, undefined);
@@ -344,7 +344,10 @@ function conforms(schema, v, at = "$") {
 }
 
 test("every tool's structuredContent matches its outputSchema", async () => {
-  const s = session({ cwd: gitRepo() });
+  // setup_audit (#77) runs a fake agnix: one finding for any path.
+  const bin = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-77-")), "agnix");
+  fs.writeFileSync(bin, `#!/bin/sh\nif [ "$1" = explain ]; then echo '{"id":"X-1"}'; else echo '{"files_checked":1,"diagnostics":[{"level":"warning","rule":"X-1","file":"a.md","line":1,"message":"m"}]}'; fi\n`, { mode: 0o755 });
+  const s = session({ cwd: gitRepo(), env: { AGNIX_BIN: bin } });
   const schemas = Object.fromEntries((await s.send("tools/list", modern())).result.tools.map((t) => [t.name, t.outputSchema]));
   const seen = new Set();
   const ok = async (name, args) => {
@@ -370,6 +373,7 @@ test("every tool's structuredContent matches its outputSchema", async () => {
   await ok("doc_section_upsert", { kind: "architecture", key: "storage", title: "Storage", body: "SQLite", records: [q.id] });
   await ok("doc_get", { kind: "architecture", full: true });
   await ok("doc_get", { kind: "architecture", section: "storage" });
+  await ok("setup_audit", {});
   assert.equal(seen.size, Object.keys(schemas).length, "every tool was checked");
   await s.close();
 });

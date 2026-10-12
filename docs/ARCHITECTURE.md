@@ -21,6 +21,7 @@
 15. [Test stratejisi](#testing)
 16. [Bilinen sınırlar](#limits)
 17. [Tasarım dokümanları ↔ Markdown dosyaları (docs sync)](#docs-sync)
+18. [Agent setup denetimi (agnix)](#agent-setup-audit)
 
 <a id="overview"></a>
 
@@ -212,7 +213,7 @@ Ayrıca `statusline.mjs` Claude Code'un durum satırıdır (hook değil, `status
 - İki protokol dönemi: 2026-07-28 (`server/discover`, her istekte `_meta` ile protokol sürümü ve `clientInfo`; keşif sonucu `ttlMs: 3.600.000`, `cacheScope: "public"`) ve eski `initialize` el sıkışması.
 - Sunucu `instructions` alanıyla araçların birlikte nasıl kullanılacağını bir kez söyler ("oturum başında `where_we_left_off`" vb.).
 
-### Araçlar (10)
+### Araçlar (11)
 
 | Araç | Tür | İş |
 |---|---|---|
@@ -226,6 +227,7 @@ Ayrıca `statusline.mjs` Claude Code'un durum satırıdır (hook değil, `status
 | `search` | okuma | Başlık/gövdede metin; `repo: "*"` bütün repolar |
 | `doc_get` | okuma | Mimari ya da ürün dokümanının içindekileri; `section` ya da `full` ile gövdeler |
 | `doc_section_upsert` | yazma | Bölüm yaz/güncelle, katkı veren kayıtları bağla |
+| `setup_audit` | yazma | Ajan kurulumunu agnix ile denetle, bulguları `AUDIT` kayıtlarına uzlaştır; `global`, `dry_run` |
 
 Araçlar bilerek az ve geneldir (tür başına araç yok): her tanım ajanın bağlamına girer. Sonuç kısa bir metin özeti ve tam `structuredContent` (+ `outputSchema`) olarak döner; aracın kendi hatası `isError` ile ve ne yapılacağını söyleyen bir mesajla döner (model düzeltir), bilinmeyen araç `-32602`.
 
@@ -548,3 +550,28 @@ Editör işaretleri ve önizleme gibi görsel davranışların elle testleri `TE
 - **Tetik:** SessionStart ve dosya düzenlemesinden sonra süreç kontrolü `docSync`; MCP `doc_section_upsert` sonrası (cevapta `file`); eklentide DB değişince, dosya kaydedilince ve açılışta; `npm run docs -- sync [repo] [--dry-run] [--take file|db] [--rev R]`.
 - **İçe aktarıcı (#59) düzeltmeleri:** `docs/design/PRODUCT.md` → PDR, `README.md` kayıt değil, üretilmiş dosya kaynak değil; daha önce başka türde/task'ta kaydedilen kayıt `<uid>@<task>` ile doğru task'a taşınır (eskisi `moved_to` ile dropped).
 - **Sağlık (#74):** `db.docHealth` + çakışmalar → `where_we_left_off` `docs`/`docs_problem` ve SessionStart satırı; `docUpdate` bağsız ADR/PDR'yi ve bağlı bölümü kayıttan sonra değişmemiş ADR/PDR/kararı söyler.
+
+<a id="agent-setup-audit"></a>
+
+## 18. Agent setup denetimi (agnix)
+
+`vscode/setup-audit.js` ajan kurulumunu [agnix](https://github.com/agent-sh/agnix) ile denetler ve bulguları kayıt olarak tutar; kural ya da dosya kesilmez. `setup-audit-tree.js` kayıtlardan Agent Setup'taki **Recommendations** ağacını kurar.
+
+### Çalıştırma
+
+- agnix sürümü sabittir (`agnix@0.57.0`, JSON biçimi onunla). `npx -y -p agnix@0.57.0` bir kez çalışıp (geçici bir betik dosyasıyla; Windows'ta `node -e` kabukta bölünürdü) Rust binary'sinin yolunu verir; sonraki çağrılar doğrudan binary'ye gider (`explain` ~7 ms; npx çağrısı ~1,4 sn). `AGNIX_BIN` yolu ezer (testler sahte bir agnix kullanır).
+- Repo için repo kökü; global için yalnız home'daki ajan klasörleri (`~/.claude` plugin'leriyle, `~/.cursor`, `~/.codex`, `~/.gemini`, `~/.kiro`, …). Tüm home taranmaz: her projeyi okurdu; home'un kendisi repo olarak açıksa o da taranmaz.
+- Çıkış kodu 1 "bulgu var" demektir, hata değil; JSON okunamazsa hata.
+- Yüzeyler: `npm run audit -- [repo …] [--global] [--dry-run]`, MCP `setup_audit` (`global`, `dry_run`), Agent Setup başlığındaki ampul. Eklenti agnix'i ve kural açıklamalarını asenkron çalıştırır (host donmaz) ve güvenilmeyen klasörde çalıştırmaz.
+
+### Kayıtlar
+
+- Her kökün `AUDIT` görevi; global bulgular home'un repo satırında ("~"). `AUDIT` bir kayıt kabıdır (ADR, PDR, TEST gibi): `where_we_left_off`'ta ve görev listelerinde iş sayılmaz. İlk denetimde `active` açılır; sonra yalnız özeti, o da değiştiyse yazılır (kullanıcı kapattıysa yeniden açılmaz, boş tur eşitlemeye bir şey yollamaz).
+- Her bulgu bir `fixme`. Başlık `KURAL: mesaj`; gövde dosya:satır, seviye, öneri, varsayım, kuralın adı, normatif düzeyi, kaynak türü, doğrulama tarihi ve doküman linkleri (`agnix explain`, çalıştırma başına önbellekli). `links.audit`: `fp`, kural, seviye, kategori, grup (`project` / `user` / `plugin` / `worktree`), sahip (plugin ya da worktree adı), dosya, satır.
+- Grup: `~/.claude/plugins/…` → plugin; `.claude/worktrees/<ad>/` → worktree; home'daki ajan klasörleri → user; gerisi project.
+- Parmak izi sha1(kural, yol, mesaj, kaçıncı tekrar). Satır numarası yoktur: üste eklenen bir satır bulguyu yeni yapmaz. Plugin önbelleğindeki dosyanın yolu sürüm klasörü (ya da `temp_git_*` kopyası) atılarak alınır: plugin güncellenince bulguları "uygulandı" sayılıp yeniden açılmaz, reddedilen reddedilmiş kalır.
+- Okuma, uzlaştırma (`reconcile`, saf) ve yazma tek işlemde: başka bir süreçten (MCP, CLI) aynı anda yapılan denetim kaydı ikilemez, az önce reddedileni açmaz. Yeni → `open`; kaybolan `open` → `done` (gövdeye "Applied" notu); `done` tekrar çıkarsa → `open`; `dropped` (kullanıcı gerekçeyle reddetti) hiç değişmez. Görevin özeti reddedilmemiş bulguları seviyeye göre sayar.
+
+### Görünüm
+
+Recommendations → denetlenen kök → grup (Project, Your setup, Plugins → plugin, Worktrees → worktree) → kategori → bulgu (hatalar önce); kökün altında ayrıca Applied ve Dismissed. Bulgu dosyayı satırında açar, ipucu kaydın gövdesidir; açık bulguda **Dismiss…** (gerekçe sorar), kapalıda **Reopen**. Hiç denetim yoksa satır denetimi başlatır.
