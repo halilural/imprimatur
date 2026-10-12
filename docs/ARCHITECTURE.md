@@ -20,6 +20,7 @@
 14. [Kurulum ve dağıtım](#deployment)
 15. [Test stratejisi](#testing)
 16. [Bilinen sınırlar](#limits)
+17. [Tasarım dokümanları ↔ Markdown dosyaları (docs sync)](#docs-sync)
 
 <a id="overview"></a>
 
@@ -532,3 +533,18 @@ Editör işaretleri ve önizleme gibi görsel davranışların elle testleri `TE
 - Hook'lar yalnız Claude Code içindir; Cursor ve Codex yalnız MCP araçlarını kullanır (inceleme, bekleyenler ve etkinlik onlarda yok).
 - Takip aracı yalnız GitHub Issues ve Jira; pano Status alanı ve Linear yok.
 - Bağlam bütçesi (kalem kalem token) henüz yok (#29).
+
+<a id="docs-sync"></a>
+
+## 17. Tasarım dokümanları ↔ Markdown dosyaları (docs sync)
+
+`vscode/docs-sync.js` (#73) veritabanındaki mimari/ürün dokümanını `<docs dir>/ARCHITECTURE.md` ve `PRODUCT.md` ile aynı metne getirir; Imprimatur repoya ne zaman gelirse gelsin (dosya yok, elle yazılmış dosya, taşımadan sonra silinmiş dosya) aynı sonuç.
+
+- **Klasör:** `.claude/imprimatur.json` `{"docs": {"dir": "docs/design"}}`, yoksa `docs`. `{"docs": {"sync": false}}` kapatır.
+- **Durum:** doküman başına son senkronun özeti `meta` tablosunda (`docsync:<repoId>:<kind>`: dosya yolu, bölüm başına başlık+gövde hash'i, varsa çakışmalar); makineye özel.
+- **Kural (bölüm anahtarı başına):** aynı → bir şey yok; yalnız dosya değişti → DB alır (actor `import:file`); yalnız DB değişti → dosya yazılır; ikisi de ya da taban yok ve farklı → çakışma, hiçbir taraf yazılmaz, `--take file|db` çözer. Dosyadan silinen ve DB'de değişmemiş bölüm superseded; DB'de superseded ama dosyada düzenlenmiş bölüm çakışma.
+- **Benimseme:** HEADER'sız dosya `##` başlıklarından bölüm olur (ilk `#` başlık, öncesi `overview`, `<!-- toc -->` atılır), o dosyadan içe aktarılmış kayıtlar `links.source` + `links.area` ile bölüme bağlanır, aslı `.claude/imprimatur/docs-backup/`'a yazılır. Yalnız repo `docs` anahtarıyla katıldıysa ya da elle (CLI, `npm run import`). `--rev <commit>` dosyaları git'ten okur ve önce o sürümün design/product kayıtlarını içe aktarır.
+- **Okuma güvenliği:** yönetilen dosya `<a id="key"></a>` + ardından `## n. Başlık` ile bölünür (fence takibi yok); DB'nin kendi metni bölümlerine geri okunmuyorsa (`roundTrips`) o doküman senkronlanmaz, `unreadable` söylenir.
+- **Tetik:** SessionStart ve dosya düzenlemesinden sonra süreç kontrolü `docSync`; MCP `doc_section_upsert` sonrası (cevapta `file`); eklentide DB değişince, dosya kaydedilince ve açılışta; `npm run docs -- sync [repo] [--dry-run] [--take file|db] [--rev R]`.
+- **İçe aktarıcı (#59) düzeltmeleri:** `docs/design/PRODUCT.md` → PDR, `README.md` kayıt değil, üretilmiş dosya kaynak değil; daha önce başka türde/task'ta kaydedilen kayıt `<uid>@<task>` ile doğru task'a taşınır (eskisi `moved_to` ile dropped).
+- **Sağlık (#74):** `db.docHealth` + çakışmalar → `where_we_left_off` `docs`/`docs_problem` ve SessionStart satırı; `docUpdate` bağsız ADR/PDR'yi ve bağlı bölümü kayıttan sonra değişmemiş ADR/PDR/kararı söyler.
