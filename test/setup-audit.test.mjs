@@ -103,7 +103,7 @@ test("audit: runs write the AUDIT task — applied when gone, back when found ag
     assert.equal(recs()[1].status, "dropped");
     s = run([one]);
     assert.equal(recs()[1].status, "dropped");
-    assert.equal(db.taskByKey(repo.id, TASK).summary.startsWith("1 open"), true);
+    assert.equal(db.taskByKey(repo.id, TASK).summary, "1 open (1 warning) · 1 dismissed");
     // A dry run writes nothing.
     const before = JSON.stringify(recs());
     auditRoot(db, { root }, { bin: "agnix", spawn, dryRun: true, report: { diagnostics: [] } });
@@ -200,4 +200,26 @@ test("audit: the npx locate script runs from a private folder, removed after", (
   };
   assert.equal(locateAgnix({ env: {}, spawn }), "/x/agnix-binary");
   assert.equal(fs.existsSync(path.dirname(seen)), false);
+});
+
+test("audit: this repo's task list shows the global audit too, in a Global (~) group", () => {
+  const { tasksPage, tasksHtml } = require("../vscode/tasksView.js");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "audit-tasks-"));
+  const db = openDb({ path: path.join(dir, "imprimatur.db") });
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "audit-tasks-repo-"));
+  const h = fs.mkdtempSync(path.join(os.tmpdir(), "audit-tasks-home-"));
+  try {
+    const spawn = /** @type {any} */ (() => ({ status: 0, stdout: "{}" }));
+    auditRoot(db, { root }, { bin: "agnix", spawn, report: { diagnostics: [d("A-1", "x.md", "a")] } });
+    auditRoot(db, { root: h, home: h, global: true }, { bin: "agnix", spawn, report: { diagnostics: [d("B-1", path.join(h, ".claude/CLAUDE.md"), "b")] } });
+    db.upsertTask(db.repoByRoot(h).id, "#9", { title: "Not shown", status: "active" });
+    const m = tasksPage(db, root, { filter: "active" }, { home: h });
+    assert.deepEqual(m.groups.map((g) => [g.tasks.map((t) => t.key), Boolean(g.global)]), [[["AUDIT"], false], [["AUDIT"], true]]);
+    assert.match(tasksHtml(m), /Global \(~\)/);
+    // Every repo: the home is one of them, no copy.
+    const all = tasksPage(db, root, { filter: "active", all: true }, { home: h });
+    assert.equal(all.groups.flatMap((g) => g.tasks).filter((t) => t.key === "AUDIT").length, 2);
+  } finally {
+    db.close();
+  }
 });

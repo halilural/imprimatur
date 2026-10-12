@@ -96,6 +96,17 @@ function repoOfRoot(db, root) {
   return undefined;
 }
 
+/**
+ * The global setup's audit (#77, the home's AUDIT task): it applies to every repo, so
+ * "this repo" lists it too, in its own group. Not when this repo is the home itself.
+ * @param {any} db @param {string} root @param {string} [home]
+ */
+function globalAudit(db, root, home = os.homedir()) {
+  const h = repoOfRoot(db, home);
+  if (!h || h.id === repoOfRoot(db, root)?.id) return [];
+  return taskSummaries(db, h).filter((/** @type {any} */ t) => t.key === "AUDIT").map((/** @type {any} */ t) => ({ ...t, global: true }));
+}
+
 /** This root's repo, or every repo (this one first). @param {any} db @param {string} root @param {boolean} all */
 function scopeRepos(db, root, all) {
   const here = repoOfRoot(db, root);
@@ -253,7 +264,7 @@ function taskPage(db, task, view, opts) {
 function tasksPage(db, root, view = {}, opts = {}) {
   const all = !!view.all;
   const repos = scopeRepos(db, root, all);
-  const tasks = repos.flatMap((repo) => taskSummaries(db, repo));
+  const tasks = [...repos.flatMap((repo) => taskSummaries(db, repo)), ...(all ? [] : globalAudit(db, root, opts.home))];
   const filter = FILTERS.includes(view.filter ?? "") ? /** @type {string} */ (view.filter) : "active";
   const counts = { active: 0, open: 0, done: 0 };
   for (const t of tasks) counts[/** @type {keyof typeof counts} */ (bucketOf(t.status))]++;
@@ -265,12 +276,12 @@ function tasksPage(db, root, view = {}, opts = {}) {
     const first = list[0] ?? tasks.find((t) => t.status === "active") ?? tasks[0];
     task = first && db.taskById(first.id);
   }
-  /** @type {Array<{repo: any, tasks: typeof list}>} */
+  /** @type {Array<{repo: any, tasks: typeof list, global?: boolean}>} */
   const groups = [];
   for (const t of list) {
     const g = groups.find((x) => x.repo.id === t.repo.id);
     if (g) g.tasks.push(t);
-    else groups.push({ repo: t.repo, tasks: [t] });
+    else groups.push({ repo: t.repo, tasks: [t], ...(t.global && { global: true }) });
   }
   const here = repoOfRoot(db, root);
   return {
@@ -395,7 +406,7 @@ function tasksHtml(m) {
   const row = (/** @type {any} */ t) => `<button class="trow${t.id === m.sel ? " on" : ""}" id="t-${t.id}" data-k="t${t.id}" data-act="sel" data-id="${t.id}" data-nav data-q="${esc(t.q)}"${t.id === m.sel ? ' aria-current="true"' : ""}>
 <span class="sdot s-${esc(t.status)}" aria-hidden="true"></span><span class="tcol"><span class="tmeta"><span class="mono">${esc(t.key)}</span><span>${esc(STATUS_TR[/** @type {keyof typeof STATUS_TR} */ (t.status)] ?? t.status)}</span></span><span class="tttl">${esc(t.title || t.key)}</span><span class="tmeta">${t.asks ? `<b class="mine">${t.asks} sende</b>` : ""}<span>${esc(todoLine(t))}</span></span></span></button>`;
   const rows = m.groups.length
-    ? m.groups.map((g) => `<div class="grp" data-k="g${g.repo.id}">${m.all ? `<div class="grp-h">${esc(g.repo.name)}</div>` : ""}${g.tasks.map(row).join("")}</div>`).join("")
+    ? m.groups.map((g) => `<div class="grp" data-k="g${g.repo.id}">${m.all || g.global ? `<div class="grp-h">${esc(g.global && !m.all ? "Global (~)" : g.repo.name)}</div>` : ""}${g.tasks.map(row).join("")}</div>`).join("")
     : `<p class="empty" data-k="empty">Bu filtrede görev yok.</p>`;
   const list = `<aside class="tlist" data-k="list" data-scroll="tlist" aria-label="Görevler"><div class="pills" data-k="filters" role="group" aria-label="Durum">${f("active", "Aktif")}${f("open", "Açık")}${f("done", "Biten")}</div><div class="tl-head" data-k="head"><span>${esc(m.all ? "Bütün repolar" : m.repoName)}</span><button class="link" data-act="scope" data-all="${m.all ? 0 : 1}">${m.all ? "Bu repo" : "Bütün repolar"}</button></div><div class="rows" data-k="rows" data-navgroup="list">${rows}</div><button class="dashed" data-k="new" data-act="newTask">${icon("plus")} Yeni görev</button></aside>`;
   const c = m.cur;
