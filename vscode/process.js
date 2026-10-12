@@ -16,8 +16,9 @@
 //   PostToolUse MCP     sweep           a task set done: its GitHub issue still open (not while tracker sync, #70, runs)
 //   Stop                status          the answer has no "Neredeyiz" section
 //   SessionStart, Bash  branchFinish    (after git merge/switch/checkout/pull) merged branches left behind
-//   PostToolUse MCP,    docUpdate       an ADR/PDR added or changed (record_add/record_update) that no design
-//   Stop, next event                    document section links: told to the agent at its next tool call or session start
+//   PostToolUse MCP,    docUpdate       an ADR/PDR/decision added or changed (record_add/record_update) that no design
+//   Stop, next event                    document section links, or whose sections did not change after it (#74; a
+//                                       decision only once linked): told to the agent at its next tool call or session start
 //   SessionStart,       docSync         the design documents and their Markdown files synced (docs-sync.js, #73):
 //   PostToolUse edits                   adoptions, edits taken in and conflicts told to the agent
 
@@ -252,21 +253,28 @@ function designRecordOf(name, input, records, root) {
       const r = input.tool_response;
       const text = typeof r === "string" ? r : JSON.stringify(r ?? "");
       id = Number(/Added \[(\d+)\]/.exec(text)?.[1] ?? /"record"\s*:\s*\{[^{}]*?"id"\s*:\s*(\d+)/.exec(text)?.[1] ?? NaN);
-      if (!Number.isInteger(id) && /^(adr|pdr)$/.test(ti.kind ?? "")) {
+      if (!Number.isInteger(id) && /^(adr|pdr|decision)$/.test(ti.kind ?? "")) {
         const repo = records.repoId(root);
         id = repo === undefined ? undefined : db.recordsByKind(repo, [ti.kind], { limit: 50 }).find((/** @type {any} */ x) => x.title === String(ti.title ?? "").trim())?.id;
       }
     }
     const rec = Number.isInteger(id) ? db.record(id) : undefined;
-    return rec && (rec.kind === "adr" || rec.kind === "pdr") ? rec : undefined;
+    return rec && DESIGN_KINDS.includes(rec.kind) ? rec : undefined;
   } catch {
     return undefined;
   }
 }
 
+/** Records whose change the design documents follow (#72; decision, #74). */
+const DESIGN_KINDS = ["adr", "pdr", "decision"];
+
 /**
- * The remembered "id:verb" notes whose record still exists and no document section links.
- * @param {any} records @param {string[]} notes @returns {Array<{id: number, kind: string, verb: string, note: string}>}
+ * The remembered "id:verb" notes whose record still exists and the documents have not
+ * followed (#74): an ADR or PDR no section links ("unlinked"), or one whose sections all
+ * changed last before the record did ("stale"). A decision is followed only once a section
+ * links it: not every decision is a design one.
+ * @param {any} records @param {string[]} notes
+ * @returns {Array<{id: number, kind: string, verb: string, note: string, why: "unlinked" | "stale", sections: string[]}>}
  */
 function unlinked(records, notes) {
   if (!notes.length) return [];
@@ -277,8 +285,13 @@ function unlinked(records, notes) {
     for (const note of new Set(notes)) {
       const [id, verb] = note.split(":");
       const rec = db.record(Number(id));
-      if (rec && rec.status !== "dropped" && (rec.kind === "adr" || rec.kind === "pdr") && !db.sectionsOfRecord(rec.id).length) {
-        out.push({ id: rec.id, kind: rec.kind, verb: verb || "eklendi", note });
+      if (!rec || rec.status === "dropped" || !DESIGN_KINDS.includes(rec.kind)) continue;
+      const secs = db.sectionsOfRecord(rec.id).filter((/** @type {any} */ s) => s.status === "current");
+      const base = { id: rec.id, kind: rec.kind, verb: verb || "eklendi", note };
+      if (!secs.length) {
+        if (rec.kind !== "decision") out.push({ ...base, why: /** @type {const} */ ("unlinked"), sections: [] });
+      } else if (Math.max(...secs.map((/** @type {any} */ s) => s.updated_at)) < rec.updated_at) {
+        out.push({ ...base, why: /** @type {const} */ ("stale"), sections: secs.map((/** @type {any} */ s) => `${s.doc_kind}/${s.key}`) });
       }
     }
     return out;
@@ -287,10 +300,14 @@ function unlinked(records, notes) {
   }
 }
 
-/** @param {{id: number, kind: string, verb: string}} l */
+/** @param {{id: number, kind: string, verb: string, why: string, sections: string[]}} l */
 const docLine = (l) => {
+  const label = l.kind === "adr" ? "ADR" : l.kind === "pdr" ? "PDR" : "Karar";
+  if (l.why === "stale") {
+    return `${label} #${l.id} ${l.verb} ama bağlı olduğu bölüm (${l.sections.join(", ")}) ondan sonra değişmedi: doc_section_upsert ile bölümün metnini kayda göre güncelle.`;
+  }
   const arch = l.kind === "adr";
-  return `${arch ? "ADR" : "PDR"} #${l.id} ${l.verb} ama ${arch ? "mimari" : "ürün"} dokümanı güncellenmedi: doc_section_upsert {kind: "${arch ? "architecture" : "product"}", key, title, body, records: [${l.id}]} ile ilgili bölümü yaz ve kaydı bağla.`;
+  return `${label} #${l.id} ${l.verb} ama ${arch ? "mimari" : "ürün"} dokümanı güncellenmedi: doc_section_upsert {kind: "${arch ? "architecture" : "product"}", key, title, body, records: [${l.id}]} ile ilgili bölümü yaz ve kaydı bağla.`;
 };
 
 /**
@@ -356,6 +373,11 @@ function check(event, input, deps = {}) {
       size += line.length + 1;
     }
     context.push(tasks.length ? lines.join("\n") : "No unfinished tasks in Imprimatur for this repo. Record work with the imprimatur MCP tools (task_upsert, record_add, pointer_set).");
+    // Design documents that need attention (#74): records no section links, conflicts with the file.
+    try {
+      const problem = id === undefined ? undefined : require("./docs-sync.js").health(records.dbOf(), id).problem;
+      if (problem) context.push(problem);
+    } catch {}
   }
 
   // Design documents ↔ their files (#73): at session start (a hand-written file adopted, a

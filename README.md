@@ -230,11 +230,13 @@ no model calls or repo scripts (Workspace Trust).
 
 **Process checks** (opt-in per repo): **Imprimatur: Turn On Process Checks for
 This Repo** writes `.claude/imprimatur.json`; commit it. Then Imprimatur's hooks
-show where work stopped at session start, block `git --no-verify` / `HUSKY=0`,
+show where work stopped (and design documents that need attention: ADRs/PDRs no
+section links, conflicts with their files) at session start, block `git --no-verify` / `HUSKY=0`,
 keep code off `main` (allowed paths are set there), refresh the docs TOC, and
 check that each answer ends with "Neredeyiz"; they warn when a new issue lacks
 its milestone or board item, a task is done but its issue is open, code starts
-before its ADR/PDR, or a merged branch is left behind. Each check is
+before its ADR/PDR, an ADR/PDR (or a decision a section links) changes but its
+document section does not follow, or a merged branch is left behind. Each check is
 `"block"`, `"warn"` or `false`. Without the file nothing runs.
 Records a repo still keeps in Markdown (`docs/todos/*/TODO.md`, `docs/design`,
 `PRODUCT.md` / `docs/product`, `docs/testing`) move in with

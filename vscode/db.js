@@ -861,6 +861,26 @@ class Db {
   }
 
   /**
+   * How a repo's design documents stand (#74): per kind its current sections and the ADRs
+   * (architecture) or PDRs (product), not dropped, that no current section links.
+   * @param {number} repoId @returns {Record<string, {sections: number, unlinked: number}>}
+   */
+  docHealth(repoId) {
+    /** @type {Record<string, {sections: number, unlinked: number}>} */
+    const out = {};
+    for (const [kind, rk] of /** @type {const} */ ([["architecture", "adr"], ["product", "pdr"]])) {
+      const doc = this.docFind(repoId, kind);
+      const sections = doc ? this.q("SELECT count(*) AS n FROM doc_sections WHERE doc_id = ? AND status = 'current'").get(doc.id).n : 0;
+      const unlinked = this.q(`SELECT count(*) AS n FROM records r JOIN tasks t ON t.id = r.task_id
+                               WHERE t.repo_id = ? AND r.kind = ? AND r.status != 'dropped'
+                                 AND NOT EXISTS (SELECT 1 FROM doc_section_records l JOIN doc_sections s ON s.id = l.section_id
+                                                 WHERE l.record_id = r.id AND s.status = 'current')`).get(repoId, rk).n;
+      out[kind] = { sections, unlinked };
+    }
+    return out;
+  }
+
+  /**
    * Records whose title or body contains the text (case-insensitive for ASCII), newest first.
    * @param {string} text @param {{repoId?: number, kind?: string, limit?: number}} [o]
    */
