@@ -300,12 +300,7 @@ function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = 
   return db.tx(() => {
     const { task, plan } = read();
     const summary = summaryOf(plan);
-    const line = `${plan.open} open: ${describeCounts(countBy(plan.live, (f) => f.level))}`;
-    const changed = plan.add.length || plan.reopen.length || plan.update.length || plan.resolve.length;
-    // Created active; after that only its summary, and only when it says something new.
-    const t = !task ? db.upsertTask(repo.id, TASK, { title: TASK_TITLE, status: "active", summary: line }, ACTOR)
-      : task.summary !== line ? db.upsertTask(repo.id, TASK, { summary: line }, ACTOR) : task;
-    if (!changed) return summary;
+    const t = task ?? db.upsertTask(repo.id, TASK, { title: TASK_TITLE, status: "active" }, ACTOR);
     for (const f of plan.add) db.addRecord(t.id, { kind: "fixme", title: titleOf(f), body: bodyOf(f, ruleOf(f.rule)), links: linksOf(f) }, ACTOR);
     for (const { id, f } of plan.reopen) db.updateRecord(id, { status: "open", title: titleOf(f), body: `${bodyOf(f, ruleOf(f.rule))}\n\n_Found again ${day}._`, links: linksOf(f) }, ACTOR);
     for (const { id, f } of plan.update) db.updateRecord(id, { title: titleOf(f), body: bodyOf(f, ruleOf(f.rule)), links: linksOf(f) }, ACTOR);
@@ -313,8 +308,24 @@ function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = 
       const r = db.record(id);
       db.updateRecord(id, { status: "done", body: `${r.body ?? ""}\n\n_Applied: gone in the audit of ${day}._` }, ACTOR);
     }
+    // After the writes: what the records say now. Written only when it says something new
+    // (a task the user closed stays closed; a run that changed nothing syncs nothing).
+    const line = summaryLine(db.recordsOf(t.id, { dropped: true }).filter((/** @type {any} */ r) => r.links?.audit));
+    if (t.summary !== line) db.upsertTask(repo.id, TASK, { summary: line }, ACTOR);
     return summary;
   });
+}
+
+/**
+ * The AUDIT task's one line: "3 open (1 error, 2 warnings) · 15 applied · 1 dismissed".
+ * @param {Array<{status: string, links: any}>} records
+ */
+function summaryLine(records) {
+  const open = records.filter((r) => r.status === "open");
+  const done = records.filter((r) => r.status === "done").length;
+  const dropped = records.filter((r) => r.status === "dropped").length;
+  return [`${open.length} open${open.length ? ` (${describeCounts(countBy(open, (r) => r.links.audit.level))})` : ""}`, done && `${done} applied`, dropped && `${dropped} dismissed`]
+    .filter(Boolean).join(" · ");
 }
 
 /** @template T @param {T[]} xs @param {(x: T) => string} key @returns {Record<string, number>} */
@@ -348,4 +359,4 @@ const exists = (p) => {
   }
 };
 
-module.exports = { AGNIX, TASK, ACTOR, locateAgnix, runAgnix, locateAgnixAsync, runAgnixAsync, explainRule, groupOf, findingsOf, titleOf, bodyOf, linksOf, reconcile, auditRoot, globalPaths, pathsOf, fpPath, explainRulesAsync, describeSummary, describeCounts, countBy, exists };
+module.exports = { AGNIX, TASK, ACTOR, locateAgnix, runAgnix, locateAgnixAsync, runAgnixAsync, explainRule, groupOf, findingsOf, titleOf, bodyOf, linksOf, reconcile, auditRoot, summaryLine, globalPaths, pathsOf, fpPath, explainRulesAsync, describeSummary, describeCounts, countBy, exists };
