@@ -382,6 +382,32 @@ function syncDocs(db, root, { dryRun = false, take, rev, adopt = optedIn(root) }
   });
 }
 
+/**
+ * How a repo's design documents stand (#74): db.docHealth plus the conflicts the last sync
+ * left; problem, when one of them has records no section links, or a conflict.
+ * @param {any} db @param {number} repoId
+ */
+function health(db, repoId) {
+  const h = db.docHealth(repoId);
+  const conflicts = conflictsOf(db, repoId);
+  /** @type {Record<string, {sections: number, unlinked: number, conflicts: string[]}>} */
+  const docs = {};
+  for (const kind of Object.keys(h)) docs[kind] = { ...h[kind], conflicts: conflicts[kind] ?? [] };
+  const parts = Object.entries(docs).flatMap(([kind, d]) => {
+    const label = kind === "architecture" ? "architecture" : "product";
+    const rk = kind === "architecture" ? "ADR" : "PDR";
+    const bits = [
+      d.unlinked && `${d.sections} section${d.sections === 1 ? "" : "s"}, ${d.unlinked} ${rk}${d.unlinked === 1 ? "" : "s"} no section links`,
+      d.conflicts.length && `conflict with its file in ${d.conflicts.join(", ")}`,
+    ].filter(Boolean);
+    return bits.length ? [`${label}: ${bits.join("; ")}`] : [];
+  });
+  const problem = parts.length
+    ? `Design documents: ${parts.join(" · ")}. Link records with doc_section_upsert (records), bring back files gone after an import with npm run docs -- sync --rev <commit>, settle a conflict with --take file|db.`
+    : undefined;
+  return { docs, problem };
+}
+
 /** One line per document for a report. @param {SyncReport[]} reports @param {string} [root] */
 function describe(reports, root) {
   return reports.map((r) => {
@@ -402,4 +428,4 @@ function describe(reports, root) {
   });
 }
 
-module.exports = { syncDocs, describe, conflictsOf, parseManaged, parseHand, sectionHash };
+module.exports = { syncDocs, describe, conflictsOf, health, parseManaged, parseHand, sectionHash };

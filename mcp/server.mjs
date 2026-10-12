@@ -18,7 +18,7 @@ const require = createRequire(import.meta.url);
 const { openDb, KINDS, DOC_KINDS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX } = require("../vscode/db.js");
 const { repoRoot } = require("../vscode/review-state.js");
 const { originOf } = require("../vscode/import.js");
-const { syncDocs } = require("../vscode/docs-sync.js");
+const { syncDocs, health: docsHealth } = require("../vscode/docs-sync.js");
 const { syncOn: docsSyncOn } = require("../vscode/docs-export.js");
 
 const MODERN = "2026-07-28";
@@ -128,9 +128,16 @@ const TOOLS = [
   {
     name: "where_we_left_off",
     title: "Where we left off",
-    description: "Unfinished tasks of the repo, each with its 👉 record (where work stopped) and how many records are open. Call at the start of a session.",
+    description: "Unfinished tasks of the repo, each with its 👉 record (where work stopped) and how many records are open; and how the design documents stand (sections, ADRs/PDRs no section links, conflicts with their files). Call at the start of a session.",
     inputSchema: input({ repo: repoArg }),
-    outputSchema: output({ tasks: { type: "array", items: LEFT_OFF } }),
+    outputSchema: output({
+      tasks: { type: "array", items: LEFT_OFF },
+      docs: {
+        type: "object", description: "Per document kind (architecture, product): current sections, ADRs/PDRs no section links, sections in conflict with the file",
+        additionalProperties: { type: "object", properties: { sections: int, unlinked: int, conflicts: { type: "array", items: str } }, required: ["sections", "unlinked", "conflicts"] },
+      },
+      docs_problem: { type: "string", description: "Set when a document needs attention" },
+    }, ["tasks"]),
     readOnly: true,
   },
   {
@@ -451,8 +458,11 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
   if (!db.sqlite) throw new ToolError(db.error);
   const actor = { kind: "agent", id: a._session ? `${ctx.client}:${a._session}` : ctx.client };
   switch (name) {
-    case "where_we_left_off":
-      return { tasks: db.whereWeLeftOff(repoOf(db, a.repo).id) };
+    case "where_we_left_off": {
+      const rid = repoOf(db, a.repo).id;
+      const { docs, problem } = docsHealth(db, rid);
+      return { tasks: db.whereWeLeftOff(rid), docs, ...(problem && { docs_problem: problem }) };
+    }
     case "task_list":
       return { tasks: db.tasksOf(repoOf(db, a.repo).id, { status: a.status }) };
     case "task_get":
@@ -513,11 +523,13 @@ const recordLine = (r) =>
  */
 export function digest(name, out, a = {}) {
   switch (name) {
-    case "where_we_left_off":
-      if (!out.tasks.length) return "No unfinished tasks in this repo.";
+    case "where_we_left_off": {
+      const docsLine = out.docs_problem ? `\n${out.docs_problem}` : "";
+      if (!out.tasks.length) return `No unfinished tasks in this repo.${docsLine}`;
       return [`${plural(out.tasks.length, "unfinished task")}:`, ...out.tasks.map((t) =>
         `- ${t.key}${t.title ? ` ${t.title}` : ""} [${t.status}] ${t.pointer_id ? `👉 [${t.pointer_id}] ${t.pointer_title}` : "no 👉"} (${t.open_records} open)` +
-        (t.summary ? `\n  where we are: ${t.summary}` : ""))].join("\n");
+        (t.summary ? `\n  where we are: ${t.summary}` : ""))].join("\n") + docsLine;
+    }
     case "task_list":
       if (!out.tasks.length) return "No tasks.";
       return [`${plural(out.tasks.length, "task")}:`, ...out.tasks.map((t) => `- ${taskLine(t)}`)].join("\n");
