@@ -23,6 +23,7 @@
 17. [Tasarım dokümanları ↔ Markdown dosyaları (docs sync)](#docs-sync)
 18. [Agent setup denetimi (agnix)](#agent-setup-audit)
 19. [Denetim: bulgu etkin mi (#78)](#audit-effect)
+20. [Best practice review (#86)](#best-practice-review)
 
 <a id="overview"></a>
 
@@ -592,3 +593,25 @@ Her bulgu denetimde Claude Code'un o dosyayı yükleyip yüklemediğine göre i�
 - Claude bileşenleri (plugin klasörünün ilk parçası): `.claude-plugin`, `hooks`, `skills`, `agents`, `commands`, `output-styles`, `monitors`, `.mcp.json`, `.lsp.json`.
 - Repo, kullanıcı ve eşitlenen skill dosyaları her zaman `active`.
 - Etkisi değişen açık kayıt bir sonraki denetimde güncellenir. Görevin özeti `N open (seviyeler) · N not loaded · N applied · N dismissed`.
+
+<a id="best-practice-review"></a>
+
+## 20. Best practice review (#86)
+
+`vscode/best-practice.js` projenin kendi mimari dokümanından, kararlarından ve kodundan best practice önerileri üretir; her öneri o çalıştırmada okunmuş resmi bir kaynağa ve repodaki kanıta dayanır. Kayıtlar repodaki `BEST` görevinde (kayıt kabı); `best-tree.js` Görevler sayfası için gruplar.
+
+### Akış
+
+1. **Kaynak haritası** (bir kez, sonra yeniden kullanılır; komutta "rebuild sources" ile yenilenir): model stack'in bileşenlerini mimari doküman, kararlar ve manifestlerden çıkarır (kodla ekosistem ayrıştırıcısı yok); her bileşen için sırayla genel doküman MCP'si, Context7 kimliği, resmi sürüm notu / changelog / deprecation adresleri. Kod doğrular: MCP katalogda mı; Context7 kimliği biçimce geçerli ve `context7.com/api/v2/docs/code` 200 mü; URL genel bir alan adında https ve yönlendirme izlemeden açılıyor mu. Context7'siz bileşene Context7 aramasından tam başlık eşleşmesi eklenir. Harita bir not kaydında (`links.bestSources`; `lastRun` başlık başına).
+2. **Başlıklar** (deps, security, testing) paralel; her biri bir `claude -p` (sonnet, `--json-schema`, `--max-budget-usd`). Haritanın MCP'leri ve Context7 verilir; WebFetch yalnız haritadaki alan adlarına (`WebFetch(domain:…)`), web araması yok. Önceki anahtarlar prompt'ta.
+3. **Kapı** (kod): alanlar tip ve boyutla normalleşir; genel https kaynak, kebab-case anahtar, her kanıt dosyası repo içinde ve satırı dosyada; karar kimlikleri reponun kararlarıyla kesişir. Geçmeyen düşer, hiçbir şey fırlatılmaz.
+4. **Kayıtlar** (tek işlem): anahtar başlığa aittir (`pillar:key`). Yeni → `todo`; bulunan → yenilenir (`seen`); bulunmayan dokunulmaz (model kendini tekrar etmeyebilir; sayfa "son turda görülmedi" der); reddedilen dokunulmaz. Bütün başlıklar başarısızsa hata (harcanan maliyetle).
+
+### Güvenlik
+
+Model çıktısı ve okunan sayfalar güvenilmez girdidir. Alt süreç: `--permission-mode dontAsk` (önceden izinli olmayan araç reddedilir), `--disallowedTools` ile `.env*`, anahtar dosyaları, `~/.ssh`, `~/.aws`, gh ve npm kimlikleri okunamaz; `--setting-sources ""` (hook yok); ortam yalnız claude'un çalışması ve oturum açması için gerekenler (eklenti host'unun token'ları yok); prompt stdin'den. Sayfadaki her model metni `esc()` ile; kaynak linki yalnız http(s) açılır.
+
+### Görünüm ve yüzeyler
+
+- Komut **Imprimatur: Best Practice Review (Claude)**: maliyet tahminiyle modal onay, bildirimde ilerleme, bitince BEST açılır. `npm run best -- [repo] [--pillars …] [--refresh-sources] [--budget 1.5]`.
+- BEST sayfası: durum (Açık / Uygulandı / Reddedildi) → [reddedilende gerekçe] → başlık → bileşen → öneri (önem sırasıyla): neden, sonraki adım, kanıt, kaynak linki, ilgili kararlar; **Uygulandı**, **Reddet…** (gerekçe; "Bilerek yapmadık" kararı seçtirir, `links.best.decision`), **Geri aç**, **Yeniden incele**; altında kaynak haritası ve yardımcı olacak araçlar.

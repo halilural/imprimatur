@@ -154,6 +154,12 @@
         "icon": "$(sparkle)"
       },
       {
+        "command": "imprimatur.bestPractices.run",
+        "title": "Best Practice Review (Claude)",
+        "category": "Imprimatur",
+        "icon": "$(sparkle)"
+      },
+      {
         "command": "imprimatur.setup.audit",
         "title": "Audit Agent Setup (agnix)",
         "category": "Imprimatur",

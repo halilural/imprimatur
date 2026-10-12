@@ -127,6 +127,16 @@ While the plugin is enabled, a plain `npm run setup` writes no hooks.
   (gone in a later audit) or dismissed with a reason (it does not come back).
   Also `npm run audit -- [repo] [--global] [--dry-run]` and the `setup_audit`
   MCP tool.
+- **Best practice review** (command *Imprimatur: Best Practice Review*, or
+  `npm run best`): recommendations for how the repo is built, from its own
+  architecture document, decisions and code. Claude first maps the stack to
+  where its best practice is read (public docs MCP servers, Context7, official
+  release notes and changelogs; checked before use), then reviews dependencies,
+  security and testing in parallel. A recommendation is kept only with an
+  official source read in the run and evidence in the repo; it says which
+  decisions it touches. Each is a record of the BEST task: open, applied, or
+  dismissed with why (a decision settles it, not applicable, accepted risk,
+  postponed). It costs Claude usage (about $1 a call, capped) and asks first.
 - **Waiting on you** (now the turn-end part of Bende bekleyenler): everything the agent asked of
   you (questions, commands waiting for permission, "verify / test this" at the
   end of a turn), open ones first. Questions close once you reply; things to go

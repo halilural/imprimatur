@@ -16,7 +16,7 @@ const FILTERS = ["active", "open", "done"];
 const TASK_STATUSES = ["open", "active", "done", "dropped"];
 const STATUS_TR = { active: "Sürüyor", open: "Açık", done: "Bitti", dropped: "Bırakıldı" };
 /** Tasks the importer opens to hold records (#59), not work (#75); db.whereWeLeftOff leaves them out too. */
-const CONTAINERS = ["ADR", "PDR", "TEST", "AUDIT"];
+const CONTAINERS = ["ADR", "PDR", "TEST", "AUDIT", "BEST"];
 const KIND_TR = { todo: "yapılacak", question: "soru", answer: "cevap", decision: "karar", note: "not", fixme: "hata", adr: "ADR", pdr: "PDR", test: "test" };
 const WHO_TR = { user: "Sen", agent: "Ajan", hook: "Hook", import: "İçe aktarma" };
 const TODO_KINDS = ["todo", "fixme"];
@@ -243,7 +243,7 @@ function taskPage(db, task, view, opts) {
     }),
     tests: recs.filter((/** @type {any} */ r) => r.kind === "test"),
     notes: live
-      .filter((/** @type {any} */ r) => r.kind === "note" || (r.kind === "question" && r.status !== "open"))
+      .filter((/** @type {any} */ r) => (r.kind === "note" && !r.links?.bestSources) || (r.kind === "question" && r.status !== "open"))
       .map((/** @type {any} */ r) => ({ ...r, answers: answers.filter((/** @type {any} */ a) => a.parent_id === r.id) })),
     activity: events,
     older: Math.max(0, total - used),
@@ -254,6 +254,8 @@ function taskPage(db, task, view, opts) {
     flash: flash?.id,
     // The audit's findings (#77): grouped like Agent setup's Recommendations, not a flat todo list.
     audit: task.key === "AUDIT" ? require("./setup-audit-tree.js").auditGroups(recs, { lang: "tr" }) : undefined,
+    // Best-practice recommendations (#86): grouped, with the source map they were read from.
+    best: task.key === "BEST" ? { groups: require("./best-tree.js").bestGroups(recs), map: recs.find((/** @type {any} */ r) => r.links?.bestSources)?.links.bestSources } : undefined,
   };
 }
 
@@ -447,7 +449,37 @@ function taskBlocks(c) {
     }).join("")}</section>`
     : "";
   const activity = `<section class="blk" data-k="act" aria-label="Etkinlik"><h2>Etkinlik</h2>${c.activity.map((v, i) => `<div class="ev" data-k="e${i}"><span class="when">${esc(when(v.at))}</span><span class="who w-${esc(v.kind)}">${esc(v.who)}</span><span class="what">${esc(v.what)}</span></div>`).join("") || '<p class="empty" data-k="none">Henüz olay yok.</p>'}${c.older || c.showOld ? `<button class="link" data-k="more" data-act="old" data-task="${c.id}">${c.showOld ? "Eski olayları gizle" : `${c.older} eski olayı göster`}</button>` : ""}</section>`;
-  return head + asks + (c.audit ? auditBlock(c.audit) : todos) + notes + decisions + tests + activity;
+  return head + asks + (c.audit ? auditBlock(c.audit) : c.best ? bestBlock(c.best) : todos) + notes + decisions + tests + activity;
+}
+
+const SEV_TR = { high: "yüksek", medium: "orta", low: "düşük" };
+/**
+ * The BEST task's recommendations (#86): durum → (gerekçe) → başlık → bileşen → öneri,
+ * each with its source, evidence and next step, and Uygulandı / Reddet / Geri aç; then
+ * the source map they were read from.
+ * @param {{groups: any[], map?: any}} best
+ */
+function bestBlock(best) {
+  const rec = (/** @type {any} */ r) => {
+    const b = r.links.best;
+    const open = r.status === "open";
+    const last = best.map?.lastRun?.[b.pillar];
+    const stale = open && b.seen && last && b.seen < last;
+    const acts = open
+      ? `<button class="primary" data-act="rec" data-op="done" data-id="${r.id}">Uygulandı</button><button class="ghost" data-act="bestDismiss" data-id="${r.id}">Reddet…</button>`
+      : `<button class="ghost" data-act="rec" data-op="open" data-id="${r.id}">Geri aç</button>`;
+    return `<div class="bfind s-${esc(r.status)}" id="rec-${r.id}" data-k="r${r.id}" data-q="${esc(r.title)}"><div class="row1"><span class="sev sev-${esc(b.severity)}">${esc(SEV_TR[/** @type {keyof typeof SEV_TR} */ (b.severity)] ?? b.severity)}</span><span class="ttl">${esc(r.title)}</span>${stale ? '<span class="dim">son turda görülmedi</span>' : ""}</div>
+<div class="bwhy">${esc(r.body?.split("\n\n")[0] ?? "")}</div>
+<div class="bmeta"><span><b>Sonraki adım:</b> ${esc(b.next_step ?? "")}</span><span><b>Kanıt:</b> <span class="mono">${esc((b.evidence ?? []).join(", "))}</span></span><span><b>Kaynak:</b> <a href="#" data-act="url" data-url="${esc(b.source?.url ?? "")}">${esc(b.source?.title ?? b.source?.url ?? "")}</a> <span class="dim">(${esc(b.source?.version_or_date ?? "")})</span></span>${b.decision_ids?.length ? `<span><b>İlgili kararlar:</b> ${b.decision_ids.map((/** @type {number} */ id) => `<a href="#" data-act="showRecord" data-id="${id}">#${id}</a>`).join(", ")}</span>` : ""}</div>
+<div class="acts">${acts}</div></div>`;
+  };
+  const group = (/** @type {any} */ g, /** @type {number} */ depth) =>
+    `<details class="agrp d${depth}" data-k="${esc(g.key)}"${g.key === "st:open" || (depth === 1 && g.key.startsWith("pillar:")) ? " open" : ""}><summary><span class="alabel">${esc(g.label)}</span><span class="dim">${g.count}</span></summary><div class="abody">${g.children ? g.children.map((/** @type {any} */ c) => group(c, depth + 1)).join("") : g.records.map(rec).join("")}</div></details>`;
+  const open = best.groups.find((g) => g.key === "st:open")?.count ?? 0;
+  const map = best.map
+    ? `<details class="agrp d0" data-k="srcmap"><summary><span class="alabel">Kaynak haritası</span><span class="dim">${best.map.components.length} bileşen</span></summary><div class="abody">${best.map.components.map((/** @type {any} */ c) => `<div class="afind"><span class="ttl"><b>${esc(c.name)}</b> <span class="dim">${esc(c.version)}</span></span><span class="dim">${c.sources.map((/** @type {any} */ s) => (s.kind === "url" ? `<a href="#" data-act="url" data-url="${esc(s.ref)}">${esc(s.ref.replace(/^https:\/\//, ""))}</a>` : `${esc(s.kind)} ${esc(s.ref)}`)).join(" · ")}</span></div>`).join("")}${best.map.missing?.length ? `<p class="dim">Yardımcı olacak araçlar: ${best.map.missing.map((/** @type {any} */ m) => `${esc(m.component)}: ${esc(m.suggestion)}`).join(" · ")}</p>` : ""}</div></details>`
+    : "";
+  return `<section class="blk" data-k="best" aria-label="Best practice önerileri"><div class="h2row" data-k="h"><h2>Best practice önerileri <span class="dim">· ${open} açık</span></h2><button class="ghost" data-act="bestRun">Yeniden incele</button></div>${best.groups.map((g) => group(g, 0)).join("") || '<p class="empty" data-k="none">Henüz öneri yok.</p>'}${map}</section>`;
 }
 
 const AUDIT_LEVEL_TR = { error: "hata", warning: "uyarı", info: "bilgi" };
@@ -686,6 +718,11 @@ const TASKS_CSS = `
   #pane.stale > * { opacity: .4; pointer-events: none; }
   #pane.stale::before { content: "Yükleniyor…"; display: block; padding: 12px 0; color: var(--vscode-descriptionForeground); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+  .bfind { padding: 8px 0 8px 16px; border-bottom: 1px solid var(--vscode-widget-border, transparent); } .bfind .row1 { display: flex; gap: 8px; align-items: baseline; }
+  .bfind .ttl { font-weight: 600; } .bfind.s-done .ttl, .bfind.s-dropped .ttl { opacity: .7; } .bwhy { margin: 4px 0; }
+  .bmeta { display: flex; flex-direction: column; gap: 2px; font-size: .92em; } .bfind .acts { display: flex; gap: 8px; margin-top: 6px; }
+  .sev { font-size: .8em; font-weight: 700; padding: 1px 6px; border-radius: 8px; } .sev-high { background: var(--vscode-inputValidation-errorBackground, rgba(255,0,0,.2)); }
+  .sev-medium { background: var(--vscode-inputValidation-warningBackground, rgba(255,165,0,.2)); } .sev-low { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
   .agrp { margin: 2px 0; } .agrp > summary { cursor: pointer; display: flex; gap: 8px; align-items: baseline; padding: 4px 0; font-weight: 600; }
   .agrp .agrp { margin-left: 16px; } .agrp.d0 > summary { font-size: 1.05em; } .abody { padding-left: 2px; }
   .afind { display: flex; gap: 8px; align-items: baseline; padding: 3px 0 3px 16px; } .afind .ttl { flex: 1; } .afind.s-done .ttl, .afind.s-dropped .ttl { opacity: .7; }
