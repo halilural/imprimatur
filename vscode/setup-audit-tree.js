@@ -26,6 +26,15 @@ const SOURCES = [
   ["plugin", "Plugins", "Plugin'ler", "extensions"],
   ["worktree", "Worktrees", "Worktree'ler", "git-branch"],
 ];
+/** Why Claude Code does not load a file (#78): [English, Turkish]. */
+const IDLE_LABELS = {
+  catalog: ["Marketplace catalog", "Marketplace kataloğu"],
+  temp: ["Leftover temp clone", "Artık geçici kopya"],
+  "not-installed": ["Plugin version not installed", "Kurulu olmayan plugin sürümü"],
+  disabled: ["Plugin turned off", "Kapalı plugin"],
+  "other-tool": ["For another tool, not a plugin part", "Başka araç için, plugin parçası değil"],
+  worktree: ["Worktree copy", "Worktree kopyası"],
+};
 const REASON_LABELS = {
   plugin: ["Third-party plugin", "Üçüncü taraf plugin", "extensions"],
   synced: ["Synced skill (claude.ai)", "Eşitlenen skill (claude.ai)", "cloud"],
@@ -67,6 +76,9 @@ function reasonOf(r) {
 function ruleNameOf(r) {
   return r.links.audit.ruleName ?? /\*\*Rule:\*\* \S+ \(([^)]+)\)/.exec(r.body ?? "")?.[1];
 }
+
+/** Open and loaded by Claude Code: what Recommendations counts (#78). @param {AuditRecord} r */
+const isOpen = (r) => r.status === "open" && r.links.audit.effect !== "inactive";
 
 /** "claude-hooks" → "Claude hooks". @param {string} c */
 const categoryLabel = (c) => (c ? c[0].toUpperCase() + c.slice(1).replace(/-/g, " ") : "Other");
@@ -110,7 +122,8 @@ function bySource(recs, lang) {
 }
 
 /**
- * The one grouping of a root's audit records (see the top of the file).
+ * The one grouping of a root's audit records (see the top of the file). Open findings
+ * split into what Claude Code loads and what it does not (#78), by why.
  * @param {AuditRecord[]} records @param {{lang?: "en" | "tr"}} [o] @returns {Group[]}
  */
 function auditGroups(records, { lang = "en" } = {}) {
@@ -119,6 +132,23 @@ function auditGroups(records, { lang = "en" } = {}) {
   return STATUSES.flatMap(([st, en, tr, icon]) => {
     const rs = recs.filter((r) => r.status === st);
     if (!rs.length) return [];
+    if (st === "open") {
+      const on = rs.filter((r) => r.links.audit.effect !== "inactive");
+      const off = rs.filter((r) => r.links.audit.effect === "inactive");
+      /** @type {Group[]} */
+      const out = [];
+      if (on.length) out.push({ key: "st:open", label: L === 2 ? tr : en, icon, count: on.length, levels: countLevels(on), children: bySource(on, L) });
+      if (off.length) {
+        out.push({
+          key: "st:idle", label: L === 2 ? "Yüklenmiyor" : "Not loaded", icon: "eye-closed", count: off.length, levels: countLevels(off),
+          children: groupBy(off, (r) => r.links.audit.why ?? "other-tool", (why, xs) => {
+            const lab = IDLE_LABELS[/** @type {keyof typeof IDLE_LABELS} */ (why)] ?? [why, why];
+            return { key: `idle:${why}`, label: lab[L - 1], icon: "eye-closed", children: bySource(xs, L) };
+          }),
+        });
+      }
+      return out;
+    }
     const children = st === "dropped"
       ? groupBy(rs, reasonOf, (why, xs) => {
         const lab = REASON_LABELS[/** @type {keyof typeof REASON_LABELS} */ (why)];
@@ -157,7 +187,7 @@ function groupRow(g, root) {
  */
 function scopeRow(scope) {
   const recs = scope.records.filter((r) => r.links?.audit);
-  const open = recs.filter((r) => r.status === "open");
+  const open = recs.filter(isOpen);
   return {
     type: "group", label: scope.label, description: open.length ? `${open.length} open · ${levelLine(open)}` : "nothing open", icon: "folder",
     tooltip: scope.summary ?? undefined, children: auditGroups(recs).map((g) => groupRow(g, scope.root)),
@@ -175,8 +205,8 @@ function recommendationsRow(scopes) {
     return { type: "leaf", label: "Recommendations", description: "audit the agent setup (agnix)", icon: "lightbulb", command: "imprimatur.setup.audit",
       tooltip: "Lints every agent file against rules from the tools' docs; findings are kept as records (open, applied, dismissed)." };
   }
-  const open = audited.flatMap((s) => s.records.filter((r) => r.links?.audit && r.status === "open"));
+  const open = audited.flatMap((s) => s.records.filter((r) => r.links?.audit && isOpen(r)));
   return { type: "group", label: `Recommendations (${open.length})`, description: levelLine(open), icon: "lightbulb", open: open.length, children: audited.map(scopeRow) };
 }
 
-module.exports = { recommendationsRow, scopeRow, findingRow, groupRow, auditGroups, reasonOf, ruleNameOf, levelLine, REASON_LABELS };
+module.exports = { IDLE_LABELS, isOpen, recommendationsRow, scopeRow, findingRow, groupRow, auditGroups, reasonOf, ruleNameOf, levelLine, REASON_LABELS };

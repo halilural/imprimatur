@@ -137,7 +137,7 @@ test("audit: the MCP tool audits the repo with the agnix it finds (AGNIX_BIN)", 
     const out = callTool(db, "setup_audit", { repo: root });
     assert.equal(out.audits.length, 1);
     assert.equal(out.audits[0].added, 1);
-    assert.match(digest("setup_audit", out, {}), /1 files, 1 findings \(1 warning; project 1\); 1 new/);
+    assert.match(digest("setup_audit", out, {}), /1 files, 1 findings \(1 warning; project 1\); 1 open, 0 not loaded; 1 new/);
     const got = callTool(db, "task_get", { repo: root, key: TASK });
     assert.equal(got.records[0].kind, "fixme");
   } finally {
@@ -254,4 +254,36 @@ test("audit: synced skills are their own source; the AUDIT task page shows the f
   } finally {
     db.close();
   }
+});
+
+test("audit: what Claude Code loads — installed, on, a plugin part; the rest not loaded, with why", () => {
+  const { effectOf, pluginsOf, summaryLine } = require("../vscode/setup-audit.js");
+  const { auditGroups } = require("../vscode/setup-audit-tree.js");
+  const h = fs.mkdtempSync(path.join(os.tmpdir(), "audit-effect-"));
+  const c = path.join(h, ".claude", "plugins", "cache");
+  fs.mkdirSync(path.join(h, ".claude", "plugins"), { recursive: true });
+  fs.writeFileSync(path.join(h, ".claude", "plugins", "installed_plugins.json"), JSON.stringify({ plugins: {
+    "dd@off": [{ scope: "user", installPath: path.join(c, "off", "dd", "1.0") }],
+    "lin@off": [{ scope: "user", installPath: path.join(c, "off", "lin", "abc") }],
+    "cm@x": [{ scope: "project", projectPath: "/p", installPath: path.join(c, "x", "cm", "2.0") }],
+  } }));
+  fs.writeFileSync(path.join(h, ".claude", "settings.json"), JSON.stringify({ enabledPlugins: { "lin@off": false, "cm@x": false } }));
+  const plugins = pluginsOf(h);
+  const eff = (p, group = "plugin") => effectOf(path.join(h, p), { group }, plugins);
+  assert.deepEqual(eff(".claude/plugins/cache/off/dd/1.0/hooks/hooks.json"), { effect: "active" });
+  assert.deepEqual(eff(".claude/plugins/cache/off/dd/1.0/skills/x/SKILL.md"), { effect: "active" });
+  assert.deepEqual(eff(".claude/plugins/cache/off/dd/1.0/.cursor-plugin/plugin.json"), { effect: "inactive", why: "other-tool" });
+  assert.deepEqual(eff(".claude/plugins/cache/off/dd/0.9/hooks/hooks.json"), { effect: "inactive", why: "not-installed" });
+  assert.deepEqual(eff(".claude/plugins/cache/off/lin/abc/hooks/hooks.json"), { effect: "inactive", why: "disabled" });
+  assert.deepEqual(eff(".claude/plugins/cache/x/cm/2.0/hooks/hooks.json"), { effect: "active" }, "a project-scope install is on in its project");
+  assert.deepEqual(eff(".claude/plugins/marketplaces/off/plugins/dd/hooks/hooks.json"), { effect: "inactive", why: "catalog" });
+  assert.deepEqual(eff(".claude/plugins/cache/temp_git_1_ab/mcp.json"), { effect: "inactive", why: "temp" });
+  assert.deepEqual(eff(".claude/settings.json", "user"), { effect: "active" });
+  assert.deepEqual(eff("p/.claude/worktrees/a/CLAUDE.md", "worktree"), { effect: "inactive", why: "worktree" });
+  // Grouped: open = loaded; not loaded by why. The summary counts them apart.
+  const rec = (id, effect, why) => ({ id, status: "open", title: `R: m${id}`, links: { audit: { fp: `${id}`, rule: "R", level: "warning", category: "c", group: "plugin", owner: "dd", file: "/f", effect, ...(why ? { why } : {}) } } });
+  const recs = [rec(1, "active"), rec(2, "inactive", "catalog"), rec(3, "inactive", "catalog"), rec(4, "inactive", "temp")];
+  assert.deepEqual(auditGroups(recs).map((g) => [g.key, g.count]), [["st:open", 1], ["st:idle", 3]]);
+  assert.deepEqual(auditGroups(recs)[1].children.map((g) => g.label), ["Marketplace catalog", "Leftover temp clone"]);
+  assert.equal(summaryLine(recs), "1 open (1 warning) · 3 not loaded");
 });
