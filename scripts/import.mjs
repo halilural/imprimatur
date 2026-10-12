@@ -25,6 +25,11 @@ try {
     }
     const r = importRepo(db, root, { dryRun });
     console.log(`${root}: ${summary(r)}${dryRun ? " (dry run: nothing written)" : ""}`);
+    // The design documents follow (#73): hand-written ones adopted, their records linked.
+    if (!dryRun) {
+      const { syncDocs, describe } = require("../vscode/docs-sync.js");
+      for (const line of describe(syncDocs(db, root, { adopt: true }), root)) console.log(`  ${line}`);
+    }
     for (const f of r.files) {
       if (verbose || f.unparsed.length || f.expected !== f.prefixed) {
         console.log(`  ${f.file}: ${f.records} records, ${f.added} new, ${f.updated} updated${f.expected !== f.prefixed ? `, count ${f.prefixed}/${f.expected}` : ""}`);

@@ -525,7 +525,7 @@
         "imprimatur.docs.export": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Write the repo's design documents (the panel's **Mimari** and **Ürün** tabs) to `docs/ARCHITECTURE.md` and `docs/PRODUCT.md`, 2 s after they change. The database stays the source of truth: edit in the panel. Imprimatur never commits them."
+          "markdownDescription": "Keep the repo's design documents (the panel's **Mimari** and **Ürün** tabs) and their files `ARCHITECTURE.md` and `PRODUCT.md` in step: in `docs/`, or the folder `.claude/imprimatur.json` names (`{\"docs\": {\"dir\": \"docs/design\"}}`). 2 s after a change, the file is written; an edit saved in the file is taken in; a hand-written file is adopted. A section changed on both sides is a conflict: `npm run docs -- sync --take file|db`."
         }
       }
     },

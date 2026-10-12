@@ -239,7 +239,22 @@ before its ADR/PDR, or a merged branch is left behind. Each check is
 Records a repo still keeps in Markdown (`docs/todos/*/TODO.md`, `docs/design`,
 `PRODUCT.md` / `docs/product`, `docs/testing`) move in with
 `npm run import -- <repo> [--dry-run]` or **Imprimatur: Import Markdown Records**;
-it can run again (nothing is added twice) and checks each file's count. Or by hand:
+it can run again (nothing is added twice) and checks each file's count.
+
+**Design documents** (the panel's **Mimari** and **Ürün** tabs) stay in step with
+`ARCHITECTURE.md` and `PRODUCT.md` in `docs/`, or the folder
+`.claude/imprimatur.json` names: `{"docs": {"dir": "docs/design"}}`. Whenever
+Imprimatur comes to a repo, the sync gets both sides to the same text: with no
+files it writes them; a hand-written file is adopted (each `##` heading a section,
+its imported records linked) and rewritten in Imprimatur's form; an edit saved in
+the file is taken in, a change in Imprimatur written out. A section changed on both
+sides is a conflict and neither is written:
+`npm run docs -- sync [repo] [--dry-run] [--take file|db]`. Files that went away
+after an import come back from git: `npm run docs -- sync --rev <commit>`. It runs at
+session start, after `doc_section_upsert`, after an edit of the file, and in VS Code;
+`{"docs": {"sync": false}}` turns it off.
+
+Or by hand:
 
 1. Hook, in your project's `.claude/settings.json` (extensions after the
    script name; default `md mdx`):

@@ -7,11 +7,18 @@
 //   continue the record above. Text outside such lines (free sections) becomes
 //   a note, so nothing is lost.
 // - docs/design/*.md: each "ARCH:" line an ADR record, a section's other text
-//   (prose, diagrams) one ADR record under the heading; task "ADR".
-// - PRODUCT.md, docs/product/*.md: each section a PDR record; task "PDR".
+//   (prose, diagrams) one ADR record under the heading; task "ADR". Not
+//   docs/design/PRODUCT.md (product, below) nor README.md (how the folder is kept,
+//   no design in it), #73.
+// - PRODUCT.md, docs/product/*.md, docs/design/PRODUCT.md: each section a PDR
+//   record; task "PDR".
 // - docs/testing/*.md: each section a test record; task "TEST".
+// A file Imprimatur generated (docs-export.js HEADER) is never a source.
 // Every record's uid comes from its file and text, so a second run updates
-// (a TODO that became DONE) instead of adding.
+// (a TODO that became DONE) instead of adding. A record in another task than its
+// file now says (an earlier run put it there) moves: the old one dropped, a new one
+// added. links.area is the "##" heading it sits under: docs-sync.js links it to that
+// document section. rev reads the files from a git revision (files since deleted).
 "use strict";
 const { execFileSync } = require("node:child_process");
 const crypto = require("node:crypto");
@@ -79,13 +86,17 @@ function fenceTracker() {
  * @param {string} text @returns {{level: number, heading: string, lines: string[]}[]}
  */
 function sections(text) {
-  /** @type {{level: number, heading: string, lines: string[]}[]} */
-  const out = [{ level: 1, heading: "", lines: [] }];
+  /** @type {{level: number, heading: string, area: string, lines: string[]}[]} */
+  const out = [{ level: 1, heading: "", area: "", lines: [] }];
   const fence = fenceTracker();
+  // The "##" heading a part sits under ("" before the first).
+  let area = "";
   for (const line of text.split(/\r?\n/)) {
     const h = !fence(line) && /^(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/.exec(line);
-    if (h) out.push({ level: h[1].length, heading: h[2], lines: [] });
-    else out[out.length - 1].lines.push(line);
+    if (h) {
+      if (h[1].length <= 2) area = h[1].length === 2 ? h[2] : "";
+      out.push({ level: h[1].length, heading: h[2], area, lines: [] });
+    } else out[out.length - 1].lines.push(line);
   }
   return out;
 }
@@ -173,7 +184,7 @@ function parseDesign(text, file) {
     for (const line of part.lines) {
       const m = /^- ARCH: ?(.*)$/.exec(line);
       if (m) {
-        last = { kind: "adr", status: "done", owner: null, title: m[1].trim(), body: null, section: heading };
+        last = { kind: "adr", status: "done", owner: null, title: m[1].trim(), body: null, section: heading, area: part.area };
         archs.push(last);
       } else if (last && /^\s+\S/.test(line)) last.body = last.body ? `${last.body}\n${line.trim()}` : line.trim();
       else {
@@ -183,7 +194,7 @@ function parseDesign(text, file) {
     }
     // The section's prose and diagrams first, then its ARCH lines.
     const body = trimBlank(other);
-    if (body.length) records.push({ kind: "adr", status: "done", owner: null, title: heading, body: body.join("\n"), section: heading });
+    if (body.length) records.push({ kind: "adr", status: "done", owner: null, title: heading, body: body.join("\n"), section: heading, area: part.area });
     records.push(...archs);
   }
   return records;
@@ -200,46 +211,109 @@ function parseSections(text, file, kind) {
     const toc = body.length > 0 && body.every((l) => !l.trim() || /^\s*- \[[^\]]+\]\(#[^)]*\)\s*$/.test(l));
     if (toc || !body.length) return [];
     const title = part.heading || path.basename(file, ".md");
-    return [{ kind, status: kind === "test" ? "open" : "done", owner: null, title, body: body.join("\n") || null, section: title }];
+    return [{ kind, status: kind === "test" ? "open" : "done", owner: null, title, body: body.join("\n") || null, section: title, area: part.area }];
   });
 }
 
-/** @param {string} dir */
-const mdFiles = (dir) => {
-  try {
-    return fs.readdirSync(dir).filter((f) => f.endsWith(".md")).sort().map((f) => path.join(dir, f));
-  } catch {
-    return [];
+/**
+ * The repo's files, from the working tree or (rev) a git revision; paths relative to root.
+ * @param {string} root @param {string} [rev]
+ */
+function filesAt(root, rev) {
+  if (!rev) {
+    return {
+      /** @param {string} dir @param {boolean} [dirs] */
+      list(dir, dirs = false) {
+        // Followed like before: a symlinked task folder or file counts.
+        const isDir = (/** @type {string} */ name) => {
+          try {
+            return fs.statSync(path.join(root, dir, name)).isDirectory();
+          } catch {
+            return undefined;
+          }
+        };
+        try {
+          return fs.readdirSync(path.join(root, dir)).filter((name) => {
+            const d = isDir(name);
+            return d !== undefined && d === dirs;
+          });
+        } catch {
+          return [];
+        }
+      },
+      /** @param {string} rel @returns {string | undefined} */
+      read(rel) {
+        try {
+          return fs.readFileSync(path.join(root, rel), "utf8");
+        } catch {
+          return undefined;
+        }
+      },
+    };
   }
-};
+  const git = (/** @type {string[]} */ args) => {
+    try {
+      return execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 << 20 });
+    } catch {
+      return undefined;
+    }
+  };
+  if (git(["rev-parse", "--verify", "--quiet", `${rev}^{commit}`]) === undefined) throw new Error(`Imprimatur: no git revision ${rev} in ${root}`);
+  const posix = (/** @type {string} */ p) => p.split(path.sep).join("/");
+  return {
+    /** @param {string} dir @param {boolean} [dirs] */
+    list(dir, dirs = false) {
+      return (git(["ls-tree", rev, `${posix(dir)}/`]) ?? "").split("\n").flatMap((l) => {
+        const m = /^\S+ (\S+) \S+\t(.*)$/.exec(l);
+        return m && (m[1] === "tree") === dirs ? [path.posix.basename(m[2])] : [];
+      });
+    },
+    /** @param {string} rel @returns {string | undefined} */
+    read(rel) {
+      return git(["show", `${rev}:${posix(rel)}`]);
+    },
+  };
+}
+
+/** Whether Imprimatur wrote the text (docs-export.js HEADER on its first line). @param {string | undefined} text */
+const generated = (text) => text?.split("\n", 1)[0].replace(/\r$/, "") === require("./docs-export.js").HEADER;
+
+/** @typedef {"todo" | "design" | "product" | "test" | "skip" | "generated"} SourceType */
 
 /**
- * Every Markdown source of records in a repo, with what it holds.
- * @param {string} root
- * @returns {{file: string, type: "todo" | "design" | "product" | "test", key: string}[]}
+ * Every Markdown source of records in a repo, with what it holds and its text. "skip": a
+ * file that holds no records (docs/design/README.md) although an older run read it;
+ * "generated": a design document Imprimatur wrote from its sections (docs-sync.js adopted
+ * the hand-written file, whose records stay as they are).
+ * @param {string} root @param {{rev?: string}} [o]
+ * @returns {{file: string, rel: string, text: string, type: SourceType, key: string}[]}
  */
-function sources(root) {
-  /** @type {{file: string, type: "todo" | "design" | "product" | "test", key: string}[]} */
+function sources(root, { rev } = {}) {
+  const at = filesAt(root, rev);
+  /** @type {{file: string, rel: string, text: string, type: SourceType, key: string}[]} */
   const out = [];
+  const add = (/** @type {string} */ rel, /** @type {SourceType} */ type, /** @type {string} */ key) => {
+    const text = at.read(rel);
+    if (text !== undefined) out.push({ file: path.join(root, rel), rel, text, type: generated(text) ? "generated" : type, key });
+  };
+  const md = (/** @type {string} */ dir) => at.list(dir).filter((f) => f.endsWith(".md")).sort().map((f) => path.join(dir, f));
   const seen = new Set();
   for (const dir of TODO_DIRS) {
-    let names = [];
-    try {
-      names = fs.readdirSync(path.join(root, dir), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
-    } catch {}
-    for (const name of names.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))) {
-      const file = path.join(root, dir, name, "TODO.md");
+    for (const name of at.list(dir, true).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))) {
       // A task in both layouts (mid-move): the new one wins.
-      if (seen.has(name) || !fs.existsSync(file)) continue;
-      seen.add(name);
-      out.push({ file, type: "todo", key: /^\d+$/.test(name) ? `#${name}` : name });
+      if (seen.has(name)) continue;
+      const before = out.length;
+      add(path.join(dir, name, "TODO.md"), "todo", /^\d+$/.test(name) ? `#${name}` : name);
+      if (out.length > before) seen.add(name);
     }
   }
-  for (const file of mdFiles(path.join(root, "docs", "design"))) out.push({ file, type: "design", key: "ADR" });
-  for (const file of [path.join(root, "PRODUCT.md"), ...mdFiles(path.join(root, "docs", "product"))]) {
-    if (fs.existsSync(file)) out.push({ file, type: "product", key: "PDR" });
+  for (const rel of md(path.join("docs", "design"))) {
+    const name = path.basename(rel).toUpperCase();
+    if (name === "PRODUCT.MD") add(rel, "product", "PDR");
+    else add(rel, name === "README.MD" ? "skip" : "design", "ADR");
   }
-  for (const file of mdFiles(path.join(root, "docs", "testing"))) out.push({ file, type: "test", key: "TEST" });
+  for (const rel of ["PRODUCT.md", ...md(path.join("docs", "product"))]) add(rel, "product", "PDR");
+  for (const rel of md(path.join("docs", "testing"))) add(rel, "test", "TEST");
   return out;
 }
 
@@ -258,27 +332,38 @@ function originOf(root) {
  * Imports a repo's Markdown records; safe to run again.
  * @param {any} db vscode/db.js handle
  * @param {string} root git root
- * @param {{dryRun?: boolean, origin?: string}} [o]
- * @returns {{files: {file: string, records: number, added: number, updated: number, dropped: number, unparsed: string[], expected: number, prefixed: number}[], total: number, added: number, updated: number, dropped: number}}
+ * @param {{dryRun?: boolean, origin?: string, rev?: string, only?: SourceType[]}} [o] rev: read the files
+ * from this git revision; only: just these source types (a "skip" file is always handled)
+ * @returns {{files: {file: string, records: number, added: number, updated: number, dropped: number, moved: number, unparsed: string[], expected: number, prefixed: number}[], total: number, added: number, updated: number, dropped: number, moved: number}}
  */
-function importRepo(db, root, { dryRun = false, origin = originOf(root) } = {}) {
+function importRepo(db, root, { dryRun = false, origin = originOf(root), rev, only } = {}) {
   const repo = dryRun ? { id: -1 } : db.repoOf(root, { origin });
   // uids name the repo by its remote, the same on every machine; its path otherwise.
   const repoKey = origin ?? root;
-  const report = { files: /** @type {any[]} */ ([]), total: 0, added: 0, updated: 0, dropped: 0 };
+  const report = { files: /** @type {any[]} */ ([]), total: 0, added: 0, updated: 0, dropped: 0, moved: 0 };
   const pointers = [];
   /** @type {Map<number, number>} */
   const positions = new Map();
-  for (const src of sources(root)) {
-    const text = fs.readFileSync(src.file, "utf8");
-    const rel = path.relative(root, src.file);
+  for (const src of sources(root, { rev })) {
+    const { text, rel } = src;
+    if (src.type === "skip") {
+      // Read by an older run (a README in docs/design, #73): its records go.
+      const stale = dryRun ? [] : db.recordsFromSource(repo.id, rel).filter((/** @type {any} */ r) => r.status !== "dropped");
+      for (const r of stale) db.updateRecord(r.id, { status: "dropped" }, ACTOR);
+      if (stale.length) {
+        report.files.push({ file: rel, records: 0, added: 0, updated: 0, dropped: stale.length, moved: 0, unparsed: [], expected: 0, prefixed: 0 });
+        report.dropped += stale.length;
+      }
+      continue;
+    }
+    if (src.type === "generated" || (only && !only.includes(src.type))) continue;
     let parsed;
     if (src.type === "todo") parsed = parseTodo(text, src.key);
     else {
       const records = src.type === "design" ? parseDesign(text, rel) : parseSections(text, rel, src.type === "product" ? "pdr" : "test");
       parsed = { task: { key: src.key, title: SPECIAL[/** @type {keyof typeof SPECIAL} */ (src.key)], status: "open", summary: null }, records, unparsed: [], expected: 0 };
     }
-    const entry = { file: rel, records: parsed.records.length, added: 0, updated: 0, dropped: 0, unparsed: parsed.unparsed, expected: 0, prefixed: 0 };
+    const entry = { file: rel, records: parsed.records.length, added: 0, updated: 0, dropped: 0, moved: 0, unparsed: parsed.unparsed, expected: 0, prefixed: 0 };
     if (src.type === "todo") {
       entry.expected = /** @type {any} */ (parsed).expected;
       entry.prefixed = parsed.records.filter((r) => !r.free).length;
@@ -304,20 +389,36 @@ function importRepo(db, root, { dryRun = false, origin = originOf(root) } = {}) 
     // Records keep the file's order; files that share a task (ADR, TEST) follow each other.
     const seen = new Set();
     for (const r of parsed.records) {
-      const uid = uidOf(r);
-      seen.add(uid);
+      let uid = uidOf(r);
+      // The record once moved to this task (below) has its own uid.
+      const movedUid = `${uid}@${t.key}`;
+      seen.add(uid).add(movedUid);
       const position = (positions.get(task.id) ?? 0) + 1;
       positions.set(task.id, position);
       // What Markdown says now; kept in links.md, so a later run applies only
       // what changed in Markdown and leaves changes made in the database.
       const md = { kind: r.kind, status: r.status, owner: r.owner, title: r.title || "(boş)", body: r.body, position, pointer: Boolean(r.pointer) };
+      const where = { source: rel, ...(r.area !== undefined && { area: r.area }) };
       const parentId = r.answers ? ids.get(r.answers) ?? null : null;
-      const old = db.recordByUid(uid);
+      let old = db.recordByUid(movedUid) ?? db.recordByUid(uid);
+      /** @type {any} */ let from;
+      if (old && old.task_id !== task.id && old.links?.md?.kind && old.links.md.kind !== md.kind) {
+        // An earlier run read the file as another kind, into another task (docs/design/PRODUCT.md
+        // as ADRs, #73). A record moved by hand (or by a task merge) keeps its task.
+        from = old;
+        old = undefined;
+        uid = movedUid;
+      }
       let rec;
       if (!old) {
         const { pointer, ...fields } = md;
-        rec = db.addRecord(task.id, { ...fields, parent_id: parentId, links: { source: rel, md }, uid }, ACTOR);
-        entry.added++;
+        // A moved record keeps what was done to it in the database.
+        if (from && from.status !== "dropped") fields.status = from.status;
+        rec = db.addRecord(task.id, { ...fields, parent_id: parentId, links: { ...where, md }, uid }, ACTOR);
+        if (from) {
+          if (from.status !== "dropped") db.updateRecord(from.id, { status: "dropped", links: { ...from.links, moved_to: rec.id } }, ACTOR);
+          entry.moved++;
+        } else entry.added++;
         if (pointer && rec.status === "open") pointers.push(rec.id);
       } else {
         const snap = old.links?.md;
@@ -327,7 +428,7 @@ function importRepo(db, root, { dryRun = false, origin = originOf(root) } = {}) 
         }
         if (parentId && old.parent_id == null) patch.parent_id = parentId;
         const changed = Object.keys(patch).some((f) => JSON.stringify(old[f] ?? null) !== JSON.stringify(patch[f] ?? null));
-        rec = db.updateRecord(old.id, { ...patch, links: { ...old.links, source: rel, md } }, ACTOR);
+        rec = db.updateRecord(old.id, { ...patch, links: { ...old.links, ...where, md } }, ACTOR);
         if (changed) entry.updated++;
         // The 👉 follows Markdown only when Markdown moved it.
         if (md.pointer && !snap?.pointer && rec.status === "open") pointers.push(rec.id);
@@ -336,7 +437,8 @@ function importRepo(db, root, { dryRun = false, origin = originOf(root) } = {}) 
       ids.set(r, rec.id);
     }
     // Gone from Markdown (removed, or reworded: its text is in its uid): dropped, never deleted.
-    for (const gone of db.recordsFromSource(repo.id, rel)) {
+    // Not when reading an older revision: what was added since is not gone.
+    for (const gone of rev ? [] : db.recordsFromSource(repo.id, rel)) {
       if (seen.has(gone.uid) || gone.status === "dropped") continue;
       db.updateRecord(gone.id, { status: "dropped" }, ACTOR);
       entry.dropped++;
@@ -344,6 +446,7 @@ function importRepo(db, root, { dryRun = false, origin = originOf(root) } = {}) 
     report.added += entry.added;
     report.updated += entry.updated;
     report.dropped += entry.dropped;
+    report.moved += entry.moved;
   }
   for (const id of pointers) db.setPointer(id, ACTOR);
   return report;
@@ -353,7 +456,7 @@ function importRepo(db, root, { dryRun = false, origin = originOf(root) } = {}) 
 function summary(r) {
   const unparsed = r.files.reduce((n, f) => n + f.unparsed.length, 0);
   const off = r.files.filter((f) => f.expected !== f.prefixed).map((f) => `${f.file} ${f.prefixed}/${f.expected}`);
-  return `${r.total} records (${r.added} new, ${r.updated} updated, ${r.dropped} gone from Markdown → dropped) from ${r.files.length} files; ${unparsed} lines kept as notes; ${off.length ? `count off: ${off.join(", ")}` : "counts match"}`;
+  return `${r.total} records (${r.added} new, ${r.updated} updated${r.moved ? `, ${r.moved} moved to their task` : ""}, ${r.dropped} gone from Markdown → dropped) from ${r.files.length} files; ${unparsed} lines kept as notes; ${off.length ? `count off: ${off.join(", ")}` : "counts match"}`;
 }
 
-module.exports = { summary, importRepo, originOf, parseTodo, parseDesign, parseSections, sources, taskStatus, ACTOR };
+module.exports = { summary, importRepo, originOf, parseTodo, parseDesign, parseSections, sections, fenceTracker, filesAt, sources, taskStatus, ACTOR };

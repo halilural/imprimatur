@@ -18,6 +18,8 @@
 //   SessionStart, Bash  branchFinish    (after git merge/switch/checkout/pull) merged branches left behind
 //   PostToolUse MCP,    docUpdate       an ADR/PDR added or changed (record_add/record_update) that no design
 //   Stop, next event                    document section links: told to the agent at its next tool call or session start
+//   SessionStart,       docSync         the design documents and their Markdown files synced (docs-sync.js, #73):
+//   PostToolUse edits                   adoptions, edits taken in and conflicts told to the agent
 
 "use strict";
 const { spawnSync } = require("node:child_process");
@@ -40,6 +42,7 @@ const DEFAULTS = {
   status: { mode: "block", word: "neredeyiz" },
   branchFinish: "warn",
   docUpdate: "warn",
+  docSync: "warn",
 };
 
 /** The git root at or above a directory, by its .git entry (no git process). @param {string} dir */
@@ -353,6 +356,22 @@ function check(event, input, deps = {}) {
       size += line.length + 1;
     }
     context.push(tasks.length ? lines.join("\n") : "No unfinished tasks in Imprimatur for this repo. Record work with the imprimatur MCP tools (task_upsert, record_add, pointer_set).");
+  }
+
+  // Design documents ↔ their files (#73): at session start (a hand-written file adopted, a
+  // file edited outside a session taken in), and right after the agent edits one of the files.
+  const edited = event === "PostToolUse" && EDITS.test(tool) && (ti.file_path || ti.notebook_path) ? relOf(root, input.cwd, ti.file_path ?? ti.notebook_path) : undefined;
+  const docEdit = edited !== undefined && Object.keys(require("./docs-export.js").FILES).some((k) => path.relative(root, require("./docs-export.js").fileOf(root, k)) === edited);
+  if (s.docSync.mode && (event === "SessionStart" || docEdit) && require("./docs-export.js").syncOn(root)) {
+    try {
+      const records = deps.records ?? require("./records.js");
+      const db = records.dbOf();
+      const { syncDocs, describe } = require("./docs-sync.js");
+      const busy = (db ? syncDocs(db, root) : []).filter((r) => r.adopted || r.imported.length || r.superseded.length || r.conflicts.length || r.skipped);
+      if (busy.length) found(s.docSync, "docSync", `design documents synced with their files: ${describe(busy, root).join(" · ")}`);
+    } catch (e) {
+      found(s.docSync, "docSync", `design documents not synced: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   // Merged branches left behind go to the agent, who can delete them: at session start, and
