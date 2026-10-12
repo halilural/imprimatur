@@ -1,0 +1,4 @@
+# agnix (#77): Imprimatur audits its agent setup with it (npm run audit).
+# The Claude Code version its version-specific rules assume; raise it with Claude Code.
+[tool_versions]
+claude_code = "2.1.283"

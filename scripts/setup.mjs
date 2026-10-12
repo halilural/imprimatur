@@ -59,6 +59,13 @@ export const wanted = (exts) => [
   ["PostToolUseFailure", "*", "activity.mjs", "", { async: true }],
 ];
 
+/**
+ * Each hook's timeout in seconds (#77: agnix CC-HK-010; Claude Code's default is 600).
+ * Ours take ~65 ms; process.mjs may wait on git and gh (10 s each), so it gets more.
+ * @param {string} script
+ */
+export const timeoutOf = (script) => (script === "process.mjs" ? 60 : 30);
+
 const MCP_NAME = "imprimatur";
 /** How every client starts the MCP server. @param {string} root */
 const mcpCommand = (root) => ({ command: "node", args: [path.join(root, "mcp", "server.mjs")] });
@@ -230,7 +237,7 @@ export function pluginHooks() {
   const hooks = {};
   for (const [event, matcher, script, , opts] of wanted([])) {
     const m = pluginMatcher(matcher);
-    (hooks[event] ??= []).push({ ...(m ? { matcher: m } : {}), hooks: [{ type: "command", command: `node "\${CLAUDE_PLUGIN_ROOT}/hooks/${script}"`, ...(opts?.async && { async: true }) }] });
+    (hooks[event] ??= []).push({ ...(m ? { matcher: m } : {}), hooks: [{ type: "command", command: `node "\${CLAUDE_PLUGIN_ROOT}/hooks/${script}"`, timeout: timeoutOf(script), ...(opts?.async && { async: true }) }] });
   }
   return { hooks };
 }
@@ -254,10 +261,11 @@ export function mergeHooks(settings, { root, lang, exts = ["md", "mdx"] }) {
       .find((h) => ourHook(h, script));
     const label = `${event}${matcher ? ` [${matcher}]` : ""} → ${script}`;
     if (!ours) {
-      entries.push({ ...(matcher ? { matcher } : {}), hooks: [{ type: "command", command, ...(opts?.async && { async: true }) }] });
+      entries.push({ ...(matcher ? { matcher } : {}), hooks: [{ type: "command", command, timeout: timeoutOf(script), ...(opts?.async && { async: true }) }] });
       changes.push(`added   ${label}`);
-    } else if (ours.command.replace(/"/g, "") !== command.replace(/"/g, "") || Boolean(ours.async) !== Boolean(opts?.async)) {
+    } else if (ours.command.replace(/"/g, "") !== command.replace(/"/g, "") || Boolean(ours.async) !== Boolean(opts?.async) || ours.timeout !== timeoutOf(script)) {
       ours.command = command;
+      ours.timeout = timeoutOf(script);
       if (opts?.async) ours.async = true;
       else delete ours.async;
       changes.push(`updated ${label}`);

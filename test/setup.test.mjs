@@ -16,11 +16,11 @@ test("setup: adds every hook to empty settings, keeps other hooks", () => {
   assert.equal(settings.model, "x");
   assert.deepEqual(settings.hooks.PreToolUse[0], {
     matcher: "Edit|Write|Bash",
-    hooks: [{ type: "command", command: `IMPRIMATUR_LANG=Turkish node "${root}/hooks/baseline.mjs" md mdx` }],
+    hooks: [{ type: "command", command: `IMPRIMATUR_LANG=Turkish node "${root}/hooks/baseline.mjs" md mdx`, timeout: 30 }],
   });
   assert.deepEqual(settings.hooks.Stop, [
-    { hooks: [{ type: "command", command: `IMPRIMATUR_LANG=Turkish node "${root}/hooks/waiting.mjs"` }] },
-    { hooks: [{ type: "command", command: `IMPRIMATUR_LANG=Turkish node "${root}/hooks/process.mjs"` }] },
+    { hooks: [{ type: "command", command: `IMPRIMATUR_LANG=Turkish node "${root}/hooks/waiting.mjs"`, timeout: 30 }] },
+    { hooks: [{ type: "command", command: `IMPRIMATUR_LANG=Turkish node "${root}/hooks/process.mjs"`, timeout: 60 }] },
   ]);
   assert.equal(before.hooks.PreToolUse, undefined); // the input is not changed
 });
