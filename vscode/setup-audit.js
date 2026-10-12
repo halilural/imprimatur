@@ -27,7 +27,7 @@ const TITLE_MAX = 300;
  * @typedef {{level: string, rule: string, file: string, line?: number, column?: number, message: string, suggestion?: string,
  *   assumption?: string, category?: string, rule_severity?: string, applies_to_tool?: string}} Diagnostic
  * @typedef {{fp: string, rule: string, level: string, file: string, rel: string, line: number, message: string, suggestion?: string,
- *   assumption?: string, category: string, severity?: string, tool?: string, group: string, owner?: string}} Finding
+ *   assumption?: string, category: string, severity?: string, tool?: string, group: string, owner?: string, effect: "active" | "inactive", why?: string}} Finding
  * @typedef {{name?: string, severity?: string, category?: string, evidence?: {source_urls?: string[], verified_on?: string,
  *   normative_level?: string, source_type?: string}}} Rule
  */
@@ -180,12 +180,64 @@ function fpPath(abs, rel) {
 }
 
 /**
+ * The plugins Claude Code loads (#78): installed (~/.claude/plugins/installed_plugins.json)
+ * and on — a user-scope install unless enabledPlugins turns it off, a project-scope
+ * install in its project. Unreadable files: no plugin is known.
+ * @param {string} [home] @returns {Array<{id: string, installPath: string, on: boolean}>}
+ */
+function pluginsOf(home = os.homedir()) {
+  const json = (/** @type {string} */ f) => {
+    try {
+      return JSON.parse(fs.readFileSync(f, "utf8"));
+    } catch {
+      return undefined;
+    }
+  };
+  const installed = json(path.join(home, ".claude", "plugins", "installed_plugins.json"))?.plugins ?? {};
+  const enabled = json(path.join(home, ".claude", "settings.json"))?.enabledPlugins ?? {};
+  /** @type {Map<string, {id: string, installPath: string, on: boolean}>} */
+  const out = new Map();
+  for (const [id, installs] of Object.entries(installed)) {
+    for (const i of Array.isArray(installs) ? installs : []) {
+      if (typeof i?.installPath !== "string") continue;
+      const on = i.scope === "project" || enabled[id] !== false;
+      const had = out.get(i.installPath);
+      out.set(i.installPath, { id, installPath: i.installPath, on: Boolean(had?.on) || on });
+    }
+  }
+  return [...out.values()];
+}
+
+/** What Claude Code loads from a plugin's folder: its manifest and its components. */
+const PLUGIN_PARTS = new Set([".claude-plugin", "hooks", "skills", "agents", "commands", "output-styles", "monitors", ".mcp.json", ".lsp.json"]);
+
+/**
+ * Whether Claude Code loads the file (#78): "active", or "inactive" and why — a
+ * marketplace's catalog, a leftover temp clone, a plugin version or plugin not
+ * installed, a plugin turned off, a file for another tool, a worktree's copy.
+ * @param {string} abs @param {{group: string}} g @param {Array<{installPath: string, on: boolean}>} plugins
+ * @returns {{effect: "active" | "inactive", why?: "catalog" | "temp" | "not-installed" | "disabled" | "other-tool" | "worktree"}}
+ */
+function effectOf(abs, { group }, plugins) {
+  if (group === "worktree") return { effect: "inactive", why: "worktree" };
+  if (group !== "plugin") return { effect: "active" };
+  const p = slash(abs);
+  if (/\/\.claude\/plugins\/marketplaces\//.test(p)) return { effect: "inactive", why: "catalog" };
+  if (/\/\.claude\/plugins\/cache\/temp_git_/.test(p)) return { effect: "inactive", why: "temp" };
+  const plugin = plugins.find((x) => p.startsWith(`${slash(x.installPath)}/`));
+  if (!plugin) return { effect: "inactive", why: "not-installed" };
+  if (!plugin.on) return { effect: "inactive", why: "disabled" };
+  const first = p.slice(slash(plugin.installPath).length + 1).split("/")[0];
+  return PLUGIN_PARTS.has(first) ? { effect: "active" } : { effect: "inactive", why: "other-tool" };
+}
+
+/**
  * The report's diagnostics as findings, every one kept. The fingerprint is rule + file +
  * message + which occurrence: a line number is left out so an edit above it does not
  * make a finding look new.
- * @param {{diagnostics?: Diagnostic[]}} report @param {{root: string, home?: string, global?: boolean}} scope @returns {Finding[]}
+ * @param {{diagnostics?: Diagnostic[]}} report @param {{root: string, home?: string, global?: boolean, plugins?: ReturnType<typeof pluginsOf>}} scope @returns {Finding[]}
  */
-function findingsOf(report, { root, home = os.homedir(), global = false }) {
+function findingsOf(report, { root, home = os.homedir(), global = false, plugins = pluginsOf(home) }) {
   /** @type {Map<string, number>} */
   const seen = new Map();
   return (report.diagnostics ?? []).map((d) => {
@@ -199,7 +251,7 @@ function findingsOf(report, { root, home = os.homedir(), global = false }) {
     if (global && group === "project") group = "user";
     return {
       fp, rule: d.rule, level: d.level, file: abs, rel, line: d.line ?? 1, message: d.message, suggestion: d.suggestion, assumption: d.assumption,
-      category: d.category ?? "other", severity: d.rule_severity, tool: d.applies_to_tool, group, owner,
+      category: d.category ?? "other", severity: d.rule_severity, tool: d.applies_to_tool, group, owner, ...effectOf(abs, { group }, plugins),
     };
   });
 }
@@ -229,6 +281,7 @@ function bodyOf(f, rule) {
 const linksOf = (f, rule) => ({
   audit: {
     fp: f.fp, rule: f.rule, ...(rule?.name ? { ruleName: rule.name } : {}), level: f.level, category: f.category, group: f.group,
+    effect: f.effect, ...(f.why ? { why: f.why } : {}),
     ...(f.owner ? { owner: f.owner } : {}), file: f.file, line: f.line, agnix: AGNIX,
   },
 });
@@ -258,10 +311,11 @@ function reconcile(findings, records) {
     if (!r) plan.add.push(f);
     else if (r.status === "dropped") plan.dismissed++;
     else if (r.status === "done") plan.reopen.push({ id: r.id, f });
-    else if (r.links.audit.line !== f.line || r.title !== titleOf(f) || r.links.audit.group !== f.group) plan.update.push({ id: r.id, f });
+    else if (r.links.audit.line !== f.line || r.title !== titleOf(f) || r.links.audit.group !== f.group || r.links.audit.effect !== f.effect || r.links.audit.why !== f.why) plan.update.push({ id: r.id, f });
   }
   for (const r of byFp.values()) if (r.status === "open" && !found.has(r.links.audit.fp)) plan.resolve.push(r.id);
-  plan.open = findings.length - plan.dismissed;
+  // Open counts what Claude Code loads (#78); the rest is kept, as not loaded.
+  plan.open = plan.live.filter((f) => f.effect !== "inactive").length;
   return plan;
 }
 
@@ -280,14 +334,14 @@ const GLOBAL_DIRS = [".claude", ".cursor", ".codex", ".gemini", ".kiro", ".copil
 
 /**
  * Audits one root and writes the plan to its AUDIT task, in one transaction.
- * @param {any} db @param {{root: string, global?: boolean, home?: string}} scope
+ * @param {any} db @param {{root: string, global?: boolean, home?: string, plugins?: ReturnType<typeof pluginsOf>}} scope
  * @param {{bin: string, dryRun?: boolean, rules?: Map<string, Rule | undefined>, spawn?: typeof spawnSync, now?: number, report?: any}} o
  */
 function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = spawnSync, now = Date.now(), report }) {
   const home = scope.home ?? os.homedir();
   const paths = pathsOf(scope);
   const rep = report ?? (paths.length ? runAgnix(bin, scope.root, { paths, spawn }) : { files_checked: 0, diagnostics: [] });
-  const findings = findingsOf(rep, { root: scope.root, home, global: scope.global });
+  const findings = findingsOf(rep, { root: scope.root, home, global: scope.global, plugins: scope.plugins });
   const repo = db.repoOf(scope.root, scope.global ? { name: "~" } : {});
   const read = () => {
     const task = db.taskByKey(repo.id, TASK);
@@ -296,7 +350,7 @@ function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = 
   };
   const summaryOf = (/** @type {ReturnType<typeof reconcile>} */ plan) => ({
     root: scope.root, files: rep.files_checked ?? 0, findings: findings.length, added: plan.add.length, reopened: plan.reopen.length,
-    resolved: plan.resolve.length, dismissed: plan.dismissed, open: plan.open, groups: countBy(findings, (f) => f.group), levels: countBy(findings, (f) => f.level),
+    resolved: plan.resolve.length, dismissed: plan.dismissed, open: plan.open, inactive: plan.live.length - plan.open, groups: countBy(findings, (f) => f.group), levels: countBy(findings, (f) => f.level),
   });
   const first = read().plan;
   if (dryRun) return summaryOf(first);
@@ -329,14 +383,16 @@ function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = 
 }
 
 /**
- * The AUDIT task's one line: "3 open (1 error, 2 warnings) · 15 applied · 1 dismissed".
+ * The AUDIT task's one line: "3 open (1 error, 2 warnings) · 40 not loaded · 15 applied · 1 dismissed"
+ * (open counts what Claude Code loads, #78).
  * @param {Array<{status: string, links: any}>} records
  */
 function summaryLine(records) {
-  const open = records.filter((r) => r.status === "open");
+  const open = records.filter((r) => r.status === "open" && r.links.audit.effect !== "inactive");
+  const idle = records.filter((r) => r.status === "open" && r.links.audit.effect === "inactive").length;
   const done = records.filter((r) => r.status === "done").length;
   const dropped = records.filter((r) => r.status === "dropped").length;
-  return [`${open.length} open${open.length ? ` (${describeCounts(countBy(open, (r) => r.links.audit.level))})` : ""}`, done && `${done} applied`, dropped && `${dropped} dismissed`]
+  return [`${open.length} open${open.length ? ` (${describeCounts(countBy(open, (r) => r.links.audit.level))})` : ""}`, idle && `${idle} not loaded`, done && `${done} applied`, dropped && `${dropped} dismissed`]
     .filter(Boolean).join(" · ");
 }
 
@@ -358,7 +414,7 @@ const LEVELS = ["error", "warning", "info"];
 /** One line per audited root, for the CLI, the MCP tool and the extension. @param {ReturnType<typeof auditRoot>} s */
 function describeSummary(s) {
   const groups = Object.entries(s.groups).map(([g, n]) => `${g} ${n}`).join(", ");
-  return `${s.root}: ${s.files} files, ${s.findings} findings (${describeCounts(s.levels)}${groups ? `; ${groups}` : ""}); ${s.added} new, ${s.resolved} applied, ${s.reopened} back, ${s.dismissed} dismissed`;
+  return `${s.root}: ${s.files} files, ${s.findings} findings (${describeCounts(s.levels)}${groups ? `; ${groups}` : ""}); ${s.open} open, ${s.inactive ?? 0} not loaded; ${s.added} new, ${s.resolved} applied, ${s.reopened} back, ${s.dismissed} dismissed`;
 }
 
 /** Whether a path exists (the home's agent folders are audited only when there). @param {string} p */
@@ -371,4 +427,4 @@ const exists = (p) => {
   }
 };
 
-module.exports = { AGNIX, TASK, ACTOR, REASONS, locateAgnix, runAgnix, locateAgnixAsync, runAgnixAsync, explainRule, groupOf, findingsOf, titleOf, bodyOf, linksOf, reconcile, auditRoot, summaryLine, globalPaths, pathsOf, fpPath, explainRulesAsync, describeSummary, describeCounts, countBy, exists };
+module.exports = { AGNIX, TASK, ACTOR, REASONS, locateAgnix, runAgnix, locateAgnixAsync, runAgnixAsync, explainRule, groupOf, findingsOf, titleOf, bodyOf, linksOf, reconcile, auditRoot, summaryLine, pluginsOf, effectOf, globalPaths, pathsOf, fpPath, explainRulesAsync, describeSummary, describeCounts, countBy, exists };
