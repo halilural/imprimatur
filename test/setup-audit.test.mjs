@@ -147,33 +147,43 @@ test("audit: the MCP tool audits the repo with the agnix it finds (AGNIX_BIN)", 
   }
 });
 
-test("audit tree: Recommendations — by root, group (plugins by name), category; applied and dismissed apart", () => {
-  const { recommendationsRow } = require("../vscode/setup-audit-tree.js");
+test("audit tree: Recommendations — status → (reason) → source → agnix category → rule → finding", () => {
+  const { recommendationsRow, auditGroups } = require("../vscode/setup-audit-tree.js");
   assert.equal(recommendationsRow([{ label: "repo", root: "/r", records: [] }]).command, "imprimatur.setup.audit");
   const rec = (id, status, level, group, category, extra = {}) => ({
-    id, status, title: `R-${id}: message ${id}`, body: `body ${id}`, links: { audit: { fp: `f${id}`, rule: `R-${id}`, level, category, group, file: `/r/f${id}.md`, line: id, ...extra } },
+    id, status, title: `R-${id}: message ${id}`, body: `**Rule:** R-${id} (Rule ${id})`, links: { audit: { fp: `f${id}`, rule: `R-${id}`, level, category, group, file: `/r/f${id}.md`, line: id, ...extra } },
   });
-  const row = recommendationsRow([
-    { label: "repo", root: "/r", records: [
-      rec(1, "open", "warning", "project", "claude-hooks"), rec(2, "open", "error", "project", "claude-hooks"), rec(3, "open", "info", "project", "memory"),
-      rec(4, "open", "error", "plugin", "plugin", { owner: "datadog" }), rec(5, "done", "warning", "project", "memory"), rec(6, "dropped", "error", "project", "claude-hooks"),
-    ] },
-    { label: "other", root: "/o", records: [] },
-  ]);
+  const records = [
+    rec(1, "open", "warning", "project", "claude-hooks", { rule: "CC-HK-010" }), rec(2, "open", "error", "project", "claude-hooks", { rule: "CC-HK-010" }),
+    rec(3, "open", "info", "project", "claude-memory"),
+    rec(4, "open", "error", "plugin", "agent-skills", { owner: "datadog" }), rec(5, "done", "warning", "project", "claude-memory"),
+    rec(6, "dropped", "error", "project", "claude-hooks", { reason: "false" }), rec(7, "dropped", "warning", "plugin", "xml", { owner: "hookify" }),
+    rec(8, "dropped", "warning", "user", "agent-skills", { file: "/h/.claude/skills/synced/x/SKILL.md" }),
+  ];
+  const row = recommendationsRow([{ label: "repo", root: "/r", records }, { label: "other", root: "/o", records: [] }]);
   assert.equal(row.label, "Recommendations (4)");
   assert.equal(row.description, "2 errors · 1 warning · 1 info");
   assert.equal(row.children.length, 1, "a root never audited is left out");
-  const [project, plugins, applied, dismissed] = row.children[0].children;
-  assert.deepEqual([project.label, plugins.label, applied.label, dismissed.label], ["Project", "Plugins", "Applied", "Dismissed"]);
-  const [hooks, memory] = project.children;
-  assert.equal(hooks.label, "claude-hooks");
-  assert.deepEqual(hooks.children.map((c) => c.label), ["message 2", "message 1"], "errors first");
-  assert.equal(hooks.children[0].description, "R-2 · f2.md:2");
-  assert.equal(hooks.children[0].context, "auditFinding-open");
-  assert.equal(hooks.children[0].recordId, 2);
-  assert.equal(memory.children[0].icon, "info");
+  const [open, applied, dismissed] = row.children[0].children;
+  assert.deepEqual([open.label, applied.label, dismissed.label], ["Open", "Applied", "Dismissed"]);
+  assert.equal(open.expanded, true);
+  const [project, plugins] = open.children;
+  assert.deepEqual([project.label, plugins.label], ["Project", "Plugins"]);
+  assert.deepEqual(project.children.map((c) => c.label), ["Claude hooks", "Claude memory"], "agnix's categories, biggest first");
+  const [timeout] = project.children[0].children;
+  assert.equal(timeout.label, "CC-HK-010 Rule 1");
+  assert.deepEqual(timeout.children.map((c) => c.label), ["message 2", "message 1"], "errors first");
+  assert.equal(timeout.children[0].context, "auditFinding-open");
+  assert.equal(timeout.children[0].description, "f2.md:2");
   assert.equal(plugins.children[0].label, "datadog");
-  assert.equal(dismissed.children[0].context, "auditFinding-dropped");
+  assert.equal(plugins.children[0].children[0].label, "Agent skills");
+  // Dismissed: by why first — a given reason, else a plugin's or a synced skill's.
+  assert.deepEqual(dismissed.children.map((c) => c.label), ["Third-party plugin", "Synced skill (claude.ai)", "False alarm"]);
+  assert.equal(dismissed.children[2].children[0].label, "Project");
+  // The same grouping in Turkish, for the task page.
+  const tr = auditGroups(records, { lang: "tr" });
+  assert.deepEqual(tr.map((g) => [g.label, g.count]), [["Açık", 4], ["Uygulandı", 1], ["Reddedildi", 3]]);
+  assert.equal(tr[2].children[0].label, "Üçüncü taraf plugin");
 });
 
 test("audit: a plugin update keeps its findings (no version in the fingerprint); a repo at the home is not walked", () => {
@@ -219,6 +229,28 @@ test("audit: this repo's task list shows the global audit too, in a Global (~) g
     // Every repo: the home is one of them, no copy.
     const all = tasksPage(db, root, { filter: "active", all: true }, { home: h });
     assert.equal(all.groups.flatMap((g) => g.tasks).filter((t) => t.key === "AUDIT").length, 2);
+  } finally {
+    db.close();
+  }
+});
+
+test("audit: synced skills are their own source; the AUDIT task page shows the findings grouped", () => {
+  assert.deepEqual(groupOf("/home/u/.claude/skills/synced/abc/docx/SKILL.md", { home }), { group: "synced" });
+  const { tasksPage, tasksHtml } = require("../vscode/tasksView.js");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "audit-page-"));
+  const db = openDb({ path: path.join(dir, "imprimatur.db") });
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "audit-page-repo-"));
+  try {
+    const spawn = /** @type {any} */ (() => ({ status: 0, stdout: JSON.stringify({ name: "Timeout Policy" }) }));
+    auditRoot(db, { root }, { bin: "agnix", spawn, report: { diagnostics: [d("CC-HK-010", "hooks/hooks.json", "no timeout")] } });
+    const task = db.taskByKey(db.repoByRoot(root).id, TASK);
+    assert.equal(db.recordsOf(task.id)[0].links.audit.ruleName, "Timeout Policy");
+    const m = tasksPage(db, root, { sel: task.id, filter: "active" }, { home: dir });
+    assert.equal(m.cur.audit[0].label, "Açık");
+    const html = tasksHtml(m);
+    assert.match(html, /Denetim bulguları/);
+    assert.match(html, /CC-HK-010 Timeout Policy/);
+    assert.doesNotMatch(html, /data-k="todos"/, "no flat todo list for the audit");
   } finally {
     db.close();
   }

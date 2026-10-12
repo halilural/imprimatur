@@ -269,7 +269,7 @@ const TOOLS = [
   {
     name: "setup_audit",
     title: "Audit the agent setup",
-    description: "Lints the repo's agent setup (CLAUDE.md, AGENTS.md, .claude/ settings, hooks, skills, subagents, MCP, plugins, Cursor/Codex/Copilot files) with agnix, whose rules cite the tools' docs; global: true also audits the home's agent folders (~/.claude with its plugins, ~/.cursor, ~/.codex, ...). Every finding is a fixme record of the AUDIT task: new ones open, gone ones done (applied), dismissed (dropped) ones stay dropped. Read them with task_get key \"AUDIT\"; dismiss one with record_update status \"dropped\" and the reason in body.",
+    description: "Lints the repo's agent setup (CLAUDE.md, AGENTS.md, .claude/ settings, hooks, skills, subagents, MCP, plugins, Cursor/Codex/Copilot files) with agnix, whose rules cite the tools' docs; global: true also audits the home's agent folders (~/.claude with its plugins, ~/.cursor, ~/.codex, ...). Every finding is a fixme record of the AUDIT task: new ones open, gone ones done (applied), dismissed (dropped) ones stay dropped. Read them with task_get key \"AUDIT\"; dismiss one with record_update status \"dropped\", the note in body and links.audit kept with reason added (plugin, synced, false, local or other).",
     inputSchema: input({
       repo: repoArg,
       global: { type: "boolean", default: false, description: "Also audit the home's agent folders" },
