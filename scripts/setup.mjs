@@ -173,10 +173,12 @@ function ourHook(hook, script) {
 /**
  * Settings without Imprimatur's hooks (the plugin brings them, #67): other
  * handlers, matchers and events are kept; a group or event left empty goes.
- * Pure: returns a copy and what was removed.
- * @param {any} settings @returns {{settings: any, changes: string[]}}
+ * Pure: returns a copy and what was removed. `keep` spares some of ours (mergeHooks
+ * keeps the ones it still wants).
+ * @param {any} settings @param {(event: string, matcher: string | undefined, script: string | undefined) => boolean} [keep]
+ * @returns {{settings: any, changes: string[]}}
  */
-export function removeOurHooks(settings) {
+export function removeOurHooks(settings, keep = () => false) {
   const out = structuredClone(settings ?? {});
   const changes = [];
   if (!out.hooks || typeof out.hooks !== "object") return { settings: out, changes };
@@ -185,10 +187,11 @@ export function removeOurHooks(settings) {
     const kept = [];
     for (const g of groups) {
       const hooks = Array.isArray(g?.hooks) ? g.hooks : [];
-      const left = hooks.filter((h) => !ourHook(h));
+      const scriptOf = (/** @type {any} */ h) => /\/hooks\/([\w-]+\.mjs)/.exec(h.command.replace(/\\/g, "/"))?.[1];
+      const left = hooks.filter((h) => !ourHook(h) || keep(event, g.matcher, scriptOf(h)));
       for (const h of hooks) {
         if (left.includes(h)) continue;
-        const script = /\/hooks\/([\w-]+\.mjs)/.exec(h.command.replace(/\\/g, "/"))?.[1];
+        const script = scriptOf(h);
         changes.push(`removed ${event}${g.matcher ? ` [${g.matcher}]` : ""} → ${script}`);
       }
       if (left.length === hooks.length) kept.push(g);
@@ -249,9 +252,13 @@ export function pluginHooks() {
  * @returns {{settings: any, changes: string[]}}
  */
 export function mergeHooks(settings, { root, lang, exts = ["md", "mdx"] }) {
-  const out = structuredClone(settings ?? {});
+  // Ours under a matcher or event we no longer use (an older release's) go first: left
+  // there, the hook would run twice (#77: process.mjs did, under its pre-#56 matcher).
+  const want = new Set(wanted(exts).map(([event, matcher, script]) => `${event}|${matcher ?? ""}|${script}`));
+  const pruned = removeOurHooks(settings, (event, matcher, script) => want.has(`${event}|${matcher ?? ""}|${script}`));
+  const out = pruned.settings;
   out.hooks ??= {};
-  const changes = [];
+  const changes = pruned.changes.map((c) => c.replace(/^removed/, "removed (stale)"));
   for (const [event, matcher, script, args, opts] of wanted(exts)) {
     const command = `${lang ? `IMPRIMATUR_LANG=${lang} ` : ""}node "${path.join(root, "hooks", script)}"${args}`;
     const entries = (out.hooks[event] ??= []);
