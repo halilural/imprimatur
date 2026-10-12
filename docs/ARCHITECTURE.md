@@ -22,6 +22,7 @@
 16. [Bilinen sınırlar](#limits)
 17. [Tasarım dokümanları ↔ Markdown dosyaları (docs sync)](#docs-sync)
 18. [Agent setup denetimi (agnix)](#agent-setup-audit)
+19. [Denetim: bulgu etkin mi (#78)](#audit-effect)
 
 <a id="overview"></a>
 
@@ -579,3 +580,15 @@ Tek gruplama: **durum** (Açık / Uygulandı / Reddedildi) → [reddedilenlerde 
 
 - Agent Setup: Recommendations → denetlenen kök → gruplar; Açık ile Project / Your setup açık gelir. Bulgu dosyayı satırında açar, ipucu kaydın gövdesidir. Açık bulguda **Dismiss…** gerekçeyi listeden seçtirir (kaynağa göre önerilen önde) ve isteğe bağlı not alır; kapalıda **Reopen** gerekçeyi siler. Hiç denetim yoksa satır denetimi başlatır.
 - Görevler sekmesi: AUDIT sayfasında düz "Yapılacaklar" listesi yerine "Denetim bulguları", iç içe açılır bölümler (`<details>`), Türkçe etiketlerle.
+
+<a id="audit-effect"></a>
+
+## 19. Denetim: bulgu etkin mi (#78)
+
+Her bulgu denetimde Claude Code'un o dosyayı yükleyip yüklemediğine göre işaretlenir (`links.audit.effect`: `active` / `inactive`, `why`). Hiçbir bulgu gizlenmez; "Açık" yalnız yüklenenleri sayar, gerisi **Yüklenmiyor** altında gerekçesine göre durur.
+
+- Kaynak: `~/.claude/plugins/installed_plugins.json` (her kurulumun `installPath` ve `scope`'u) ve `~/.claude/settings.json` `enabledPlugins`. Kullanıcı kapsamındaki kurulum `enabledPlugins` onu kapatmadıkça açıktır; proje kapsamındaki kurulum kendi projesinde açıktır.
+- `inactive` gerekçeleri: `catalog` (`plugins/marketplaces/…`, mağaza kataloğu), `temp` (`cache/temp_git_*` artığı), `not-installed` (kurulu sürüm dışındaki sürüm ya da kurulu olmayan plugin), `disabled` (kapalı plugin), `other-tool` (kurulu plugin klasöründe Claude bileşeni olmayan dosya: `.cursor-plugin`, `.github`, `configs/`, Gemini manifesti …), `worktree` (ajan worktree kopyası).
+- Claude bileşenleri (plugin klasörünün ilk parçası): `.claude-plugin`, `hooks`, `skills`, `agents`, `commands`, `output-styles`, `monitors`, `.mcp.json`, `.lsp.json`.
+- Repo, kullanıcı ve eşitlenen skill dosyaları her zaman `active`.
+- Etkisi değişen açık kayıt bir sonraki denetimde güncellenir. Görevin özeti `N open (seviyeler) · N not loaded · N applied · N dismissed`.
