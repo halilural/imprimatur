@@ -40,20 +40,27 @@ const TITLE_MAX = 300;
  */
 function locateAgnix({ env = process.env, spawn = spawnSync } = {}) {
   if (env.AGNIX_BIN) return env.AGNIX_BIN;
-  const [cmd, args, opts] = locateCall();
-  return binOf(spawn(cmd, args, opts));
+  const [cmd, args, opts, done] = locateCall();
+  try {
+    return binOf(spawn(cmd, args, opts));
+  } finally {
+    done();
+  }
 }
 
-/** The npx call that prints the binary's path. @returns {[string, string[], any]} */
+/** The npx call that prints the binary's path, and what removes its script after. @returns {[string, string[], any, () => void]} */
 function locateCall() {
   const name = process.platform === "win32" ? "agnix-binary.exe" : "agnix-binary";
   // npx puts the package's node_modules/.bin on PATH; the binary sits in ../agnix/bin.
   const script = `const p=require("node:path"),f=require("node:fs");for(const d of process.env.PATH.split(p.delimiter)){const b=p.join(d,"..","agnix","bin",${JSON.stringify(name)});if(f.existsSync(b)){process.stdout.write(b);break}}`;
   // A file, not node -e: on Windows npx is a .cmd run through the shell, which would split the script.
-  const file = path.join(os.tmpdir(), "imprimatur-agnix-locate.cjs");
-  fs.writeFileSync(file, script);
+  // In a fresh owner-only folder: a fixed name in the shared temp folder could be planted by another user.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-agnix-"));
+  const file = path.join(dir, "locate.cjs");
+  fs.writeFileSync(file, script, { mode: 0o600, flag: "wx" });
   const win = process.platform === "win32";
-  return ["npx", ["-y", "-p", AGNIX, "node", win ? `"${file}"` : file], { encoding: "utf8", shell: win, timeout: 180_000 }];
+  const done = () => fs.rmSync(dir, { recursive: true, force: true });
+  return ["npx", ["-y", "-p", AGNIX, "node", win ? `"${file}"` : file], { encoding: "utf8", shell: win, timeout: 180_000 }, done];
 }
 
 /** @param {any} r a spawn result @returns {string} */
@@ -98,8 +105,12 @@ function spawnAsync(cmd, args, opts = {}) {
  */
 async function locateAgnixAsync({ env = process.env } = {}) {
   if (env.AGNIX_BIN) return env.AGNIX_BIN;
-  const [cmd, args, opts] = locateCall();
-  return binOf(await spawnAsync(cmd, args, opts));
+  const [cmd, args, opts, done] = locateCall();
+  try {
+    return binOf(await spawnAsync(cmd, args, opts));
+  } finally {
+    done();
+  }
 }
 
 /** runAgnix without blocking: a big home takes seconds. @param {string} bin @param {string} root @param {{paths?: string[]}} [o] */
