@@ -188,3 +188,16 @@ test("audit: a plugin update keeps its findings (no version in the fingerprint);
   // A project in a hidden folder of the home is still a project.
   assert.deepEqual(groupOf("/home/u/.local/src/x/CLAUDE.md", { home }), { group: "project" });
 });
+
+test("audit: the npx locate script runs from a private folder, removed after", () => {
+  const { locateAgnix } = require("../vscode/setup-audit.js");
+  let seen;
+  const spawn = (cmd, args) => {
+    seen = args.at(-1).replace(/"/g, "");
+    assert.equal(fs.statSync(seen).mode & 0o077, 0, "owner only");
+    assert.notEqual(path.dirname(seen), os.tmpdir());
+    return { status: 0, stdout: "/x/agnix-binary" };
+  };
+  assert.equal(locateAgnix({ env: {}, spawn }), "/x/agnix-binary");
+  assert.equal(fs.existsSync(path.dirname(seen)), false);
+});
