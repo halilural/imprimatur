@@ -84,3 +84,13 @@ test("where_we_left_off and session start tell how the design documents stand", 
   assert.equal(ok.docs_problem, undefined);
   assert.doesNotMatch(digest("where_we_left_off", ok), /Design documents/);
 });
+
+test("where_we_left_off leaves out the importer's record containers (ADR, PDR, TEST) unless one has a 👉 (#75)", () => {
+  const { root, db, repo, task } = setup();
+  for (const key of ["ADR", "PDR", "TEST"]) db.addRecord(db.upsertTask(repo.id, key, {}).id, { kind: "note", title: `in ${key}`, status: "done" }, agent);
+  db.addRecord(task.id, { kind: "todo", title: "real work" }, agent);
+  assert.deepEqual(callTool(db, "where_we_left_off", { repo: root }).tasks.map((t) => t.key), ["#74"]);
+  const t = db.addRecord(db.taskByKey(repo.id, "TEST").id, { kind: "test", title: "MT-1 · run" }, agent);
+  db.setPointer(t.id, agent);
+  assert.deepEqual(callTool(db, "where_we_left_off", { repo: root }).tasks.map((x) => x.key).sort(), ["#74", "TEST"]);
+});
