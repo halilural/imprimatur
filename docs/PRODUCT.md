@@ -13,6 +13,7 @@
 7. [Başarı ölçütleri](#metrics)
 8. [Yol haritası](#roadmap)
 9. [Kapsam dışı](#non-goals)
+10. [Agent setup denetimi (planlandı)](#agent-setup-audit)
 
 <a id="summary"></a>
 
@@ -273,3 +274,15 @@ Açık işler, önceliğe göre:
 - **Merkezi sunucu / çok kullanıcı:** eşitleme Worker'ı kullanıcının kendi hesabında, tek token'lı, tek kişilik kullanım içindir; birleştirme cihazlarda yapılır.
 - **Markdown'ı asıl kaynak yapmak:** README, CLAUDE.md, AGENTS.md, kurallar ve skill'ler araç yapılandırması olarak dosyada kalır; kayıtlar ve tasarım dokümanlarının asıl kaynağı veritabanıdır.
 - **Komut satırı görev yönetimi** (`imprimatur done --task` gibi), arşivden geri yükleme komutu: gerek görülmedi.
+
+<a id="agent-setup-audit"></a>
+
+## 10. Agent setup denetimi (planlandı)
+
+Ajan kurulumu (CLAUDE.md, AGENTS.md, `.claude/` ayarları, hook'lar, skill'ler, subagent'lar, MCP, plugin'ler, Cursor/Codex/Copilot/Gemini/Kiro dosyaları) resmi dokümanlara dayalı kurallarla denetlenir. Kural motoru agnix'tir ve tam kapsamıyla kullanılır: kural ya da dosya kesilmez.
+
+- Bulgular gizlenmez; proje / kullanıcı / plugin / worktree olarak gruplanır, kategori ve seviye sayılarıyla gösterilir. Her bulguda kuralın doküman linki ve doğrulama tarihi bulunur.
+- Her bulgu bir Imprimatur kaydıdır: açık / uygulandı / reddedildi (gerekçeyle). Kaybolan bulgu "uygulandı" olur, reddedilen tekrar açılmaz; iki tarama arasındaki fark görünür. Rakiplerde öneri başına durum geçmişi yok, Imprimatur'un farkı bu.
+- Sonra: LLM katmanı (kalite, çelişki, eskimiş talimat), ajanlar arası tutarlılık, bağlam maliyeti × kullanım (#29).
+
+Epic [#76](https://github.com/halilural/imprimatur/issues/76), ilk iş [#77](https://github.com/halilural/imprimatur/issues/77).
