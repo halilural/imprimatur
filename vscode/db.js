@@ -849,7 +849,7 @@ class Db {
 
   /**
    * Where each unfinished task of a repo was left: its 👉 record and its open records count.
-   * The record containers (ADR, PDR, TEST from the importer, #59; AUDIT, #77) are no work: left out
+   * The record containers (ADR, PDR, TEST from the importer, #59; AUDIT, #77; BEST, #86) are no work: left out
    * unless someone put a 👉 in one (#75).
    * @param {number} repoId
    */
@@ -859,7 +859,7 @@ class Db {
                      (SELECT count(*) FROM records o WHERE o.task_id = t.id AND o.status = 'open') AS open_records
                    FROM tasks t LEFT JOIN records p ON p.task_id = t.id AND p.pointer = 1
                    WHERE t.repo_id = ? AND t.status IN ('open', 'active')
-                     AND (t.key NOT IN ('ADR', 'PDR', 'TEST', 'AUDIT') OR p.id IS NOT NULL)
+                     AND (t.key NOT IN ('ADR', 'PDR', 'TEST', 'AUDIT', 'BEST') OR p.id IS NOT NULL)
                    ORDER BY t.updated_at DESC LIMIT 100`).all(repoId);
   }
 

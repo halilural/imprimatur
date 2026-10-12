@@ -271,6 +271,47 @@ function showGraph(at) {
   openGraph(root, openEditDiff, currentText, acceptEditOf, goToEdit, renderEdit, undefined, at);
 }
 
+let bestRunning = false;
+/**
+ * Best-practice review of the panel's repo (#86): Claude (sonnet) builds the source
+ * map the first time, then reviews each pillar in parallel; minutes and dollars, so
+ * it asks first. The BEST task opens when it is done.
+ */
+async function runBestPractices() {
+  const root = graphRoot();
+  if (!root) return void vscode.window.showInformationMessage("Imprimatur: no folder open.");
+  if (!vscode.workspace.isTrusted) return void vscode.window.showInformationMessage("Imprimatur: the review runs Claude with tools in this repo; trust this folder first.");
+  if (bestRunning) return void vscode.window.showInformationMessage("Imprimatur: a best practice review is already running.");
+  const db = records.dbOf();
+  if (!db) return void vscode.window.showErrorMessage(`Imprimatur: ${records.lastError ?? "database not available"}`);
+  const best = require("./best-practice.js");
+  const repo = db.repoByRoot(repoRoot(root) ?? root);
+  const task = repo && db.taskByKey(repo.id, best.TASK);
+  const hasMap = Boolean(task && best.sourceMapRecord(db, task.id));
+  const budget = 1.5;
+  const calls = Object.keys(best.PILLARS).length + (hasMap ? 0 : 1);
+  const run = "Run", refreshRun = "Run and rebuild sources";
+  const pick = await vscode.window.showInformationMessage(
+    `Best practice review: Claude (${best.MODEL}) ${hasMap ? "" : "builds the source map, then "}reviews ${Object.keys(best.PILLARS).join(", ")} in parallel. Each call stops at $${budget} (at most ~$${(calls * budget).toFixed(0)}; usually about $1 each). It takes a few minutes.`,
+    { modal: true }, run, ...(hasMap ? [refreshRun] : []),
+  );
+  if (!pick) return;
+  bestRunning = true;
+  try {
+    const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur best practice review" }, (progress) =>
+      best.review(db, repoRoot(root) ?? root, { budget, refreshSources: pick === refreshRun, lang: vscode.workspace.getConfiguration("imprimatur").get("language") || best.proseLang(), progress: (message) => progress.report({ message }) }));
+    for (const p of r.pillars) log.info(`best ${p.pillar}: ${p.proposed} proposed, $${p.cost.toFixed(2)}${p.error ? `, error ${p.error}` : ""}`);
+    for (const d of r.dropped) log.info(`best dropped ${d.pillar} ${d.key}: ${d.why.join("; ")}`);
+    const errors = r.pillars.filter((p) => p.error);
+    showGraph({ tab: "tasks", root, task: best.TASK });
+    vscode.window.showInformationMessage(`Imprimatur: ${r.added} new, ${r.refreshed} refreshed recommendations ($${r.cost.toFixed(2)}). ${r.summary}${errors.length ? `. Failed: ${errors.map((e) => e.pillar).join(", ")} (Output → Imprimatur)` : ""}`);
+  } catch (e) {
+    vscode.window.showErrorMessage(`Imprimatur best practice review failed: ${e instanceof Error ? e.message : e}`);
+  } finally {
+    bestRunning = false;
+  }
+}
+
 /** What waits on the user: one count for the launcher, the status bar and the panel (graphView.inboxNow). */
 const inboxNow = () => panelInbox(graphRoot());
 
@@ -562,6 +603,7 @@ function activate(ctx) {
     vscode.commands.registerCommand("imprimatur.openGraph", () => showGraph({ tab: "edits" })),
     vscode.commands.registerCommand("imprimatur.openHome", () => showGraph({ tab: "home" })),
     vscode.commands.registerCommand("imprimatur.openTasks", () => showGraph({ tab: "tasks" })),
+    vscode.commands.registerCommand("imprimatur.bestPractices.run", () => runBestPractices()),
     vscode.commands.registerCommand("imprimatur.openInbox", () => showGraph({ tab: "inbox" })),
     // Design documents (#72): the Mimari and Ürün tabs; docs.reveal opens one on a section.
     vscode.commands.registerCommand("imprimatur.openArchitecture", () => showGraph({ tab: "architecture" })),
