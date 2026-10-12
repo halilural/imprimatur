@@ -72,3 +72,17 @@ test("setup: the status line is added only when there is none; another one is ke
   assert.equal(kept.change, undefined);
   assert.match(kept.hint, /statusline\.mjs/);
 });
+
+test("setup: one of our hooks under a matcher no longer used goes (it would run twice)", async () => {
+  const { mergeHooks } = await import("../scripts/setup.mjs");
+  const root = "/x/imprimatur";
+  const stale = { matcher: "Edit|Write|MultiEdit|Bash|mcp__imprimatur__task_upsert", hooks: [{ type: "command", command: `node "${root}/hooks/process.mjs"` }] };
+  const other = { matcher: "Bash", hooks: [{ type: "command", command: "node /else/process.mjs" }] };
+  const { settings, changes } = mergeHooks({ hooks: { PostToolUse: [stale, other] } }, { root });
+  const post = settings.hooks.PostToolUse;
+  assert.ok(!post.some((g) => g.matcher === stale.matcher), "the stale one is gone");
+  assert.ok(post.some((g) => g === other || JSON.stringify(g) === JSON.stringify(other)), "someone else's process.mjs stays");
+  assert.ok(changes.some((c) => c.startsWith("removed (stale) PostToolUse")));
+  // Run again: nothing to do.
+  assert.deepEqual(mergeHooks(settings, { root }).changes, []);
+});
