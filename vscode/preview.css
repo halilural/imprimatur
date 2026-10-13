@@ -4,15 +4,22 @@
   border-left: 3px solid;
   padding-left: 6px;
 }
-.imprimatur-added { background: rgba(46, 160, 67, 0.22); border-color: rgb(46, 160, 67); }
-.imprimatur-changed { background: rgba(31, 111, 235, 0.2); border-color: rgb(31, 111, 235); }
+/* Theme colours first (#90: a high-contrast theme gets its own); the fixed ones are the fallback. */
+.imprimatur-added { background: var(--vscode-diffEditor-insertedLineBackground, rgba(46, 160, 67, 0.22)); border-color: var(--vscode-gitDecoration-addedResourceForeground, rgb(46, 160, 67)); }
+.imprimatur-changed { background: var(--vscode-imprimatur-changedLineBackground, rgba(31, 111, 235, 0.2)); border-color: var(--vscode-gitDecoration-modifiedResourceForeground, rgb(31, 111, 235)); }
 /* Old text: plain text in a red box (no strike line: struck text was hard to read). */
-.imprimatur-old { margin: 0.4em 0 0; padding: 4px 9px; border: 1px solid rgba(248, 81, 73, 0.6); border-left: 3px solid rgb(248, 81, 73); border-radius: 3px; background: rgba(248, 81, 73, 0.12); }
+.imprimatur-old { margin: 0.4em 0 0; padding: 4px 9px; border: 1px solid var(--vscode-imprimatur-deletedForeground, rgba(248, 81, 73, 0.6)); border-left: 3px solid var(--vscode-imprimatur-deletedForeground, rgb(248, 81, 73)); border-radius: 3px; background: var(--vscode-imprimatur-oldTextBackground, rgba(248, 81, 73, 0.12)); }
 .imprimatur-old del { color: inherit; text-decoration: none; }
 /* Kept above neighbouring boxes so it always takes the click. */
 .imprimatur-accept { position: relative; z-index: 2; float: right; font-size: 0.85em; padding: 0 8px; border-radius: 3px; text-decoration: none; color: var(--vscode-button-foreground, #fff); background: var(--vscode-button-background, #0e639c); }
 .imprimatur-accept:hover { background: var(--vscode-button-hoverBackground, #1177bb); text-decoration: none; }
-.imprimatur-diagram { margin: 0.6em 0 0.2em; padding: 3px 8px; font-size: 0.85em; border-left: 3px solid rgb(210, 153, 34); background: rgba(210, 153, 34, 0.1); }
-.imprimatur-d-added { color: rgb(46, 160, 67); }
-.imprimatur-d-changed { color: rgb(210, 153, 34); }
-.imprimatur-d-removed { color: rgb(248, 81, 73); }
+.imprimatur-diagram { margin: 0.6em 0 0.2em; padding: 3px 8px; font-size: 0.85em; border-left: 3px solid var(--vscode-charts-yellow, rgb(210, 153, 34)); background: rgba(210, 153, 34, 0.1); }
+.imprimatur-d-added { color: var(--vscode-gitDecoration-addedResourceForeground, rgb(46, 160, 67)); }
+.imprimatur-d-changed { color: var(--vscode-charts-yellow, rgb(210, 153, 34)); }
+.imprimatur-d-removed { color: var(--vscode-imprimatur-deletedForeground, rgb(248, 81, 73)); }
+/* High contrast: the theme's contrast border too, so a change does not rest on colour alone. */
+.vscode-high-contrast .imprimatur-added, .vscode-high-contrast .imprimatur-changed, .vscode-high-contrast .imprimatur-old,
+.vscode-high-contrast-light .imprimatur-added, .vscode-high-contrast-light .imprimatur-changed, .vscode-high-contrast-light .imprimatur-old {
+  outline: 1px dashed var(--vscode-contrastBorder, currentColor);
+  outline-offset: 1px;
+}

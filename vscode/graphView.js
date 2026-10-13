@@ -80,7 +80,9 @@ const KINDS = { question: [tasksView.icon("question"), "Question"], command: [ta
 /** The waiting log that mirrors the user's open records (history.js): the records show in Bende bekleyenler themselves. */
 const FILES_SESSION = "todo-files";
 
-const COLORS = ["#4fc1ff", "#c586c0", "#dcdcaa", "#4ec9b0", "#ce9178", "#9cdcfe", "#f48771", "#b5cea8"];
+/** Lane colours: the theme's chart colours first (#90: a high-contrast theme gets its own), fixed ones after. */
+const COLORS = ["var(--vscode-charts-blue, #4fc1ff)", "var(--vscode-charts-purple, #c586c0)", "var(--vscode-charts-yellow, #dcdcaa)", "var(--vscode-charts-green, #4ec9b0)",
+  "var(--vscode-charts-orange, #ce9178)", "#9cdcfe", "var(--vscode-charts-red, #f48771)", "#b5cea8"];
 const LANE = 16;
 const ROW = 28;
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -111,10 +113,13 @@ function laneSvg(i, row, lanes, cols = columnsOf(lanes)) {
     const x = cols[k] * LANE + LANE / 2;
     const top = i === l.first ? ROW / 2 : 0;
     const bottom = i === l.last ? ROW / 2 : ROW;
-    return top === bottom ? "" : `<line x1="${x}" y1="${top}" x2="${x}" y2="${bottom}" stroke="${COLORS[k % COLORS.length]}" stroke-width="2"/>`;
+    // style, not the attribute: a presentation attribute takes no var().
+    return top === bottom ? "" : `<line x1="${x}" y1="${top}" x2="${x}" y2="${bottom}" style="stroke:${COLORS[k % COLORS.length]}" stroke-width="2"/>`;
   });
   const cx = cols[row.lane] * LANE + LANE / 2;
-  parts.push(`<circle cx="${cx}" cy="${ROW / 2}" r="4.5" fill="${COLORS[row.lane % COLORS.length]}"/>`);
+  // The dot names its task on hover: a lane is not told apart by colour alone (#90).
+  const task = lanes[row.lane]?.task;
+  parts.push(`<circle cx="${cx}" cy="${ROW / 2}" r="4.5" style="fill:${COLORS[row.lane % COLORS.length]}">${task ? `<title>${esc(task)}</title>` : ""}</circle>`);
   return `<svg width="${w}" height="${ROW}">${parts.join("")}</svg>`;
 }
 
