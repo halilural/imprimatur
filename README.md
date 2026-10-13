@@ -466,8 +466,22 @@ stops queueing changes (`--setup` again queues everything, edits made meanwhile 
   machine never undoes a different field changed on another.
 - A value over 100,000 characters (a huge record body) is sent cut short, ending
   in "…"; the machine that wrote it keeps it whole.
-- The server keeps every change it was sent; nothing compacts its `changes`
-  table yet. It stays small for one person's records; a new machine replays it all.
+- Once a day (03:23 UTC, a cron trigger) the server deletes changes a newer value
+  of the same field supersedes, by the machines' own rule; a new machine replays
+  what is left. Over 300 requests a minute from one address it answers 429, and
+  503 when D1 is busy or out of quota; VS Code then waits (Retry-After, doubling
+  up to 30 minutes). A transient D1 error on a push is retried.
+
+**Each time you deploy the Worker** (after a `git pull` that changed `cloud/`):
+
+```sh
+cd cloud
+# 1. Set compatibility_date in wrangler.jsonc to today: the runtime's newer defaults
+#    (https://developers.cloudflare.com/workers/configuration/compatibility-flags/).
+#    Read the flags that turn on between the old date and today first.
+npx wrangler d1 migrations apply imprimatur-sync --remote   # any new migrations/
+npx wrangler deploy
+```
 
 ### Live updates
 
