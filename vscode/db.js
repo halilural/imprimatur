@@ -712,9 +712,11 @@ class Db {
       if (rec.pointer && this.q("SELECT 1 FROM records WHERE task_id = ? AND pointer = 1").get(to.id)) {
         this.q("UPDATE records SET pointer = 0 WHERE id = ?").run(id);
       }
-      this.q("UPDATE records SET task_id = ?, updated_at = ? WHERE id = ?").run(to.id, now, id);
-      this.version_(id, actor, "update", { task: from.key }, { task: to.key }, now);
-      this.trackRecord_(id, ["task"], now);
+      // Last in the task it moves to: its old position means nothing there.
+      const position = /** @type {any} */ (this.q("SELECT coalesce(max(position), 0) + 1 AS p FROM records WHERE task_id = ?").get(to.id)).p;
+      this.q("UPDATE records SET task_id = ?, position = ?, updated_at = ? WHERE id = ?").run(to.id, position, now, id);
+      this.version_(id, actor, "update", { task: from.key, position: rec.position }, { task: to.key, position }, now);
+      this.trackRecord_(id, ["task", "position"], now);
       return this.record(id);
     });
   }

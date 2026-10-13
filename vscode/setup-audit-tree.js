@@ -128,7 +128,7 @@ function bySource(recs, lang) {
  */
 function auditGroups(records, { lang = "en" } = {}) {
   const L = lang === "tr" ? 2 : 1;
-  const recs = records.filter((r) => r.links?.audit);
+  const recs = records.filter((r) => r.links?.audit && !r.links.audit.duplicate);
   return STATUSES.flatMap(([st, en, tr, icon]) => {
     const rs = recs.filter((r) => r.status === st);
     if (!rs.length) return [];
@@ -184,6 +184,14 @@ function groupRow(g, root) {
 /** "2 high · 1 medium". @param {Record<string, number> | undefined} n */
 const severityLine = (n) => ["high", "medium", "low"].filter((l) => n?.[l]).map((l) => `${n?.[l]} ${l}`).join(" · ");
 
+/** A path of the repo, never outside it (evidence is model output; a synced record may predate the gate). @param {string} root @param {string | undefined} file */
+function inside(root, file) {
+  if (!file) return undefined;
+  const p = require("node:path");
+  const abs = p.resolve(root, file);
+  return abs.startsWith(p.resolve(root) + p.sep) ? abs : undefined;
+}
+
 /** A project recommendation row (#87): opens its first evidence; its record's body is the tooltip. @param {AuditRecord} r @param {string} root @returns {Row} */
 function bestRow(r, root) {
   const b = r.links.best;
@@ -193,7 +201,7 @@ function bestRow(r, root) {
     : r.status === "done" ? ["pass", "testing.iconPassed"] : ["circle-slash", "disabledForeground"];
   return {
     type: "leaf", label: r.title, description: `${b.component ?? ""}${first ? ` · ${first}` : ""}`, tooltip: r.body ?? r.title, markdown: true, icon: icon[0], color: icon[1],
-    ...(file ? { abs: `${root}/${file}`, line: line ? Number(line) : undefined } : {}), context: `bestFinding-${r.status}`, recordId: r.id,
+    ...(inside(root, file) ? { abs: inside(root, file), line: line ? Number(line) : undefined } : {}), context: `bestFinding-${r.status}`, recordId: r.id,
   };
 }
 
@@ -215,8 +223,8 @@ const isBestOpen = (r) => r.status === "open" && Boolean(r.links?.best);
  * @param {{label: string, root: string, records: AuditRecord[], summary?: string | null}} scope @returns {Row}
  */
 function scopeRow(scope) {
-  const audit = scope.records.filter((r) => r.links?.audit);
-  const best = scope.records.filter((r) => r.links?.best);
+  const audit = scope.records.filter((r) => r.links?.audit && !r.links.audit.duplicate);
+  const best = scope.records.filter((r) => r.links?.best && !r.links.best.duplicate);
   const auditRows = auditGroups(audit).map((g) => groupRow(g, scope.root));
   const { bestGroups } = require("./best-tree.js");
   const bestRows = bestGroups(best, { lang: "en" }).map((g) => bestGroupRow(g, scope.root));
@@ -239,7 +247,8 @@ function scopeRow(scope) {
  * @param {Array<{label: string, root: string, records: AuditRecord[], summary?: string | null}>} scopes @returns {Row}
  */
 function recommendationsRow(scopes) {
-  const some = scopes.filter((s) => s.records.some((r) => r.links?.audit || r.links?.best));
+  const some = scopes.map((s) => ({ ...s, records: s.records.filter((r) => !r.links?.audit?.duplicate && !r.links?.best?.duplicate) }))
+    .filter((s) => s.records.some((r) => r.links?.audit || r.links?.best));
   if (!some.length) {
     return { type: "leaf", label: "Recommendations", description: "audit the agent setup, review the project", icon: "lightbulb", command: "imprimatur.setup.audit",
       tooltip: "The agent setup audit (agnix, by the tools' docs) and the project review (Claude, by ISO/IEC 25010 and NIST SSDF); every finding is a record (open, applied, dismissed)." };

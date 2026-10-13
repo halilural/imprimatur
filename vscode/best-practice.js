@@ -302,6 +302,55 @@ function linksIn(text, base) {
   return [...new Set([...abs, ...rel])].filter(publicHttps);
 }
 
+/** An address a host may not be sent to: loopback, private, link-local, unique-local. @param {string} ip */
+function privateIp(ip) {
+  const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(ip.replace(/^::ffff:/i, ""));
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
+  }
+  const v6 = ip.toLowerCase();
+  return v6 === "::1" || v6 === "::" || /^f[cd]/.test(v6) || /^fe[89ab]/.test(v6);
+}
+
+/** Whether a host name resolves only to public addresses. @param {string} host @param {{lookup?: (h: string) => Promise<Array<{address: string}>>}} [o] */
+async function resolvesPublic(host, { lookup = (h) => require("node:dns").promises.lookup(h, { all: true }) } = {}) {
+  try {
+    const addrs = await lookup(host);
+    return addrs.length > 0 && addrs.every((a) => !privateIp(a.address));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * GET a model-proposed page safely: a public https URL that resolves to public
+ * addresses only; redirects followed by hand, at most 3, only on the same host.
+ * @param {string} url @param {{fetchFn?: typeof fetch, lookup?: any}} [o] @returns {Promise<string>} the body, or "" when refused
+ */
+async function fetchPublic(url, { fetchFn = fetch, lookup } = {}) {
+  let u = url;
+  const host = (() => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return "";
+    }
+  })();
+  for (let hop = 0; hop < 4; hop++) {
+    if (!publicHttps(u) || new URL(u).hostname !== host || !(await resolvesPublic(host, lookup ? { lookup } : {}))) return "";
+    const r = await fetchFn(u, { redirect: "manual", signal: AbortSignal.timeout(30_000) });
+    if (r.status >= 300 && r.status < 400) {
+      const to = r.headers?.get?.("location");
+      if (!to) return "";
+      u = new URL(to, u).href;
+      continue;
+    }
+    return r.ok ? await r.text() : "";
+  }
+  return "";
+}
+
 /** HTML to plain text, enough for a changelog page. @param {string} h */
 const htmlText = (h) => h.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ")
   .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
@@ -310,9 +359,9 @@ const htmlText = (h) => h.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/st
  * The documentation for a review, fetched by code in parallel (8 at a time): per
  * component × category, Context7 and the vendor's docs MCP; changelogs once, for
  * compatibility and the process.
- * @param {SourceMap} map @param {string[]} cats @param {{fetchFn?: typeof fetch, cap?: number}} [o] @returns {Promise<Excerpt[]>}
+ * @param {SourceMap} map @param {string[]} cats @param {{fetchFn?: typeof fetch, cap?: number, lookup?: any}} [o] @returns {Promise<Excerpt[]>}
  */
-async function fetchDocs(map, cats, { fetchFn = fetch, cap = 2500 } = {}) {
+async function fetchDocs(map, cats, { fetchFn = fetch, cap = 2500, lookup } = {}) {
   /** @type {Excerpt[]} */
   const out = [];
   /** @type {Array<() => Promise<void>>} */
@@ -333,9 +382,9 @@ async function fetchDocs(map, cats, { fetchFn = fetch, cap = 2500 } = {}) {
         if (text) out.push({ component: c.name, cat, kind: "mcp", ref: mcp.url, urls: linksIn(text, mcp.base), text: text.slice(0, cap) });
       });
     }
+    // The changelog URL is the model's: fetched only on a public host, same-host redirects.
     if (c.changelog_url) jobs.push(async () => {
-      const r = await fetchFn(c.changelog_url, { redirect: "follow", signal: AbortSignal.timeout(30_000) });
-      const text = r.ok ? htmlText(await r.text()) : "";
+      const text = htmlText(await fetchPublic(c.changelog_url, { fetchFn, lookup }));
       if (text) for (const cat of ["compatibility", "ssdf"].filter((x) => cats.includes(x))) out.push({ component: c.name, cat, kind: "url", ref: c.changelog_url, urls: [c.changelog_url], text: text.slice(0, cap * 2) });
     });
   }
@@ -449,6 +498,8 @@ function gate(recsIn, root, decisionIds, fetched) {
       const abs = file ? path.resolve(base, file) : "";
       if (!abs || !abs.startsWith(base + path.sep)) return true;
       try {
+        // A link inside the repo may point outside it: the real path must stay inside too.
+        if (!fs.realpathSync(abs).startsWith(fs.realpathSync(base) + path.sep)) return true;
         if (!line) return !fs.statSync(abs).isFile();
         return Number(line) > fs.readFileSync(abs, "utf8").split("\n").length;
       } catch {
@@ -515,7 +566,7 @@ const idOf = (b) => `${b.category ?? b.pillar ?? ""}:${b.key}`;
 function reconcileBest(list, records) {
   /** @type {Map<string, any>} */
   const byKey = new Map();
-  for (const r of records) if (r.links?.best?.key) byKey.set(idOf(r.links.best), r);
+  for (const r of records) if (r.links?.best?.key && !r.links.best.duplicate) byKey.set(idOf(r.links.best), r);
   /** @type {{add: Recommendation[], refresh: Array<{id: number, r: Recommendation}>, dismissed: number}} */
   const plan = { add: [], refresh: [], dismissed: 0 };
   const seen = new Set();
@@ -545,9 +596,9 @@ function mapBody(map) {
  * category (staggered for the prompt cache), gate, dedupe, one write.
  * @param {any} db @param {string} root
  * @param {{categories?: string[], refreshSources?: boolean, budget?: number, lang?: string, ask?: typeof askClaude, fetchFn?: typeof fetch,
- *   progress?: (msg: string) => void, now?: number, stagger?: number}} [o]
+ *   progress?: (msg: string) => void, now?: number, stagger?: number, lookup?: any}} [o]
  */
-async function review(db, root, { categories = CORE, refreshSources = false, budget = 1.5, lang = "English", ask = askClaude, fetchFn = fetch, progress = () => {}, now = Date.now(), stagger = 4000 } = {}) {
+async function review(db, root, { categories = CORE, refreshSources = false, budget = 1.5, lang = "English", ask = askClaude, fetchFn = fetch, progress = () => {}, now = Date.now(), stagger = 4000, lookup } = {}) {
   const t0 = Date.now();
   const cats = categories.filter((c) => c in CATEGORIES);
   if (!cats.length) throw new Error("no category to review");
@@ -574,7 +625,7 @@ async function review(db, root, { categories = CORE, refreshSources = false, bud
   const m = /** @type {SourceMap} */ (map);
   progress(`Fetching documentation for ${m.components.length} components`);
   let t = Date.now();
-  const docs = await fetchDocs(m, cats, { fetchFn });
+  const docs = await fetchDocs(m, cats, { fetchFn, lookup });
   timings.fetch = Date.now() - t;
   const fetched = new Set(docs.flatMap((d) => d.urls).map(normUrl));
   const system = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-best-")), "context.txt");
@@ -633,6 +684,6 @@ function proseLang() {
 
 module.exports = {
   TASK, ACTOR, MODEL, MAP_MODEL, CATEGORIES, CORE, VENDOR_MCP, DENY, run, childEnv, askClaude, authKind, projectContext, repoBundle, MAP_SCHEMA,
-  publicHttps, context7For, buildSourceMap, mcpSearch, linksIn, fetchDocs, recSchema, sharedPrompt, categoryPrompt, normUrl, gate, dedupe,
+  publicHttps, privateIp, resolvesPublic, fetchPublic, context7For, buildSourceMap, mcpSearch, linksIn, fetchDocs, recSchema, sharedPrompt, categoryPrompt, normUrl, gate, dedupe,
   bodyOf, linksOf, reconcileBest, sourceMapRecord, mapBody, review, proseLang,
 };

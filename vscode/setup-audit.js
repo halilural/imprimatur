@@ -347,7 +347,7 @@ function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = 
   // Read only: RECS and the containers it replaces (a dry run moves nothing).
   const read = () => {
     const tasks = [recs.TASK, ...recs.OLD].map((k) => db.taskByKey(repo.id, k)).filter(Boolean);
-    const records = tasks.flatMap((t) => db.recordsOf(t.id, { dropped: true })).filter((/** @type {any} */ r) => r.links?.audit);
+    const records = tasks.flatMap((t) => db.recordsOf(t.id, { dropped: true })).filter((/** @type {any} */ r) => r.links?.audit && !r.links.audit.duplicate);
     return { plan: reconcile(findings, records) };
   };
   const summaryOf = (/** @type {ReturnType<typeof reconcile>} */ plan) => ({

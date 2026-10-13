@@ -158,7 +158,8 @@ test("best: a review — map once (haiku), docs fetched by code, one call per ca
     const r0 = db.repoOf(root);
     const t0 = recs.recsTask(db, r0.id, { create: true });
     db.addRecord(t0.id, { kind: "fixme", title: "CC-HK-010: no timeout", links: { audit: { fp: "a", rule: "CC-HK-010", level: "warning", category: "claude-hooks", group: "project", effect: "active", file: path.join(root, "package.json"), line: 1 } } }, { kind: "hook" });
-    let r = await best.review(db, root, { categories: ["compatibility", "security"], ask, fetchFn, now: 1000, stagger: 0 });
+    const lookup = async () => [{ address: "93.184.216.34" }];
+    let r = await best.review(db, root, { categories: ["compatibility", "security"], ask, fetchFn, now: 1000, stagger: 0, lookup });
     assert.deepEqual(calls.map((c) => [c.model, c.map]), [["haiku", true], ["sonnet", false], ["sonnet", false]]);
     assert.ok(calls.slice(1).every((c) => c.effort === "medium" && c.system), "the shared part goes as a system file");
     assert.equal(r.added, 2);
@@ -173,7 +174,7 @@ test("best: a review — map once (haiku), docs fetched by code, one call per ca
     assert.match(t.summary ?? db.taskByKey(r0.id, "RECS").summary, /Agent setup: 1 open \(1 warning\) \| Project: 2 open \(2 medium\)/);
     // Second run: the map is reused; the same keys refreshed.
     calls.length = 0;
-    r = await best.review(db, root, { categories: ["compatibility"], ask, fetchFn, now: 2000, stagger: 0 });
+    r = await best.review(db, root, { categories: ["compatibility"], ask, fetchFn, now: 2000, stagger: 0, lookup });
     assert.equal(calls.filter((c) => c.map).length, 0);
     assert.deepEqual([r.added, r.refreshed], [0, 2]);
     // The groups and the page.
@@ -194,4 +195,63 @@ test("best: a review — map once (haiku), docs fetched by code, one call per ca
   } finally {
     db.close();
   }
+});
+
+test("best: a model-proposed page is fetched only on a public host; redirects by hand, same host only", async () => {
+  assert.equal(best.privateIp("10.0.0.5"), true);
+  assert.equal(best.privateIp("169.254.169.254"), true);
+  assert.equal(best.privateIp("::1"), true);
+  assert.equal(best.privateIp("93.184.216.34"), false);
+  const pub = async () => [{ address: "93.184.216.34" }];
+  const priv = async () => [{ address: "127.0.0.1" }];
+  const seen = [];
+  const fetchFn = async (u, init) => {
+    seen.push([u, init.redirect]);
+    if (u.endsWith("/a")) return { status: 302, ok: false, headers: { get: () => "/b" } };
+    if (u.endsWith("/x")) return { status: 302, ok: false, headers: { get: () => "https://evil.example/" } };
+    return { status: 200, ok: true, text: async () => "page" };
+  };
+  assert.equal(await best.fetchPublic("https://docs.example.com/a", { fetchFn, lookup: pub }), "page");
+  assert.deepEqual(seen.map((s) => s[1]), ["manual", "manual"]);
+  assert.equal(await best.fetchPublic("https://docs.example.com/x", { fetchFn, lookup: pub }), "", "another host");
+  assert.equal(await best.fetchPublic("https://docs.example.com/", { fetchFn, lookup: priv }), "", "resolves private");
+});
+
+test("recs: a read writes nothing; a finding written again under the old task moves in as a dropped duplicate, last in order", () => {
+  const db = db0();
+  try {
+    const r = db.repoOf(repo());
+    const t = recs.recsTask(db, r.id, { create: true });
+    const rec1 = db.addRecord(t.id, { kind: "fixme", title: "f", links: { audit: { fp: "same", level: "warning", group: "project", effect: "active" } } }, { kind: "hook" });
+    const stamp = db.changeStamp();
+    assert.equal(recs.recsTask(db, r.id).id, t.id);
+    assert.equal(db.changeStamp(), stamp, "nothing to move: no write");
+    // An older release audited again into AUDIT.
+    const a = db.upsertTask(r.id, "AUDIT", { status: "active" });
+    const again = db.addRecord(a.id, { kind: "fixme", title: "f", links: { audit: { fp: "same", level: "warning", group: "project", effect: "active" } } }, { kind: "hook" });
+    recs.recsTask(db, r.id);
+    const moved = db.record(again.id);
+    assert.equal(moved.task_id, t.id);
+    assert.equal(moved.status, "dropped");
+    assert.equal(moved.links.audit.duplicate, true);
+    assert.ok(moved.position > db.record(rec1.id).position, "last in the task");
+    assert.equal(recs.summaryLine(db.recordsOf(t.id, { dropped: true })), "Agent setup: 1 open (1 warning)", "the duplicate is not counted");
+    const { reconcile } = require("../vscode/setup-audit.js");
+    assert.ok(reconcile, "audit reconcile exists");
+  } finally {
+    db.close();
+  }
+});
+
+test("best: evidence through a link that leaves the repo is not evidence; the tree opens files inside the repo only", () => {
+  const root = repo();
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "outside-"));
+  fs.writeFileSync(path.join(outside, "secret.txt"), "x\n");
+  fs.symlinkSync(outside, path.join(root, "link"));
+  const { kept, dropped } = best.gate([rec("via-link", { evidence: ["link/secret.txt:1"] })], root, new Set(), new Set([best.normUrl(URL1)]));
+  assert.equal(kept.length, 0);
+  assert.match(dropped[0].why[0], /evidence not in the repo/);
+  const { bestRow } = require("../vscode/setup-audit-tree.js");
+  const row = bestRow({ id: 1, status: "open", title: "t", links: { best: { evidence: ["../../etc/passwd:1"], severity: "low" } } }, root);
+  assert.equal(row.abs, undefined);
 });

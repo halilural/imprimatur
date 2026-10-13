@@ -119,6 +119,118 @@ While the plugin is enabled, a plain `npm run setup` writes no hooks.
   and the git hooks commits run through. Grouped by tool, each with a one-line
   summary (a settings file lists its hooks); files new, changed or removed
   since you last looked are marked until you Mark all as seen. Read only.
+- **Recommendations** (Agent setup, the lightbulb): one place for what to
+  improve, from two producers, each finding a record that stays (open, applied,
+  or dismissed with why; a dismissed one does not come back):
+  - *Agent setup*: lints every agent file with
+    [agnix](https://github.com/agent-sh/agnix), whose rules cite the tools'
+    docs — the repo, and your home's agent folders with their plugins. Findings
+    in files Claude Code does not load are kept apart ("not loaded").
+    Also `npm run audit -- [repo] [--global] [--dry-run]` and the `setup_audit`
+    MCP tool.
+  - *Project*: best practices for how the repo is built, by ISO/IEC 25010:2023
+    and NIST SSDF (security, reliability, maintainability, compatibility,
+    performance, the development process; the rest on request). Code fetches
+    the stack's current documentation (Context7, vendors' docs MCP servers,
+    changelogs); Claude judges one category per call against your architecture
+    document and decisions. A recommendation is kept only citing a page fetched
+    in the run and with evidence in the repo. About 2–3 minutes; it uses
+    Claude (your plan's limits on a subscription) and asks first. Also
+    `npm run best -- [repo] [--categories …|all] [--refresh-sources]`.
+- **Waiting on you** collects the agent's questions, permission requests and
+  "test this" steps, across sessions, each written to make sense on its own
+  ("LATD-13937: send Tim the follow-up mail about the !2690 review"), with a
+  line on why.
+- A step shows its task: click the key to open its issue or Jira page (the link
+  in the task's TODO.md, or the repo's GitHub issue), or the 📄 to open the
+  TODO.md at the line that says it.
+- After each turn Haiku keeps the list honest: what you answered, what was done
+  or asked again is ticked. **Audit** reviews it on demand.
+- Set up after work began? **Scan history** reads your past Claude sessions and
+  `TODO.md` files for asks you may have missed.
+
+## Quick start
+
+1. Clone this repo; you need Node 22+, git, VS Code 1.100+ and the `claude` CLI.
+2. Run `npm run setup` in it: it adds the Claude Code hooks for every repo and
+   installs the extension.
+3. Ask Claude to edit a Markdown file, then open it: the changes are marked.
+   Click **Agent Graph** in the status bar for the edits and what waits on you.
+
+### Install as a Claude Code plugin
+
+The hooks and the MCP server also ship as a Claude Code plugin, so Claude Code
+keeps them up to date instead of `~/.claude/settings.json`:
+
+```sh
+claude plugin marketplace add halilural/imprimatur
+claude plugin install imprimatur@imprimatur
+```
+
+The plugin does not bring the VS Code extension or the status line. In a clone
+of this repo, run `npm run setup -- --plugin [--lang Turkish] [--exts md,mdx]`:
+it installs the plugin from the clone, takes the settings-file hooks and the
+user-scope MCP server out (a backup first), and adds the status line and the
+extension. Plugin hooks take no arguments: they read the language and file
+extensions from `IMPRIMATUR_LANG`, the plugin's options (`/config`), or the
+`config.json` next to Imprimatur's database that `--lang` / `--exts` write.
+While the plugin is enabled, a plain `npm run setup` writes no hooks.
+
+## Reference
+
+### Features
+
+- Added lines get a green background.
+- A changed line where only one word changed marks that word: the new word
+  highlighted, the old one in a red box next to it. When more than one word
+  changed, the old sentence is shown above the line (a CodeLens: the editor API
+  cannot insert a real line) and the new line is highlighted.
+- A deleted block shows a red marker on the line before it; hover to read it.
+- Marks in the overview ruler, a change count in the status bar.
+- **✓ Accept** in the editor (CodeLens) per Markdown unit: a block that is all
+  new (table, quote, list item, paragraph, heading, code, HTML, rule) is one
+  unit, a changed line (e.g. a table cell) is its own; and on each
+  changed block in the Markdown preview accepts that block; **Imprimatur:
+  Accept Agent Change at Cursor** and **Accept All Agent Changes in File** do
+  the same from the command palette. After an accept the view moves to the
+  next change, like a review queue.
+- Old text is shown as plain text in a red box (no strike line, so it stays
+  readable); in the preview it is rendered as Markdown.
+- **Imprimatur: Show Agent Edit History** (command palette) lists the
+  agent's edits to the file newest first, like a commit log; pick one to open
+  its diff (before / after), or **All changes under review**.
+- **Agent Change Graph** (status bar **Agent Graph**, or the command palette): every agent
+  edit in the repo as a table like Git Graph, one colored lane per Claude
+  session, click a row for its diff. The description is one plain sentence on
+  what the edit changed, written a few seconds later by a small model from the
+  edit's diff ([hooks/describe.mjs](hooks/describe.mjs), `claude -p --model
+  haiku`, run in the background; language from `IMPRIMATUR_LANG`, default
+  English; `IMPRIMATUR_DESCRIBE=off` turns it off). Until then, or without it:
+  what the agent said it was doing, else the nearest heading and the first
+  changed line. Hover the description for all of it. Your request is in the row's tooltip, the
+  session column shows Claude's title for the conversation.
+  A green ✓ marks edits with nothing left under review, an amber dot the rest:
+  hover it for an Accept button (or right-click the row: Accept this edit, Go to change, Open
+  diff); hover the status cell to see its change (the popup stays while you move into
+  it, and scrolls). A Markdown edit shows rendered, as the preview's review: its added
+  and changed blocks marked, old text in red boxes, one block of context around each. The status bar's **Agent Graph** button opens it and shows
+  how many asks wait on you.
+- **Imprimatur panel tabs** (#69): next to the edits (**Ajan değişiklikleri**),
+  **Ana sayfa** (progress, where each task was left, the top asks, every task),
+  **Görevler** (the task list by status, this repo or every repo; a task's page:
+  where we left off, what waits on you with an answer box, todos to tick, a
+  quick-add box (`?` question, `!` decision, `#` note, `@ben` your todo),
+  decisions, ADRs, PDRs, manual tests, activity) and **Bende bekleyenler**
+  (everything waiting on you, by task, plus the turn-end asks). Keyboard: j/k,
+  Enter, x, a, /, Esc. Writes go to Imprimatur's database as you.
+- **Imprimatur side bar** (its own icon in the activity bar): rows that open
+  the panel on a tab (the badge counts what waits on you), then **Agent setup**: every file in the repo, and in your home folder, that
+  shapes a coding agent, whatever the tool: Claude Code (CLAUDE.md, settings
+  hooks and permissions, hook scripts, skills, commands, agents, MCP), Cursor
+  rules, Copilot instructions, AGENTS.md, GEMINI.md, Windsurf, Cline, Aider,
+  and the git hooks commits run through. Grouped by tool, each with a one-line
+  summary (a settings file lists its hooks); files new, changed or removed
+  since you last looked are marked until you Mark all as seen. Read only.
 - **Recommendations** (Agent setup, the lightbulb): audits the agent setup with
   [agnix](https://github.com/agent-sh/agnix), whose rules each cite the tools'
   docs: the repo, and your home's agent folders with their plugins. Nothing is

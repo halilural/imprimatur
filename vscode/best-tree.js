@@ -54,7 +54,7 @@ function byCategory(rs, tr) {
 /** The groups of a repo's project recommendations. @param {BestRecord[]} records @param {{lang?: "en" | "tr"}} [o] @returns {BestGroup[]} */
 function bestGroups(records, { lang = "tr" } = {}) {
   const tr = lang === "tr";
-  const recs = records.filter((r) => r.links?.best);
+  const recs = records.filter((r) => r.links?.best && !r.links.best.duplicate);
   return STATUSES.flatMap(([st, en, trName, icon]) => {
     const rs = recs.filter((r) => r.status === st);
     if (!rs.length) return [];
