@@ -37,7 +37,7 @@ if (!root) {
 const db = require("../vscode/db.js").openDb();
 try {
   const r = await review(db, root, { categories, refreshSources, budget, lang: proseLang(), progress: (m) => console.log(`… ${m}`) });
-  for (const c of r.categories) console.log(`  ${c.category}: ${c.proposed} proposed, $${c.cost.toFixed(2)}${c.error ? `, ERROR ${c.error}` : ""}`);
+  for (const c of r.categories) console.log(`  ${c.category}: ${c.proposed} proposed, $${c.cost.toFixed(2)}${c.retried ? " (retried without tools)" : ""}${c.error ? `, ERROR ${c.error}` : ""}`);
   for (const d of r.dropped) console.log(`  dropped ${d.category} ${d.key}: ${d.why.join("; ")}`);
   console.log(`${root}: ${r.components} components, ${r.excerpts} excerpts; ${r.kept} kept (${r.merged} merged), ${r.added} new, ${r.refreshed} refreshed, ${r.dismissed} dismissed; $${r.cost.toFixed(2)}; ${JSON.stringify(Object.fromEntries(Object.entries(r.timings).map(([k, v]) => [k, Math.round(v / 100) / 10])))} s`);
   console.log(`RECS: ${r.summary}`);

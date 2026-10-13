@@ -255,3 +255,26 @@ test("best: evidence through a link that leaves the repo is not evidence; the tr
   const row = bestRow({ id: 1, status: "open", title: "t", links: { best: { evidence: ["../../etc/passwd:1"], severity: "low" } } }, root);
   assert.equal(row.abs, undefined);
 });
+
+test("best: a category out of turns is asked once more without tools, so it is not lost", async () => {
+  const db = db0();
+  const root = repo();
+  const calls = [];
+  const ask = async (prompt, schema, o) => {
+    calls.push({ tools: o.tools, maxTurns: o.maxTurns, map: "components" in schema.properties });
+    if ("components" in schema.properties) return { out: { components: [{ name: "Node.js", docs_name: "Node.js", version: ">=22", evidence: ["package.json:1"], vendor: "other", changelog_url: "" }] }, cost: 0.1 };
+    if (o.tools === undefined) throw Object.assign(new Error("claude: error_max_turns"), { cost: 0.5, subtype: "error_max_turns" });
+    return { out: { recommendations: [rec("node-floor")] }, cost: 0.1 };
+  };
+  const fetchFn = async (u) => (String(u).includes("/libs/search") ? { ok: true, json: async () => ({ results: [{ id: "/nodejs/node", title: "Node.js", trustScore: 9 }] }) }
+    : { ok: true, text: async () => `Source: ${URL1}\nx` });
+  try {
+    const r = await best.review(db, root, { categories: ["compatibility"], ask, fetchFn, stagger: 0, lookup: async () => [{ address: "93.184.216.34" }] });
+    assert.deepEqual(calls.filter((c) => !c.map).map((c) => [c.maxTurns, c.tools?.length ?? "repo"]), [[20, "repo"], [2, 0]]);
+    assert.equal(r.added, 1);
+    assert.equal(r.categories[0].retried, true);
+    assert.equal(r.categories[0].cost, 0.6);
+  } finally {
+    db.close();
+  }
+});

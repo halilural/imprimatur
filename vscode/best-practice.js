@@ -111,12 +111,13 @@ const REPO_TOOLS = ["Read", "Glob", "Grep"];
  * One `claude -p` with a JSON schema; only the repo tools (no web, no MCP), secrets
  * denied, dontAsk, no settings files (no hooks), a minimal env, the prompt on stdin.
  * @param {string} prompt @param {any} schema
- * @param {{cwd: string, model?: string, effort?: string, maxTurns?: number, system?: string, budget?: number, exec?: typeof run, timeoutMs?: number}} o
+ * `tools: []`: no tool at all (an answer from the prompt alone).
+ * @param {{cwd: string, model?: string, effort?: string, maxTurns?: number, system?: string, budget?: number, exec?: typeof run, timeoutMs?: number, tools?: string[]}} o
  * @returns {Promise<{out: any, cost: number, turns: number}>}
  */
-async function askClaude(prompt, schema, { cwd, model = MODEL, effort = "medium", maxTurns = 12, system, budget = 1.5, exec = run, timeoutMs = 10 * 60_000 }) {
+async function askClaude(prompt, schema, { cwd, model = MODEL, effort = "medium", maxTurns = 20, system, budget = 1.5, exec = run, timeoutMs = 10 * 60_000, tools = REPO_TOOLS }) {
   const args = ["-p", "--model", model, "--effort", effort, "--max-turns", String(maxTurns), "--output-format", "json", "--json-schema", JSON.stringify(schema),
-    "--tools", REPO_TOOLS.join(","), "--allowedTools", ...REPO_TOOLS, "--disallowedTools", ...DENY, "--permission-mode", "dontAsk",
+    "--tools", tools.join(","), ...(tools.length ? ["--allowedTools", ...tools] : []), "--disallowedTools", ...DENY, "--permission-mode", "dontAsk",
     "--mcp-config", '{"mcpServers":{}}', "--strict-mcp-config", "--setting-sources", "", "--no-session-persistence", "--disable-slash-commands",
     "--max-budget-usd", String(budget), ...(system ? ["--append-system-prompt-file", system] : [])];
   const r = await exec("claude", args, { cwd, timeout: timeoutMs, env: childEnv(), input: prompt });
@@ -127,7 +128,7 @@ async function askClaude(prompt, schema, { cwd, model = MODEL, effort = "medium"
     throw Object.assign(new Error(`claude: ${(r.stderr || r.stdout || `exit ${r.code}`).trim().slice(0, 300)}`), { cost: 0 });
   }
   const cost = Number(res.total_cost_usd ?? 0);
-  if (res.is_error && !res.structured_output) throw Object.assign(new Error(`claude: ${String(res.result ?? res.subtype ?? "error").slice(0, 300)}`), { cost });
+  if (res.is_error && !res.structured_output) throw Object.assign(new Error(`claude: ${String(res.result ?? res.subtype ?? "error").slice(0, 300)}`), { cost, subtype: res.subtype });
   let out = res.structured_output;
   if (out === undefined) {
     try {
@@ -639,11 +640,25 @@ async function review(db, root, { categories = CORE, refreshSources = false, bud
       // The first call writes the shared prompt to the cache; the others read it.
       if (i && stagger) await new Promise((r) => setTimeout(r, stagger));
       const keys = before.filter((/** @type {any} */ r) => r.links?.best?.category === cat).map((/** @type {any} */ r) => r.links.best.key);
+      const prompt = categoryPrompt(cat, docs.filter((d) => d.cat === cat), keys, lang);
+      const asRecs = (/** @type {any} */ out) => (Array.isArray(out?.recommendations) ? out.recommendations : []).map((/** @type {any} */ r) => ({ ...r, category: cat }));
+      let spent = 0;
       try {
-        const { out, cost: c } = await ask(categoryPrompt(cat, docs.filter((d) => d.cat === cat), keys, lang), recSchema(cat), { cwd: root, model: MODEL, effort: "medium", maxTurns: 12, system, budget });
-        return { cat, recs: (Array.isArray(out?.recommendations) ? out.recommendations : []).map((/** @type {any} */ r) => ({ ...r, category: cat })), cost: c };
+        const { out, cost: c } = await ask(prompt, recSchema(cat), { cwd: root, model: MODEL, effort: "medium", maxTurns: 20, system, budget });
+        return { cat, recs: asRecs(out), cost: c };
       } catch (e) {
-        return { cat, recs: [], cost: Number(/** @type {any} */ (e)?.cost ?? 0), error: e instanceof Error ? e.message : String(e) };
+        spent = Number(/** @type {any} */ (e)?.cost ?? 0);
+        // Out of turns checking the repo: once more without tools, from what it was given
+        // (the key files are in the prompt), so the category is not lost.
+        if (/** @type {any} */ (e)?.subtype === "error_max_turns" || /max_turns/.test(String(/** @type {any} */ (e)?.message))) {
+          try {
+            const { out, cost: c } = await ask(`${prompt}\n\nAnswer now from the files and excerpts given; do not read anything else.`, recSchema(cat), { cwd: root, model: MODEL, effort: "medium", maxTurns: 2, system, budget, tools: [] });
+            return { cat, recs: asRecs(out), cost: spent + c, retried: true };
+          } catch (e2) {
+            return { cat, recs: [], cost: spent + Number(/** @type {any} */ (e2)?.cost ?? 0), error: e2 instanceof Error ? e2.message : String(e2) };
+          }
+        }
+        return { cat, recs: [], cost: spent, error: e instanceof Error ? e.message : String(e) };
       }
     }));
   } finally {
@@ -669,7 +684,7 @@ async function review(db, root, { categories = CORE, refreshSources = false, bud
   timings.total = Date.now() - t0;
   return {
     ...result, kept: final.length, merged: kept.length - final.length, dropped, cost, timings, excerpts: docs.length, components: m.components.length,
-    categories: runs.map((r) => ({ category: r.cat, proposed: r.recs.length, cost: r.cost, ...(r.error ? { error: r.error } : {}) })),
+    categories: runs.map((r) => ({ category: r.cat, proposed: r.recs.length, cost: r.cost, ...(/** @type {any} */ (r).retried ? { retried: true } : {}), ...(r.error ? { error: r.error } : {}) })),
   };
 }
 
