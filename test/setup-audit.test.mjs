@@ -103,7 +103,7 @@ test("audit: runs write the AUDIT task — applied when gone, back when found ag
     assert.equal(recs()[1].status, "dropped");
     s = run([one]);
     assert.equal(recs()[1].status, "dropped");
-    assert.equal(db.taskByKey(repo.id, TASK).summary, "1 open (1 warning) · 1 dismissed");
+    assert.equal(db.taskByKey(repo.id, TASK).summary, "Agent setup: 1 open (1 warning) · 1 dismissed");
     // A dry run writes nothing.
     const before = JSON.stringify(recs());
     auditRoot(db, { root }, { bin: "agnix", spawn, dryRun: true, report: { diagnostics: [] } });
@@ -224,11 +224,11 @@ test("audit: this repo's task list shows the global audit too, in a Global (~) g
     auditRoot(db, { root: h, home: h, global: true }, { bin: "agnix", spawn, report: { diagnostics: [d("B-1", path.join(h, ".claude/CLAUDE.md"), "b")] } });
     db.upsertTask(db.repoByRoot(h).id, "#9", { title: "Not shown", status: "active" });
     const m = tasksPage(db, root, { filter: "active" }, { home: h });
-    assert.deepEqual(m.groups.map((g) => [g.tasks.map((t) => t.key), Boolean(g.global)]), [[["AUDIT"], false], [["AUDIT"], true]]);
+    assert.deepEqual(m.groups.map((g) => [g.tasks.map((t) => t.key), Boolean(g.global)]), [[["RECS"], false], [["RECS"], true]]);
     assert.match(tasksHtml(m), /Global \(~\)/);
     // Every repo: the home is one of them, no copy.
     const all = tasksPage(db, root, { filter: "active", all: true }, { home: h });
-    assert.equal(all.groups.flatMap((g) => g.tasks).filter((t) => t.key === "AUDIT").length, 2);
+    assert.equal(all.groups.flatMap((g) => g.tasks).filter((t) => t.key === "RECS").length, 2);
   } finally {
     db.close();
   }
@@ -248,7 +248,7 @@ test("audit: synced skills are their own source; the AUDIT task page shows the f
     const m = tasksPage(db, root, { sel: task.id, filter: "active" }, { home: dir });
     assert.equal(m.cur.audit[0].label, "Açık");
     const html = tasksHtml(m);
-    assert.match(html, /Denetim bulguları/);
+    assert.match(html, /Ajan kurulumu/);
     assert.match(html, /CC-HK-010 Timeout Policy/);
     assert.doesNotMatch(html, /data-k="todos"/, "no flat todo list for the audit");
   } finally {

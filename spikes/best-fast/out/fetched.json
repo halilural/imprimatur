@@ -1,0 +1,814 @@
+[
+  {
+    "component": "SQLite (node:sqlite)",
+    "pillar": "deps",
+    "kind": "url",
+    "ref": "https://nodejs.org/api/sqlite.html",
+    "urls": [
+      "https://nodejs.org/api/sqlite.html"
+    ],
+    "chars": 6000
+  },
+  {
+    "component": "Node.js",
+    "pillar": "deps",
+    "kind": "url",
+    "ref": "https://nodejs.org/en/blog/",
+    "urls": [
+      "https://nodejs.org/en/blog/"
+    ],
+    "chars": 1604
+  },
+  {
+    "component": "Node.js",
+    "pillar": "security",
+    "kind": "context7",
+    "ref": "/nodejs/node",
+    "urls": [
+      "https://github.com/nodejs/node/blob/main/doc/api/crypto.md",
+      "https://github.com/nodejs/node/blob/main/doc/api/https.md",
+      "https://github.com/nodejs/node/blob/main/deps/npm/node_modules/safer-buffer/Porting-Buffer.md",
+      "https://github.com/nodejs/node/blob/main/doc/api/http.md"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Visual Studio Code",
+    "pillar": "testing",
+    "kind": "context7",
+    "ref": "/microsoft/vscode-docs",
+    "urls": [
+      "https://github.com/microsoft/vscode-docs/blob/main/api/extension-guides/testing.md",
+      "https://github.com/microsoft/vscode-docs/blob/main/api/working-with-extensions/continuous-integration.md",
+      "https://github.com/microsoft/vscode-docs/blob/main/docs/agents/guides/fix-a-bug-with-agents.md",
+      "https://github.com/microsoft/vscode-docs/blob/main/release-notes/v1_88.md"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Node.js",
+    "pillar": "deps",
+    "kind": "context7",
+    "ref": "/nodejs/node",
+    "urls": [
+      "https://github.com/nodejs/node/blob/main/doc/changelogs/CHANGELOG_V24.md",
+      "https://github.com/nodejs/node/blob/main/doc/api/buffer.md",
+      "https://github.com/nodejs/node/blob/main/src/node_version.h",
+      "https://github.com/nodejs/node/blob/main/deps/npm/docs/output/commands/npm-deprecate.html",
+      "https://github.com/nodejs/node/blob/main/doc/changelogs/CHANGELOG_V15.md"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Visual Studio Code",
+    "pillar": "deps",
+    "kind": "url",
+    "ref": "https://code.visualstudio.com/updates",
+    "urls": [
+      "https://code.visualstudio.com/updates"
+    ],
+    "chars": 6000
+  },
+  {
+    "component": "Node.js",
+    "pillar": "testing",
+    "kind": "context7",
+    "ref": "/nodejs/node",
+    "urls": [
+      "https://github.com/nodejs/node/blob/main/doc/api/test.md",
+      "https://github.com/nodejs/node/blob/main/BUILDING.md",
+      "https://github.com/nodejs/node/blob/main/deps/undici/src/CONTRIBUTING.md",
+      "https://github.com/nodejs/node/blob/main/doc/api/cli.md"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Visual Studio Code",
+    "pillar": "deps",
+    "kind": "context7",
+    "ref": "/microsoft/vscode-docs",
+    "urls": [
+      "https://github.com/microsoft/vscode-docs/blob/main/release-notes/v1_42.md",
+      "https://github.com/microsoft/vscode-docs/blob/main/api/references/contribution-points.md",
+      "https://github.com/microsoft/vscode-docs/blob/main/release-notes/v0_5_0.md",
+      "https://github.com/microsoft/vscode-docs/blob/main/release-notes/v1_71.md"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Visual Studio Code",
+    "pillar": "security",
+    "kind": "context7",
+    "ref": "/microsoft/vscode-docs",
+    "urls": [
+      "https://github.com/microsoft/vscode-docs/blob/main/docs/agents/reference/mcp-configuration.md",
+      "https://github.com/microsoft/vscode-docs/blob/main/api/advanced-topics/remote-extensions.md",
+      "https://github.com/microsoft/vscode-docs/blob/main/release-notes/v1_18.md",
+      "https://github.com/microsoft/vscode-docs/blob/main/api/extension-guides/webview.md"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "esbuild",
+    "pillar": "deps",
+    "kind": "context7",
+    "ref": "/evanw/esbuild",
+    "urls": [
+      "https://github.com/evanw/esbuild/blob/main/CHANGELOG-2025.md",
+      "https://github.com/evanw/esbuild/blob/main/CHANGELOG-2021.md",
+      "https://github.com/evanw/esbuild/blob/main/CHANGELOG-2024.md"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "markdown-it",
+    "pillar": "deps",
+    "kind": "url",
+    "ref": "https://github.com/markdown-it/markdown-it/releases",
+    "urls": [
+      "https://github.com/markdown-it/markdown-it/releases"
+    ],
+    "chars": 2616
+  },
+  {
+    "component": "esbuild",
+    "pillar": "security",
+    "kind": "context7",
+    "ref": "/evanw/esbuild",
+    "urls": [
+      "https://github.com/evanw/esbuild/blob/main/pkg/api/serve_other.go",
+      "https://github.com/evanw/esbuild/blob/main/CHANGELOG-2025.md",
+      "https://github.com/evanw/esbuild/blob/main/pkg/api/api_impl.go",
+      "https://github.com/evanw/esbuild/blob/main/CHANGELOG-2020.md"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "esbuild",
+    "pillar": "deps",
+    "kind": "url",
+    "ref": "https://github.com/evanw/esbuild/releases",
+    "urls": [
+      "https://github.com/evanw/esbuild/releases"
+    ],
+    "chars": 6000
+  },
+  {
+    "component": "markdown-it",
+    "pillar": "security",
+    "kind": "context7",
+    "ref": "/markdown-it/markdown-it",
+    "urls": [
+      "https://github.com/markdown-it/markdown-it/blob/master/CHANGELOG.md",
+      "https://github.com/markdown-it/markdown-it/blob/master/src/rules_core/normalize.ts",
+      "https://github.com/markdown-it/markdown-it/blob/master/docs/safety.md"
+    ],
+    "chars": 2939
+  },
+  {
+    "component": "esbuild",
+    "pillar": "testing",
+    "kind": "context7",
+    "ref": "/evanw/esbuild",
+    "urls": [
+      "https://github.com/evanw/esbuild/blob/main/scripts/browser/index.html",
+      "https://github.com/evanw/esbuild/blob/main/CHANGELOG-2021.md",
+      "https://github.com/evanw/esbuild/blob/main/scripts/end-to-end-tests.js",
+      "https://github.com/evanw/esbuild/blob/main/scripts/ts-type-tests.js",
+      "https://github.com/evanw/esbuild/blob/main/CHANGELOG-2022.md"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "markdown-it",
+    "pillar": "deps",
+    "kind": "context7",
+    "ref": "/markdown-it/markdown-it",
+    "urls": [
+      "https://github.com/markdown-it/markdown-it/blob/master/CHANGELOG.md",
+      "https://github.com/markdown-it/markdown-it/blob/master/README.md",
+      "https://github.com/markdown-it/markdown-it/blob/master/docs/migration/migration_v15.md",
+      "https://github.com/markdown-it/markdown-it/blob/master/benchmark/samples/README.md"
+    ],
+    "chars": 2000
+  },
+  {
+    "component": "Mermaid",
+    "pillar": "deps",
+    "kind": "context7",
+    "ref": "/mermaid-js/mermaid",
+    "urls": [
+      "https://github.com/mermaid-js/mermaid/blob/develop/docs/config/directives.md",
+      "https://github.com/mermaid-js/mermaid/blob/develop/docs/config/usage.md",
+      "https://github.com/mermaid-js/mermaid/blob/develop/docs/config/setup/mermaid/interfaces/Mermaid.md",
+      "https://github.com/mermaid-js/mermaid/blob/develop/packages/mermaid/src/config.ts",
+      "https://github.com/mermaid-js/mermaid/blob/develop/packages/mermaid/CHANGELOG.md"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Mermaid",
+    "pillar": "security",
+    "kind": "context7",
+    "ref": "/mermaid-js/mermaid",
+    "urls": [
+      "https://github.com/mermaid-js/mermaid/blob/develop/docs/config/setup/config/functions/sanitize.md",
+      "https://github.com/mermaid-js/mermaid/blob/develop/e2e/platform/xss9.html",
+      "https://github.com/mermaid-js/mermaid/blob/develop/docs/config/usage.md",
+      "https://github.com/mermaid-js/mermaid/blob/develop/docs/community/security.md"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Mermaid",
+    "pillar": "testing",
+    "kind": "context7",
+    "ref": "/mermaid-js/mermaid",
+    "urls": [
+      "https://github.com/mermaid-js/mermaid/blob/develop/docs/community/layout-makers-guide.md",
+      "https://github.com/mermaid-js/mermaid/blob/develop/docs/adding-new-shape.md",
+      "https://github.com/mermaid-js/mermaid/blob/develop/packages/mermaid/src/docs/community/layout-makers-guide.md",
+      "https://github.com/mermaid-js/mermaid/blob/develop/docs/community/new-diagram.md"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Cloudflare Workers",
+    "pillar": "deps",
+    "kind": "url",
+    "ref": "https://developers.cloudflare.com/workers/platform/changelog/",
+    "urls": [
+      "https://developers.cloudflare.com/workers/platform/changelog/"
+    ],
+    "chars": 6000
+  },
+  {
+    "component": "Mermaid",
+    "pillar": "deps",
+    "kind": "url",
+    "ref": "https://github.com/mermaid-js/mermaid/releases",
+    "urls": [
+      "https://github.com/mermaid-js/mermaid/releases"
+    ],
+    "chars": 6000
+  },
+  {
+    "component": "Cloudflare Workers",
+    "pillar": "deps",
+    "kind": "context7",
+    "ref": "/llmstxt/developers_cloudflare_workers_llms-full_txt",
+    "urls": [
+      "https://developers.cloudflare.com/workers/llms-full.txt",
+      "https://developers.cloudflare.com/kv/reference/kv-commands",
+      "https://developers.cloudflare.com/workers/wrangler"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Cloudflare Workers",
+    "pillar": "security",
+    "kind": "context7",
+    "ref": "/llmstxt/developers_cloudflare_workers_llms-full_txt",
+    "urls": [
+      "https://developers.cloudflare.com/workers/examples/basic-auth/index",
+      "https://developers.cloudflare.com/workers/best-practices/workers-best-practices",
+      "https://developers.cloudflare.com/turnstile/get-started/server-side-validation",
+      "https://developers.cloudflare.com/workers/configuration/integrations/apis",
+      "https://developers.cloudflare.com/reference-architecture/diagrams/serverless/fullstack-application"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Cloudflare Workers",
+    "pillar": "testing",
+    "kind": "context7",
+    "ref": "/llmstxt/developers_cloudflare_workers_llms-full_txt",
+    "urls": [
+      "https://developers.cloudflare.com/workers/llms-full.txt"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Cloudflare Workers",
+    "pillar": "deps",
+    "kind": "mcp",
+    "ref": "cloudflare-docs",
+    "urls": [
+      "https://developers.cloudflare.com/changelog/product/workers/5/</url>",
+      "https://developers.cloudflare.com/changelog/post/2025-12-01-build-image-policies-dev-plat/</url>",
+      "https://developers.cloudflare.com/changelog/",
+      "https://developers.cloudflare.com/tunnel/downloads/</url>",
+      "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/</url>",
+      "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/#page",
+      "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/",
+      "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/og.png?v=5972c1a6f1f6f1b7",
+      "https://developers.cloudflare.com/logo.svg",
+      "https://developers.cloudflare.com/#website",
+      "https://developers.cloudflare.com/changelog/post/2026-04-30-cloudflare-python-v5.0.0/</url>",
+      "https://developers.cloudflare.com/api/sdks/python/",
+      "https://developers.cloudflare.com/support/disruptive-maintenance/</url>",
+      "https://developers.cloudflare.com/support/disruptive-maintenance/#page",
+      "https://developers.cloudflare.com/support/disruptive-maintenance/",
+      "https://developers.cloudflare.com/og-docs.png"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Cloudflare D1",
+    "pillar": "deps",
+    "kind": "context7",
+    "ref": "/llmstxt/developers_cloudflare_d1_llms-full_txt",
+    "urls": [
+      "https://blog.cloudflare.com/wrangler3",
+      "https://developers.cloudflare.com/workers/wrangler/install-and-update",
+      "https://developers.cloudflare.com/workers/observability/errors",
+      "https://developers.cloudflare.com/workers/wrangler"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Cloudflare Workers",
+    "pillar": "testing",
+    "kind": "mcp",
+    "ref": "cloudflare-docs",
+    "urls": [
+      "https://developers.cloudflare.com/changelog/post/2026-02-15-workers-best-practices/</url>",
+      "https://developers.cloudflare.com/changelog/post/2026-02-15-workers-best-practices/og.png?v=01956831f6e2096a",
+      "https://developers.cloudflare.com/fundamentals/new-features/available-rss-feeds/",
+      "https://developers.cloudflare.com/workers/best-practices/workers-best-practices/</url>",
+      "https://developers.cloudflare.com/workers/best-practices/workers-best-practices/og.png?v=d435c8b7aebe8dd9",
+      "https://developers.cloudflare.com/workers/llms.txt",
+      "https://developers.cloudflare.com/workers/testing/test-harness/get-started/</url>",
+      "https://developers.cloudflare.com/og-docs.png"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Cloudflare D1",
+    "pillar": "deps",
+    "kind": "url",
+    "ref": "https://developers.cloudflare.com/d1/platform/changelog/",
+    "urls": [
+      "https://developers.cloudflare.com/d1/platform/changelog/"
+    ],
+    "chars": 6000
+  },
+  {
+    "component": "Cloudflare Workers",
+    "pillar": "security",
+    "kind": "mcp",
+    "ref": "cloudflare-docs",
+    "urls": [
+      "https://developers.cloudflare.com/reference-architecture/architectures/security/</url>",
+      "https://developers.cloudflare.com/changelog/38/</url>",
+      "https://developers.cloudflare.com/fundamentals/manage-members/dashboard-sso/"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Cloudflare D1",
+    "pillar": "security",
+    "kind": "mcp",
+    "ref": "cloudflare-docs",
+    "urls": [
+      "https://developers.cloudflare.com/changelog/38/</url>",
+      "https://developers.cloudflare.com/fundamentals/manage-members/dashboard-sso/",
+      "https://developers.cloudflare.com/d1/tutorials/build-an-api-to-access-d1/</url>"
+    ],
+    "chars": 2579
+  },
+  {
+    "component": "Cloudflare D1",
+    "pillar": "testing",
+    "kind": "context7",
+    "ref": "/llmstxt/developers_cloudflare_d1_llms-full_txt",
+    "urls": [
+      "https://developers.cloudflare.com/workers/wrangler/api",
+      "https://developers.cloudflare.com/workers/languages/typescript"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Cloudflare D1",
+    "pillar": "security",
+    "kind": "context7",
+    "ref": "/llmstxt/developers_cloudflare_d1_llms-full_txt",
+    "urls": [
+      "https://developers.cloudflare.com/workers/configuration/placement",
+      "https://developers.cloudflare.com/workers/wrangler/configuration",
+      "https://developers.cloudflare.com/workers/configuration/secrets",
+      "https://developers.cloudflare.com/reference-architecture/diagrams/serverless/fullstack-application",
+      "https://developers.cloudflare.com/d1/llms-full.txt"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Cloudflare Durable Objects",
+    "pillar": "deps",
+    "kind": "url",
+    "ref": "https://developers.cloudflare.com/durable-objects/platform/changelog/",
+    "urls": [
+      "https://developers.cloudflare.com/durable-objects/platform/changelog/"
+    ],
+    "chars": 6000
+  },
+  {
+    "component": "Cloudflare Durable Objects",
+    "pillar": "deps",
+    "kind": "context7",
+    "ref": "/llmstxt/developers_cloudflare_durable-objects_llms-full_txt",
+    "urls": [
+      "https://developers.cloudflare.com/workers/wrangler/install-and-update",
+      "https://developers.cloudflare.com/workers/versions-and-deployments/deployment-management",
+      "https://developers.cloudflare.com/workers/wrangler/configuration",
+      "https://developers.cloudflare.com/workers/versions-and-deployments"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Cloudflare Durable Objects",
+    "pillar": "deps",
+    "kind": "mcp",
+    "ref": "cloudflare-docs",
+    "urls": [
+      "https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/</url>",
+      "https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/#page",
+      "https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/",
+      "https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/og.png?v=5f19b4ca07f8994f",
+      "https://developers.cloudflare.com/logo.svg",
+      "https://developers.cloudflare.com/#website"
+    ],
+    "chars": 1814
+  },
+  {
+    "component": "Cloudflare Durable Objects",
+    "pillar": "security",
+    "kind": "context7",
+    "ref": "/llmstxt/developers_cloudflare_durable-objects_llms-full_txt",
+    "urls": [
+      "https://developers.cloudflare.com/workers/best-practices/workers-best-practices",
+      "https://developers.cloudflare.com/workers/wrangler/configuration",
+      "https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/index",
+      "https://developers.cloudflare.com/agents/communication-channels/webhooks"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Cloudflare Durable Objects",
+    "pillar": "security",
+    "kind": "mcp",
+    "ref": "cloudflare-docs",
+    "urls": [
+      "https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/</url>",
+      "https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/#page",
+      "https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/",
+      "https://developers.cloudflare.com/og-docs.png",
+      "https://developers.cloudflare.com/#website",
+      "https://developers.cloudflare.com/changelog/post/2025-12-15-rules-of-durable-objects/</url>",
+      "https://developers.cloudflare.com/changelog/post/2025-12-15-rules-of-durable-objects/#page",
+      "https://developers.cloudflare.com/changelog/post/2025-12-15-rules-of-durable-objects/",
+      "https://developers.cloudflare.com/changelog/post/2025-12-15-rules-of-durable-objects/og.png?v=2f295f3d270c275a",
+      "https://developers.cloudflare.com/logo.svg",
+      "https://developers.cloudflare.com/workers/authorization/durable-objects/</url>",
+      "https://developers.cloudflare.com/workers/authorization/durable-objects/#page",
+      "https://developers.cloudflare.com/workers/authorization/durable-objects/"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Cloudflare Durable Objects",
+    "pillar": "testing",
+    "kind": "context7",
+    "ref": "/llmstxt/developers_cloudflare_durable-objects_llms-full_txt",
+    "urls": [
+      "https://developers.cloudflare.com/durable-objects/examples/testing-with-durable-objects/index",
+      "https://developers.cloudflare.com/durable-objects/examples/testing-with-durable-objects",
+      "https://developers.cloudflare.com/workers/best-practices/workers-best-practices"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Cloudflare Durable Objects",
+    "pillar": "testing",
+    "kind": "mcp",
+    "ref": "cloudflare-docs",
+    "urls": [
+      "https://developers.cloudflare.com/changelog/post/2025-12-15-rules-of-durable-objects/</url>",
+      "https://developers.cloudflare.com/changelog/product-group/developer-platform/16/</url>",
+      "https://developers.cloudflare.com/changelog/33/</url>",
+      "https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/</url>",
+      "https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/#page",
+      "https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/",
+      "https://developers.cloudflare.com/og-docs.png",
+      "https://developers.cloudflare.com/#website",
+      "https://developers.cloudflare.com/changelog/post/2026-06-25-durable-object-eviction-test-helpers/</url>",
+      "https://developers.cloudflare.com/changelog/post/2026-06-25-durable-object-eviction-test-helpers/#page",
+      "https://developers.cloudflare.com/changelog/post/2026-06-25-durable-object-eviction-test-helpers/",
+      "https://developers.cloudflare.com/changelog/post/2026-06-25-durable-object-eviction-test-helpers/og.png?v=90a70461c3484f3c",
+      "https://developers.cloudflare.com/logo.svg",
+      "https://developers.cloudflare.com/durable-objects/examples/testing-with-durable-objects/</url>"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Claude (AI model)",
+    "pillar": "deps",
+    "kind": "context7",
+    "ref": "/llmstxt/platform_claude_llms_txt",
+    "urls": [
+      "https://platform.claude.com/docs/en/agents-and-tools/mcp-connector",
+      "https://platform.claude.com/docs/en/api/versioning",
+      "https://platform.claude.com/docs/en/cli-sdks-libraries/sdks/typescript",
+      "https://platform.claude.com/docs/en/cli-sdks-libraries/sdks/python"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Claude (AI model)",
+    "pillar": "security",
+    "kind": "context7",
+    "ref": "/llmstxt/platform_claude_llms_txt",
+    "urls": [
+      "https://platform.claude.com/docs/en/managed-agents/vaults",
+      "https://platform.claude.com/docs/en/manage-claude/cmek-aws-kms",
+      "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-runner",
+      "https://platform.claude.com/docs/en/agents-and-tools/tool-use/strict-tool-use",
+      "https://platform.claude.com/docs/en/agents-and-tools/tool-use/text-editor-tool"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Claude (AI model)",
+    "pillar": "testing",
+    "kind": "context7",
+    "ref": "/llmstxt/platform_claude_llms_txt",
+    "urls": [
+      "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+      "https://platform.claude.com/docs/en/managed-agents/scheduled-deployments",
+      "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests",
+      "https://platform.claude.com/docs/en/agents-and-tools/tool-use/bash-tool"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "VS Code Extension Packaging (@vscode/vsce)",
+    "pillar": "deps",
+    "kind": "url",
+    "ref": "https://github.com/microsoft/vscode-vsce/releases",
+    "urls": [
+      "https://github.com/microsoft/vscode-vsce/releases"
+    ],
+    "chars": 6000
+  },
+  {
+    "component": "agnix",
+    "pillar": "testing",
+    "kind": "context7",
+    "ref": "/agent-sh/agnix",
+    "urls": [
+      "https://github.com/agent-sh/agnix/blob/main/docs/RELEASING.md",
+      "https://github.com/agent-sh/agnix/blob/main/CONTRIBUTING.md",
+      "https://github.com/agent-sh/agnix/blob/main/knowledge-base/standards/claude-code-OPINIONS.md",
+      "https://github.com/agent-sh/agnix/blob/main/knowledge-base/EVALUATION.md",
+      "https://github.com/agent-sh/agnix/blob/main/knowledge-base/agent-docs/PROMPT-ENGINEERING-REFERENCE.md"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "agnix",
+    "pillar": "deps",
+    "kind": "url",
+    "ref": "https://github.com/agent-sh/agnix/releases",
+    "urls": [
+      "https://github.com/agent-sh/agnix/releases"
+    ],
+    "chars": 6000
+  },
+  {
+    "component": "agnix",
+    "pillar": "security",
+    "kind": "context7",
+    "ref": "/agent-sh/agnix",
+    "urls": [
+      "https://github.com/agent-sh/agnix/blob/main/knowledge-base/standards/mcp-OPINIONS.md",
+      "https://github.com/agent-sh/agnix/blob/main/knowledge-base/standards/mcp-HARD-RULES.md",
+      "https://github.com/agent-sh/agnix/blob/main/knowledge-base/standards/multi-platform-OPINIONS.md",
+      "https://github.com/agent-sh/agnix/blob/main/knowledge-base/agent-docs/CLAUDE-CODE-REFERENCE.md"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "agnix",
+    "pillar": "deps",
+    "kind": "context7",
+    "ref": "/agent-sh/agnix",
+    "urls": [
+      "https://github.com/agent-sh/agnix/blob/main/knowledge-base/standards/agent-skills-OPINIONS.md",
+      "https://github.com/agent-sh/agnix/blob/main/docs/RELEASING.md",
+      "https://github.com/agent-sh/agnix/blob/main/CONTRIBUTING.md",
+      "https://github.com/agent-sh/agnix/blob/main/knowledge-base/agent-docs/PROMPT-ENGINEERING-REFERENCE.md",
+      "https://github.com/agent-sh/agnix/blob/main/knowledge-base/MONTHLY-REVIEW.md"
+    ],
+    "chars": 2438
+  },
+  {
+    "component": "GitHub",
+    "pillar": "deps",
+    "kind": "context7",
+    "ref": "/websites/github_en",
+    "urls": [
+      "https://docs.github.com/en/rest/about-the-rest-api/breaking-changes",
+      "https://docs.github.com/en/graphql/overview/breaking-changes"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "GitHub",
+    "pillar": "security",
+    "kind": "context7",
+    "ref": "/websites/github_en",
+    "urls": [
+      "https://docs.github.com/en/copilot/concepts/about-customizing-github-copilot-chat-responses_tool=webui",
+      "https://docs.github.com/en/rest/guides/basics-of-authentication",
+      "https://docs.github.com/en/code-security/supply-chain-security/end-to-end-supply-chain/securing-code",
+      "https://docs.github.com/en/copilot/tutorials/customization-library/custom-instructions/pull-request-assistant",
+      "https://docs.github.com/en/code-security/getting-started/best-practices-for-preventing-data-leaks-in-your-organization"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Jira",
+    "pillar": "deps",
+    "kind": "context7",
+    "ref": "/websites/confluence_atlassian_jira",
+    "urls": [
+      "https://confluence.atlassian.com/jiracore/jira-core-8-19-x-upgrade-notes-1082527689.html",
+      "https://confluence.atlassian.com/jirasoftware/preparing-jira-for-the-9-4-upgrade-1178869723.html",
+      "https://confluence.atlassian.com/jira/updating-jira-plugins-for-jira-4-0-191004951.html",
+      "https://confluence.atlassian.com/jirasoftware/jira-software-10-4-x-upgrade-notes-1489804807.html",
+      "https://confluence.atlassian.com/jira/all-jira-upgrade-guides-version-3-x-and-later-162432194.html"
+    ],
+    "chars": 2339
+  },
+  {
+    "component": "GitHub",
+    "pillar": "testing",
+    "kind": "context7",
+    "ref": "/websites/github_en",
+    "urls": [
+      "https://docs.github.com/en/actions/tutorials/build-and-test-code/nodejs",
+      "https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python",
+      "https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github",
+      "https://docs.github.com/en/copilot/tutorials/rolling-out-github-copilot-at-scale/driving-downstream-impact/increase-test-coverage"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Jira",
+    "pillar": "testing",
+    "kind": "context7",
+    "ref": "/websites/confluence_atlassian_jira",
+    "urls": [
+      "https://confluence.atlassian.com/jirasoftware/jira-software-7-13-long-term-support-release-performance-report-957136267.html",
+      "https://confluence.atlassian.com/jirakb/configure-log-rotation-for-the-catalina-log-in-jira-data-center-224398003.html",
+      "https://confluence.atlassian.com/jirakb/jira-fails-to-shutdown-due-to-insufficient-memory-for-the-jre-1044777004.html",
+      "https://confluence.atlassian.com/jirasoftware/preparing-jira-for-the-9-4-upgrade-1178869723.html"
+    ],
+    "chars": 2456
+  },
+  {
+    "component": "GitHub",
+    "pillar": "deps",
+    "kind": "url",
+    "ref": "https://docs.github.com/en/webhooks-and-events/webhooks/webhook-events-and-payloads",
+    "urls": [
+      "https://docs.github.com/en/webhooks-and-events/webhooks/webhook-events-and-payloads"
+    ],
+    "chars": 6000
+  },
+  {
+    "component": "Context7",
+    "pillar": "deps",
+    "kind": "context7",
+    "ref": "/upstash/context7",
+    "urls": [
+      "https://github.com/upstash/context7/blob/master/packages/mcp/CHANGELOG.md",
+      "https://github.com/upstash/context7/blob/master/packages/cli/CHANGELOG.md",
+      "https://github.com/upstash/context7/blob/master/docs/sdks/ts/commands/search-library.mdx",
+      "https://github.com/upstash/context7/blob/master/docs/api-guide.mdx",
+      "https://github.com/upstash/context7/blob/master/SECURITY.md"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Context7",
+    "pillar": "testing",
+    "kind": "context7",
+    "ref": "/upstash/context7",
+    "urls": [
+      "https://github.com/upstash/context7/blob/master/packages/sdk/README.md",
+      "https://github.com/upstash/context7/blob/master/docs/agentic-tools.mdx"
+    ],
+    "chars": 2011
+  },
+  {
+    "component": "Jira",
+    "pillar": "security",
+    "kind": "context7",
+    "ref": "/websites/confluence_atlassian_jira",
+    "urls": [
+      "https://confluence.atlassian.com/jirakb/security-tools-report-the-default-ssl-ciphers-are-too-weak-278695513.html",
+      "https://confluence.atlassian.com/jira/security-addendum-2010-04-16-determining-if-your-public-jira-instance-has-been-compromised-216433274.html",
+      "https://confluence.atlassian.com/jira/preventing-security-attacks-218276926.html",
+      "https://confluence.atlassian.com/jira/installing-jira-on-mac-os-x-191501161.html",
+      "https://confluence.atlassian.com/jira/upgrading-jira-185729508.html"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Context7",
+    "pillar": "security",
+    "kind": "context7",
+    "ref": "/upstash/context7",
+    "urls": [
+      "https://github.com/upstash/context7/blob/master/docs/security/best-practices.mdx",
+      "https://github.com/upstash/context7/blob/master/docs/security/infrastructure.mdx",
+      "https://github.com/upstash/context7/blob/master/SECURITY.md"
+    ],
+    "chars": 1989
+  },
+  {
+    "component": "Wrangler",
+    "pillar": "deps",
+    "kind": "context7",
+    "ref": "/cloudflare/wrangler-action",
+    "urls": [
+      "https://github.com/cloudflare/wrangler-action/blob/main/README.md"
+    ],
+    "chars": 1650
+  },
+  {
+    "component": "Wrangler",
+    "pillar": "security",
+    "kind": "context7",
+    "ref": "/cloudflare/wrangler-action",
+    "urls": [
+      "https://github.com/cloudflare/wrangler-action/blob/main/README.md",
+      "https://github.com/cloudflare/wrangler-action/blob/main/src/wranglerAction.ts",
+      "https://github.com/cloudflare/wrangler-action/blob/main/_autodocs/errors.md"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Wrangler",
+    "pillar": "testing",
+    "kind": "context7",
+    "ref": "/cloudflare/wrangler-action",
+    "urls": [
+      "https://github.com/cloudflare/wrangler-action/blob/main/README.md",
+      "https://github.com/cloudflare/wrangler-action/blob/main/_autodocs/api-reference/index.md",
+      "https://github.com/cloudflare/wrangler-action/blob/main/_autodocs/configuration.md"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Wrangler",
+    "pillar": "security",
+    "kind": "mcp",
+    "ref": "cloudflare-docs",
+    "urls": [
+      "https://developers.cloudflare.com/agents/communication-channels/webhooks/</url>",
+      "https://developers.cloudflare.com/changelog/26/</url>",
+      "https://developers.cloudflare.com/workers/wrangler/configuration/</url>",
+      "https://developers.cloudflare.com/workers/configuration/secrets/</url>"
+    ],
+    "chars": 3000
+  },
+  {
+    "component": "Wrangler",
+    "pillar": "deps",
+    "kind": "url",
+    "ref": "https://github.com/cloudflare/workers-sdk/releases",
+    "urls": [
+      "https://github.com/cloudflare/workers-sdk/releases"
+    ],
+    "chars": 6000
+  },
+  {
+    "component": "Wrangler",
+    "pillar": "deps",
+    "kind": "mcp",
+    "ref": "cloudflare-docs",
+    "urls": [
+      "https://developers.cloudflare.com/changelog/product/workers/10/</url>",
+      "https://developers.cloudflare.com/workers/wrangler/deprecations/#wrangler-v2",
+      "https://developers.cloudflare.com/workers/wrangler/deprecations/#wrangler-v3",
+      "https://developers.cloudflare.com/workers/static-assets/",
+      "https://developers.cloudflare.com/workers/runtime-apis/nodejs",
+      "https://developers.cloudflare.com/workers/wrangler/api/#getplatformproxy",
+      "https://developers.cloudflare.com/changelog/51/</url>",
+      "https://developers.cloudflare.com/changelog/product-group/developer-platform/24/</url>"
+    ],
+    "chars": 3000
+  }
+]

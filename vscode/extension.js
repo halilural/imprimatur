@@ -273,40 +273,50 @@ function showGraph(at) {
 
 let bestRunning = false;
 /**
- * Best-practice review of the panel's repo (#86): Claude (sonnet) builds the source
- * map the first time, then reviews each pillar in parallel; minutes and dollars, so
- * it asks first. The BEST task opens when it is done.
+ * The project's best-practice review (#86, #87): code fetches the stack's documentation,
+ * Claude judges one ISO/IEC 25010 / NIST SSDF category per call; findings land in
+ * Recommendations. It uses Claude, so it says what it costs and asks first.
  */
 async function runBestPractices() {
   const root = graphRoot();
   if (!root) return void vscode.window.showInformationMessage("Imprimatur: no folder open.");
-  if (!vscode.workspace.isTrusted) return void vscode.window.showInformationMessage("Imprimatur: the review runs Claude with tools in this repo; trust this folder first.");
-  if (bestRunning) return void vscode.window.showInformationMessage("Imprimatur: a best practice review is already running.");
+  if (!vscode.workspace.isTrusted) return void vscode.window.showInformationMessage("Imprimatur: the review runs Claude on this repo; trust this folder first.");
+  if (bestRunning) return void vscode.window.showInformationMessage("Imprimatur: a project review is already running.");
   const db = records.dbOf();
   if (!db) return void vscode.window.showErrorMessage(`Imprimatur: ${records.lastError ?? "database not available"}`);
   const best = require("./best-practice.js");
-  const repo = db.repoByRoot(repoRoot(root) ?? root);
-  const task = repo && db.taskByKey(repo.id, best.TASK);
+  const rroot = repoRoot(root) ?? root;
+  const repo = db.repoByRoot(rroot);
+  const task = repo && require("./recs.js").recsTask(db, repo.id);
   const hasMap = Boolean(task && best.sourceMapRecord(db, task.id));
-  const budget = 1.5;
-  const calls = Object.keys(best.PILLARS).length + (hasMap ? 0 : 1);
-  const run = "Run", refreshRun = "Run and rebuild sources";
+  const extra = Object.keys(best.CATEGORIES).filter((k) => !best.CORE.includes(k));
+  const auth = await best.authKind();
+  // About $0.3 a category and $0.15 for the map (measured, API-equivalent).
+  const estimate = (/** @type {number} */ n) => (n * 0.35 + (hasMap ? 0 : 0.15)).toFixed(1);
+  const costText = (/** @type {number} */ n) => auth === "subscription"
+    ? `It uses your Claude plan's usage limits (about $${estimate(n)} of API-equivalent usage).`
+    : auth === "api-key" ? `It is billed to your Anthropic API key: about $${estimate(n)}.`
+    : auth === "cloud" ? `It is billed to your cloud account (Bedrock / Vertex): about $${estimate(n)} at Anthropic's prices.`
+    : `About $${estimate(n)} of Claude usage.`;
+  const core = `Review ${best.CORE.length} core categories`, all = `All ${Object.keys(best.CATEGORIES).length} categories`, rebuild = "Core, and remap the stack";
   const pick = await vscode.window.showInformationMessage(
-    `Best practice review: Claude (${best.MODEL}) ${hasMap ? "" : "builds the source map, then "}reviews ${Object.keys(best.PILLARS).join(", ")} in parallel. Each call stops at $${budget} (at most ~$${(calls * budget).toFixed(0)}; usually about $1 each). It takes a few minutes.`,
-    { modal: true }, run, ...(hasMap ? [refreshRun] : []),
+    `Project review: Claude reviews this repo by ISO/IEC 25010 and NIST SSDF (${best.CORE.map((k) => best.CATEGORIES[k].name).join(", ")}), from documentation fetched now. Takes 1–3 minutes. ${costText(best.CORE.length)} The ${extra.length} other categories (${extra.map((k) => best.CATEGORIES[k].name).join(", ")}) run with "${all}".`,
+    { modal: true }, core, all, ...(hasMap ? [rebuild] : []),
   );
   if (!pick) return;
   bestRunning = true;
   try {
-    const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur best practice review" }, (progress) =>
-      best.review(db, repoRoot(root) ?? root, { budget, refreshSources: pick === refreshRun, lang: vscode.workspace.getConfiguration("imprimatur").get("language") || best.proseLang(), progress: (message) => progress.report({ message }) }));
-    for (const p of r.pillars) log.info(`best ${p.pillar}: ${p.proposed} proposed, $${p.cost.toFixed(2)}${p.error ? `, error ${p.error}` : ""}`);
-    for (const d of r.dropped) log.info(`best dropped ${d.pillar} ${d.key}: ${d.why.join("; ")}`);
-    const errors = r.pillars.filter((p) => p.error);
-    showGraph({ tab: "tasks", root, task: best.TASK });
-    vscode.window.showInformationMessage(`Imprimatur: ${r.added} new, ${r.refreshed} refreshed recommendations ($${r.cost.toFixed(2)}). ${r.summary}${errors.length ? `. Failed: ${errors.map((e) => e.pillar).join(", ")} (Output → Imprimatur)` : ""}`);
+    const categories = pick === all ? Object.keys(best.CATEGORIES) : best.CORE;
+    const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur project review" }, (progress) =>
+      best.review(db, rroot, { categories, refreshSources: pick === rebuild, lang: vscode.workspace.getConfiguration("imprimatur").get("language") || best.proseLang(), progress: (message) => progress.report({ message }) }));
+    for (const c of r.categories) log.info(`review ${c.category}: ${c.proposed} proposed, $${c.cost.toFixed(2)}${c.error ? `, error ${c.error}` : ""}`);
+    for (const d of r.dropped) log.info(`review dropped ${d.category} ${d.key}: ${d.why.join("; ")}`);
+    log.info(`review: ${JSON.stringify(r.timings)} ms, ${r.excerpts} excerpts, ${r.kept} kept (${r.merged} merged), $${r.cost.toFixed(2)}`);
+    const errors = r.categories.filter((c) => c.error);
+    showGraph({ tab: "tasks", root, task: require("./recs.js").TASK });
+    vscode.window.showInformationMessage(`Imprimatur: ${r.added} new, ${r.refreshed} refreshed recommendations in ${Math.round(r.timings.total / 1000)} s. ${r.summary}${errors.length ? `. Failed: ${errors.map((e) => e.category).join(", ")} (Output → Imprimatur)` : ""}`);
   } catch (e) {
-    vscode.window.showErrorMessage(`Imprimatur best practice review failed: ${e instanceof Error ? e.message : e}`);
+    vscode.window.showErrorMessage(`Imprimatur project review failed: ${e instanceof Error ? e.message : e}`);
   } finally {
     bestRunning = false;
   }

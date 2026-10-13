@@ -14,9 +14,11 @@ const userActor = () => ({ kind: /** @type {"user"} */ ("user"), id: os.userInfo
 const TABS = ["home", "tasks", "inbox", "architecture", "product", "edits"];
 const FILTERS = ["active", "open", "done"];
 const TASK_STATUSES = ["open", "active", "done", "dropped"];
+/** The tasks that hold recommendations (#87: RECS; AUDIT and BEST before it). */
+const RECS_KEYS = ["RECS", "AUDIT", "BEST"];
 const STATUS_TR = { active: "Sürüyor", open: "Açık", done: "Bitti", dropped: "Bırakıldı" };
 /** Tasks the importer opens to hold records (#59), not work (#75); db.whereWeLeftOff leaves them out too. */
-const CONTAINERS = ["ADR", "PDR", "TEST", "AUDIT", "BEST"];
+const CONTAINERS = ["ADR", "PDR", "TEST", "AUDIT", "BEST", "RECS"];
 const KIND_TR = { todo: "yapılacak", question: "soru", answer: "cevap", decision: "karar", note: "not", fixme: "hata", adr: "ADR", pdr: "PDR", test: "test" };
 const WHO_TR = { user: "Sen", agent: "Ajan", hook: "Hook", import: "İçe aktarma" };
 const TODO_KINDS = ["todo", "fixme"];
@@ -104,7 +106,7 @@ function repoOfRoot(db, root) {
 function globalAudit(db, root, home = os.homedir()) {
   const h = repoOfRoot(db, home);
   if (!h || h.id === repoOfRoot(db, root)?.id) return [];
-  return taskSummaries(db, h).filter((/** @type {any} */ t) => t.key === "AUDIT").map((/** @type {any} */ t) => ({ ...t, global: true }));
+  return taskSummaries(db, h).filter((/** @type {any} */ t) => t.key === "RECS" || t.key === "AUDIT").map((/** @type {any} */ t) => ({ ...t, global: true }));
 }
 
 /** This root's repo, or every repo (this one first). @param {any} db @param {string} root @param {boolean} all */
@@ -192,6 +194,7 @@ function describeVersion(v) {
   if (a.status === "dropped") return `bıraktı: ${v.title}`;
   if (a.pointer === true) return `sıradakini buraya taşıdı: ${v.title}`;
   if (a.pointer === false && Object.keys(a).length === 1) return undefined;
+  if (typeof a.task === "string") return `${a.task} görevine taşıdı: ${v.title}`;
   if ("title" in a) return `başlığı değiştirdi: ${v.title}`;
   return `güncelledi: ${v.title}`;
 }
@@ -253,9 +256,11 @@ function taskPage(db, task, view, opts) {
     recordCount: live.length,
     flash: flash?.id,
     // The audit's findings (#77): grouped like Agent setup's Recommendations, not a flat todo list.
-    audit: task.key === "AUDIT" ? require("./setup-audit-tree.js").auditGroups(recs, { lang: "tr" }) : undefined,
+    // Recommendations (#87): the agent setup audit's findings and the project's best
+    // practices, grouped as in the Recommendations tree, not as a flat todo list.
+    audit: RECS_KEYS.includes(task.key) && recs.some((/** @type {any} */ r) => r.links?.audit) ? require("./setup-audit-tree.js").auditGroups(recs, { lang: "tr" }) : undefined,
     // Best-practice recommendations (#86): grouped, with the source map they were read from.
-    best: task.key === "BEST" ? { groups: require("./best-tree.js").bestGroups(recs), map: recs.find((/** @type {any} */ r) => r.links?.bestSources)?.links.bestSources } : undefined,
+    best: RECS_KEYS.includes(task.key) && recs.some((/** @type {any} */ r) => r.links?.best || r.links?.bestSources) ? { groups: require("./best-tree.js").bestGroups(recs), map: recs.find((/** @type {any} */ r) => r.links?.bestSources)?.links.bestSources } : undefined,
   };
 }
 
@@ -449,7 +454,8 @@ function taskBlocks(c) {
     }).join("")}</section>`
     : "";
   const activity = `<section class="blk" data-k="act" aria-label="Etkinlik"><h2>Etkinlik</h2>${c.activity.map((v, i) => `<div class="ev" data-k="e${i}"><span class="when">${esc(when(v.at))}</span><span class="who w-${esc(v.kind)}">${esc(v.who)}</span><span class="what">${esc(v.what)}</span></div>`).join("") || '<p class="empty" data-k="none">Henüz olay yok.</p>'}${c.older || c.showOld ? `<button class="link" data-k="more" data-act="old" data-task="${c.id}">${c.showOld ? "Eski olayları gizle" : `${c.older} eski olayı göster`}</button>` : ""}</section>`;
-  return head + asks + (c.audit ? auditBlock(c.audit) : c.best ? bestBlock(c.best) : todos) + notes + decisions + tests + activity;
+  const recBlocks = (c.audit ? auditBlock(c.audit) : "") + (c.best ? bestBlock(c.best) : "");
+  return head + asks + (recBlocks || todos) + notes + decisions + tests + activity;
 }
 
 const SEV_TR = { high: "yüksek", medium: "orta", low: "düşük" };
@@ -463,10 +469,10 @@ function bestBlock(best) {
   const rec = (/** @type {any} */ r) => {
     const b = r.links.best;
     const open = r.status === "open";
-    const last = best.map?.lastRun?.[b.pillar];
+    const last = best.map?.lastRun?.[b.category ?? b.pillar];
     const stale = open && b.seen && last && b.seen < last;
     const acts = open
-      ? `<button class="primary" data-act="rec" data-op="done" data-id="${r.id}">Uygulandı</button><button class="ghost" data-act="bestDismiss" data-id="${r.id}">Reddet…</button>`
+      ? `<button class="primary" data-act="rec" data-op="done" data-id="${r.id}">Uygulandı</button><button class="ghost" data-act="recDismiss" data-id="${r.id}">Reddet…</button>`
       : `<button class="ghost" data-act="rec" data-op="open" data-id="${r.id}">Geri aç</button>`;
     return `<div class="bfind s-${esc(r.status)}" id="rec-${r.id}" data-k="r${r.id}" data-q="${esc(r.title)}"><div class="row1"><span class="sev sev-${esc(b.severity)}">${esc(SEV_TR[/** @type {keyof typeof SEV_TR} */ (b.severity)] ?? b.severity)}</span><span class="ttl">${esc(r.title)}</span>${stale ? '<span class="dim">son turda görülmedi</span>' : ""}</div>
 <div class="bwhy">${esc(r.body?.split("\n\n")[0] ?? "")}</div>
@@ -474,12 +480,12 @@ function bestBlock(best) {
 <div class="acts">${acts}</div></div>`;
   };
   const group = (/** @type {any} */ g, /** @type {number} */ depth) =>
-    `<details class="agrp d${depth}" data-k="${esc(g.key)}"${g.key === "st:open" || (depth === 1 && g.key.startsWith("pillar:")) ? " open" : ""}><summary><span class="alabel">${esc(g.label)}</span><span class="dim">${g.count}</span></summary><div class="abody">${g.children ? g.children.map((/** @type {any} */ c) => group(c, depth + 1)).join("") : g.records.map(rec).join("")}</div></details>`;
+    `<details class="agrp d${depth}" data-k="${esc(g.key)}"${g.key === "st:open" || (depth === 1 && g.key.startsWith("cat:")) ? " open" : ""}><summary><span class="alabel">${esc(g.label)}</span><span class="dim">${g.count}</span></summary><div class="abody">${g.children ? g.children.map((/** @type {any} */ c) => group(c, depth + 1)).join("") : g.records.map(rec).join("")}</div></details>`;
   const open = best.groups.find((g) => g.key === "st:open")?.count ?? 0;
   const map = best.map
-    ? `<details class="agrp d0" data-k="srcmap"><summary><span class="alabel">Kaynak haritası</span><span class="dim">${best.map.components.length} bileşen</span></summary><div class="abody">${best.map.components.map((/** @type {any} */ c) => `<div class="afind"><span class="ttl"><b>${esc(c.name)}</b> <span class="dim">${esc(c.version)}</span></span><span class="dim">${c.sources.map((/** @type {any} */ s) => (s.kind === "url" ? `<a href="#" data-act="url" data-url="${esc(s.ref)}">${esc(s.ref.replace(/^https:\/\//, ""))}</a>` : `${esc(s.kind)} ${esc(s.ref)}`)).join(" · ")}</span></div>`).join("")}${best.map.missing?.length ? `<p class="dim">Yardımcı olacak araçlar: ${best.map.missing.map((/** @type {any} */ m) => `${esc(m.component)}: ${esc(m.suggestion)}`).join(" · ")}</p>` : ""}</div></details>`
+    ? `<details class="agrp d0" data-k="srcmap"><summary><span class="alabel">Kaynak haritası</span><span class="dim">${best.map.components.length} bileşen</span></summary><div class="abody">${best.map.components.map((/** @type {any} */ c) => `<div class="afind"><span class="ttl"><b>${esc(c.name)}</b> <span class="dim">${esc(c.version)}</span></span><span class="dim">${[c.context7 && `Context7 ${esc(c.context7)}`, c.vendor && c.vendor !== "other" && `${esc(c.vendor)} docs MCP`, c.changelog_url && `<a href="#" data-act="url" data-url="${esc(c.changelog_url)}">changelog</a>`].filter(Boolean).join(" · ") || "kaynak yok"}</span></div>`).join("")}</div></details>`
     : "";
-  return `<section class="blk" data-k="best" aria-label="Best practice önerileri"><div class="h2row" data-k="h"><h2>Best practice önerileri <span class="dim">· ${open} açık</span></h2><button class="ghost" data-act="bestRun">Yeniden incele</button></div>${best.groups.map((g) => group(g, 0)).join("") || '<p class="empty" data-k="none">Henüz öneri yok.</p>'}${map}</section>`;
+  return `<section class="blk" data-k="best" aria-label="Proje"><div class="h2row" data-k="h"><h2>Proje <span class="dim">· ISO/IEC 25010 + NIST SSDF · ${open} açık</span></h2><button class="ghost" data-act="bestRun">Yeniden incele</button></div>${best.groups.map((g) => group(g, 0)).join("") || '<p class="empty" data-k="none">Henüz öneri yok.</p>'}${map}</section>`;
 }
 
 const AUDIT_LEVEL_TR = { error: "hata", warning: "uyarı", info: "bilgi" };
@@ -494,12 +500,13 @@ function auditBlock(groups) {
   const finding = (/** @type {any} */ r) => {
     const a = r.links.audit;
     const where = `${String(a.file).replace(/^.*?[\\/]\.claude[\\/]/, "~/.claude/")}${a.line ? `:${a.line}` : ""}`;
-    return `<div class="afind s-${esc(r.status)}" id="rec-${r.id}" data-k="r${r.id}" data-q="${esc(r.title)}"${r.body ? ` title="${esc(r.body)}"` : ""}><span class="adot a-${esc(a.level)}" aria-hidden="true"></span><span class="ttl">${esc(r.title.replace(/^[^:]+:\s*/, ""))}</span><span class="mono dim">${esc(where)}</span></div>`;
+    const act = r.status === "open" ? `<button class="link" data-act="recDismiss" data-id="${r.id}">Reddet…</button>` : `<button class="link" data-act="rec" data-op="open" data-id="${r.id}">Geri aç</button>`;
+    return `<div class="afind s-${esc(r.status)}" id="rec-${r.id}" data-k="r${r.id}" data-q="${esc(r.title)}"${r.body ? ` title="${esc(r.body)}"` : ""}><span class="adot a-${esc(a.level)}" aria-hidden="true"></span><span class="ttl">${esc(r.title.replace(/^[^:]+:\s*/, ""))}</span><span class="mono dim">${esc(where)}</span>${act}</div>`;
   };
   const group = (/** @type {any} */ g, /** @type {number} */ depth) =>
     `<details class="agrp d${depth}" data-k="${esc(g.key)}"${g.key === "st:open" || (depth === 1 && g.key.startsWith("src:") && g.count <= 50) ? " open" : ""}><summary><span class="alabel">${esc(g.label)}</span><span class="dim">${g.count}</span>${levels(g.levels)}</summary><div class="abody">${g.children ? g.children.map((c) => group(c, depth + 1)).join("") : g.records.map(finding).join("")}</div></details>`;
   const open = groups.find((g) => g.key === "st:open")?.count ?? 0;
-  return `<section class="blk" data-k="audit" aria-label="Denetim bulguları"><h2>Denetim bulguları <span class="dim">· ${open} açık</span></h2>${groups.map((g) => group(g, 0)).join("") || '<p class="empty" data-k="none">Bulgu yok.</p>'}</section>`;
+  return `<section class="blk" data-k="audit" aria-label="Ajan kurulumu"><h2>Ajan kurulumu <span class="dim">· agnix · ${open} açık</span></h2>${groups.map((g) => group(g, 0)).join("") || '<p class="empty" data-k="none">Bulgu yok.</p>'}</section>`;
 }
 
 /** The properties rail. @param {NonNullable<ReturnType<typeof tasksPage>["cur"]>} c */

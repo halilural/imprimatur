@@ -181,32 +181,73 @@ function groupRow(g, root) {
   };
 }
 
-/**
- * One audited root's rows: its records by status, then the grouping.
- * @param {{label: string, root: string, records: AuditRecord[], summary?: string | null}} scope @returns {Row}
- */
-function scopeRow(scope) {
-  const recs = scope.records.filter((r) => r.links?.audit);
-  const open = recs.filter(isOpen);
+/** "2 high · 1 medium". @param {Record<string, number> | undefined} n */
+const severityLine = (n) => ["high", "medium", "low"].filter((l) => n?.[l]).map((l) => `${n?.[l]} ${l}`).join(" · ");
+
+/** A project recommendation row (#87): opens its first evidence; its record's body is the tooltip. @param {AuditRecord} r @param {string} root @returns {Row} */
+function bestRow(r, root) {
+  const b = r.links.best;
+  const first = String(b.evidence?.[0] ?? "");
+  const [, file, line] = /^([^:#]+)(?::(\d+))?/.exec(first) ?? [];
+  const icon = r.status === "open" ? (b.severity === "high" ? ["error", "problemsErrorIcon.foreground"] : b.severity === "medium" ? ["warning", "problemsWarningIcon.foreground"] : ["info", "problemsInfoIcon.foreground"])
+    : r.status === "done" ? ["pass", "testing.iconPassed"] : ["circle-slash", "disabledForeground"];
   return {
-    type: "group", label: scope.label, description: open.length ? `${open.length} open · ${levelLine(open)}` : "nothing open", icon: "folder",
-    tooltip: scope.summary ?? undefined, children: auditGroups(recs).map((g) => groupRow(g, scope.root)),
+    type: "leaf", label: r.title, description: `${b.component ?? ""}${first ? ` · ${first}` : ""}`, tooltip: r.body ?? r.title, markdown: true, icon: icon[0], color: icon[1],
+    ...(file ? { abs: `${root}/${file}`, line: line ? Number(line) : undefined } : {}), context: `bestFinding-${r.status}`, recordId: r.id,
   };
 }
 
+/** A project group as a tree row. @param {any} g @param {string} root @returns {Row} */
+function bestGroupRow(g, root) {
+  return {
+    type: "group", label: g.label, description: [String(g.count), g.key.startsWith("st:") && g.key !== "st:open" ? "" : severityLine(g.levels)].filter(Boolean).join(" · "), icon: g.icon,
+    expanded: g.key === "st:open",
+    children: g.children ? g.children.map((/** @type {any} */ c) => bestGroupRow(c, root)) : (g.records ?? []).map((/** @type {AuditRecord} */ r) => bestRow(r, root)),
+  };
+}
+
+/** Open project recommendations. @param {AuditRecord} r */
+const isBestOpen = (r) => r.status === "open" && Boolean(r.links?.best);
+
 /**
- * The "Recommendations" row: every audited root under it; before any audit, a row that
- * runs one.
+ * One root's rows (#87): the agent setup audit's findings and the project's
+ * best-practice recommendations, each under its own row when both are there.
+ * @param {{label: string, root: string, records: AuditRecord[], summary?: string | null}} scope @returns {Row}
+ */
+function scopeRow(scope) {
+  const audit = scope.records.filter((r) => r.links?.audit);
+  const best = scope.records.filter((r) => r.links?.best);
+  const auditRows = auditGroups(audit).map((g) => groupRow(g, scope.root));
+  const { bestGroups } = require("./best-tree.js");
+  const bestRows = bestGroups(best, { lang: "en" }).map((g) => bestGroupRow(g, scope.root));
+  const openA = audit.filter(isOpen).length;
+  const openB = best.filter(isBestOpen).length;
+  /** @type {Row[]} */
+  const children = audit.length && best.length
+    ? [
+      { type: "group", label: "Agent setup", description: openA ? `${openA} open` : "nothing open", icon: "hubot", expanded: true, children: auditRows },
+      { type: "group", label: "Project", description: openB ? `${openB} open` : "nothing open", icon: "repo", expanded: true, children: bestRows },
+    ]
+    : [...auditRows, ...bestRows];
+  const open = openA + openB;
+  return { type: "group", label: scope.label, description: open ? `${open} open` : "nothing open", icon: "folder", tooltip: scope.summary ?? undefined, children };
+}
+
+/**
+ * The "Recommendations" row: every root with recommendations under it; before any, a
+ * row that asks what to run.
  * @param {Array<{label: string, root: string, records: AuditRecord[], summary?: string | null}>} scopes @returns {Row}
  */
 function recommendationsRow(scopes) {
-  const audited = scopes.filter((s) => s.records.some((r) => r.links?.audit));
-  if (!audited.length) {
-    return { type: "leaf", label: "Recommendations", description: "audit the agent setup (agnix)", icon: "lightbulb", command: "imprimatur.setup.audit",
-      tooltip: "Lints every agent file against rules from the tools' docs; findings are kept as records (open, applied, dismissed)." };
+  const some = scopes.filter((s) => s.records.some((r) => r.links?.audit || r.links?.best));
+  if (!some.length) {
+    return { type: "leaf", label: "Recommendations", description: "audit the agent setup, review the project", icon: "lightbulb", command: "imprimatur.setup.audit",
+      tooltip: "The agent setup audit (agnix, by the tools' docs) and the project review (Claude, by ISO/IEC 25010 and NIST SSDF); every finding is a record (open, applied, dismissed)." };
   }
-  const open = audited.flatMap((s) => s.records.filter((r) => r.links?.audit && isOpen(r)));
-  return { type: "group", label: `Recommendations (${open.length})`, description: levelLine(open), icon: "lightbulb", open: open.length, children: audited.map(scopeRow) };
+  const audit = some.flatMap((s) => s.records.filter((r) => r.links?.audit && isOpen(r)));
+  const best = some.flatMap((s) => s.records.filter(isBestOpen));
+  const open = audit.length + best.length;
+  return { type: "group", label: `Recommendations (${open})`, description: [levelLine(audit), severityLine(Object.fromEntries(["high", "medium", "low"].map((l) => [l, best.filter((r) => r.links.best.severity === l).length])))].filter(Boolean).join(" · "), icon: "lightbulb", open, children: some.map(scopeRow) };
 }
 
-module.exports = { IDLE_LABELS, isOpen, recommendationsRow, scopeRow, findingRow, groupRow, auditGroups, reasonOf, ruleNameOf, levelLine, REASON_LABELS };
+module.exports = { IDLE_LABELS, isOpen, isBestOpen, recommendationsRow, scopeRow, findingRow, groupRow, bestRow, bestGroupRow, auditGroups, reasonOf, ruleNameOf, levelLine, REASON_LABELS };

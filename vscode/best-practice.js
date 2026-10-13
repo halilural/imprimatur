@@ -1,56 +1,85 @@
 // @ts-check
-// Best-practice review (#86): recommendations for how this project is built, from
-// its own architecture document, decisions and code, each grounded in an official
-// source read in the run and in evidence from the repo. Kept as records of the
-// repo's BEST task, matched across runs by key (the audit's way, setup-audit.js).
+// Project best-practice review (#86, #87): recommendations for how the repo is built,
+// by ISO/IEC 25010:2023 quality characteristics and NIST SSDF (SP 800-218), each
+// grounded in official documentation fetched in the run and in evidence from the
+// repo. Records of the repo's Recommendations task (RECS, recs.js), next to the agent
+// setup audit's.
 //
-// 1. Source map (once, then reused): a model finds the stack's components and, per
-//    component, where best practice is read — a public docs MCP, a Context7 library
-//    id, official release-notes / changelog / deprecation URLs. Code checks each
-//    source and adds a Context7 id the model missed.
-// 2. One model call per pillar (deps, security, testing), in parallel, with the
-//    map's tools; WebFetch last. A JSON schema; the previous run's keys fed back.
-// 3. Gate (code): no official source or no repo evidence → dropped; decision ids
-//    must be the repo's.
-// 4. Records: new key → open todo; a key found again → refreshed (last seen); a key
-//    not found → left as it is (a model may not repeat itself; "applied" is the
-//    user's call); a dismissed one is never touched.
+// A pipeline, not an agent loop (spike/best-fast: ~600 s → ~120 s):
+// 1. Source map (reused until asked again): Haiku lists the stack from the repo only;
+//    code finds each component's Context7 id (REST search, strict title match) and
+//    checks its changelog URL.
+// 2. Fetch (code, in parallel): per component × category, Context7 /v2/context, the
+//    vendor's public docs MCP (JSON-RPC over HTTP), changelog pages.
+// 3. Judge: one Sonnet call per category, effort medium, only Read/Grep on the repo,
+//    no web; the shared bundle (decisions, architecture, stack, key files numbered) in
+//    the system prompt so the calls after the first read it from the prompt cache.
+// 4. Gate (code): shapes, an https source among the URLs fetched, evidence inside the
+//    repo, a subcategory of the category; the same fix across categories kept once.
+// 5. Records: key per category; new → open todo, found → refreshed, not found → left
+//    (the user says applied), dismissed → never touched.
 "use strict";
 const { execFile } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const recs = require("./recs.js");
 
-const TASK = "BEST";
-const TASK_TITLE = "Best practice review";
+const TASK = recs.TASK;
 /** @type {import("./db.js").Actor} */
 const ACTOR = { kind: "hook", id: "best-practice" };
 const MODEL = "sonnet";
-
-/** Public docs MCP servers (no sign-in) a review may use. */
-const CATALOG = {
-  context7: { type: "http", url: "https://mcp.context7.com/mcp", what: "versioned library and framework docs (any ecosystem)" },
-  "cloudflare-docs": { type: "http", url: "https://docs.mcp.cloudflare.com/mcp", what: "Cloudflare docs and changelog (Workers, D1, Durable Objects, …)" },
-  "microsoft-learn": { type: "http", url: "https://learn.microsoft.com/api/mcp", what: "Microsoft docs (Azure, .NET, TypeScript; not VS Code)" },
-  "aws-knowledge": { type: "http", url: "https://knowledge-mcp.global.api.aws", what: "AWS docs, What's New, Well-Architected" },
-};
-
-const PILLARS = {
-  deps: "Dependencies, runtimes and platform versions: what is outdated, deprecated, near end of life, or has a newer recommended way, for each component of the source map.",
-  security: "Security: trust boundaries, secrets, child processes and shell use, input validation, webhook signatures, tokens, supply chain (pinned versions, npx).",
-  testing: "Testing and CI: unit and integration tests, coverage of risky paths, CI, cross-platform runs, release checks.",
-};
-
-/** Why a recommendation was dismissed. decided: a decision record settles it (links.best.decision). */
-const REASONS = ["decided", "not-applicable", "accepted-risk", "postponed", "other"];
+const MAP_MODEL = "haiku";
 
 /**
- * @typedef {{kind: "mcp" | "context7" | "url", ref: string, covers: string[], note?: string, check?: {ok: boolean, why?: string, added?: boolean}}} Source
- * @typedef {{name: string, version: string, evidence: string[], sources: Source[]}} Component
- * @typedef {{components: Component[], missing: Array<{component: string, suggestion: string}>, at?: number, lastRun?: Record<string, number>}} SourceMap
- * @typedef {{key: string, component: string, title: string, why: string, severity: "high" | "medium" | "low", evidence: string[],
- *   source: {url: string, title: string, version_or_date: string}, next_step: string, decision_ids: number[], pillar?: string}} Recommendation
+ * The taxonomy: ISO/IEC 25010:2023 product quality (2023: usability → interaction
+ * capability, portability → flexibility, safety added) and NIST SSDF for the process.
+ * core: reviewed by default; the rest when asked. subs: [name, one-line meaning].
  */
+const CATEGORIES = {
+  security: { std: "ISO 25010", name: "Security", core: true, query: "security best practices, authentication, secrets, input validation, permissions", subs: [
+    ["confidentiality", "data reachable only by those allowed"], ["integrity", "data and code cannot be changed without permission"], ["non-repudiation", "actions can be proven"],
+    ["accountability", "actions can be traced to who did them"], ["authenticity", "identities are what they claim"], ["resistance", "withstands attacks"]] },
+  reliability: { std: "ISO 25010", name: "Reliability", core: true, query: "error handling, retries, data integrity, transactions, recovery, backups", subs: [
+    ["faultlessness", "works without faults in normal use"], ["availability", "there when needed"], ["fault tolerance", "keeps working despite faults"], ["recoverability", "recovers data and state after a failure"]] },
+  maintainability: { std: "ISO 25010", name: "Maintainability", core: true, query: "testing best practices, code organization, logging and diagnostics, configuration", subs: [
+    ["modularity", "parts change without affecting others"], ["reusability", "parts usable elsewhere"], ["analysability", "faults and impact of changes can be diagnosed"],
+    ["modifiability", "changes without defects"], ["testability", "tests can be set up and run"]] },
+  compatibility: { std: "ISO 25010", name: "Compatibility", core: true, query: "supported versions, deprecations, breaking changes, protocol versions, upgrade guide", subs: [
+    ["co-existence", "works alongside other software and versions"], ["interoperability", "exchanges information with other systems correctly"]] },
+  "performance-efficiency": { std: "ISO 25010", name: "Performance efficiency", core: true, query: "performance best practices, caching, latency, memory, limits", subs: [
+    ["time behaviour", "response and processing times"], ["resource utilization", "CPU, memory, I/O used"], ["capacity", "limits it can handle"]] },
+  ssdf: { std: "NIST SSDF", name: "Development process (SSDF)", core: true, query: "CI, release, signing, dependency pinning and updates, supply chain, vulnerability disclosure", subs: [
+    ["PO prepare the organization", "roles, requirements, toolchains"], ["PS protect the software", "code, build and release integrity; dependencies verified"],
+    ["PW produce well-secured software", "secure design, coding, review, testing, CI"], ["RV respond to vulnerabilities", "finding, triaging and fixing vulnerabilities"]] },
+  flexibility: { std: "ISO 25010", name: "Flexibility", core: false, query: "installation, packaging, cross-platform, scaling, configuration across environments", subs: [
+    ["adaptability", "works in other environments"], ["scalability", "handles growth"], ["installability", "installs and uninstalls cleanly"], ["replaceability", "can replace or be replaced"]] },
+  "interaction-capability": { std: "ISO 25010", name: "Interaction capability", core: false, query: "user experience guidelines, accessibility, UX best practices", subs: [
+    ["appropriateness recognizability", "users see if it fits"], ["learnability", "easy to learn"], ["operability", "easy to operate"], ["user error protection", "prevents user mistakes"],
+    ["user engagement", "pleasant to use"], ["inclusivity", "usable by people with different needs"], ["user assistance", "helps users"], ["self-descriptiveness", "explains itself"]] },
+  "functional-suitability": { std: "ISO 25010", name: "Functional suitability", core: false, query: "correct behavior, edge cases, API contract", subs: [
+    ["functional completeness", "covers what is needed"], ["functional correctness", "gives correct results"], ["functional appropriateness", "helps reach the goal"]] },
+  safety: { std: "ISO 25010", name: "Safety", core: false, query: "safe defaults, fail safe, hazard", subs: [
+    ["operational constraint", "stays within safe limits"], ["risk identification", "identifies risks"], ["fail safe", "fails into a safe state"], ["hazard warning", "warns of hazards"], ["safe integration", "stays safe when integrated"]] },
+};
+const CORE = Object.keys(CATEGORIES).filter((k) => CATEGORIES[/** @type {keyof typeof CATEGORIES} */ (k)].core);
+
+/** Public docs MCP servers (no sign-in), by vendor; called from code, not by the model. */
+const VENDOR_MCP = {
+  cloudflare: { url: "https://docs.mcp.cloudflare.com/mcp", base: "https://developers.cloudflare.com" },
+  microsoft: { url: "https://learn.microsoft.com/api/mcp", base: "https://learn.microsoft.com" },
+  aws: { url: "https://knowledge-mcp.global.api.aws", base: "https://docs.aws.amazon.com" },
+};
+
+/**
+ * @typedef {{name: string, docs_name: string, version: string, evidence: string[], vendor: string, changelog_url: string, context7?: string}} Component
+ * @typedef {{components: Component[], at: number, lastRun?: Record<string, number>}} SourceMap
+ * @typedef {{component: string, cat: string, kind: "context7" | "mcp" | "url", ref: string, urls: string[], text: string}} Excerpt
+ * @typedef {{key: string, component: string, title: string, why: string, severity: "high" | "medium" | "low", evidence: string[], subcategory: string,
+ *   source: {url: string, title: string, version_or_date: string}, next_step: string, decision_ids: number[], category: string, tags?: string[]}} Recommendation
+ */
+
+// Child processes ------------------------------------------------------------------------
 
 /**
  * A child process's result, never rejected; `input` goes to its stdin (a long prompt
@@ -67,38 +96,29 @@ function run(cmd, args, opts = {}) {
   });
 }
 
-/**
- * The child's environment: what claude needs to run and sign in, nothing else of
- * the extension host's (its tokens stay out of reach of injected instructions).
- */
+/** The child's environment: what claude needs to run and sign in, none of the host's tokens. */
 function childEnv(env = process.env) {
   const keep = /^(PATH|PATHEXT|HOME|USERPROFILE|APPDATA|LOCALAPPDATA|USER|USERNAME|LOGNAME|LANG|LC_ALL|TMPDIR|TEMP|TMP|SHELL|SYSTEMROOT|COMSPEC|XDG_CONFIG_HOME|XDG_DATA_HOME|NODE_EXTRA_CA_CERTS|HTTPS?_PROXY|NO_PROXY|https?_proxy|no_proxy|ANTHROPIC_API_KEY|ANTHROPIC_BASE_URL|CLAUDE_CODE_USE_BEDROCK|CLAUDE_CODE_USE_VERTEX|CLAUDE_CONFIG_DIR|AWS_REGION|AWS_PROFILE|CLOUD_ML_REGION|ANTHROPIC_VERTEX_PROJECT_ID)$/;
   return { ...Object.fromEntries(Object.entries(env).filter(([k]) => keep.test(k))), IMPRIMATUR_CHILD: "1" };
 }
 
-/** Secrets the model may never read, whatever a file or a page tells it. */
+/** Secrets the model may never read, whatever a file tells it. */
 const DENY = ["Read(**/.env*)", "Read(**/*.pem)", "Read(**/*.key)", "Read(**/id_rsa*)", "Read(**/id_ed25519*)", "Read(~/.ssh/**)", "Read(~/.aws/**)",
   "Read(~/.config/gh/**)", "Read(**/.npmrc)", "Read(**/.dev.vars*)", "Grep(**/.env*)"];
+const REPO_TOOLS = ["Read", "Glob", "Grep"];
 
 /**
- * One `claude -p` with a JSON schema, the given tools and MCP servers; no settings
- * files (no hooks run in it), nothing saved, a minimal environment, secrets denied.
- * `fetchDomains` limits WebFetch to those hosts (undefined: any, for finding sources;
- * a review only reads the map's hosts, so an injected instruction cannot send repo
- * content elsewhere). WebSearch only when `search`.
+ * One `claude -p` with a JSON schema; only the repo tools (no web, no MCP), secrets
+ * denied, dontAsk, no settings files (no hooks), a minimal env, the prompt on stdin.
  * @param {string} prompt @param {any} schema
- * @param {{cwd: string, servers?: string[], budget?: number, timeoutMs?: number, exec?: typeof run, fetchDomains?: string[], search?: boolean}} o
+ * @param {{cwd: string, model?: string, effort?: string, maxTurns?: number, system?: string, budget?: number, exec?: typeof run, timeoutMs?: number}} o
  * @returns {Promise<{out: any, cost: number, turns: number}>}
  */
-async function askClaude(prompt, schema, { cwd, servers = [], budget = 1.5, timeoutMs = 20 * 60_000, exec = run, fetchDomains, search = false }) {
-  const tools = ["Read", "Grep", "Glob", "WebFetch", ...(search ? ["WebSearch"] : [])];
-  const mcp = { mcpServers: Object.fromEntries(servers.filter((s) => s in CATALOG).map((s) => [s, { type: CATALOG[/** @type {keyof typeof CATALOG} */ (s)].type, url: CATALOG[/** @type {keyof typeof CATALOG} */ (s)].url }])) };
-  const fetchRules = fetchDomains ? fetchDomains.map((d) => `WebFetch(domain:${d})`) : ["WebFetch"];
-  const allowed = [...tools.filter((t) => t !== "WebFetch"), ...fetchRules, ...Object.keys(mcp.mcpServers).map((s) => `mcp__${s}`)];
-  const args = ["-p", "--model", MODEL, "--output-format", "json", "--json-schema", JSON.stringify(schema), "--tools", tools.join(","),
-    "--allowedTools", ...allowed, "--disallowedTools", ...DENY, "--permission-mode", "dontAsk",
-    "--mcp-config", JSON.stringify(mcp), "--strict-mcp-config", "--setting-sources", "", "--no-session-persistence", "--disable-slash-commands",
-    "--max-budget-usd", String(budget)];
+async function askClaude(prompt, schema, { cwd, model = MODEL, effort = "medium", maxTurns = 12, system, budget = 1.5, exec = run, timeoutMs = 10 * 60_000 }) {
+  const args = ["-p", "--model", model, "--effort", effort, "--max-turns", String(maxTurns), "--output-format", "json", "--json-schema", JSON.stringify(schema),
+    "--tools", REPO_TOOLS.join(","), "--allowedTools", ...REPO_TOOLS, "--disallowedTools", ...DENY, "--permission-mode", "dontAsk",
+    "--mcp-config", '{"mcpServers":{}}', "--strict-mcp-config", "--setting-sources", "", "--no-session-persistence", "--disable-slash-commands",
+    "--max-budget-usd", String(budget), ...(system ? ["--append-system-prompt-file", system] : [])];
   const r = await exec("claude", args, { cwd, timeout: timeoutMs, env: childEnv(), input: prompt });
   let res;
   try {
@@ -120,10 +140,24 @@ async function askClaude(prompt, schema, { cwd, servers = [], budget = 1.5, time
 }
 
 /**
- * What the model is told about the project: its decisions and the architecture
- * document's sections (cut), from Imprimatur's database.
- * @param {any} db @param {number} repoId
+ * How claude is signed in, for what a run costs: "subscription" (claude.ai: counts
+ * against the plan's limits), "api-key" (billed), "cloud" (Bedrock/Vertex), or "unknown".
+ * @param {{exec?: typeof run}} [o] @returns {Promise<"subscription" | "api-key" | "cloud" | "unknown">}
  */
+async function authKind({ exec = run } = {}) {
+  const r = await exec("claude", ["auth", "status"], { timeout: 15_000, env: childEnv() });
+  try {
+    const s = JSON.parse(r.stdout);
+    if (s.apiProvider && s.apiProvider !== "firstParty") return "cloud";
+    if (s.authMethod === "claude.ai") return "subscription";
+    if (/api.?key/i.test(String(s.authMethod))) return "api-key";
+  } catch {}
+  return "unknown";
+}
+
+// Project context ------------------------------------------------------------------------
+
+/** Decisions and the architecture document's sections (cut), from Imprimatur's database. @param {any} db @param {number} repoId */
 function projectContext(db, repoId) {
   const decisions = db.recordsByKind(repoId, ["adr", "pdr", "decision"], { limit: 500 })
     .filter((/** @type {any} */ r) => r.status !== "dropped")
@@ -133,9 +167,32 @@ function projectContext(db, repoId) {
   return { decisions, sections };
 }
 
-// 1. Source map ---------------------------------------------------------------------
+/** Manifests, build and CI files of any ecosystem, shown to the model numbered (cites path:line). */
+const KEY_FILE = /(^|\/)(package\.json|pnpm-workspace\.yaml|tsconfig\.json|[^/]*\.toml|[^/]*\.jsonc|pom\.xml|build\.gradle(\.kts)?|settings\.gradle(\.kts)?|go\.mod|Cargo\.toml|pyproject\.toml|requirements[^/]*\.txt|Gemfile|[^/]*\.csproj|Dockerfile|docker-compose[^/]*\.ya?ml|hooks\.json|plugin\.json)$|^\.github\/workflows\/[^/]+\.ya?ml$/;
 
-const COVERS = ["api", "guides", "release-notes", "changelog", "deprecations", "security", "support-policy"];
+/** The repo's files (git ls-files) and its key files, numbered and capped. @param {string} root */
+function repoBundle(root) {
+  let files = [];
+  try {
+    files = require("node:child_process").execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).trim().split("\n").filter(Boolean);
+  } catch {}
+  const key = files.filter((f) => KEY_FILE.test(f) && !/(^|\/)(node_modules|vendor|dist|build|\.claude\/worktrees)\//.test(f) && f.split("/").length <= 3).slice(0, 25);
+  let budget = 60_000;
+  const shown = [];
+  for (const f of key) {
+    let text = "";
+    try {
+      text = fs.readFileSync(path.join(root, f), "utf8").split("\n").slice(0, 150).map((l, i) => `${i + 1}: ${l}`).join("\n");
+    } catch {}
+    if (!text || text.length > budget) continue;
+    budget -= text.length;
+    shown.push(`=== ${f} (numbered)\n${text}`);
+  }
+  return { list: files.length > 3000 ? `${files.slice(0, 3000).join(" ")} … (${files.length} files)` : files.join(" "), key: shown };
+}
+
+// 1. Source map --------------------------------------------------------------------------
+
 const MAP_SCHEMA = {
   type: "object",
   properties: {
@@ -144,45 +201,20 @@ const MAP_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          name: { type: "string" },
+          name: { type: "string", description: "usual product name: 'Node.js', 'esbuild', 'Cloudflare Workers'" },
+          docs_name: { type: "string", description: "name of its official documentation, e.g. 'Visual Studio Code Extension API'" },
           version: { type: "string" },
           evidence: { type: "array", items: { type: "string" } },
-          sources: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: { kind: { type: "string", enum: ["mcp", "context7", "url"] }, ref: { type: "string" }, covers: { type: "array", items: { type: "string", enum: COVERS } }, note: { type: "string" } },
-              required: ["kind", "ref", "covers"],
-            },
-          },
+          vendor: { type: "string", enum: ["cloudflare", "microsoft", "aws", "other"] },
+          changelog_url: { type: "string", description: "official changelog / release-notes / deprecations URL you know, or empty" },
         },
-        required: ["name", "version", "evidence", "sources"],
+        required: ["name", "docs_name", "version", "evidence", "vendor", "changelog_url"],
       },
     },
-    missing: { type: "array", items: { type: "object", properties: { component: { type: "string" }, suggestion: { type: "string" } }, required: ["component", "suggestion"] } },
   },
-  required: ["components", "missing"],
+  required: ["components"],
 };
-
-/** @param {{decisions: Array<{line: string}>, sections: string[]}} ctx */
-const mapPrompt = (ctx) => `Build a SOURCE MAP for the repository in the current directory: for each component of its stack, where current best practice is read. Do not give recommendations; only find sources.
-
-1. Find the components: read docs/ARCHITECTURE.md (if there), the manifests and build files of whatever ecosystem this repo uses, and code where needed. Include runtimes, platforms, frameworks, protocols, external APIs and tools the project is built on or for. Skip trivial dev tooling.
-2. For each component, list sources in this order of preference, and CHECK each one with the tools before listing it:
-   - mcp: a docs MCP server from the catalog below that covers it (call it once to confirm).
-   - context7: a Context7 library id — ALWAYS try resolve-library-id for every library, framework, runtime and protocol; prefer the official docs id and the version matching the repo.
-   - url: official pages on the vendor's own domain that the above do not cover — release notes, changelog, deprecations, support policy, security advisories (fetch once to confirm).
-   Every component needs a source covering release-notes, changelog or deprecations, and one covering api or guides.
-3. In "missing", name better tools that exist but are not in the catalog (e.g. an official docs MCP for a vendor).
-
-MCP CATALOG: ${Object.entries(CATALOG).map(([k, v]) => `${k}: ${v.what}`).join("; ")}
-
-PROJECT DECISIONS:
-${ctx.decisions.slice(0, 200).map((d) => d.line).join("\n")}
-`;
-
-/** A component's base name for a Context7 search: "Node.js runtime (incl. node:sqlite)" → "Node.js". @param {string} name */
-const baseName = (name) => name.replace(/\(.*$/, "").replace(/\b(runtime|API|SDK|CLI|platform|protocol|specification)\b.*$/i, "").trim() || name;
+const MAP_PROMPT = `List the components of this repository's stack: runtimes, platforms, frameworks, protocols, external APIs and libraries it is built on or for. Skip trivial dev tooling and AI or docs tools it merely calls. Read docs/ARCHITECTURE.md if there and the manifests. For each: its usual product name, the name of its official documentation, the version or range used, where in the repo (path:line), the vendor, and the official changelog / release-notes URL if you know it (do not fetch). At most 14.`;
 
 /** An https URL on a public host name (no IP literal, no localhost or internal names). @param {string} u */
 function publicHttps(u) {
@@ -197,163 +229,220 @@ function publicHttps(u) {
 }
 
 /**
- * Checks a source: the MCP is one the review has, the Context7 id answers, the URL answers.
- * @param {Source} s @param {{fetchFn?: typeof fetch}} [o] @returns {Promise<{ok: boolean, why?: string}>}
- */
-async function checkSource(s, { fetchFn = fetch } = {}) {
-  try {
-    if (s.kind === "mcp") return s.ref in CATALOG ? { ok: true } : { ok: false, why: "not a catalog server" };
-    if (s.kind === "context7") {
-      const id = s.ref.startsWith("/") ? s.ref : `/${s.ref}`;
-      if (!/^\/[\w.-]+\/[\w.-]+(\/[\w.-]+)?$/.test(id) || id.includes("..")) return { ok: false, why: "not a Context7 id" };
-      const r = await fetchFn(`https://context7.com/api/v2/docs/code${id}?query=overview`, { signal: AbortSignal.timeout(20_000) });
-      return r.ok ? { ok: true } : { ok: false, why: `context7 ${r.status}` };
-    }
-    if (!publicHttps(s.ref)) return { ok: false, why: "not a public https URL" };
-    // No redirect followed: the model chose the URL; the host only answers whether it is there.
-    const r = await fetchFn(s.ref, { redirect: "manual", signal: AbortSignal.timeout(20_000) });
-    if (r.ok) return { ok: true };
-    const to = r.status >= 300 && r.status < 400 ? r.headers?.get?.("location") : undefined;
-    if (to && new URL(to, s.ref).host === new URL(s.ref).host) return { ok: true };
-    return { ok: false, why: `http ${r.status}` };
-  } catch (e) {
-    return { ok: false, why: String(/** @type {any} */ (e)?.message ?? e).slice(0, 80) };
-  }
-}
-
-/**
- * A Context7 id for a component the model left without one: Context7's search, an
- * exact title match only.
+ * A component's Context7 id by REST search: the exact title, else (a name of 3+ words) a
+ * title with every word of it; a wrong id is worse than none.
  * @param {string} name @param {{fetchFn?: typeof fetch}} [o] @returns {Promise<string | undefined>}
  */
 async function context7For(name, { fetchFn = fetch } = {}) {
-  const q = baseName(name);
   try {
-    const r = await fetchFn(`https://context7.com/api/v1/search?query=${encodeURIComponent(q)}`, { signal: AbortSignal.timeout(20_000) });
+    const r = await fetchFn(`https://context7.com/api/v2/libs/search?libraryName=${encodeURIComponent(name)}&query=${encodeURIComponent("best practices")}`, { signal: AbortSignal.timeout(20_000) });
     if (!r.ok) return undefined;
     const j = await r.json();
-    const norm = (/** @type {string} */ s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-    return (j.results ?? []).find((/** @type {any} */ x) => norm(x.title ?? "") === norm(q))?.id;
+    const norm = (/** @type {any} */ s) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const words = String(name).toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
+    const list = Array.isArray(j.results) ? j.results : [];
+    // Every word in the title only for names specific enough (3+ words): "VS Code" would match "VS Code Messenger".
+    const hit = list.find((/** @type {any} */ x) => norm(x.title) === norm(name)) ?? (words.length >= 3 ? list.find((/** @type {any} */ x) => words.every((w) => String(x.title ?? "").toLowerCase().includes(w))) : undefined);
+    const id = hit && Number(hit.trustScore ?? 0) >= 5 ? String(hit.id ?? "") : "";
+    return /^\/[\w.-]+\/[\w.-]+(\/[\w.-]+)?$/.test(id) ? id : undefined;
   } catch {
     return undefined;
   }
 }
 
 /**
- * Builds the source map: the model proposes, code checks and fills Context7 gaps.
- * @param {string} root @param {{decisions: any[], sections: string[]}} ctx
- * @param {{budget?: number, ask?: typeof askClaude, fetchFn?: typeof fetch}} [o]
- * @returns {Promise<{map: SourceMap, cost: number}>}
+ * The source map: Haiku lists the stack from the repo; code finds Context7 ids and keeps
+ * a changelog URL only when public https.
+ * @param {string} root @param {{ask?: typeof askClaude, fetchFn?: typeof fetch}} [o] @returns {Promise<{map: SourceMap, cost: number}>}
  */
-async function buildSourceMap(root, ctx, { budget = 1.5, ask = askClaude, fetchFn = fetch } = {}) {
-  const { out, cost } = await ask(mapPrompt(ctx), MAP_SCHEMA, { cwd: root, servers: Object.keys(CATALOG), budget, search: true });
-  /** @type {SourceMap} */
-  const map = {
-    components: (Array.isArray(out?.components) ? out.components : []).filter((/** @type {any} */ c) => c && typeof c.name === "string" && Array.isArray(c.sources))
-      .map((/** @type {any} */ c) => ({ name: c.name.slice(0, 120), version: String(c.version ?? "").slice(0, 120), evidence: (Array.isArray(c.evidence) ? c.evidence : []).map(String).slice(0, 10),
-        sources: c.sources.filter((/** @type {any} */ x) => x && ["mcp", "context7", "url"].includes(x.kind) && typeof x.ref === "string").map((/** @type {any} */ x) => ({ kind: x.kind, ref: x.ref.slice(0, 500), covers: (Array.isArray(x.covers) ? x.covers : []).filter((/** @type {any} */ v) => COVERS.includes(v)), ...(typeof x.note === "string" ? { note: x.note.slice(0, 300) } : {}) })) })),
-    missing: (Array.isArray(out?.missing) ? out.missing : []).filter((/** @type {any} */ m) => typeof m?.component === "string" && typeof m?.suggestion === "string").map((/** @type {any} */ m) => ({ component: m.component.slice(0, 120), suggestion: m.suggestion.slice(0, 400) })),
-    at: Date.now(),
-  };
-  for (const c of map.components) {
-    for (const s of c.sources) s.check = await checkSource(s, { fetchFn });
-    c.sources = c.sources.filter((s) => s.check?.ok);
-    if (!c.sources.some((s) => s.kind === "context7")) {
-      const id = await context7For(c.name, { fetchFn });
-      if (id) c.sources.push({ kind: "context7", ref: id, covers: ["api", "guides"], note: "added by the check (Context7 search)", check: { ok: true, added: true } });
-    }
-  }
-  return { map, cost };
+async function buildSourceMap(root, { ask = askClaude, fetchFn = fetch } = {}) {
+  const { out, cost } = await ask(MAP_PROMPT, MAP_SCHEMA, { cwd: root, model: MAP_MODEL, effort: "low", maxTurns: 14 });
+  const str = (/** @type {any} */ v, /** @type {number} */ n) => (typeof v === "string" ? v.trim().slice(0, n) : "");
+  /** @type {Component[]} */
+  const components = (Array.isArray(out?.components) ? out.components : []).filter((/** @type {any} */ c) => c && typeof c.name === "string").slice(0, 20).map((/** @type {any} */ c) => ({
+    name: str(c.name, 120), docs_name: str(c.docs_name, 120) || str(c.name, 120), version: str(c.version, 120),
+    evidence: (Array.isArray(c.evidence) ? c.evidence : []).map(String).slice(0, 6), vendor: ["cloudflare", "microsoft", "aws"].includes(c.vendor) ? c.vendor : "other",
+    changelog_url: publicHttps(str(c.changelog_url, 500)) ? str(c.changelog_url, 500) : "",
+  }));
+  await Promise.all(components.map(async (c) => {
+    c.context7 = (await context7For(c.docs_name, { fetchFn })) ?? (c.docs_name !== c.name ? await context7For(c.name, { fetchFn }) : undefined);
+  }));
+  return { map: { components, at: Date.now() }, cost };
 }
 
-// 2. Pillars ------------------------------------------------------------------------
+// 2. Fetch -------------------------------------------------------------------------------
 
-const REC_SCHEMA = {
-  type: "object",
-  properties: {
-    recommendations: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          key: { type: "string", description: "stable kebab-case id: pillar-component-what" },
-          component: { type: "string", description: "a component name from the source map" },
-          title: { type: "string", description: "one line, imperative" },
-          why: { type: "string", description: "2-4 sentences: what the official source says and why it matters here" },
-          severity: { type: "string", enum: ["high", "medium", "low"] },
-          evidence: { type: "array", items: { type: "string" }, description: "'path:line' or 'docs/ARCHITECTURE.md#section-key'" },
-          source: {
-            type: "object",
-            properties: { url: { type: "string" }, title: { type: "string" }, version_or_date: { type: "string" } },
-            required: ["url", "title", "version_or_date"],
+/**
+ * One call of a public docs MCP server's search tool over streamable HTTP
+ * (initialize, initialized, tools/list, tools/call); its text.
+ * @param {string} url @param {string} query @param {{fetchFn?: typeof fetch}} [o]
+ */
+async function mcpSearch(url, query, { fetchFn = fetch } = {}) {
+  const headers = { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-06-18" };
+  const post = async (/** @type {any} */ body, /** @type {string | undefined} */ sid) => {
+    const r = await fetchFn(url, { method: "POST", headers: { ...headers, ...(sid ? { "Mcp-Session-Id": sid } : {}) }, body: JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
+    const text = await r.text();
+    const data = text.trimStart().startsWith("{") ? text : text.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5)).pop();
+    return { sid: r.headers?.get?.("mcp-session-id") ?? sid, json: data ? JSON.parse(data) : undefined };
+  };
+  const init = await post({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "imprimatur", version: "1" } } });
+  await post({ jsonrpc: "2.0", method: "notifications/initialized" }, init.sid);
+  const list = await post({ jsonrpc: "2.0", id: 2, method: "tools/list" }, init.sid);
+  const tool = list.json?.result?.tools?.find((/** @type {any} */ x) => /search/i.test(x.name));
+  if (!tool) return "";
+  const arg = Object.keys(tool.inputSchema?.properties ?? { query: 1 })[0] ?? "query";
+  const call = await post({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: tool.name, arguments: { [arg]: query } } }, init.sid);
+  return (call.json?.result?.content ?? []).map((/** @type {any} */ c) => (typeof c.text === "string" ? c.text : "")).join("\n");
+}
+
+/** Links in a text: absolute https ones, and the base's paths (an MCP answer's relative links). @param {string} text @param {string} [base] */
+function linksIn(text, base) {
+  const abs = [...text.matchAll(/https:\/\/[^\s"'<>)\]]+/g)].map((m) => m[0].replace(/[.,;:]+$/, ""));
+  const rel = base ? [...text.matchAll(/(?:\]\(|"|\s)(\/[a-z0-9][^\s"'<>)\]]*)/gi)].map((m) => `${base}${m[1]}`.replace(/[.,;:]+$/, "")) : [];
+  return [...new Set([...abs, ...rel])].filter(publicHttps);
+}
+
+/** HTML to plain text, enough for a changelog page. @param {string} h */
+const htmlText = (h) => h.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ")
+  .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
+
+/**
+ * The documentation for a review, fetched by code in parallel (8 at a time): per
+ * component × category, Context7 and the vendor's docs MCP; changelogs once, for
+ * compatibility and the process.
+ * @param {SourceMap} map @param {string[]} cats @param {{fetchFn?: typeof fetch, cap?: number}} [o] @returns {Promise<Excerpt[]>}
+ */
+async function fetchDocs(map, cats, { fetchFn = fetch, cap = 2500 } = {}) {
+  /** @type {Excerpt[]} */
+  const out = [];
+  /** @type {Array<() => Promise<void>>} */
+  const jobs = [];
+  for (const c of map.components) {
+    for (const cat of cats) {
+      const q = CATEGORIES[/** @type {keyof typeof CATEGORIES} */ (cat)].query;
+      if (c.context7) jobs.push(async () => {
+        const r = await fetchFn(`https://context7.com/api/v2/context?libraryId=${encodeURIComponent(c.context7 ?? "")}&query=${encodeURIComponent(q)}&type=txt`, { signal: AbortSignal.timeout(30_000) });
+        const text = r.ok ? await r.text() : "";
+        // Context7 names each snippet's original page: that is what a recommendation cites.
+        const urls = [...new Set([...text.matchAll(/Source: (https:\/\/\S+)/g)].map((m) => m[1]))].filter(publicHttps);
+        if (text) out.push({ component: c.name, cat, kind: "context7", ref: c.context7 ?? "", urls, text: text.slice(0, cap) });
+      });
+      const mcp = VENDOR_MCP[/** @type {keyof typeof VENDOR_MCP} */ (c.vendor)];
+      if (mcp) jobs.push(async () => {
+        const text = await mcpSearch(mcp.url, `${c.name} ${q}`, { fetchFn });
+        if (text) out.push({ component: c.name, cat, kind: "mcp", ref: mcp.url, urls: linksIn(text, mcp.base), text: text.slice(0, cap) });
+      });
+    }
+    if (c.changelog_url) jobs.push(async () => {
+      const r = await fetchFn(c.changelog_url, { redirect: "follow", signal: AbortSignal.timeout(30_000) });
+      const text = r.ok ? htmlText(await r.text()) : "";
+      if (text) for (const cat of ["compatibility", "ssdf"].filter((x) => cats.includes(x))) out.push({ component: c.name, cat, kind: "url", ref: c.changelog_url, urls: [c.changelog_url], text: text.slice(0, cap * 2) });
+    });
+  }
+  let next = 0;
+  await Promise.all(Array.from({ length: 8 }, async () => {
+    while (next < jobs.length) await jobs[next++]().catch(() => {});
+  }));
+  return out;
+}
+
+// 3. Judge -------------------------------------------------------------------------------
+
+/** The recommendation schema of a category: its subcategories as an enum. @param {string} cat */
+function recSchema(cat) {
+  const c = CATEGORIES[/** @type {keyof typeof CATEGORIES} */ (cat)];
+  return {
+    type: "object",
+    properties: {
+      recommendations: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            key: { type: "string", description: "stable kebab-case id: component-what" },
+            subcategory: { type: "string", enum: c.subs.map((s) => s[0]) },
+            component: { type: "string" },
+            title: { type: "string", description: "one line, imperative" },
+            why: { type: "string", description: "2-4 sentences: what the documentation says and why it matters here" },
+            severity: { type: "string", enum: ["high", "medium", "low"] },
+            evidence: { type: "array", items: { type: "string" }, description: "'path:line' or 'docs/ARCHITECTURE.md#section-key'" },
+            source: { type: "object", properties: { url: { type: "string" }, title: { type: "string" }, version_or_date: { type: "string" } }, required: ["url", "title", "version_or_date"] },
+            next_step: { type: "string", description: "the concrete change: file and what to change" },
+            decision_ids: { type: "array", items: { type: "integer" } },
           },
-          next_step: { type: "string", description: "the concrete change: file and what to change" },
-          decision_ids: { type: "array", items: { type: "integer" } },
+          required: ["key", "subcategory", "component", "title", "why", "severity", "evidence", "source", "next_step", "decision_ids"],
         },
-        required: ["key", "component", "title", "why", "severity", "evidence", "source", "next_step", "decision_ids"],
       },
     },
-  },
-  required: ["recommendations"],
-};
+    required: ["recommendations"],
+  };
+}
 
-/**
- * @param {string} pillar @param {SourceMap} map @param {{decisions: Array<{line: string}>, sections: string[]}} ctx
- * @param {string[]} keys previous keys of this pillar @param {string} lang
- */
-const pillarPrompt = (pillar, map, ctx, keys, lang) => `You review the repository in the current directory for ONE pillar:
+/** The part every category call shares (the system prompt; cached after the first call). */
+function sharedPrompt(/** @type {{decisions: Array<{line: string}>, sections: string[]}} */ ctx, /** @type {SourceMap} */ map, /** @type {ReturnType<typeof repoBundle>} */ repo) {
+  return [
+    "You review a software repository against official documentation excerpts fetched just now, one quality category at a time (ISO/IEC 25010:2023, NIST SSDF).",
+    "", "DECISIONS of the project (id kind: title):", ...ctx.decisions.slice(0, 200).map((d) => d.line),
+    "", "ARCHITECTURE DOCUMENT (sections, cut; full text in docs/ARCHITECTURE.md):", ...ctx.sections,
+    "", "STACK:", ...map.components.map((c) => `- ${c.name} ${c.version} (${c.evidence.join(", ")})`),
+    "", "REPOSITORY FILES (git ls-files):", repo.list, "", ...repo.key,
+  ].join("\n");
+}
 
-PILLAR: ${pillar} — ${PILLARS[/** @type {keyof typeof PILLARS} */ (pillar)]}
+/** @param {string} cat @param {Excerpt[]} docs @param {string[]} keys previous keys of this category @param {string} lang */
+function categoryPrompt(cat, docs, keys, lang) {
+  const c = CATEGORIES[/** @type {keyof typeof CATEGORIES} */ (cat)];
+  return `CATEGORY: ${c.std} — ${c.name}. Subcategories: ${c.subs.map(([n, m]) => `${n} (${m})`).join("; ")}.
 
-Give best-practice recommendations for THIS project as it is built today. Rules:
-- Read current guidance from the SOURCE MAP below, in its order: the docs MCP servers, then Context7 (query-docs with the listed id), then the listed URLs with WebFetch. Search the web only if those do not answer.
-- Every recommendation cites an OFFICIAL source you read in this session (vendor docs, spec, release notes, changelog), with its version or date. No blogs. No source → leave it out.
-- Every recommendation points to evidence you read in this repo (path:line, or an architecture section key). No evidence → leave it out. Nothing generic.
-- Say which version it applies to; use the versions in the map.
-- Respect the project's decisions: if one already settles the point, skip it; if the official source is newer and goes against it, keep it and put the decision id in decision_ids.
-- At most 6, most valuable first. Fewer is fine. Write title, why and next_step in ${lang}.
+Give best-practice recommendations for THIS project in this category only, each under the subcategory it fits best, from the DOCUMENTATION EXCERPTS below and the repository in your instructions.
+- source.url must be one of the URLs listed with the excerpts (the page the excerpt came from), with its version or date if shown. None fits → leave it out.
+- Evidence: "path:line" (e.g. "package.json:9") or "docs/ARCHITECTURE.md#<section key>". The key files are given numbered; use Read or Grep at most 3 times, only to check a line elsewhere. Do not explore.
+- Respect the decisions: skip what one settles; if the documentation is newer and goes against one, keep it and list the decision id.
+- At most 5, most valuable first; fewer or none is fine. Nothing generic. Write title, why and next_step in ${lang}.
 ${keys.length ? `- Earlier runs used these keys; reuse a key when it is the same recommendation: ${keys.join(", ")}` : ""}
 
-SOURCE MAP:
-${map.components.map((c) => `- ${c.name} (${c.version}): ${c.sources.map((s) => `${s.kind} ${s.ref} [${s.covers.join(",")}]`).join("; ")}`).join("\n")}
+DOCUMENTATION EXCERPTS (${c.name}):
+${docs.map((d) => `\n=== ${d.component} · ${d.kind} ${d.ref}\nURLs: ${d.urls.slice(0, 10).join(" ")}\n${d.text}`).join("\n") || "(none fetched)"}`;
+}
 
-DECISIONS (id kind: title):
-${ctx.decisions.slice(0, 200).map((d) => d.line).join("\n")}
+// 4. Gate --------------------------------------------------------------------------------
 
-ARCHITECTURE DOCUMENT (sections, cut; full text in docs/ARCHITECTURE.md):
-${ctx.sections.join("\n\n")}
-`;
+/** A URL compared without query, fragment or trailing slash. @param {string} u */
+const normUrl = (u) => u.replace(/[#?].*$/, "").replace(/\/+$/, "").toLowerCase();
 
 /**
- * The gate: an official https source and evidence in the repo, or the recommendation
- * goes; decision ids kept only when they are the repo's.
- * @param {Recommendation[]} recs @param {string} root @param {Set<number>} decisionIds
+ * The gate: shapes and sizes fixed, an https source among the URLs fetched, every
+ * evidence file inside the repo (a line within the file), a subcategory of the category,
+ * decision ids the repo's. Dropped items say why; nothing throws.
+ * @param {any[]} recsIn @param {string} root @param {Set<number>} decisionIds @param {Set<string>} [fetched] normalized URLs fetched
  * @returns {{kept: Recommendation[], dropped: Array<Recommendation & {why: string[]}>}}
  */
-function gate(recs, root, decisionIds) {
+function gate(recsIn, root, decisionIds, fetched) {
   /** @type {Recommendation[]} */
   const kept = [];
   /** @type {Array<Recommendation & {why: string[]}>} */
   const dropped = [];
   const str = (/** @type {any} */ v, /** @type {number} */ max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
   const base = path.resolve(root);
-  for (const raw of Array.isArray(recs) ? recs : []) {
+  for (const raw of Array.isArray(recsIn) ? recsIn : []) {
     if (!raw || typeof raw !== "object") continue;
-    // Model output is untrusted: shapes and sizes fixed here, before anything is written.
+    const category = String(raw.category ?? "");
+    const cat = CATEGORIES[/** @type {keyof typeof CATEGORIES} */ (category)];
     /** @type {Recommendation} */
     const r = {
-      key: str(raw.key, 80), component: str(raw.component, 120), title: str(raw.title, 300), why: str(raw.why, 2000), next_step: str(raw.next_step, 1000),
-      severity: ["high", "medium", "low"].includes(raw.severity) ? raw.severity : "low",
+      key: str(raw.key, 80), category, subcategory: str(raw.subcategory, 80), component: str(raw.component, 120), title: str(raw.title, 300), why: str(raw.why, 2000),
+      next_step: str(raw.next_step, 1000), severity: ["high", "medium", "low"].includes(raw.severity) ? raw.severity : "low",
       evidence: (Array.isArray(raw.evidence) ? raw.evidence : []).filter((/** @type {any} */ e) => typeof e === "string").map((/** @type {string} */ e) => e.slice(0, 300)).slice(0, 10),
       source: { url: str(raw.source?.url, 500), title: str(raw.source?.title, 200), version_or_date: str(raw.source?.version_or_date, 100) },
       decision_ids: (Array.isArray(raw.decision_ids) ? raw.decision_ids : []).filter((/** @type {any} */ id) => Number.isInteger(id) && decisionIds.has(id)),
-      pillar: raw.pillar,
     };
     const why = [];
+    if (!cat) why.push("unknown category");
+    else if (!cat.subs.some((s) => s[0] === r.subcategory)) why.push("not a subcategory of the category");
     if (!r.title) why.push("no title");
     if (!publicHttps(r.source.url)) why.push("no public https source");
+    else if (fetched && !fetched.has(normUrl(r.source.url))) why.push("source not among the pages fetched");
     if (!/^[a-z0-9][a-z0-9-]*$/.test(r.key)) why.push("bad key");
-    // Every evidence file inside the repo and there; a line number within the file.
     const bad = r.evidence.filter((e) => {
       if (e.startsWith("docs/ARCHITECTURE.md#")) return !fs.existsSync(path.join(base, "docs", "ARCHITECTURE.md"));
       const [, file, line] = /^([^:#]+)(?::(\d+))?/.exec(e) ?? [];
@@ -374,42 +463,66 @@ function gate(recs, root, decisionIds) {
   return { kept, dropped };
 }
 
-// 3. Records -----------------------------------------------------------------------
+/**
+ * The same fix found by two categories is one recommendation: its first evidence and
+ * component the same → the more severe kept, the others' categories as tags.
+ * @param {Recommendation[]} list @returns {Recommendation[]}
+ */
+function dedupe(list) {
+  const rank = { high: 0, medium: 1, low: 2 };
+  /** @type {Map<string, Recommendation>} */
+  const by = new Map();
+  for (const r of [...list].sort((a, b) => rank[a.severity] - rank[b.severity])) {
+    const k = `${r.component.toLowerCase()}|${(r.evidence[0] ?? "").toLowerCase()}`;
+    const have = by.get(k);
+    if (!have) by.set(k, { ...r, tags: [] });
+    else if (have.category !== r.category && !have.tags?.includes(r.category)) have.tags = [...(have.tags ?? []), r.category];
+  }
+  return [...by.values()];
+}
 
-/** A recommendation's record body (Markdown). @param {Recommendation} r */
+// 5. Records -----------------------------------------------------------------------------
+
+/** A recommendation's record body (Markdown); the source link escaped. @param {Recommendation} r */
 function bodyOf(r) {
+  const c = CATEGORIES[/** @type {keyof typeof CATEGORIES} */ (r.category)];
   return [
     r.why, "",
     `**Next:** ${r.next_step}`,
-    `**Evidence:** ${r.evidence.map((e) => `\`${e}\``).join(", ")}`,
-    `**Source:** [${r.source.title.replace(/[[\]\\]/g, "")}](${r.source.url.replace(/[()\s<>]/g, (c) => encodeURIComponent(c))}) (${r.source.version_or_date})`,
+    `**Category:** ${c ? `${c.std} · ${c.name} → ${r.subcategory}` : r.category}${r.tags?.length ? ` (also ${r.tags.join(", ")})` : ""}`,
+    `**Evidence:** ${r.evidence.map((e) => `\`${e.replace(/`/g, "")}\``).join(", ")}`,
+    `**Source:** [${r.source.title.replace(/[[\]\\]/g, "")}](${r.source.url.replace(/[()\s<>]/g, (ch) => encodeURIComponent(ch))}) (${r.source.version_or_date})`,
     ...(r.decision_ids.length ? [`**Touches decisions:** ${r.decision_ids.join(", ")}`] : []),
   ].join("\n");
 }
 
 /** @param {Recommendation} r @param {number} at */
 const linksOf = (r, at) => ({
-  best: { key: r.key, pillar: r.pillar, component: r.component, severity: r.severity, source: r.source, evidence: r.evidence, next_step: r.next_step, decision_ids: r.decision_ids, seen: at },
+  best: {
+    key: r.key, category: r.category, subcategory: r.subcategory, std: CATEGORIES[/** @type {keyof typeof CATEGORIES} */ (r.category)]?.std, tags: r.tags ?? [],
+    component: r.component, severity: r.severity, source: r.source, evidence: r.evidence, next_step: r.next_step, decision_ids: r.decision_ids, seen: at,
+  },
 });
 
+/** A record's identity: category and key (two categories may name the same key). @param {any} b */
+const idOf = (b) => `${b.category ?? b.pillar ?? ""}:${b.key}`;
+
 /**
- * The write plan, pure: new keys added, found ones refreshed (open or done, never
- * dismissed), the rest left as they are.
- * @param {Recommendation[]} recs @param {Array<{id: number, status: string, links?: any}>} records
+ * The write plan, pure: new keys added, found ones refreshed (open or done), dismissed
+ * left, the rest left.
+ * @param {Recommendation[]} list @param {Array<{id: number, status: string, links?: any}>} records
  */
-function reconcileBest(recs, records) {
+function reconcileBest(list, records) {
   /** @type {Map<string, any>} */
   const byKey = new Map();
-  // A key is the pillar's: two pillars may name the same key for different things.
-  const id = (/** @type {any} */ b) => `${b.pillar ?? ""}:${b.key}`;
-  for (const r of records) if (r.links?.best?.key) byKey.set(id(r.links.best), r);
+  for (const r of records) if (r.links?.best?.key) byKey.set(idOf(r.links.best), r);
   /** @type {{add: Recommendation[], refresh: Array<{id: number, r: Recommendation}>, dismissed: number}} */
   const plan = { add: [], refresh: [], dismissed: 0 };
   const seen = new Set();
-  for (const r of recs) {
-    if (seen.has(id(r))) continue;
-    seen.add(id(r));
-    const rec = byKey.get(id(r));
+  for (const r of list) {
+    if (seen.has(idOf(r))) continue;
+    seen.add(idOf(r));
+    const rec = byKey.get(idOf(r));
     if (!rec) plan.add.push(r);
     else if (rec.status === "dropped") plan.dismissed++;
     else plan.refresh.push({ id: rec.id, r });
@@ -417,89 +530,96 @@ function reconcileBest(recs, records) {
   return plan;
 }
 
-/** "3 open (1 high, 2 medium) · 2 applied · 1 dismissed". @param {Array<{status: string, links?: any}>} records */
-function summaryLine(records) {
-  const recs = records.filter((r) => r.links?.best);
-  const open = recs.filter((r) => r.status === "open");
-  const sev = ["high", "medium", "low"].map((s) => [s, open.filter((r) => r.links.best.severity === s).length]).filter(([, n]) => n).map(([s, n]) => `${n} ${s}`);
-  const done = recs.filter((r) => r.status === "done").length;
-  const dropped = recs.filter((r) => r.status === "dropped").length;
-  return [`${open.length} open${sev.length ? ` (${sev.join(", ")})` : ""}`, done && `${done} applied`, dropped && `${dropped} dismissed`].filter(Boolean).join(" · ");
-}
-
-/** The source map's record: a note of the BEST task, its map in links. @param {any} db @param {number} taskId */
+/** The source map's record: a note of RECS with links.bestSources. @param {any} db @param {number} taskId */
 function sourceMapRecord(db, taskId) {
   return db.recordsOf(taskId).find((/** @type {any} */ r) => r.kind === "note" && r.links?.bestSources);
 }
 
-/**
- * A whole review of a repo: the source map (built when missing or asked), then the
- * pillars in parallel, the gate, and one write.
- * @param {any} db @param {string} root
- * @param {{pillars?: string[], refreshSources?: boolean, budget?: number, lang?: string, ask?: typeof askClaude, fetchFn?: typeof fetch,
- *   progress?: (msg: string) => void, now?: number}} [o]
- */
-async function review(db, root, { pillars = Object.keys(PILLARS), refreshSources = false, budget = 1.5, lang = "English", ask = askClaude, fetchFn = fetch, progress = () => {}, now = Date.now() } = {}) {
-  const repo = db.repoOf(root);
-  const ctx = projectContext(db, repo.id);
-  let task = db.taskByKey(repo.id, TASK);
-  let cost = 0;
-  /** @type {SourceMap | undefined} */
-  let map = task ? sourceMapRecord(db, task.id)?.links.bestSources : undefined;
-  if (!map || refreshSources) {
-    progress("Building the source map");
-    const built = await buildSourceMap(root, ctx, { budget, ask, fetchFn });
-    map = built.map;
-    cost += built.cost;
-    if (!map.components.length) throw new Error("the source map came back empty");
-    const t = task ?? db.upsertTask(repo.id, TASK, { title: TASK_TITLE, status: "active" }, ACTOR);
-    task = t;
-    const old = sourceMapRecord(db, t.id);
-    const fields = { title: `Source map: ${map.components.length} components, ${map.components.reduce((n, c) => n + c.sources.length, 0)} sources`, body: mapBody(map), links: { bestSources: map } };
-    if (old) db.updateRecord(old.id, fields, ACTOR);
-    else db.addRecord(t.id, { kind: "note", ...fields }, ACTOR);
-  }
-  const before = task ? db.recordsOf(task.id, { dropped: true }) : [];
-  progress(`Reviewing ${pillars.join(", ")}`);
-  const runs = await Promise.all(pillars.map(async (p) => {
-    const keys = before.filter((/** @type {any} */ r) => r.links?.best?.pillar === p).map((/** @type {any} */ r) => r.links.best.key);
-    const m = /** @type {SourceMap} */ (map);
-    const servers = ["context7", ...new Set(m.components.flatMap((c) => c.sources.filter((s) => s.kind === "mcp").map((s) => s.ref)))];
-    // WebFetch only to the map's hosts, no web search: repo content cannot be sent anywhere else.
-    const fetchDomains = [...new Set(m.components.flatMap((c) => c.sources.filter((s) => s.kind === "url" && publicHttps(s.ref)).map((s) => new URL(s.ref).hostname)))];
-    try {
-      const { out, cost: c } = await ask(pillarPrompt(p, m, ctx, keys, lang), REC_SCHEMA, { cwd: root, servers, budget, fetchDomains });
-      return { pillar: p, recs: /** @type {Recommendation[]} */ ((Array.isArray(out?.recommendations) ? out.recommendations : []).map((/** @type {any} */ r) => ({ ...r, pillar: p }))), cost: c };
-    } catch (e) {
-      return { pillar: p, recs: [], cost: Number(/** @type {any} */ (e)?.cost ?? 0), error: e instanceof Error ? e.message : String(e) };
-    }
-  }));
-  cost += runs.reduce((n, r) => n + r.cost, 0);
-  if (runs.every((r) => r.error)) throw new Error(`every pillar failed ($${cost.toFixed(2)} spent): ${runs.map((r) => `${r.pillar}: ${r.error}`).join("; ")}`);
-  const ran = runs.filter((r) => !r.error).map((r) => r.pillar);
-  const { kept, dropped } = gate(runs.flatMap((r) => r.recs), root, new Set(ctx.decisions.map((d) => d.id)));
-  const result = db.tx(() => {
-    const t = db.taskByKey(repo.id, TASK) ?? db.upsertTask(repo.id, TASK, { title: TASK_TITLE, status: "active" }, ACTOR);
-    const plan = reconcileBest(kept, db.recordsOf(t.id, { dropped: true }));
-    for (const r of plan.add) db.addRecord(t.id, { kind: "todo", title: r.title.slice(0, 300), body: bodyOf(r), links: linksOf(r, now) }, ACTOR);
-    for (const { id, r } of plan.refresh) db.updateRecord(id, { title: r.title.slice(0, 300), body: bodyOf(r), links: linksOf(r, now) }, ACTOR);
-    // The run's time on the source map: a recommendation seen before it was not seen now.
-    const m = sourceMapRecord(db, t.id);
-    // Per pillar, and only those that ran: a failed pillar's recommendations are not "unseen".
-    const lastRun = { ...(typeof m?.links.bestSources.lastRun === "object" ? m.links.bestSources.lastRun : {}), ...Object.fromEntries(ran.map((p) => [p, now])) };
-    if (m) db.updateRecord(m.id, { links: { ...m.links, bestSources: { ...m.links.bestSources, lastRun } } }, ACTOR);
-    const line = summaryLine(db.recordsOf(t.id, { dropped: true }));
-    if (t.summary !== line) db.upsertTask(repo.id, TASK, { summary: line }, ACTOR);
-    return { added: plan.add.length, refreshed: plan.refresh.length, dismissed: plan.dismissed, summary: line };
-  });
-  return { ...result, kept: kept.length, dropped, cost, pillars: runs.map((r) => ({ pillar: r.pillar, proposed: r.recs.length, cost: r.cost, ...(r.error ? { error: r.error } : {}) })), components: map.components.length };
+/** The source map as Markdown, for its record. @param {SourceMap} map */
+function mapBody(map) {
+  return map.components.map((c) => `- **${c.name}** (${c.version}): ${[c.context7 && `Context7 \`${c.context7}\``, VENDOR_MCP[/** @type {keyof typeof VENDOR_MCP} */ (c.vendor)] && `${c.vendor} docs MCP`, c.changelog_url && `[changelog](${c.changelog_url})`].filter(Boolean).join(", ") || "no source"}`).join("\n");
 }
 
-/** The source map as Markdown, for its record's body. @param {SourceMap} map */
-function mapBody(map) {
-  const lines = map.components.map((c) => `- **${c.name}** (${c.version}): ${c.sources.map((s) => (s.kind === "url" ? `[${new URL(s.ref).host}${new URL(s.ref).pathname}](${s.ref})` : `${s.kind} \`${s.ref}\``)).join(", ")}`);
-  if (map.missing.length) lines.push("", "**Tools that would help:**", ...map.missing.map((m) => `- ${m.component}: ${m.suggestion}`));
-  return lines.join("\n");
+/**
+ * A whole review: source map (built when missing or asked), fetch, one call per
+ * category (staggered for the prompt cache), gate, dedupe, one write.
+ * @param {any} db @param {string} root
+ * @param {{categories?: string[], refreshSources?: boolean, budget?: number, lang?: string, ask?: typeof askClaude, fetchFn?: typeof fetch,
+ *   progress?: (msg: string) => void, now?: number, stagger?: number}} [o]
+ */
+async function review(db, root, { categories = CORE, refreshSources = false, budget = 1.5, lang = "English", ask = askClaude, fetchFn = fetch, progress = () => {}, now = Date.now(), stagger = 4000 } = {}) {
+  const t0 = Date.now();
+  const cats = categories.filter((c) => c in CATEGORIES);
+  if (!cats.length) throw new Error("no category to review");
+  const repo = db.repoOf(root);
+  const ctx = projectContext(db, repo.id);
+  const timings = /** @type {Record<string, number>} */ ({});
+  let cost = 0;
+  let task = recs.recsTask(db, repo.id, { create: true, actor: ACTOR });
+  /** @type {SourceMap | undefined} */
+  let map = sourceMapRecord(db, task.id)?.links.bestSources;
+  if (!map?.components?.length || refreshSources) {
+    progress("Mapping the stack");
+    const t = Date.now();
+    const built = await buildSourceMap(root, { ask, fetchFn });
+    timings.map = Date.now() - t;
+    cost += built.cost;
+    map = built.map;
+    if (!map.components.length) throw new Error("the stack came back empty");
+    const old = sourceMapRecord(db, task.id);
+    const fields = { title: `Source map: ${map.components.length} components`, body: mapBody(map), links: { bestSources: map } };
+    if (old) db.updateRecord(old.id, fields, ACTOR);
+    else db.addRecord(task.id, { kind: "note", ...fields }, ACTOR);
+  }
+  const m = /** @type {SourceMap} */ (map);
+  progress(`Fetching documentation for ${m.components.length} components`);
+  let t = Date.now();
+  const docs = await fetchDocs(m, cats, { fetchFn });
+  timings.fetch = Date.now() - t;
+  const fetched = new Set(docs.flatMap((d) => d.urls).map(normUrl));
+  const system = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-best-")), "context.txt");
+  fs.writeFileSync(system, sharedPrompt(ctx, m, repoBundle(root)), { mode: 0o600 });
+  const before = db.recordsOf(task.id, { dropped: true });
+  progress(`Reviewing ${cats.length} categories`);
+  t = Date.now();
+  let runs;
+  try {
+    runs = await Promise.all(cats.map(async (cat, i) => {
+      // The first call writes the shared prompt to the cache; the others read it.
+      if (i && stagger) await new Promise((r) => setTimeout(r, stagger));
+      const keys = before.filter((/** @type {any} */ r) => r.links?.best?.category === cat).map((/** @type {any} */ r) => r.links.best.key);
+      try {
+        const { out, cost: c } = await ask(categoryPrompt(cat, docs.filter((d) => d.cat === cat), keys, lang), recSchema(cat), { cwd: root, model: MODEL, effort: "medium", maxTurns: 12, system, budget });
+        return { cat, recs: (Array.isArray(out?.recommendations) ? out.recommendations : []).map((/** @type {any} */ r) => ({ ...r, category: cat })), cost: c };
+      } catch (e) {
+        return { cat, recs: [], cost: Number(/** @type {any} */ (e)?.cost ?? 0), error: e instanceof Error ? e.message : String(e) };
+      }
+    }));
+  } finally {
+    fs.rmSync(path.dirname(system), { recursive: true, force: true });
+  }
+  timings.judge = Date.now() - t;
+  cost += runs.reduce((n, r) => n + r.cost, 0);
+  if (runs.every((r) => r.error)) throw new Error(`every category failed ($${cost.toFixed(2)} used): ${runs.map((r) => `${r.cat}: ${r.error}`).join("; ")}`);
+  const ran = runs.filter((r) => !r.error).map((r) => r.cat);
+  const { kept, dropped } = gate(runs.flatMap((r) => r.recs), root, new Set(ctx.decisions.map((d) => d.id)), fetched);
+  const final = dedupe(kept);
+  const result = db.tx(() => {
+    task = recs.recsTask(db, repo.id, { create: true, actor: ACTOR });
+    const plan = reconcileBest(final, db.recordsOf(task.id, { dropped: true }));
+    for (const r of plan.add) db.addRecord(task.id, { kind: "todo", title: r.title, body: bodyOf(r), links: linksOf(r, now) }, ACTOR);
+    for (const { id, r } of plan.refresh) db.updateRecord(id, { title: r.title, body: bodyOf(r), links: linksOf(r, now) }, ACTOR);
+    // When each category last ran: a recommendation seen before that was not seen now.
+    const mr = sourceMapRecord(db, task.id);
+    if (mr) db.updateRecord(mr.id, { links: { ...mr.links, bestSources: { ...mr.links.bestSources, lastRun: { ...(mr.links.bestSources.lastRun ?? {}), ...Object.fromEntries(ran.map((c) => [c, now])) } } } }, ACTOR);
+    const summary = recs.writeSummary(db, db.taskById(task.id), ACTOR);
+    return { added: plan.add.length, refreshed: plan.refresh.length, dismissed: plan.dismissed, summary };
+  });
+  timings.total = Date.now() - t0;
+  return {
+    ...result, kept: final.length, merged: kept.length - final.length, dropped, cost, timings, excerpts: docs.length, components: m.components.length,
+    categories: runs.map((r) => ({ category: r.cat, proposed: r.recs.length, cost: r.cost, ...(r.error ? { error: r.error } : {}) })),
+  };
 }
 
 /** The prose language: imprimatur.language / IMPRIMATUR_LANG, else English. */
@@ -512,6 +632,7 @@ function proseLang() {
 }
 
 module.exports = {
-  TASK, ACTOR, CATALOG, PILLARS, REASONS, MODEL, askClaude, projectContext, buildSourceMap, checkSource, context7For, baseName, gate, reconcileBest,
-  summaryLine, bodyOf, linksOf, review, mapBody, proseLang, sourceMapRecord, run, childEnv, publicHttps, DENY,
+  TASK, ACTOR, MODEL, MAP_MODEL, CATEGORIES, CORE, VENDOR_MCP, DENY, run, childEnv, askClaude, authKind, projectContext, repoBundle, MAP_SCHEMA,
+  publicHttps, context7For, buildSourceMap, mcpSearch, linksIn, fetchDocs, recSchema, sharedPrompt, categoryPrompt, normUrl, gate, dedupe,
+  bodyOf, linksOf, reconcileBest, sourceMapRecord, mapBody, review, proseLang,
 };

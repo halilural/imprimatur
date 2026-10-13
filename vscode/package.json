@@ -155,15 +155,27 @@
       },
       {
         "command": "imprimatur.bestPractices.run",
-        "title": "Best Practice Review (Claude)",
+        "title": "Review Project Best Practices (Claude)",
         "category": "Imprimatur",
         "icon": "$(sparkle)"
       },
       {
         "command": "imprimatur.setup.audit",
-        "title": "Audit Agent Setup (agnix)",
+        "title": "Recommendations…",
         "category": "Imprimatur",
         "icon": "$(lightbulb)"
+      },
+      {
+        "command": "imprimatur.setup.auditAgent",
+        "title": "Audit Agent Setup (agnix)",
+        "category": "Imprimatur",
+        "icon": "$(hubot)"
+      },
+      {
+        "command": "imprimatur.setup.applyFinding",
+        "title": "Mark Recommendation Applied",
+        "category": "Imprimatur",
+        "icon": "$(check)"
       },
       {
         "command": "imprimatur.setup.dismissFinding",
@@ -337,6 +349,10 @@
           "when": "false"
         },
         {
+          "command": "imprimatur.setup.applyFinding",
+          "when": "false"
+        },
+        {
           "command": "imprimatur.setup.reopenFinding",
           "when": "false"
         },
@@ -490,22 +506,32 @@
         },
         {
           "command": "imprimatur.setup.dismissFinding",
-          "when": "view == imprimatur.setup && viewItem == auditFinding-open",
+          "when": "view == imprimatur.setup && viewItem =~ /^(audit|best)Finding-open$/",
           "group": "inline@1"
         },
         {
           "command": "imprimatur.setup.dismissFinding",
-          "when": "view == imprimatur.setup && viewItem == auditFinding-open",
+          "when": "view == imprimatur.setup && viewItem =~ /^(audit|best)Finding-open$/",
           "group": "1_setup@3"
         },
         {
+          "command": "imprimatur.setup.applyFinding",
+          "when": "view == imprimatur.setup && viewItem =~ /^bestFinding-open$/",
+          "group": "inline@0"
+        },
+        {
+          "command": "imprimatur.setup.applyFinding",
+          "when": "view == imprimatur.setup && viewItem =~ /^bestFinding-open$/",
+          "group": "1_setup@2"
+        },
+        {
           "command": "imprimatur.setup.reopenFinding",
-          "when": "view == imprimatur.setup && viewItem =~ /^auditFinding-(done|dropped)$/",
+          "when": "view == imprimatur.setup && viewItem =~ /^(audit|best)Finding-(done|dropped)$/",
           "group": "inline@1"
         },
         {
           "command": "imprimatur.setup.reopenFinding",
-          "when": "view == imprimatur.setup && viewItem =~ /^auditFinding-(done|dropped)$/",
+          "when": "view == imprimatur.setup && viewItem =~ /^(audit|best)Finding-(done|dropped)$/",
           "group": "1_setup@3"
         }
       ]
