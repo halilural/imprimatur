@@ -8,6 +8,10 @@
 //                   after each push, {"t":"tracker","repo":"owner/name"} after a GitHub issue changed
 //   POST /v1/github GitHub's `issues` webhook (#71), signed with GITHUB_WEBHOOK_SECRET; no Bearer
 // Auth: Authorization: Bearer <SYNC_TOKEN> (a Worker secret), compared in constant time.
+// Limits (#89): RATE_LIMITER (a Workers rate-limit binding, per client IP) answers 429 with
+// Retry-After; a D1 write that fails transiently is retried with backoff; D1 overloaded or
+// over its quota answers 503 with Retry-After. A daily cron (scheduled → compact) deletes
+// change rows a newer one of the same field supersedes, by the devices' own rule.
 // handle() needs only D1's prepare/bind/all/run/batch and a Durable Object stub's fetch, so tests
 // run it in Node over node:sqlite; Live takes its runtime pieces (WebSocketPair, the 101) as deps.
 
@@ -86,6 +90,28 @@ export async function bodyText(req, max = MAX_BODY) {
   return new TextDecoder().decode(all);
 }
 
+/** D1's transient errors (developers.cloudflare.com/d1/best-practices/retry-queries/). @param {unknown} e */
+export const retryable = (e) => /Network connection lost|storage caused object to be reset|reset because its code was updated/.test(String(e?.message ?? e));
+/** D1 asking for less load: overloaded, or a quota spent. @param {unknown} e */
+export const overloaded = (e) => /overloaded|Too many requests|exceeded|quota|limit reached/i.test(String(e?.message ?? e));
+
+/**
+ * Runs fn, again on a transient D1 error: up to `tries` times, exponential backoff with
+ * jitter. A push repeated after a commit only writes the same field values twice, which
+ * the devices' last-writer-wins merge ignores.
+ * @template T @param {() => Promise<T>} fn @param {{tries?: number, baseMs?: number, sleep?: (ms: number) => Promise<void>}} [o] @returns {Promise<T>}
+ */
+export async function withRetry(fn, { tries = 4, baseMs = 100, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (attempt >= tries || !retryable(e)) throw e;
+      await sleep(baseMs * 2 ** (attempt - 1) * (0.5 + Math.random()));
+    }
+  }
+}
+
 /** The account's one Live object (#71), or undefined before it is deployed. @param {any} env */
 const liveStub = (env) => env.LIVE?.get(env.LIVE.idFromName("default"));
 
@@ -126,13 +152,13 @@ async function push(req, env, ctx) {
   }
   const rows = JSON.stringify(body.changes.map(({ entity, key, field, value, at }) => ({ entity, key, field, value, at })));
   // One statement for the whole batch (D1 caps bound parameters and queries per request).
-  const [, last] = await env.DB.batch([
+  const [, last] = await withRetry(() => env.DB.batch([
     env.DB.prepare(`INSERT INTO changes (device, entity, key, field, value, at)
                     SELECT ?, json_extract(j.value, '$.entity'), json_extract(j.value, '$.key'), json_extract(j.value, '$.field'),
                            json_extract(j.value, '$.value'), json_extract(j.value, '$.at')
                     FROM json_each(?) j ORDER BY CAST(j.key AS INTEGER)`).bind(body.device, rows),
     env.DB.prepare("SELECT max(seq) AS last FROM changes"),
-  ]);
+  ]));
   const seq = last.results[0]?.last ?? 0;
   // Other devices pull now instead of at their next poll.
   const told = notify(env, { t: "sync", seq, device: body.device }, ctx);
@@ -208,12 +234,43 @@ async function github(req, env, ctx) {
   return reply(200, out?.duplicate ? { ignored: "duplicate" } : { ok: true });
 }
 
+/**
+ * Deletes change rows that a newer row of the same field supersedes, by the devices' rule
+ * (db.js applyField: the later `at` wins, then the greater device id): no device would
+ * apply them, and a device that has not pulled yet still gets the winning value. In
+ * chunks (D1 caps a query's work); at most `rounds` a run.
+ * @param {{DB: any}} env @param {{chunk?: number, rounds?: number}} [o] @returns {Promise<number>} rows deleted
+ */
+export async function compact(env, { chunk = 5000, rounds = 20 } = {}) {
+  let deleted = 0;
+  for (let i = 0; i < rounds; i++) {
+    const r = await withRetry(() => env.DB.prepare(`DELETE FROM changes WHERE seq IN (
+        SELECT c.seq FROM changes c WHERE EXISTS (
+          SELECT 1 FROM changes n WHERE n.entity = c.entity AND n.key = c.key AND n.field = c.field
+            AND (n.at > c.at OR (n.at = c.at AND (n.device > c.device OR (n.device = c.device AND n.seq > c.seq)))))
+        LIMIT ?)`).bind(chunk).run());
+    const n = Number(r?.meta?.changes ?? r?.changes ?? 0);
+    deleted += n;
+    if (n < chunk) break;
+  }
+  return deleted;
+}
+
+/** Requests a client IP may make a minute (wrangler.jsonc RATE_LIMITER; a first sync pages fast). */
+export const RATE_PER_MINUTE = 300;
+
 /** Deliveries remembered against replays (#71). */
 export const REPLAY_KEEP = 500;
 
-/** @param {Request} req @param {{DB: any, SYNC_TOKEN?: string, LIVE?: any, GITHUB_WEBHOOK_SECRET?: string}} env @param {any} [ctx] */
+/** @param {Request} req @param {{DB: any, SYNC_TOKEN?: string, LIVE?: any, GITHUB_WEBHOOK_SECRET?: string, RATE_LIMITER?: any}} env @param {any} [ctx] */
 export async function handle(req, env, ctx) {
   const url = new URL(req.url);
+  // Per client IP, before any work (a token guess costs a request too). No binding: no limit.
+  if (env.RATE_LIMITER) {
+    const ip = req.headers.get("cf-connecting-ip") ?? "unknown";
+    const { success } = await env.RATE_LIMITER.limit({ key: `ip:${ip}` });
+    if (!success) return withHeader(fail(429, "too many requests; slow down"), "retry-after", "60");
+  }
   try {
     // Signed by GitHub, not by our token.
     if (req.method === "POST" && url.pathname === "/v1/github") return await github(req, env, ctx);
@@ -232,9 +289,17 @@ export async function handle(req, env, ctx) {
       return await stub.fetch(req);
     }
   } catch (e) {
+    // D1 overloaded or out of quota: the client backs off (vscode/sync.js) instead of hammering.
+    if (overloaded(e)) return withHeader(fail(503, `database busy: ${e instanceof Error ? e.message : e}`), "retry-after", "300");
     return fail(500, e instanceof Error ? e.message : String(e));
   }
   return fail(404, "not found");
+}
+
+/** @param {Response} res @param {string} k @param {string} v */
+function withHeader(res, k, v) {
+  res.headers.set(k, v);
+  return res;
 }
 
 /**
