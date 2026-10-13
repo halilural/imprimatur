@@ -555,6 +555,10 @@ npm test         # hook, diff and preview tests (node:test)
 npm run package  # builds dist/imprimatur-<version>.vsix
 ```
 
+## Security
+
+Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
+
 ## License
 
 MIT
