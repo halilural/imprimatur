@@ -17,8 +17,9 @@ const path = require("node:path");
 
 /** The agnix release this code reads; its JSON shape is pinned with it. */
 const AGNIX = "agnix@0.57.0";
-const TASK = "AUDIT";
-const TASK_TITLE = "Agent setup audit (agnix)";
+const recs = require("./recs.js");
+/** Findings are records of the repo's Recommendations task (#87; AUDIT before). */
+const TASK = recs.TASK;
 /** @type {import("./db.js").Actor} */
 const ACTOR = { kind: "hook", id: "audit" };
 const TITLE_MAX = 300;
@@ -333,7 +334,7 @@ const pathsOf = (scope) => {
 const GLOBAL_DIRS = [".claude", ".cursor", ".codex", ".gemini", ".kiro", ".copilot", ".windsurf", ".codeium", ".config/opencode"];
 
 /**
- * Audits one root and writes the plan to its AUDIT task, in one transaction.
+ * Audits one root and writes the plan to its Recommendations task (RECS), in one transaction.
  * @param {any} db @param {{root: string, global?: boolean, home?: string, plugins?: ReturnType<typeof pluginsOf>}} scope
  * @param {{bin: string, dryRun?: boolean, rules?: Map<string, Rule | undefined>, spawn?: typeof spawnSync, now?: number, report?: any}} o
  */
@@ -343,10 +344,11 @@ function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = 
   const rep = report ?? (paths.length ? runAgnix(bin, scope.root, { paths, spawn }) : { files_checked: 0, diagnostics: [] });
   const findings = findingsOf(rep, { root: scope.root, home, global: scope.global, plugins: scope.plugins });
   const repo = db.repoOf(scope.root, scope.global ? { name: "~" } : {});
+  // Read only: RECS and the containers it replaces (a dry run moves nothing).
   const read = () => {
-    const task = db.taskByKey(repo.id, TASK);
-    const records = task ? db.recordsOf(task.id, { dropped: true }).filter((/** @type {any} */ r) => r.links?.audit) : [];
-    return { task, plan: reconcile(findings, records) };
+    const tasks = [recs.TASK, ...recs.OLD].map((k) => db.taskByKey(repo.id, k)).filter(Boolean);
+    const records = tasks.flatMap((t) => db.recordsOf(t.id, { dropped: true })).filter((/** @type {any} */ r) => r.links?.audit && !r.links.audit.duplicate);
+    return { plan: reconcile(findings, records) };
   };
   const summaryOf = (/** @type {ReturnType<typeof reconcile>} */ plan) => ({
     root: scope.root, files: rep.files_checked ?? 0, findings: findings.length, added: plan.add.length, reopened: plan.reopen.length,
@@ -364,9 +366,9 @@ function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = 
   // Read, plan and write in one transaction: an audit from another process (the MCP
   // server, the CLI) cannot add the same findings twice or reopen one just dismissed.
   return db.tx(() => {
-    const { task, plan } = read();
+    const t = recs.recsTask(db, repo.id, { create: true, actor: ACTOR });
+    const { plan } = read();
     const summary = summaryOf(plan);
-    const t = task ?? db.upsertTask(repo.id, TASK, { title: TASK_TITLE, status: "active" }, ACTOR);
     for (const f of plan.add) db.addRecord(t.id, { kind: "fixme", title: titleOf(f), body: bodyOf(f, ruleOf(f.rule)), links: linksOf(f, ruleOf(f.rule)) }, ACTOR);
     for (const { id, f } of plan.reopen) db.updateRecord(id, { status: "open", title: titleOf(f), body: `${bodyOf(f, ruleOf(f.rule))}\n\n_Found again ${day}._`, links: linksOf(f, ruleOf(f.rule)) }, ACTOR);
     for (const { id, f } of plan.update) db.updateRecord(id, { title: titleOf(f), body: bodyOf(f, ruleOf(f.rule)), links: linksOf(f, ruleOf(f.rule)) }, ACTOR);
@@ -376,8 +378,7 @@ function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = 
     }
     // After the writes: what the records say now. Written only when it says something new
     // (a task the user closed stays closed; a run that changed nothing syncs nothing).
-    const line = summaryLine(db.recordsOf(t.id, { dropped: true }).filter((/** @type {any} */ r) => r.links?.audit));
-    if (t.summary !== line) db.upsertTask(repo.id, TASK, { summary: line }, ACTOR);
+    recs.writeSummary(db, db.taskById(t.id), ACTOR);
     return summary;
   });
 }

@@ -627,7 +627,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       case "edits": state.qs.edits = d.key; return go({ tab: "edits" });
       case "url": return vscode.postMessage({ type: "openUrl", url: d.url });
       case "newTask": return vscode.postMessage({ type: "newTask" });
-      case "bestDismiss": return vscode.postMessage({ type: "bestDismiss", id: Number(d.id) });
+      case "recDismiss": return vscode.postMessage({ type: "recDismiss", id: Number(d.id) });
       case "bestRun": return vscode.postMessage({ type: "bestRun" });
       case "answer": return sendAnswer(d.id);
       case "docEdit": return setView({ edit: d.kind + ":" + d.id });
@@ -1095,7 +1095,7 @@ function onMessage(m) {
   }
   if (m.type === "newTask") return newTask();
   if (m.type === "bestRun") return vscode.commands.executeCommand("imprimatur.bestPractices.run");
-  if (m.type === "bestDismiss") return bestDismiss(Number(m.id));
+  if (m.type === "recDismiss") return recDismiss(Number(m.id));
   if (["rec", "answer", "add", "taskStatus", "docSave", "docNew", "docStatus"].includes(m.type)) return writeFromPanel(m);
   if (m.type === "preview" && shown) {
     let html;
@@ -1147,36 +1147,11 @@ function writeFromPanel(m) {
   refresh?.(true);
 }
 
-/**
- * Dismiss a best-practice recommendation (#86) with why; "decided" asks which decision
- * record settles it. The reason goes in links.best, a note in the body.
- * @param {number} id
- */
-async function bestDismiss(id) {
+/** Dismiss a recommendation (#87, either producer) with why; then the page redraws. @param {number} id */
+async function recDismiss(id) {
   const db = records.dbOf();
-  const rec = db?.record(id);
-  if (!rec?.links?.best) return;
-  const { REASONS_TR } = require("./best-tree.js");
-  const pick = await vscode.window.showQuickPick(Object.entries(REASONS_TR).map(([key, label]) => ({ label, key })), { title: `Reddet: ${rec.title}`, placeHolder: "Neden?" });
-  if (!pick) return;
-  const best = { ...rec.links.best, reason: pick.key };
-  let note = "";
-  if (pick.key === "decided") {
-    const task = db.taskById(rec.task_id);
-    const decisions = db.recordsByKind(task.repo_id, ["adr", "pdr", "decision"], { limit: 500 }).filter((/** @type {any} */ r) => r.status !== "dropped");
-    const touched = new Set(best.decision_ids ?? []);
-    const d = await vscode.window.showQuickPick(
-      decisions.map((/** @type {any} */ r) => ({ label: `#${r.id} ${r.kind.toUpperCase()}`, description: r.title, id: r.id, picked: touched.has(r.id) }))
-        .sort((/** @type {any} */ a, /** @type {any} */ b) => Number(b.picked) - Number(a.picked)),
-      { title: "Hangi karar bunu belirliyor?", matchOnDescription: true },
-    );
-    if (!d) return;
-    best.decision = d.id;
-    note = ` (#${d.id})`;
-  }
-  const text = await vscode.window.showInputBox({ title: `Reddet: ${pick.label}`, prompt: "Not (isteğe bağlı)" });
-  if (text === undefined) return;
-  db.updateRecord(id, { status: "dropped", links: { ...rec.links, best }, body: `${rec.body ?? ""}\n\n_Reddedildi (${pick.label}${note})${text.trim() ? `:_ ${text.trim()}` : "._"}` }, tasksView.userActor());
+  if (!db) return;
+  if (!(await require("./recs-ui.js").setRecommendation(db, id, "dropped"))) return;
   if (hooks.afterWrite) hooks.afterWrite();
   refresh?.(true);
 }

@@ -695,6 +695,32 @@ class Db {
     });
   }
 
+  /**
+   * Moves a record to another task of the same repo (#87: AUDIT and BEST into RECS). A 👉 on
+   * it goes when the task it moves to has one; the move is versioned and synced ("task").
+   * @param {number} id @param {number} taskId @param {Actor} actor
+   */
+  moveRecord(id, taskId, actor) {
+    return this.tx(() => {
+      const rec = /** @type {any} */ (this.record(id));
+      if (!rec) throw new Error(`Imprimatur: no record ${id}`);
+      const from = this.taskById(rec.task_id);
+      const to = this.taskById(taskId);
+      if (!to || to.repo_id !== from?.repo_id) throw new Error(`Imprimatur: record ${id} can move only to a task of its repo`);
+      if (to.id === rec.task_id) return rec;
+      const now = Date.now();
+      if (rec.pointer && this.q("SELECT 1 FROM records WHERE task_id = ? AND pointer = 1").get(to.id)) {
+        this.q("UPDATE records SET pointer = 0 WHERE id = ?").run(id);
+      }
+      // Last in the task it moves to: its old position means nothing there.
+      const position = /** @type {any} */ (this.q("SELECT coalesce(max(position), 0) + 1 AS p FROM records WHERE task_id = ?").get(to.id)).p;
+      this.q("UPDATE records SET task_id = ?, position = ?, updated_at = ? WHERE id = ?").run(to.id, position, now, id);
+      this.version_(id, actor, "update", { task: from.key, position: rec.position }, { task: to.key, position }, now);
+      this.trackRecord_(id, ["task", "position"], now);
+      return this.record(id);
+    });
+  }
+
   /** A record's parent (the question an answer answers) is another record of the same task. @param {number} taskId @param {number | null | undefined} parentId @param {number} [self] */
   checkParent(taskId, parentId, self) {
     if (parentId == null) return;
@@ -859,7 +885,7 @@ class Db {
                      (SELECT count(*) FROM records o WHERE o.task_id = t.id AND o.status = 'open') AS open_records
                    FROM tasks t LEFT JOIN records p ON p.task_id = t.id AND p.pointer = 1
                    WHERE t.repo_id = ? AND t.status IN ('open', 'active')
-                     AND (t.key NOT IN ('ADR', 'PDR', 'TEST', 'AUDIT', 'BEST') OR p.id IS NOT NULL)
+                     AND (t.key NOT IN ('ADR', 'PDR', 'TEST', 'AUDIT', 'BEST', 'RECS') OR p.id IS NOT NULL)
                    ORDER BY t.updated_at DESC LIMIT 100`).all(repoId);
   }
 

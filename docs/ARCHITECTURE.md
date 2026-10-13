@@ -23,7 +23,7 @@
 17. [Tasarım dokümanları ↔ Markdown dosyaları (docs sync)](#docs-sync)
 18. [Agent setup denetimi (agnix)](#agent-setup-audit)
 19. [Denetim: bulgu etkin mi (#78)](#audit-effect)
-20. [Best practice review (#86)](#best-practice-review)
+20. [Recommendations: proje best practice incelemesi (#86, #87)](#best-practice-review)
 
 <a id="overview"></a>
 
@@ -596,22 +596,32 @@ Her bulgu denetimde Claude Code'un o dosyayı yükleyip yüklemediğine göre i�
 
 <a id="best-practice-review"></a>
 
-## 20. Best practice review (#86)
+## 20. Recommendations: proje best practice incelemesi (#86, #87)
 
-`vscode/best-practice.js` projenin kendi mimari dokümanından, kararlarından ve kodundan best practice önerileri üretir; her öneri o çalıştırmada okunmuş resmi bir kaynağa ve repodaki kanıta dayanır. Kayıtlar repodaki `BEST` görevinde (kayıt kabı); `best-tree.js` Görevler sayfası için gruplar.
+**Recommendations** tek yerdir: repo başına bir `RECS` görevi (kayıt kabı) iki üreticinin kayıtlarını tutar. Ajan kurulumu denetimi (`setup-audit.js`, `links.audit`) ve proje best practice incelemesi (`best-practice.js`, `links.best`). Eski `AUDIT` (#77) ve `BEST` (#86) kayıtları `recs.recsTask` ilk çağrıldığında `db.moveRecord` ile RECS'e taşınır (sürüm satırı, eşitlemede `task` alanı; karşı makine `applyField_` ile aynı göreve koyar); eski görevler `dropped`, özeti "Moved to RECS (#87)".
 
-### Akış
+### Taksonomi
 
-1. **Kaynak haritası** (bir kez, sonra yeniden kullanılır; komutta "rebuild sources" ile yenilenir): model stack'in bileşenlerini mimari doküman, kararlar ve manifestlerden çıkarır (kodla ekosistem ayrıştırıcısı yok); her bileşen için sırayla genel doküman MCP'si, Context7 kimliği, resmi sürüm notu / changelog / deprecation adresleri. Kod doğrular: MCP katalogda mı; Context7 kimliği biçimce geçerli ve `context7.com/api/v2/docs/code` 200 mü; URL genel bir alan adında https ve yönlendirme izlemeden açılıyor mu. Context7'siz bileşene Context7 aramasından tam başlık eşleşmesi eklenir. Harita bir not kaydında (`links.bestSources`; `lastRun` başlık başına).
-2. **Başlıklar** (deps, security, testing) paralel; her biri bir `claude -p` (sonnet, `--json-schema`, `--max-budget-usd`). Haritanın MCP'leri ve Context7 verilir; WebFetch yalnız haritadaki alan adlarına (`WebFetch(domain:…)`), web araması yok. Önceki anahtarlar prompt'ta.
-3. **Kapı** (kod): alanlar tip ve boyutla normalleşir; genel https kaynak, kebab-case anahtar, her kanıt dosyası repo içinde ve satırı dosyada; karar kimlikleri reponun kararlarıyla kesişir. Geçmeyen düşer, hiçbir şey fırlatılmaz.
-4. **Kayıtlar** (tek işlem): anahtar başlığa aittir (`pillar:key`). Yeni → `todo`; bulunan → yenilenir (`seen`); bulunmayan dokunulmaz (model kendini tekrar etmeyebilir; sayfa "son turda görülmedi" der); reddedilen dokunulmaz. Bütün başlıklar başarısızsa hata (harcanan maliyetle).
+ISO/IEC 25010:2023 ürün kalitesi karakteristikleri ve süreç için NIST SSDF (SP 800-218). Her kategorinin alt kategorileri tanımlarıyla birlikte modele verilir ve şemada enum'dur. Varsayılan 6 çekirdek: Güvenlik, Güvenilirlik, Bakım kolaylığı, Uyumluluk, Performans verimliliği, SSDF. Esneklik, Etkileşim yeteneği, İşlevsel uygunluk, Emniyet istenince ("All categories" / `--categories all`).
+
+### Akış (ajan döngüsü değil, boru hattı)
+
+Spike ölçümü (spike/best-fast): ajan döngüsünde her doküman bakışı bir tur (6–8 sn) idi, ~600 sn. Şimdi:
+
+1. **Kaynak haritası** (bir kez, `links.bestSources` notunda; "remap" ile yenilenir): Haiku, effort low, yalnız repo araçları; stack bileşenleri, sürüm, kanıt, üretici, changelog adresi. Kod: Context7 kimliği REST aramasıyla (tam başlık; 3+ kelimelik adlarda bütün kelimeler; kısa adda gevşek eşleşme yok), changelog yalnız genel https.
+2. **Doküman toplama** (kod, 8 paralel): bileşen × kategori için Context7 `/api/v2/context` (kategori sorgusu; parçaların `Source:` asıl adresi atıf olur), üreticinin genel doküman MCP'si (Cloudflare, Microsoft Learn, AWS Knowledge) JSON-RPC ile doğrudan (`initialize` → `tools/list` → `tools/call`; göreli bağlantılar sitenin adresine çözülür), changelog sayfası (Uyumluluk ve SSDF için).
+3. **Karar**: kategori başına bir `claude -p` (Sonnet, effort medium, `--max-turns 12`, yalnız Read/Glob/Grep, web yok, MCP yok). Ortak paket (kararlar, mimari doküman bölümleri, stack, `git ls-files`, numaralı anahtar dosyalar: her ekosistemin manifest/build/CI dosyaları) `--append-system-prompt-file` ile; ilk çağrı önbelleğe yazar, diğerleri 4 sn sonra başlar ve okur. Kategoriye özel dokümanlar prompt'ta.
+4. **Kapı** (kod): tip/boyut normalleşir; alt kategori kategorinin; kaynak toplanan sayfalardan biri ve genel https; kanıt dosyaları repo içinde, satır dosyada; karar kimlikleri reponun. Aynı bileşen ve ilk kanıt → tek öneri (en ağır olan; diğer kategoriler `tags`).
+5. **Kayıtlar** (tek işlem): kimlik `kategori:anahtar`; yeni → `todo`, bulunan → yenilenir (`seen`), bulunmayan dokunulmaz (sayfa "son turda görülmedi"), reddedilen dokunulmaz. Kategori başına `lastRun` haritada. Özet iki üreticiyi ayrı sayar: `Agent setup: … | Project: N open (yüksek/orta/düşük) · …`.
 
 ### Güvenlik
 
-Model çıktısı ve okunan sayfalar güvenilmez girdidir. Alt süreç: `--permission-mode dontAsk` (önceden izinli olmayan araç reddedilir), `--disallowedTools` ile `.env*`, anahtar dosyaları, `~/.ssh`, `~/.aws`, gh ve npm kimlikleri okunamaz; `--setting-sources ""` (hook yok); ortam yalnız claude'un çalışması ve oturum açması için gerekenler (eklenti host'unun token'ları yok); prompt stdin'den. Sayfadaki her model metni `esc()` ile; kaynak linki yalnız http(s) açılır.
+Alt süreç: `--permission-mode dontAsk`, yalnız Read/Glob/Grep, `.env*`/anahtar/`~/.ssh`/`~/.aws`/gh/npm kimlik dosyaları yasak, `--setting-sources ""`, en az ortam (host'un token'ları yok), prompt stdin'den, ortak paket `0600` geçici dosyada ve iş bitince silinir. Model ağ erişimi olmadığından okuduğunu dışarı yollayamaz. Sayfadaki her model metni `esc()`; kaynak linki yalnız http(s).
 
-### Görünüm ve yüzeyler
+### Maliyet
 
-- Komut **Imprimatur: Best Practice Review (Claude)**: maliyet tahminiyle modal onay, bildirimde ilerleme, bitince BEST açılır. `npm run best -- [repo] [--pillars …] [--refresh-sources] [--budget 1.5]`.
-- BEST sayfası: durum (Açık / Uygulandı / Reddedildi) → [reddedilende gerekçe] → başlık → bileşen → öneri (önem sırasıyla): neden, sonraki adım, kanıt, kaynak linki, ilgili kararlar; **Uygulandı**, **Reddet…** (gerekçe; "Bilerek yapmadık" kararı seçtirir, `links.best.decision`), **Geri aç**, **Yeniden incele**; altında kaynak haritası ve yardımcı olacak araçlar.
+`claude auth status` ile: abonelik (claude.ai) → planın kullanım limitleri; API anahtarı → fatura; Bedrock/Vertex → bulut hesabı. Onay penceresi buna göre yazar. Bu repoda 6 kategori: 181 sn (harita 63, toplama 7, karar 112), 16 öneri, 2,70 $ API eşdeğeri.
+
+### Görünüm
+
+Agent Setup ampulü bir menü açar: ajan kurulumunu denetle (agnix), projeyi incele (Claude), ikisi. Recommendations ağacında kök → "Agent setup" / "Project" → durum → (reddedilende gerekçe) → kategori → alt kategori → öneri. Görevler'de tek RECS sayfası: "Ajan kurulumu" ve "Proje" bölümleri, kaynak haritası; Uygulandı / Reddet… / Geri aç her iki üreticide (`recs-ui.js`): gerekçe tek listeden (üreticiye uyanlar, olası olan önde), "Bilerek yapmadık" kararı seçtirir.

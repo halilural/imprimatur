@@ -112,12 +112,12 @@ class SetupView {
   loadAudit() {
     try {
       const records = require("./records.js");
-      const { TASK } = require("./setup-audit.js");
       const db = records.dbOf();
       if (!db) return void (this.audit = undefined);
+      // RECS (#87): the old AUDIT / BEST records move into it the first time it is read.
       this.audit = recommendationsRow(this.scopes.map((s) => {
         const repo = db.repoByRoot(s.root);
-        const task = repo && db.taskByKey(repo.id, TASK);
+        const task = repo && require("./recs.js").recsTask(db, repo.id);
         return { label: s.label, root: s.root, records: task ? db.recordsOf(task.id, { dropped: true }) : [], summary: task?.summary };
       }));
     } catch (e) {
@@ -397,9 +397,11 @@ function registerSetupView(ctx, roots, counts) {
     vscode.commands.registerCommand("imprimatur.setup.markSeen", () => provider.markSeen()),
     vscode.commands.registerCommand("imprimatur.setup.compareVariant", (node) => compareVariant(provider, node ?? view.selection[0])),
     vscode.commands.registerCommand("imprimatur.setup.explainLastChange", (node) => explainLastChange(provider, node ?? view.selection[0])),
-    vscode.commands.registerCommand("imprimatur.setup.audit", () => runAudit(provider)),
+    vscode.commands.registerCommand("imprimatur.setup.audit", () => recommendationsMenu(provider)),
+    vscode.commands.registerCommand("imprimatur.setup.auditAgent", () => runAudit(provider)),
     vscode.commands.registerCommand("imprimatur.setup.dismissFinding", (node) => setFinding(provider, node ?? view.selection[0], "dropped")),
     vscode.commands.registerCommand("imprimatur.setup.reopenFinding", (node) => setFinding(provider, node ?? view.selection[0], "open")),
+    vscode.commands.registerCommand("imprimatur.setup.applyFinding", (node) => setFinding(provider, node ?? view.selection[0], "done")),
   );
   followActiveEditor(ctx, provider);
   return provider;
@@ -452,27 +454,23 @@ async function setFinding(provider, node, status) {
   if (!node?.recordId) return void vscode.window.showInformationMessage("Imprimatur: pick a recommendation first.");
   const db = require("./records.js").dbOf();
   if (!db) return;
-  const rec = db.record(node.recordId);
-  if (!rec) return;
-  /** @type {Record<string, any>} */
-  const patch = { status };
-  const { REASON_LABELS, reasonOf } = require("./setup-audit-tree.js");
-  const audit = { ...(rec.links?.audit ?? {}) };
-  if (status === "dropped") {
-    // Why, from a short list: dismissed findings group by it (#77).
-    const guess = reasonOf(rec);
-    const picks = Object.entries(REASON_LABELS).map(([key, [label]]) => ({ label, key, picked: key === guess }))
-      .sort((a, b) => Number(b.picked) - Number(a.picked));
-    const pick = await vscode.window.showQuickPick(picks, { title: `Dismiss ${audit.rule ?? "finding"}: why?`, placeHolder: "It will not come back" });
-    if (!pick) return;
-    const note = await vscode.window.showInputBox({ title: `Dismiss ${audit.rule ?? "finding"}: ${pick.label}`, prompt: "A note (optional), kept with the record", placeHolder: "e.g. VS Code settings are JSONC" });
-    if (note === undefined) return;
-    audit.reason = pick.key;
-    patch.body = `${rec.body ?? ""}\n\n_Dismissed (${pick.label})${note.trim() ? `:_ ${note.trim()}` : "._"}`;
-  } else delete audit.reason;
-  patch.links = { ...(rec.links ?? {}), audit };
-  db.updateRecord(rec.id, patch, { kind: "user" });
-  provider.refresh();
+  if (await require("./recs-ui.js").setRecommendation(db, node.recordId, status)) provider.refresh();
+}
+
+/**
+ * The lightbulb (#87): what to run — the agent setup audit (agnix, quick, free), the
+ * project review (Claude, a minute or two), or both.
+ * @param {SetupView} provider
+ */
+async function recommendationsMenu(provider) {
+  const pick = await vscode.window.showQuickPick([
+    { label: "$(hubot) Ajan kurulumunu denetle", description: "agnix · hızlı, ücretsiz", id: "audit" },
+    { label: "$(repo) Projeyi incele", description: "Claude · ISO 25010 + NIST SSDF · 1–2 dk", id: "review" },
+    { label: "$(checklist) İkisi birden", id: "both" },
+  ], { title: "Recommendations" });
+  if (!pick) return;
+  if (pick.id !== "review") await runAudit(provider);
+  if (pick.id !== "audit") await vscode.commands.executeCommand("imprimatur.bestPractices.run");
 }
 
 /** Diff this repo's copy of a drifted file with a variant from another repo (#31). @param {SetupView} provider @param {Node | undefined} node */

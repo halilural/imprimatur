@@ -269,7 +269,7 @@ const TOOLS = [
   {
     name: "setup_audit",
     title: "Audit the agent setup",
-    description: "Lints the repo's agent setup (CLAUDE.md, AGENTS.md, .claude/ settings, hooks, skills, subagents, MCP, plugins, Cursor/Codex/Copilot files) with agnix, whose rules cite the tools' docs; global: true also audits the home's agent folders (~/.claude with its plugins, ~/.cursor, ~/.codex, ...). Every finding is a fixme record of the AUDIT task: new ones open, gone ones done (applied), dismissed (dropped) ones stay dropped. Read them with task_get key \"AUDIT\"; dismiss one with record_update status \"dropped\", the note in body and links.audit kept with reason added (plugin, synced, false, local or other).",
+    description: "Lints the repo's agent setup (CLAUDE.md, AGENTS.md, .claude/ settings, hooks, skills, subagents, MCP, plugins, Cursor/Codex/Copilot files) with agnix, whose rules cite the tools' docs; global: true also audits the home's agent folders (~/.claude with its plugins, ~/.cursor, ~/.codex, ...). Every finding is a fixme record of the Recommendations task (key \"RECS\", shared with the project best-practice review): new ones open, gone ones done (applied), dismissed (dropped) ones stay dropped. Read them with task_get key \"RECS\"; dismiss one with record_update status \"dropped\", the note in body and links.audit kept with reason added (false, plugin, synced, local, accepted-risk, decided, other).",
     inputSchema: input({
       repo: repoArg,
       global: { type: "boolean", default: false, description: "Also audit the home's agent folders" },
@@ -614,7 +614,7 @@ export function digest(name, out, a = {}) {
       return `${out.created ? "Created" : "Saved"} ${out.document.kind} section ${s.key} — ${s.title} [${s.status}]${s.records.length ? `; records ${s.records.join(", ")}` : "; no records linked"}${fileNote}`;
     }
     case "setup_audit":
-      return [...out.audits.map(describeSummary), a.dry_run ? "Dry run: nothing written." : 'Open findings: task_get key "AUDIT" (repo for the home: its path).'].join("\n");
+      return [...out.audits.map(describeSummary), a.dry_run ? "Dry run: nothing written." : 'Open findings: task_get key "RECS" (repo for the home: its path).'].join("\n");
     case "search":
       if (!out.records.length) return `No records match ${JSON.stringify(a.text ?? "")}.`;
       return [`${plural(out.records.length, "record")}:`, ...out.records.map((r) =>
