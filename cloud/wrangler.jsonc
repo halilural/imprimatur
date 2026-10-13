@@ -19,6 +19,11 @@
   "durable_objects": {
     "bindings": [{ "name": "LIVE", "class_name": "Live" }]
   },
+  // Per client IP (#89): 300 requests a minute in each Cloudflare location; over it, 429.
+  // namespace_id is any integer unique in the account.
+  "ratelimits": [{ "name": "RATE_LIMITER", "namespace_id": "8901", "simple": { "limit": 300, "period": 60 } }],
+  // Daily at 03:23 UTC: change rows superseded by a newer value of the same field go (#89).
+  "triggers": { "crons": ["23 3 * * *"] },
   // Applied by `wrangler deploy` (no separate step); a tag is never edited once deployed.
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Live"] }]
   // Secrets: `npx wrangler secret put SYNC_TOKEN` and, for GitHub's webhook,

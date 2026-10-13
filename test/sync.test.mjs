@@ -14,7 +14,7 @@ const sync = req("../vscode/sync.js");
 const { syncOnce, syncLoop, readConfig, writeConfig, configPath } = sync;
 const { DatabaseSync } = req("node:sqlite");
 
-const MIGRATION = fs.readFileSync(new URL("../cloud/migrations/0001_changes.sql", import.meta.url), "utf8");
+const MIGRATION = ["0001_changes.sql", "0002_changes_field.sql"].map((f) => fs.readFileSync(new URL(`../cloud/migrations/${f}`, import.meta.url), "utf8")).join("\n");
 const TOKEN = "s3cret-token";
 const URL_ = "https://sync.example";
 const user = { kind: "user", id: "u" };
@@ -565,4 +565,65 @@ test("a 👉 that comes pages before its record still lands: tries count per syn
   db.applyRemote([ch("record", "rec-1", "task", taskKey), ch("record", "rec-1", "kind", "todo"), ch("record", "rec-1", "title", "x"), ch("record", "rec-1", "status", "open")], { lastPage: true });
   assert.equal(db.recordByUid("rec-1").pointer, true);
   db.close();
+});
+
+test("sync server (#89): compaction deletes only rows a newer one of the same field supersedes, by the devices' rule", async () => {
+  const { compact } = await import("../cloud/src/server.js");
+  const env = { DB: new FakeD1() };
+  const ins = env.DB.db.prepare("INSERT INTO changes (device, entity, key, field, value, at) VALUES (?, ?, ?, ?, ?, ?)");
+  ins.run("a", "record", "u1", "title", '"old"', 1);
+  ins.run("a", "record", "u1", "title", '"a2"', 2);
+  ins.run("b", "record", "u1", "title", '"b2"', 2); // same at: the greater device wins (db.js applyField)
+  ins.run("a", "record", "u1", "status", '"open"', 1);
+  ins.run("b", "task", "#1", "title", '"t"', 5);
+  assert.equal(await compact(env, { chunk: 1 }), 2, "in chunks until done");
+  const left = env.DB.db.prepare("SELECT device, entity, key, field, value FROM changes ORDER BY seq").all().map((r) => `${r.device}:${r.field}=${r.value}`);
+  assert.deepEqual(left, ['b:title="b2"', 'a:status="open"', 'b:title="t"']);
+  assert.equal(await compact(env), 0, "nothing more");
+});
+
+test("sync server (#89): transient D1 errors are retried; overload answers 503 and a flood 429, both with Retry-After", async () => {
+  const { withRetry, handle: h } = await import("../cloud/src/server.js");
+  let n = 0;
+  const sleep = async () => {};
+  assert.equal(await withRetry(async () => (++n < 3 ? Promise.reject(new Error("D1_ERROR: Network connection lost.")) : "ok"), { sleep }), "ok");
+  assert.equal(n, 3);
+  n = 0;
+  await assert.rejects(withRetry(async () => { n++; throw new Error("D1_ERROR: no such table"); }, { sleep }));
+  assert.equal(n, 1, "not transient: no retry");
+  const auth = { authorization: `Bearer ${TOKEN}` };
+  const busy = { DB: { prepare: () => { throw new Error("D1 DB is overloaded. Too many requests queued."); } }, SYNC_TOKEN: TOKEN };
+  const r503 = await h(new Request(`${URL_}/v1/pull?since=0&device=d`, { headers: auth }), busy);
+  assert.equal(r503.status, 503);
+  assert.equal(r503.headers.get("retry-after"), "300");
+  const keys = [];
+  const limited = { DB: new FakeD1(), SYNC_TOKEN: TOKEN, RATE_LIMITER: { limit: async ({ key }) => (keys.push(key), { success: false }) } };
+  const r429 = await h(new Request(`${URL_}/v1/pull?since=0&device=d`, { headers: { ...auth, "cf-connecting-ip": "203.0.113.9" } }), limited);
+  assert.equal(r429.status, 429);
+  assert.equal(r429.headers.get("retry-after"), "60");
+  assert.deepEqual(keys, ["ip:203.0.113.9"]);
+});
+
+test("sync client (#89): after a 429 or 503 the loop waits for Retry-After, longer each time, and resumes on success", async () => {
+  let calls = 0;
+  let fail = true;
+  const lines = [];
+  const loop = syncLoop(async () => {
+    calls++;
+    if (fail) throw Object.assign(new Error("sync /v1/pull: HTTP 429 too many requests"), { status: 429, retryAfter: 0.05 });
+    return "ok";
+  }, (l) => lines.push(l), { intervalMs: 3_600_000 });
+  try {
+    await loop.now();
+    assert.equal(calls, 1);
+    const waited = await loop.now();
+    assert.equal(calls, 1, "held: no request");
+    assert.match(waited.line, /waiting for the server/);
+    await new Promise((r) => setTimeout(r, 80));
+    fail = false;
+    await loop.now();
+    assert.equal(calls, 2, "after Retry-After it runs again");
+  } finally {
+    loop.dispose();
+  }
 });

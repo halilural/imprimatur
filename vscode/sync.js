@@ -59,7 +59,8 @@ async function call(cfg, route, body, fetchFn = fetch) {
     try {
       why = JSON.parse(text).error ?? text;
     } catch {}
-    throw Object.assign(new Error(`sync ${route.split("?")[0]}: HTTP ${res.status} ${why}`.trim()), { status: res.status });
+    const retryAfter = Number(res.headers?.get?.("retry-after") ?? 0) || undefined;
+    throw Object.assign(new Error(`sync ${route.split("?")[0]}: HTTP ${res.status} ${why}`.trim()), { status: res.status, retryAfter });
   }
   return JSON.parse(text);
 }
@@ -235,12 +236,24 @@ function syncLoop(run, log, { intervalMs = 60_000, debounceMs = 5_000, name = "s
   let queued;
   /** @type {NodeJS.Timeout | undefined} */
   let timer;
+  // The server says slow down (#89: 429 rate limit, 503 D1 busy or out of quota): no run
+  // before Retry-After, longer each time it says so again (up to 30 min); reset on success.
+  let holdUntil = 0;
+  let holds = 0;
   const once = async () => {
+    if (Date.now() < holdUntil) return { line: `${name}: waiting for the server (until ${new Date(holdUntil).toISOString().slice(11, 19)})` };
     try {
       const line = await run();
+      holds = 0;
       log(line);
       return { line };
     } catch (e) {
+      const status = /** @type {any} */ (e)?.status;
+      if (status === 429 || status === 503) {
+        const base = (Number(/** @type {any} */ (e)?.retryAfter) || 60) * 1000;
+        holdUntil = Date.now() + Math.min(base * 2 ** holds, 30 * 60_000);
+        holds++;
+      }
       const error = `${name} failed: ${e instanceof Error ? e.message : e}`;
       log(error, true);
       return { error };
