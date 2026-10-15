@@ -101,7 +101,11 @@ test("#72 a click in the contents brings its section into view, in a narrow pane
     const model = { kind: "architecture", label: "Mimari", title: "Mimari", repoName: "repo", last: undefined, adding: false, empty: false, manual: undefined, superseded: [], current: [1, 2, 3, 4, 5, 6].map(section) };
     const page = html({ rows: [], lanes: [], sessions: [] }, dir, "N", [], { view: { tab: "architecture" }, pane: dv.docHtml(model), repoName: "repo", mermaid: { src: "", csp: "file:" } });
     // Clicks the 4th entry, then reports what lies under the section's top-left corner.
+    // VS Code's webview handles link clicks on the window: an <a href="#"> scrolls to the top.
     const probe = `<script nonce="N">window.acquireVsCodeApi = () => ({ postMessage() {}, setState() {}, getState() {} });
+addEventListener("click", (e) => { const a = e.target.closest("a[href]"); if (!a) return;
+  if (a.getAttribute("href") === "#") scrollTo(0, 0); else if (a.hash) document.getElementById(decodeURIComponent(a.hash.slice(1)))?.scrollIntoView();
+  e.preventDefault(); });
 setTimeout(() => { document.querySelector('.dtoc a[data-key="s4"]').click(); setTimeout(() => {
 const r = document.getElementById("sec-s4").getBoundingClientRect();
 document.title = "T:" + Math.round(r.top) + ":" + document.elementFromPoint(r.left + 20, r.top + 20)?.closest(".dsec, .dtoc")?.id; }, 300); }, 500);</script></head>`;
