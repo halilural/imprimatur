@@ -86,3 +86,33 @@ document.title = "R:" + d.join(",") + "|CSP:" + errs.join(";"); }, 50);</script>
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("#72 a click in the contents brings its section into view, in a narrow panel too", { skip: !bin && "no Chromium found" }, () => {
+  const Module = req("node:module");
+  const load = Module._load;
+  Module._load = function (r, ...a) {
+    return r === "vscode" ? { window: {}, workspace: {}, commands: {}, env: {}, Uri: {} } : load.call(this, r, ...a);
+  };
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-toc-"));
+  try {
+    const { html } = req("../vscode/graphView.js");
+    const body = Array.from({ length: 30 }, (_, i) => `Paragraf ${i}.`).join("\n\n");
+    const section = (id) => ({ id, key: `s${id}`, title: `S${id}`, status: "current", n: id, body, html: dv.renderMarkdown(body), contributors: [], versions: [], editing: false, flash: false });
+    const model = { kind: "architecture", label: "Mimari", title: "Mimari", repoName: "repo", last: undefined, adding: false, empty: false, manual: undefined, superseded: [], current: [1, 2, 3, 4, 5, 6].map(section) };
+    const page = html({ rows: [], lanes: [], sessions: [] }, dir, "N", [], { view: { tab: "architecture" }, pane: dv.docHtml(model), repoName: "repo", mermaid: { src: "", csp: "file:" } });
+    // Clicks the 4th entry, then reports what lies under the section's top-left corner.
+    const probe = `<script nonce="N">window.acquireVsCodeApi = () => ({ postMessage() {}, setState() {}, getState() {} });
+setTimeout(() => { document.querySelector('.dtoc a[data-key="s4"]').click(); setTimeout(() => {
+const r = document.getElementById("sec-s4").getBoundingClientRect();
+document.title = "T:" + Math.round(r.top) + ":" + document.elementFromPoint(r.left + 20, r.top + 20)?.closest(".dsec, .dtoc")?.id; }, 300); }, 500);</script></head>`;
+    const file = path.join(dir, "page.html");
+    fs.writeFileSync(file, page.replace("</head>", probe));
+    for (const width of [500, 1200]) {
+      const r = spawnSync(bin, ["--headless", "--no-sandbox", "--disable-gpu", `--window-size=${width},700`, "--virtual-time-budget=3000", "--dump-dom", pathToFileURL(file).href], { encoding: "utf8", timeout: 60000 });
+      assert.equal(r.stdout.match(/<title>([^<]*)<\/title>/)?.[1], "T:12:sec-s4", `${width}px ${r.stderr.slice(-500)}`);
+    }
+  } finally {
+    Module._load = load;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

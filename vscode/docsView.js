@@ -234,13 +234,19 @@ function applyDocMessage(db, m, actor, root) {
 
 /** Styles of the document tabs: VS Code theme colours only, like the other tabs. */
 const DOCS_CSS = `
-  .doc { display: flex; flex-wrap: wrap; align-items: stretch; margin: 0 -12px; border-top: 1px solid var(--line); min-height: calc(100vh - 60px); }
+  .doc { display: flex; align-items: stretch; margin: 0 -12px; border-top: 1px solid var(--line); min-height: calc(100vh - 60px); }
   .dtoc { flex: 1 1 220px; max-width: 280px; min-width: 0; padding: 18px 12px; background: var(--vscode-sideBar-background); border-right: 1px solid var(--line);
     display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 60px); overflow: auto; position: sticky; top: 0; box-sizing: border-box; }
   .dtoc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
   .dtoc li a { display: flex; gap: 8px; padding: 5px 8px; border-radius: 6px; color: var(--vscode-foreground) !important; font-weight: 600; }
   .dtoc li a:hover { background: var(--vscode-list-hoverBackground); text-decoration: none !important; }
   .dtoc .num { flex: none; min-width: 18px; color: var(--acc); font-weight: 700; }
+  /* A narrow panel: the contents sit above the page and scroll away with it, or a sticky
+     one would cover the section a click scrolls to. */
+  @media (max-width: 760px) {
+    .doc { flex-direction: column; }
+    .dtoc { position: static; max-width: none; max-height: none; border-right: 0; border-bottom: 1px solid var(--line); }
+  }
   .dold { padding: 4px 8px; font-size: 12px; font-weight: 600; }
   .dpage { flex: 999 1 520px; min-width: 0; max-width: 980px; padding: 22px 30px 48px; display: flex; flex-direction: column; gap: 18px; box-sizing: border-box; }
   .dhead { display: flex; flex-direction: column; gap: 4px; }
