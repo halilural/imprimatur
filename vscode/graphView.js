@@ -667,7 +667,9 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     if (tab) return go({ tab: tab.dataset.tab });
     const control = t.closest("#pane [data-act]");
     if (control) {
+      // VS Code's own click handler on the window scrolls an <a href="#"> to the top.
       e.preventDefault();
+      e.stopPropagation();
       return act(control);
     }
     const task = t.closest("a.task");
