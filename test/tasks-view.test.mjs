@@ -138,6 +138,9 @@ test("Bende bekleyenler: one chip per task, cards found by the task's title", ()
     assert.ok(all.includes(`data-task="${g.task.id}"`), g.task.key);
     assert.ok(g.items.every((r) => r.task_title === g.task.title));
   }
+  for (const id of ["question", "todo", "test", "done"]) assert.ok(all.includes(`data-act="ibucket" data-b="${id}"`), id);
+  assert.match(all, /class="card ask[^"]*"[^>]*data-b="question"/, "a card says its bucket");
+  assert.ok(all.includes('id="ifnone"'));
 });
 
 test("#69 Ana sayfa: progress, where we left off, top asks, tasks by status", () => {

@@ -401,7 +401,7 @@ function askCard(r, o = {}) {
   const k = r.kind === "test" ? "test" : r.kind;
   const head = `<div class="row1">${kindChip(k)}<span class="ttl">${esc(r.title)}</span><span class="age">${esc(r.age ?? "")}</span></div>`;
   const body = r.body ? `<div class="body">${esc(r.body)}</div>` : "";
-  const q = `data-q="${esc([r.title, r.body, r.task_key, r.task_title].filter(Boolean).join(" "))}"`;
+  const q = `data-q="${esc([r.title, r.body, r.task_key, r.task_title].filter(Boolean).join(" "))}" data-b="${r.done ? "done" : esc(k)}"`;
   if (r.done)
     return `<article class="card ask done" id="${id}" data-k="r${r.id}" data-nav tabindex="0" ${q}>${head}<span class="okline">${icon("check", 14)} Tamamlandı — ajan bir sonraki turda görecek · <a href="#" data-act="rec" data-op="open" data-id="${r.id}">geri al</a></span></article>`;
   const action = r.kind === "question"
@@ -523,15 +523,16 @@ function railHtml(c) {
 function inboxHtml(m) {
   const seg = `<div class="seg" role="group" aria-label="Kapsam"><button class="fpill${m.all ? "" : " on"}" data-act="scope" data-all="0" aria-pressed="${!m.all}">Bu repo</button><button class="fpill${m.all ? " on" : ""}" data-act="scope" data-all="1" aria-pressed="${m.all}">Bütün repolar</button></div>`;
   const top = `<div class="toprow" data-k="top"><div><h1>Bende bekleyenler</h1><p class="lead">Ajanın senden beklediği her şey, görev görev. Cevaplayınca ya da yapınca ajan bir sonraki turda görür.</p></div>${seg}</div>`;
-  const buckets = `<div class="buckets" data-k="buckets">${m.buckets.map((b) => `<div class="bucket b-${b.id}" data-k="${b.id}"><span class="n">${b.n}</span><span class="bl">${b.label}</span><span class="dim">${b.hint}</span></div>`).join("")}</div>`;
+  // A click on a bucket shows its kind alone (the page script filters), again shows all.
+  const buckets = `<div class="buckets" role="group" aria-label="Tür" data-k="buckets">${m.buckets.map((b) => `<button class="bucket b-${b.id}" data-k="${b.id}" data-act="ibucket" data-b="${b.id}" aria-pressed="false"><span class="n">${b.n}</span><span class="bl">${b.label}</span><span class="dim">${b.hint}</span></button>`).join("")}</div>`;
   // One chip per task, with what is still open on it: a click shows that task alone (the page script filters).
   const chips = m.groups.length > 1
-    ? `<div class="seg itasks" role="group" aria-label="Görev" data-k="itasks">${m.groups.map((g) => `<button class="fpill" data-act="itask" data-id="${g.task.id}" aria-pressed="false" title="${esc(g.task.title)}"><span class="mono">${esc(g.task.key)}</span> <span class="dim">${g.items.filter((r) => !r.done).length}</span></button>`).join("")}</div>`
+    ? `<div class="seg itasks" role="group" aria-label="Görev" data-k="itasks">${m.groups.map((g) => `<button class="fpill" data-act="itask" data-id="${g.task.id}" data-key="${esc(g.task.key)}" aria-pressed="false" title="${esc(g.task.title)}"><span class="mono">${esc(g.task.key)}</span> <span class="dim cnt">${g.items.filter((r) => !r.done).length}</span></button>`).join("")}</div>`
     : "";
   const groups = m.groups.length
     ? m.groups.map((g) => `<section class="igrp" data-k="g${g.task.id}" data-task="${g.task.id}"><h2>${openTask(g.task.id, g.task.status, g.task.key)}<span>${esc(g.task.title)}</span><span class="dim">${esc(g.repo?.name ?? "")}</span></h2>${g.items.map((r) => askCard(r)).join("")}</section>`).join("")
     : `<p class="empty" data-k="none">Şu an kayıtlarda senden beklenen bir şey yok.</p>`;
-  return `<div class="inbox" data-k="inbox">${top}${buckets}${chips}<div class="igroups" data-k="groups" data-navgroup="inbox">${groups}</div><h2 class="turn-h" data-k="turn">Tur sonunda sorulanlar <span class="dim">· ${m.turn} açık</span></h2></div>`;
+  return `<div class="inbox" data-k="inbox">${top}${buckets}${chips}<div class="igroups" data-k="groups" data-navgroup="inbox">${groups}<p class="empty" id="ifnone" data-k="ifnone" hidden>Bu filtrede senden beklenen bir şey yok.</p></div><h2 class="turn-h" data-k="turn">Tur sonunda sorulanlar <span class="dim">· ${m.turn} açık</span></h2></div>`;
 }
 
 /** @param {ReturnType<typeof homeModel>} m */
@@ -758,7 +759,8 @@ const TASKS_CSS = `
   .home { max-width: 1180px; gap: 26px; }
   .toprow { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
   .buckets { display: flex; flex-wrap: wrap; gap: 10px; }
-  .bucket { flex: 1 1 170px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); display: flex; flex-direction: column; gap: 1px; }
+  .bucket { flex: 1 1 170px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); display: flex; flex-direction: column; gap: 1px; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+  .bucket:hover { border-color: var(--c); } .bucket.on { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); background: color-mix(in srgb, var(--c) 12%, var(--card)); }
   .bucket .n { opacity: 1; font-size: 24px; font-weight: 700; color: var(--c); } .bucket .bl { font-weight: 600; } .bucket .dim { font-size: 12px; }
   .b-question { --c: var(--vscode-charts-orange); } .b-todo { --c: var(--vscode-charts-blue); } .b-test { --c: var(--vscode-charts-yellow); } .b-done { --c: var(--vscode-charts-green); }
   .igroups { display: flex; flex-direction: column; gap: 18px; } .igrp { display: flex; flex-direction: column; gap: 8px; }

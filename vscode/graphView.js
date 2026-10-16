@@ -179,7 +179,8 @@ function waitingBody(steps, sessions, root) {
         w.answer ? `<div class="meta">Your answer: ${esc(w.answer)}</div>` : "",
         ...(w.notes ?? []).map((n) => `<div class="meta">You wrote since: ${esc(n)}</div>`),
       ].join("");
-      return `<tr class="w s-${w.state}" data-key="${esc(`${w.item} ${w.i}`)}" data-q="${esc(q)}"${w.state === "open" ? "" : " data-done"}
+      const bucket = w.state !== "open" ? "" : w.kind === "question" ? "question" : w.kind === "verify" ? "test" : w.kind === "command" || w.kind === "input" ? "todo" : "";
+      return `<tr class="w s-${w.state}" data-key="${esc(`${w.item} ${w.i}`)}" data-q="${esc(q)}" data-b="${bucket}" data-tk="${esc(place.task ?? "")}"${w.state === "open" ? "" : " data-done"}
   data-vscode-context="${menu({ webviewSection: w.state === "open" ? "waiting-open" : "waiting-done", session: w.session, t: w.item, i: w.i, text: w.text })}">
   <td class="ok">${status}</td>
   <td class="k" title="${esc(label)}">${icon}</td>
@@ -540,21 +541,46 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     const q = (state.qs[tab] || "").toLowerCase();
     document.querySelectorAll("#kinds .chip").forEach((b) => b.classList.toggle("on", state.kinds[b.dataset.kind] !== false));
     document.querySelectorAll("a.grp").forEach((a) => (a.textContent = (state.agents.includes(a.dataset.agent) ? "▾" : "▸") + a.textContent.slice(1)));
+    // Bende bekleyenler: a task chip and a bucket, each kept only while the page still has it; they combine.
+    const chip = state.itask ? document.querySelector('#pane [data-act="itask"][data-id="' + state.itask + '"]') : null;
+    const bucket = document.querySelector('#pane [data-act="ibucket"][data-b="' + state.ibucket + '"]') ? state.ibucket : null;
     document.querySelectorAll("#edits tr[data-q], #waiting tr[data-q]").forEach((tr) => {
       // A subagent's call shows with its open Agent row, whatever its kind; other rows by kind.
       const kindOn = tr.dataset.parent ? state.agents.includes(tr.dataset.parent) : !tr.dataset.kind || state.kinds[tr.dataset.kind] !== false;
-      const show = kindOn && tr.dataset.q.toLowerCase().includes(q) && (!state.answered || !("done" in tr.dataset));
+      // A bucket chosen on Bende bekleyenler shows its turn-end asks alone.
+      const bucketOn = tr.dataset.b === undefined || ((!bucket || tr.dataset.b === bucket) && (!chip || tr.dataset.tk === chip.dataset.key));
+      const show = kindOn && bucketOn && tr.dataset.q.toLowerCase().includes(q) && (!state.answered || !("done" in tr.dataset));
       tr.style.display = show ? "" : "none";
       if (tr.nextElementSibling?.classList.contains("x")) tr.nextElementSibling.hidden = !show || !state.expanded.includes(tr.dataset.key);
     });
     // The task tabs: the search hides tasks, records and asks that do not say it.
     document.querySelectorAll("#pane [data-q]").forEach((el) => { el.hidden = !!q && !el.dataset.q.toLowerCase().includes(q); });
-    // Bende bekleyenler: the chosen task's chip shows it alone; a task the search left nothing of goes too.
-    const chip = state.itask ? document.querySelector('#pane [data-act="itask"][data-id="' + state.itask + '"]') : null;
-    document.querySelectorAll('#pane [data-act="itask"]').forEach((b) => { b.classList.toggle("on", b === chip); b.setAttribute("aria-pressed", String(b === chip)); });
+    // Each card shows when it says the search, is of the bucket and of the chip's task; a task with none left goes.
+    const says = (el) => !q || el.dataset.q.toLowerCase().includes(q);
+    const cards = [...document.querySelectorAll("#pane .igrp[data-task] [data-b]")].map((el) => ({ el, task: el.closest(".igrp").dataset.task, b: el.dataset.b, says: says(el) }));
+    for (const c of cards) c.el.hidden = !c.says || (!!bucket && c.b !== bucket) || (!!chip && c.task !== chip.dataset.id);
     document.querySelectorAll("#pane .igrp[data-task]").forEach((g) => {
-      g.hidden = (!!chip && g.dataset.task !== chip.dataset.id) || (!!q && !g.querySelector("[data-q]:not([hidden])"));
+      g.hidden = (!!chip && g.dataset.task !== chip.dataset.id) || ((!!q || !!bucket) && !g.querySelector("[data-b]:not([hidden])"));
     });
+    // The counts follow the other filter: a bucket counts the chosen task's, a chip the chosen bucket's.
+    const turnRows = [...document.querySelectorAll("#waiting tr[data-b]")].filter((tr) => tr.dataset.b && says(tr));
+    document.querySelectorAll('#pane [data-act="ibucket"]').forEach((b) => {
+      const id = b.dataset.b;
+      const n = cards.filter((c) => c.says && c.b === id && (!chip || c.task === chip.dataset.id)).length
+        + turnRows.filter((tr) => tr.dataset.b === id && (!chip || tr.dataset.tk === chip.dataset.key)).length;
+      b.querySelector(".n").textContent = String(n);
+      b.classList.toggle("on", id === bucket);
+      b.setAttribute("aria-pressed", String(id === bucket));
+    });
+    document.querySelectorAll('#pane [data-act="itask"]').forEach((b) => {
+      const n = cards.filter((c) => c.says && c.task === b.dataset.id && (bucket ? c.b === bucket : c.b !== "done")).length;
+      b.querySelector(".cnt").textContent = String(n);
+      b.hidden = !!bucket && !n && b !== chip;
+      b.classList.toggle("on", b === chip);
+      b.setAttribute("aria-pressed", String(b === chip));
+    });
+    const ifnone = document.getElementById("ifnone");
+    if (ifnone) ifnone.hidden = !(chip || bucket || q) || !cards.length || cards.some((c) => !c.el.hidden);
     document.getElementById("none").hidden = !state.answered || !!q || document.querySelector("tr.w.s-open") !== null;
     drawDiagrams();
   };
@@ -630,6 +656,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     switch (d.act) {
       case "filter": return setView({ filter: d.f, sel: null });
       case "scope": return setView({ all: d.all === "1" });
+      case "ibucket": state.ibucket = state.ibucket === d.b ? null : d.b; return apply();
       case "itask": state.itask = state.itask === Number(d.id) ? null : Number(d.id); return apply();
       case "sel": return setView({ sel: Number(d.id) });
       case "open": return go({ tab: "tasks", sel: Number(d.id), filter: d.f || state.filter });
