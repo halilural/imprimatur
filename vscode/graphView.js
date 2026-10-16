@@ -649,6 +649,28 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     title.closest(".dsec")?.classList.add("sent");
     setView({ edit: null });
   };
+  /** Steps ticked on the page that the host has not drawn back yet: "record:line" → ticked. */
+  const steps = new Map();
+  /** A card's "2/5 adım" from its boxes. */
+  const countSteps = (card) => {
+    const n = card?.querySelector(".row1 .steps");
+    if (!n) return;
+    const boxes = [...card.querySelectorAll("input.mdstep")];
+    const done = boxes.filter((b) => b.checked).length;
+    n.textContent = done + "/" + boxes.length + " adım";
+    n.classList.toggle("all", done === boxes.length);
+  };
+  /** After a redraw: a tick the host has drawn is confirmed; one it has not yet stays as clicked. */
+  const keepSteps = () => {
+    for (const [k, want] of steps) {
+      const [id, line] = k.split(":");
+      const box = document.querySelector('#pane [data-body="' + id + '"] input.mdstep[data-line="' + line + '"]');
+      if (!box || box.hasAttribute("checked") === want) { steps.delete(k); continue; }
+      box.checked = want;
+      box.closest("li")?.classList.toggle("on", want);
+      countSteps(box.closest(".card"));
+    }
+  };
   const toggleIn = (list, id) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   /** A click on a task tab's control. */
   const act = (el) => {
@@ -694,6 +716,16 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   document.addEventListener("change", (e) => {
     const t = e.target;
     if (t.matches?.('#pane select[data-change="taskStatus"]')) vscode.postMessage({ type: "taskStatus", task: Number(t.dataset.task), status: t.value });
+    if (t.matches?.("#pane input.mdstep")) {
+      // Shown at once; kept over redraws until the host's page has it (keepSteps).
+      const id = Number(t.closest("[data-body]")?.dataset.body);
+      if (!id) return;
+      const line = Number(t.dataset.line);
+      t.closest("li")?.classList.toggle("on", t.checked);
+      steps.set(id + ":" + line, t.checked);
+      countSteps(t.closest(".card"));
+      vscode.postMessage({ type: "recStep", id, line, done: t.checked });
+    }
   });
   document.addEventListener("click", (e) => {
     const t = e.target;
@@ -864,6 +896,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     patchRows("waiting", doc);
     const freshPane = doc.getElementById("pane");
     if (freshPane) morph(document.getElementById("pane"), freshPane);
+    keepSteps();
     showFlash();
     const data = doc.getElementById("rows")?.textContent;
     if (data) { document.getElementById("rows").textContent = data; rows = JSON.parse(data); }
@@ -1137,7 +1170,7 @@ function onMessage(m) {
   if (m.type === "newTask") return newTask();
   if (m.type === "bestRun") return vscode.commands.executeCommand("imprimatur.bestPractices.run");
   if (m.type === "recDismiss") return recDismiss(Number(m.id));
-  if (["rec", "answer", "add", "taskStatus", "docSave", "docNew", "docStatus"].includes(m.type)) return writeFromPanel(m);
+  if (["rec", "recStep", "answer", "add", "taskStatus", "docSave", "docNew", "docStatus"].includes(m.type)) return writeFromPanel(m);
   if (m.type === "preview" && shown) {
     let html;
     try {

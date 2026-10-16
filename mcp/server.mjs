@@ -65,7 +65,7 @@ const sessionArg = { type: "string", description: "Set by Imprimatur's hook; lea
 const keyArg = { type: "string", description: "\"#58\" or a Jira key" };
 const recordFields = {
   title: { type: "string", maxLength: MAX_TITLE, description: "One line, understandable a week later without the chat" },
-  body: { type: "string", maxLength: MAX_BODY, description: "Details, result, reasoning (Markdown)" },
+  body: { type: "string", maxLength: MAX_BODY, description: "Details, result, reasoning (Markdown). Steps the user follows (a test, a todo of theirs) as \"- [ ] step\" lines: they tick each one in the panel, kept in the body" },
   owner: { type: "string", enum: ["C", "K"], description: "C = the agent does it, K = the user does it" },
   status: { type: "string", enum: RECORD_STATUS },
   parent_id: { type: "integer", description: "For an answer: the question's record id" },
