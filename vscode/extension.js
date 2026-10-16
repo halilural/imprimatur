@@ -615,11 +615,12 @@ function activate(ctx) {
     vscode.commands.registerCommand("imprimatur.openTasks", () => showGraph({ tab: "tasks" })),
     vscode.commands.registerCommand("imprimatur.bestPractices.run", () => runBestPractices()),
     vscode.commands.registerCommand("imprimatur.openInbox", () => showGraph({ tab: "inbox" })),
-    // Design documents (#72): the Mimari and Ürün tabs; docs.reveal opens one on a section.
+    // Design documents (#72): the Mimari, Ürün and Sözlük tabs; docs.reveal opens one on a section.
     vscode.commands.registerCommand("imprimatur.openArchitecture", () => showGraph({ tab: "architecture" })),
     vscode.commands.registerCommand("imprimatur.openProduct", () => showGraph({ tab: "product" })),
+    vscode.commands.registerCommand("imprimatur.openGlossary", () => showGraph({ tab: "glossary" })),
     vscode.commands.registerCommand("imprimatur.docs.reveal", (/** @type {{root?: string, kind?: string, section?: string}} */ at) => {
-      const kind = at?.kind === "product" ? "product" : "architecture";
+      const kind = at?.kind === "product" || at?.kind === "glossary" ? at.kind : "architecture";
       return showGraph({ root: at?.root, tab: kind, ...(typeof at?.section === "string" && { section: at.section }) });
     }),
     vscode.commands.registerCommand("imprimatur.acceptRange", acceptRange),

@@ -11,7 +11,7 @@ const os = require("node:os");
 /** The user, as record versions name them. */
 const userActor = () => ({ kind: /** @type {"user"} */ ("user"), id: os.userInfo().username });
 
-const TABS = ["home", "tasks", "inbox", "architecture", "product", "edits"];
+const TABS = ["home", "tasks", "inbox", "architecture", "product", "glossary", "edits"];
 const FILTERS = ["active", "open", "done"];
 const TASK_STATUSES = ["open", "active", "done", "dropped"];
 /** The tasks that hold recommendations (#87: RECS; AUDIT and BEST before it). */
@@ -611,7 +611,7 @@ function paneHtml(db, root, view, o = {}) {
   if (view.tab === "home") return homeHtml(homeModel(db, root, o));
   if (view.tab === "tasks") return tasksHtml(tasksPage(db, root, view, o));
   if (view.tab === "inbox") return inboxHtml(inboxModel(db, root, { all: view.all, waiting: o.waiting, now: o.now, placeOf: o.placeOf }));
-  if (view.tab === "architecture" || view.tab === "product") {
+  if (view.tab === "architecture" || view.tab === "product" || view.tab === "glossary") {
     const docs = require("./docsView.js");
     return docs.docHtml(docs.docModel(db, root, view.tab, view));
   }
@@ -694,8 +694,8 @@ function cleanView(v) {
   if (typeof v.all === "boolean") out.all = v.all;
   if (ids(v.showDone)) out.showDone = ids(v.showDone);
   if (ids(v.old)) out.old = ids(v.old);
-  // The section open for editing on a document tab (#72): "architecture:12", "product:new".
-  if (v.edit === null || (typeof v.edit === "string" && /^(architecture|product):(new|\d+)$/.test(v.edit))) out.edit = v.edit;
+  // The section open for editing on a document tab (#72): "architecture:12", "product:new", "glossary:3".
+  if (v.edit === null || (typeof v.edit === "string" && /^(architecture|product|glossary):(new|\d+)$/.test(v.edit))) out.edit = v.edit;
   return out;
 }
 

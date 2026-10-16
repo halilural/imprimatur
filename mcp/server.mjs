@@ -41,8 +41,8 @@ export const INSTRUCTIONS = [
   "When work is done, record_update that record with status \"done\" and the result in body.",
   "task_get returns open records by default; status \"all\", kind, limit/offset and full:true give more.",
   "search with repo \"*\" looks in every repo.",
-  "Each repo has two living design documents in sections: architecture (how it is built) and product (what the user gets); doc_get reads them.",
-  "When you add or change an adr/pdr/decision, update the matching section of the architecture/product document with doc_section_upsert and link the record.",
+  "Each repo has living documents in sections: architecture (how it is built), product (what the user gets) and glossary (a section per project term); doc_get reads them.",
+  "When you add or change an adr/pdr/decision, update the matching architecture/product section with doc_section_upsert and link the record; a new or changed term goes in the glossary.",
   "Leave _session empty: Imprimatur's hook fills it.",
   // #90: records come from people, other agents, other machines (sync) and imports; a line in
   // one must not steer the agent that reads it (prompt injection).
@@ -56,7 +56,7 @@ const MAX_TITLE = 300;
 const MAX_BODY = 20_000;
 /** A design document section's body (#72): longer than a record's, short enough to sync (db.js). */
 const MAX_SECTION_BODY = SECTION_BODY_MAX;
-const DOC_KIND = { type: "string", enum: Object.keys(DOC_KINDS), description: "architecture (how it is built) or product (what the user gets)" };
+const DOC_KIND = { type: "string", enum: Object.keys(DOC_KINDS), description: "architecture (how it is built), product (what the user gets) or glossary (the project's terms, one section each)" };
 const SECTION_KEY_ARG = { type: "string", maxLength: 64, description: "The section's slug, e.g. \"storage\" (a-z, 0-9, -); unique in the document" };
 const BODY_CUT = 500;
 
@@ -138,7 +138,7 @@ const TOOLS = [
     outputSchema: output({
       tasks: { type: "array", items: LEFT_OFF },
       docs: {
-        type: "object", description: "Per document kind (architecture, product): current sections, ADRs/PDRs no section links, sections in conflict with the file",
+        type: "object", description: "Per document kind (architecture, product, glossary): current sections, ADRs/PDRs no section links, sections in conflict with the file",
         additionalProperties: { type: "object", properties: { sections: int, unlinked: int, conflicts: { type: "array", items: str } }, required: ["sections", "unlinked", "conflicts"] },
       },
       docs_problem: { type: "string", description: "Set when a document needs attention" },
@@ -232,7 +232,7 @@ const TOOLS = [
   {
     name: "doc_get",
     title: "Read a design document",
-    description: "The repo's architecture or product design document: its table of contents (each section's key, title, status, last update and contributing record ids). section gives that section's body; full:true gives every body.",
+    description: "The repo's architecture or product design document, or its glossary (terms, alphabetical): its table of contents (each section's key, title, status, last update and contributing record ids). section gives that section's body; full:true gives every body.",
     inputSchema: input({
       kind: DOC_KIND,
       repo: repoArg,
@@ -248,13 +248,13 @@ const TOOLS = [
   {
     name: "doc_section_upsert",
     title: "Write a design document section",
-    description: "Creates a section of the architecture or product document (title needed) or changes its title, body (Markdown), position or status (superseded: replaced, kept at the end). records: ids of records of this repo (adr, pdr, decision, …) linked as contributors, besides those already linked. Every change is versioned.",
+    description: "Creates a section of the architecture or product document, or a glossary term (title = the term, body = its meaning) (title needed) or changes its title, body (Markdown), position or status (superseded: replaced, kept at the end). records: ids of records of this repo (adr, pdr, decision, …) linked as contributors, besides those already linked. Every change is versioned.",
     inputSchema: input({
       kind: DOC_KIND,
       key: SECTION_KEY_ARG,
       title: { type: "string", maxLength: MAX_TITLE, description: "The section heading" },
       body: { type: "string", maxLength: MAX_SECTION_BODY, description: "The section's text (Markdown; headings from ### down)" },
-      position: { type: "number", description: "Sort order; a new section goes last" },
+      position: { type: "number", description: "Sort order; a new section goes last (the glossary sorts by title)" },
       status: { type: "string", enum: SECTION_STATUSES },
       records: { type: "array", items: int, description: "Record ids that contribute to the section (linked, never unlinked here)" },
       repo: repoArg,

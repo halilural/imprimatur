@@ -42,18 +42,80 @@ function seeded(root = "/a/proj", origin) {
 
 // ---- database ----
 
-test("migration 4: a schema 3 database gains the document tables; VERSION is 4", () => {
-  assert.equal(VERSION, 4);
+test("migration 4: a schema 3 database gains the document tables", () => {
+  assert.equal(VERSION, 5);
   const file = tmpDb();
   const raw = new DatabaseSync(file);
   for (const m of MIGRATIONS.slice(0, 3)) raw.exec(m);
   raw.exec("PRAGMA user_version = 3");
   raw.close();
   const db = openDb({ path: file });
-  assert.equal(db.version, 4);
+  assert.equal(db.version, VERSION);
   const tables = db.sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((t) => t.name);
   for (const t of ["documents", "doc_sections", "doc_section_records", "doc_versions"]) assert.ok(tables.includes(t), t);
   assert.throws(() => db.sqlite.exec("INSERT INTO documents (uid, repo_id, kind, title, updated_at) VALUES ('x', 1, 'roadmap', 't', 1)"), /CHECK/);
+  db.close();
+});
+
+test("migration 5: a schema 4 database keeps its documents, sections, links and versions, and takes a glossary", () => {
+  const file = tmpDb();
+  const raw = new DatabaseSync(file);
+  for (const m of MIGRATIONS.slice(0, 4)) raw.exec(m);
+  raw.exec("PRAGMA user_version = 4");
+  raw.exec("PRAGMA foreign_keys = ON");
+  raw.exec(`INSERT INTO repos (id, uid, root, created_at) VALUES (1, 'r', '/a/p', 1);
+    INSERT INTO tasks (id, uid, repo_id, key, created_at, updated_at) VALUES (1, 't', 1, '#1', 1, 1);
+    INSERT INTO records (id, uid, task_id, kind, title, position, created_at, updated_at) VALUES (1, 'a', 1, 'adr', 'SQLite', 1, 1, 1);
+    INSERT INTO documents (id, uid, repo_id, kind, title, updated_at) VALUES (1, 'd', 1, 'architecture', 'Mimari', 1);
+    INSERT INTO doc_sections (id, uid, doc_id, key, title, body, position, updated_at) VALUES (1, 's', 1, 'storage', 'Storage', 'x', 1, 1);
+    INSERT INTO doc_section_records (section_id, record_id) VALUES (1, 1);
+    INSERT INTO doc_versions (section_id, at, actor_kind, after) VALUES (1, 1, 'agent', '{}');`);
+  assert.throws(() => raw.exec("INSERT INTO documents (uid, repo_id, kind, title, updated_at) VALUES ('g', 1, 'glossary', 't', 1)"), /CHECK/);
+  raw.close();
+  const db = openDb({ path: file });
+  assert.equal(db.version, 5);
+  const s = db.docSection(1, "storage");
+  assert.deepEqual([s.title, s.body, s.records, db.sectionVersions(1).length], ["Storage", "x", [1], 1]);
+  assert.deepEqual(db.sqlite.prepare("PRAGMA foreign_key_check").all(), []);
+  const g = db.docOf(1, "glossary");
+  assert.equal(g.title, "Proje Sözlüğü");
+  db.upsertSection(g.id, "pointer", { title: "Pointer", body: "Where work stopped." }, agent);
+  assert.throws(() => db.sqlite.exec("DELETE FROM documents WHERE id = 1"), /FOREIGN KEY/, "the sections still point at their document");
+  for (const i of ["doc_section_records_record", "doc_versions_section"]) {
+    assert.ok(db.sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?").get(i), i);
+  }
+  db.close();
+});
+
+test("glossary: terms read alphabetically (Turkish), unnumbered in the panel and the file, written by MCP and the user", () => {
+  const root = gitRepo();
+  const db = openDb({ path: tmpDb() });
+  const repo = db.repoOf(root);
+  const g = db.docOf(repo.id, "glossary");
+  db.upsertSection(g.id, "zarf", { title: "Zarf", body: "Kayıtların kabı." }, agent);
+  db.upsertSection(g.id, "ceza", { title: "Ceza" }, agent);
+  db.upsertSection(g.id, "cizgi", { title: "Çizgi", body: "Bir satır." }, agent);
+  db.upsertSection(g.id, "adr", { title: "ADR", body: "Mimari karar." }, agent);
+  assert.deepEqual(db.docSections(g.id).map((s) => s.title), ["ADR", "Ceza", "Çizgi", "Zarf"]);
+  const m = docs.docModel(db, root, "glossary");
+  assert.deepEqual([m.label, m.title, m.current.map((s) => s.n)], ["Sözlük", "Proje Sözlüğü", [null, null, null, null]]);
+  const html = docs.docHtml(m);
+  assert.match(html, /Terimler · 4/);
+  assert.match(html, /Yeni terim/);
+  assert.doesNotMatch(html, /class="num"/);
+  const text = docMarkdown(db, g.id);
+  assert.match(text, /^## Terimler\n\n- \[ADR\]\(#adr\)\n- \[Ceza\]\(#ceza\)/m);
+  assert.match(text, /<a id="cizgi"><\/a>\n\n## Çizgi\n\nBir satır\./);
+  exportDocs(db, root);
+  assert.ok(fs.readFileSync(path.join(root, "docs", "GLOSSARY.md"), "utf8").startsWith(HEADER));
+  // The user adds a term from the panel; MCP reads and writes them.
+  docs.applyDocMessage(db, { type: "docNew", kind: "glossary", title: "Pointer (👉)", body: "Where work stopped." }, user, root);
+  assert.ok(db.docSection(g.id, "pointer"));
+  const call = (name, a) => callTool(db, name, { repo: root, ...a }, { client: "test" });
+  assert.deepEqual(call("doc_get", { kind: "glossary" }).sections.map((s) => s.key), ["adr", "ceza", "cizgi", "pointer", "zarf"]);
+  call("doc_section_upsert", { kind: "glossary", key: "kayit", title: "Kayıt", body: "Bir görevin satırı." });
+  assert.equal(db.docSection(g.id, "kayit").body, "Bir görevin satırı.");
+  assert.equal(db.docHealth(repo.id).glossary.sections, 6);
   db.close();
 });
 

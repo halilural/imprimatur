@@ -104,10 +104,10 @@ test("start: no file, sections in the database → the file is written in docs.d
   const r = db.repoOf(root);
   db.upsertSection(db.docOf(r.id, "product").id, "flow", { title: "Akış", body: "A → B" }, agent);
   const first = syncDocs(db, root);
-  assert.deepEqual(first.map((x) => [x.kind, x.written]), [["architecture", false], ["product", true]]);
+  assert.deepEqual(first.map((x) => [x.kind, x.written]), [["architecture", false], ["product", true], ["glossary", false]]);
   assert.ok(read(root, "docs/design/PRODUCT.md").startsWith(HEADER));
   assert.ok(!fs.existsSync(path.join(root, "docs/design/ARCHITECTURE.md")), "an empty document writes no file");
-  assert.deepEqual(describe(syncDocs(db, root), root), ["docs/design/ARCHITECTURE.md: in sync", "docs/design/PRODUCT.md: in sync"]);
+  assert.deepEqual(describe(syncDocs(db, root), root), ["docs/design/ARCHITECTURE.md: in sync", "docs/design/PRODUCT.md: in sync", "docs/design/GLOSSARY.md: in sync"]);
 });
 
 test("middle: hand-written files are adopted with their imported records linked; the file is rewritten in Imprimatur's form", () => {
@@ -120,6 +120,7 @@ test("middle: hand-written files are adopted with their imported records linked;
   assert.deepEqual(reports.map((x) => [x.kind, x.adopted, x.imported, x.written]), [
     ["architecture", "docs/design/ARCHITECTURE.md", ["overview", "profil", "ajan"], true],
     ["product", "docs/design/PRODUCT.md", ["profil"], true],
+    ["glossary", undefined, [], false],
   ]);
   const arch = sectionsOf(db, root, "architecture");
   const title = (id) => db.record(id).title;
@@ -131,7 +132,7 @@ test("middle: hand-written files are adopted with their imported records linked;
   // No ADR from the README.
   const repoId = db.repoByRoot(root).id;
   assert.equal(db.recordsFromSource(repoId, "docs/design/README.md").length, 0);
-  assert.deepEqual(syncDocs(db, root).map((x) => [x.written, x.imported.length]), [[false, 0], [false, 0]], "second sync: in sync");
+  assert.deepEqual(syncDocs(db, root).map((x) => [x.written, x.imported.length]), [[false, 0], [false, 0], [false, 0]], "second sync: in sync");
   // The generated file is no source of records for the importer any more.
   assert.ok(sources(root).filter((s) => s.rel.endsWith("ARCHITECTURE.md")).every((s) => s.type === "generated"));
   assert.equal(importRepo(db, root).dropped, 0, "a generated file does not drop the records it came from");
@@ -187,16 +188,16 @@ test("end: files gone after the import come back from a git revision; misfiled A
   git(root, "commit", "-qm", "gone");
   const rev = git(root, "rev-parse", "HEAD~1").trim();
   const dry = syncDocs(db, root, { rev, dryRun: true });
-  assert.deepEqual(dry.map((x) => x.adopted), ["docs/design/ARCHITECTURE.md", "docs/design/PRODUCT.md"]);
+  assert.deepEqual(dry.map((x) => x.adopted), ["docs/design/ARCHITECTURE.md", "docs/design/PRODUCT.md", undefined]);
   assert.ok(!fs.existsSync(path.join(root, "docs/design/ARCHITECTURE.md")), "dry run writes nothing");
   const reports = syncDocs(db, root, { rev });
-  assert.ok(reports.every((x) => x.written));
+  assert.ok(reports.filter((x) => x.kind !== "glossary").every((x) => x.written));
   const prod = sectionsOf(db, root, "product");
   const linked = prod[0].records.map((id) => db.record(id));
   assert.deepEqual(linked.map((r) => [r.kind, db.taskById(r.task_id).key]), [["pdr", "PDR"]]);
   assert.ok(pdrsBefore.every((r) => db.record(r.id).status === "dropped" && db.record(r.id).links.moved_to), "the misfiled copies are dropped, pointing to the moved ones");
   assert.equal(db.record(old.id).status, "dropped", "README records are no design");
-  assert.deepEqual(syncDocs(db, root, { rev }).map((x) => x.imported.length + x.linked), [0, 0], "again: nothing new");
+  assert.deepEqual(syncDocs(db, root, { rev }).map((x) => x.imported.length + x.linked), [0, 0, 0], "again: nothing new");
 });
 
 test("MCP doc_section_upsert writes the file and says so; a section also edited in the file is a conflict, told back", () => {
