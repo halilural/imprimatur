@@ -256,3 +256,24 @@ test("record bodies are Markdown: bold, code blocks, links; raw HTML stays text"
   assert.ok(!inbox.includes("<script>alert"), "raw HTML is text");
   assert.ok(!inbox.includes('href="javascript:'), "no script links");
 });
+
+test("steps in a record body: checkboxes with their line, a tick rewrites that line and stays", () => {
+  const s = seed();
+  const body = "**Adımlar:**\n\n- [ ] Pod'u bul\n- [x] Logu aç\n\n```\n- [ ] not a step\n```\n1. [ ] numbered";
+  const r = s.db.addRecord(s.t1.id, { kind: "test", title: "Adhoc 05", body }, AGENT);
+  const docs = req("../vscode/docsView.js");
+  assert.deepEqual(docs.stepsOf(body), [{ line: 2, done: false }, { line: 3, done: true }, { line: 8, done: false }]);
+  let inbox = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting: [] });
+  assert.match(inbox, /<input type="checkbox" class="mdstep" data-line="2" aria-label="Adım">Pod/);
+  assert.match(inbox, /data-line="3" checked/);
+  assert.ok(inbox.includes("1/3 adım"));
+  assert.ok(!docs.renderMarkdown(body).includes('data-line="2" aria'), "documents: boxes only show");
+
+  tv.applyMessage(s.db, { type: "recStep", id: r.id, line: 2, done: true }, USER);
+  tv.applyMessage(s.db, { type: "recStep", id: r.id, line: 6, done: true }, USER);
+  assert.equal(s.db.record(r.id).body, body.replace("- [ ] Pod", "- [x] Pod"), "the step's line ticked; a fenced line is no step");
+  tv.applyMessage(s.db, { type: "recStep", id: r.id, line: 3, done: false }, USER);
+  assert.ok(s.db.record(r.id).body.includes("- [ ] Logu aç"));
+  inbox = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting: [] });
+  assert.ok(inbox.includes("1/3 adım"));
+});

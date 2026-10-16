@@ -23,29 +23,92 @@ const rendered = new Map();
  * http(s), mailto and in-page anchors (markdown-it's own check drops javascript: and data:).
  * @param {string | null | undefined} text
  */
-function renderMarkdown(text) {
+function renderMarkdown(text, { steps = false } = {}) {
   const src = String(text ?? "");
   if (!src.trim()) return "";
-  const hit = rendered.get(src);
+  const key = (steps ? "S" : "-") + src;
+  const hit = rendered.get(key);
   if (hit !== undefined) return hit;
   let out;
   try {
-    if (md === undefined) {
-      const MarkdownIt = require("markdown-it");
-      md = new MarkdownIt({ html: false, linkify: true, typographer: false });
-      const valid = md.validateLink.bind(md);
-      md.validateLink = (/** @type {string} */ url) => valid(url) && /^(https?:|mailto:|#)/i.test(url.trim());
-      md.renderer.rules.fence = mermaidFence(md.renderer.rules.fence);
-    }
-    out = md.render(src);
+    out = markdown().render(src, { steps });
   } catch {
     md = null;
     out = `<pre>${esc(src)}</pre>`;
   }
   if (md === null) out = `<pre>${esc(src)}</pre>`;
   if (rendered.size > 500) rendered.clear();
-  rendered.set(src, out);
+  rendered.set(key, out);
   return out;
+}
+
+/** markdown-it, set up once: safe links, mermaid fences, "- [ ] step" checkboxes. */
+function markdown() {
+  if (md === undefined) {
+    const MarkdownIt = require("markdown-it");
+    md = new MarkdownIt({ html: false, linkify: true, typographer: false });
+    const valid = md.validateLink.bind(md);
+    md.validateLink = (/** @type {string} */ url) => valid(url) && /^(https?:|mailto:|#)/i.test(url.trim());
+    md.renderer.rules.fence = mermaidFence(md.renderer.rules.fence);
+    md.core.ruler.after("inline", "steps", stepRule);
+  }
+  return md;
+}
+
+const STEP = /^\[([ xX])\]\s+/;
+
+/**
+ * A list item that starts with "[ ]" or "[x]" is a step: a checkbox carrying its source
+ * line (data-line), which the panel ticks by rewriting that line (toggleStep). With
+ * env.steps off (design documents) the box only shows.
+ * @param {any} state markdown-it's core state
+ */
+function stepRule(state) {
+  const t = state.tokens;
+  for (let i = 2; i < t.length; i++) {
+    if (t[i].type !== "inline" || t[i - 1].type !== "paragraph_open" || t[i - 2].type !== "list_item_open") continue;
+    const first = t[i].children?.[0];
+    const m = first?.type === "text" && STEP.exec(first.content);
+    if (!m || !t[i].map) continue;
+    const on = m[1] !== " ";
+    first.content = first.content.slice(m[0].length);
+    t[i].content = t[i].content.replace(STEP, "");
+    t[i - 2].attrJoin("class", on ? "step on" : "step");
+    const box = new state.Token("html_inline", "", 0);
+    box.content = `<input type="checkbox" class="mdstep" data-line="${t[i].map[0]}"${on ? " checked" : ""}${state.env?.steps ? "" : " disabled"} aria-label="Adım">`;
+    t[i].children.unshift(box);
+  }
+}
+
+/** The steps of a Markdown text: source line and whether ticked. @param {string | null | undefined} text */
+function stepsOf(text) {
+  const src = String(text ?? "");
+  if (!/\[[ xX]\]/.test(src)) return [];
+  /** @type {{line: number, done: boolean}[]} */
+  const out = [];
+  try {
+    // The step rule runs in parse: it has marked the steps' list items.
+    const t = markdown().parse(src, {});
+    for (let i = 2; i < t.length; i++) {
+      const cls = t[i - 2].type === "list_item_open" ? t[i - 2].attrGet("class") ?? "" : "";
+      if (t[i].type === "inline" && t[i].map && /\bstep\b/.test(cls)) out.push({ line: t[i].map[0], done: /\bon\b/.test(cls) });
+    }
+  } catch {
+    // no markdown-it: no steps
+  }
+  return out;
+}
+
+/**
+ * The text with the step on `line` ticked (or not); unchanged when that line is no step.
+ * @param {string} text @param {number} line @param {boolean} done
+ */
+function toggleStep(text, line, done) {
+  const src = String(text ?? "");
+  if (!stepsOf(src).some((s) => s.line === line)) return src;
+  const lines = src.split("\n");
+  lines[line] = lines[line].replace(/^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[[ xX]\]/, `$1[${done ? "x" : " "}]`);
+  return lines.join("\n");
 }
 
 /**
@@ -267,6 +330,9 @@ const DOCS_CSS = `
   .md blockquote { margin: 8px 0; padding: 4px 12px; border-left: 3px solid var(--vscode-textBlockQuote-border, var(--acc)); background: var(--vscode-textBlockQuote-background); }
   .md table { border-collapse: collapse; margin: 8px 0; } .md th, .md td { border: 1px solid var(--line); padding: 4px 10px; text-align: left; }
   .md a { color: var(--vscode-textLink-foreground); }
+  .md li.step { list-style: none; margin-left: -20px; } .md li.step > p { margin: 2px 0; }
+  .md input.mdstep { margin: 0 8px 0 0; width: 15px; height: 15px; vertical-align: -2px; accent-color: var(--acc); cursor: pointer; } .md input.mdstep:disabled { cursor: default; }
+  .md li.step.on { color: var(--vscode-descriptionForeground); } .md li.step.on > p, .md li.step.on { text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 50%, transparent); }
   .rchips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 8px; }
   .rchip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 2px 8px 2px 2px; border: 1px solid var(--line); border-radius: 12px; color: var(--vscode-foreground) !important; font-size: 12px; }
   .rchip:hover { background: var(--vscode-list-hoverBackground); text-decoration: none !important; } .rchip.gone .rt { text-decoration: line-through; }
@@ -279,4 +345,4 @@ const DOCS_CSS = `
   .deditor .acts { align-items: center; flex-wrap: wrap; }
 `;
 
-module.exports = { DOC_TABS, TAB_LABEL, DOCS_CSS, SECTION_BODY_MAX, docModel, docHtml, applyDocMessage, renderMarkdown, mermaidKey, slugify, editOf, describeSectionVersion };
+module.exports = { DOC_TABS, TAB_LABEL, DOCS_CSS, SECTION_BODY_MAX, docModel, docHtml, applyDocMessage, renderMarkdown, stepsOf, toggleStep, mermaidKey, slugify, editOf, describeSectionVersion };
