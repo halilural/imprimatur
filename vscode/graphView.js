@@ -549,6 +549,12 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     });
     // The task tabs: the search hides tasks, records and asks that do not say it.
     document.querySelectorAll("#pane [data-q]").forEach((el) => { el.hidden = !!q && !el.dataset.q.toLowerCase().includes(q); });
+    // Bende bekleyenler: the chosen task's chip shows it alone; a task the search left nothing of goes too.
+    const chip = state.itask ? document.querySelector('#pane [data-act="itask"][data-id="' + state.itask + '"]') : null;
+    document.querySelectorAll('#pane [data-act="itask"]').forEach((b) => { b.classList.toggle("on", b === chip); b.setAttribute("aria-pressed", String(b === chip)); });
+    document.querySelectorAll("#pane .igrp[data-task]").forEach((g) => {
+      g.hidden = (!!chip && g.dataset.task !== chip.dataset.id) || (!!q && !g.querySelector("[data-q]:not([hidden])"));
+    });
     document.getElementById("none").hidden = !state.answered || !!q || document.querySelector("tr.w.s-open") !== null;
     drawDiagrams();
   };
@@ -624,6 +630,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     switch (d.act) {
       case "filter": return setView({ filter: d.f, sel: null });
       case "scope": return setView({ all: d.all === "1" });
+      case "itask": state.itask = state.itask === Number(d.id) ? null : Number(d.id); return apply();
       case "sel": return setView({ sel: Number(d.id) });
       case "open": return go({ tab: "tasks", sel: Number(d.id), filter: d.f || state.filter });
       case "tab": return go({ tab: d.tab });

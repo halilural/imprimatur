@@ -127,6 +127,19 @@ test("#69 Bende bekleyenler: buckets, groups by task, turn-end asks counted, tod
   assert.ok(all.groups.some((g) => g.task.key === "OT-1"));
 });
 
+test("Bende bekleyenler: one chip per task, cards found by the task's title", () => {
+  const s = seed();
+  const one = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting: [] });
+  assert.ok(!one.includes('data-act="itask"'), "one task: no chips");
+  const all = tv.paneHtml(s.db, s.root, { tab: "inbox", all: true }, { waiting: [] });
+  const m = tv.inboxModel(s.db, s.root, { all: true });
+  for (const g of m.groups) {
+    assert.ok(all.includes(`data-act="itask" data-id="${g.task.id}"`), g.task.key);
+    assert.ok(all.includes(`data-task="${g.task.id}"`), g.task.key);
+    assert.ok(g.items.every((r) => r.task_title === g.task.title));
+  }
+});
+
 test("#69 Ana sayfa: progress, where we left off, top asks, tasks by status", () => {
   const s = seed();
   const m = tv.homeModel(s.db, s.root);
