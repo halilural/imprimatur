@@ -4,7 +4,7 @@
 // (tasksView.js, #69); "Mimari" and "Ürün" the repo's design documents (docsView.js, #72); "Ajan değişiklikleri" is the Agent Change Graph: rows from
 // graph.js, one colored lane per Claude session, click a row to open that edit's
 // diff, Accept an edit from its row or its right-click menu. Bende bekleyenler
-// also lists what the agent asked at a turn's end (waiting.js), with ticks.
+// also shows what the agent asked at a turn's end (waiting.js) as cards.
 "use strict";
 const vscode = require("vscode");
 const fs = require("node:fs");
@@ -76,7 +76,6 @@ const ACTIVITY = {
   other: ["·", "Other"],
 };
 
-const KINDS = { question: [tasksView.icon("question"), "Question"], command: [tasksView.icon("terminal"), "Command"], verify: [tasksView.icon("eye"), "Verify / test"], input: [tasksView.icon("hand"), "Input"] };
 /** The waiting log that mirrors the user's open records (history.js): the records show in Bende bekleyenler themselves. */
 const FILES_SESSION = "todo-files";
 
@@ -121,78 +120,6 @@ function laneSvg(i, row, lanes, cols = columnsOf(lanes)) {
   const task = lanes[row.lane]?.task;
   parts.push(`<circle cx="${cx}" cy="${ROW / 2}" r="4.5" style="fill:${COLORS[row.lane % COLORS.length]}">${task ? `<title>${esc(task)}</title>` : ""}</circle>`);
   return `<svg width="${w}" height="${ROW}">${parts.join("")}</svg>`;
-}
-
-const STATES = {
-  done: ["Done", "you ticked it, your reply settled it, or the agent reported it done"],
-  replaced: ["Replaced", "asked again later in other words: see the newer step"],
-  answered: ["Answered", "a question your next message answered"],
-  closed: ["Closed", "its item was marked done"],
-};
-
-/**
- * The Waiting on you list: one row per step, newest first, history kept
- * (like the edits); open ones have a checkbox.
- * @param {ReturnType<typeof waitingSteps>} steps @param {ReturnType<typeof graphRows>["sessions"]} sessions
- * @param {string} root
- */
-function waitingBody(steps, sessions, root) {
-  const sessions_ = records.sessionTasks(root);
-  const cache = new Map();
-  steps = steps.filter((w) => w.session !== FILES_SESSION);
-  if (!steps.length) return `<tr><td colspan="7" class="empty">No turn-end asks yet.</td></tr>`;
-  const order = sessions.map((l) => l.session);
-  const titles = new Map(sessions.map((l) => [l.session, l.title]));
-  const color = (s) => {
-    if (!order.includes(s)) order.push(s);
-    return COLORS[order.indexOf(s) % COLORS.length];
-  };
-  const time = (t) => new Date(t).toLocaleString();
-  return steps
-    .map((w) => {
-      const [icon, label] = KINDS[w.kind] ?? ["•", w.kind];
-      const name = w.title ?? titles.get(w.session) ?? w.session.slice(0, 8);
-      const q = [w.text, w.why, w.task, w.prompt, w.answer, w.note, w.session, name, label, w.state].join(" ");
-      const mine = w.state === "done" && !w.by;
-      const box = (on) => `<input type="checkbox" data-tick data-session="${esc(w.session)}" data-item="${esc(w.item)}" data-i="${w.i}"${on ? " checked" : ""} title="${on ? "Ticked by you: untick to reopen" : "Tick when you did or decided it"}">`;
-      const status =
-        w.state === "open" ? box(false)
-        : mine ? box(true)
-        : w.state === "done" ? `<span class="badge-ok" title="${esc(`${w.by}: ${w.note ?? ""}`)}">✓</span>`
-        : w.state === "replaced" ? `<span class="badge-gone" title="${esc(STATES.replaced[1])}">replaced</span>`
-        : `<span class="pill" title="${esc(STATES[w.state]?.[1] ?? "")}">${esc(STATES[w.state]?.[0] ?? w.state)}</span>`;
-      const source = mine ? "you" : w.by ?? (w.answer ? esc(w.answer) : "");
-      // The task and its record (vscode/tasks.js): the key opens its issue or Jira page, the record icon shows the record.
-      const place = placeOf(root, w, sessions_, cache);
-      const open = (cls, attrs, label, title) => `<a href="#" class="task ${cls}" ${attrs} title="${esc(title)}">${label}</a>`;
-      // The key shows the task in Görevler (its GitHub or Jira page is a click away there).
-      const key = place.task ? open("key", `data-task="${esc(place.task)}"`, esc(place.task), `Show ${place.task} in Görevler`) : "";
-      // The badge names the task: the text need not start with it too ("LATD-13937: …").
-      const stepText = place.task && w.text.startsWith(place.task) ? w.text.slice(place.task.length).replace(/^[\s:–—-]+/, "") || w.text : w.text;
-      // Before the text: a long text is cut at the end of the cell (…), and the icon must stay.
-      const file = place.record ? open("file", `data-record="${place.record}"`, tasksView.icon("file", 14), `Show the record in ${place.task}`) : "";
-      const more = [
-        w.why ? `<div class="why">${esc(w.why)}</div>` : "",
-        w.detail && w.detail !== w.text ? `<details><summary>Full message</summary><pre>${esc(w.detail)}</pre></details>` : "",
-        w.prompt ? `<div class="meta">Request: ${esc(w.prompt)}</div>` : "",
-        w.note ? `<div class="meta">${esc(w.by ?? "")}: ${esc(w.note)}</div>` : "",
-        w.answer ? `<div class="meta">Your answer: ${esc(w.answer)}</div>` : "",
-        ...(w.notes ?? []).map((n) => `<div class="meta">You wrote since: ${esc(n)}</div>`),
-      ].join("");
-      const bucket = w.state !== "open" ? "" : w.kind === "question" ? "question" : w.kind === "verify" ? "test" : w.kind === "command" || w.kind === "input" ? "todo" : "";
-      return `<tr class="w s-${w.state}" data-key="${esc(`${w.item} ${w.i}`)}" data-q="${esc(q)}" data-b="${bucket}" data-tk="${esc(place.task ?? "")}"${w.state === "open" ? "" : " data-done"}
-  data-vscode-context="${menu({ webviewSection: w.state === "open" ? "waiting-open" : "waiting-done", session: w.session, t: w.item, i: w.i, text: w.text })}">
-  <td class="ok">${status}</td>
-  <td class="k" title="${esc(label)}">${icon}</td>
-  <td class="d" title="${esc([w.text, w.why].filter(Boolean).join("\n"))}">${key}${file}${esc(stepText)}</td>
-  <td class="d p">${esc(w.prompt ?? "")}</td>
-  <td class="t">${esc(time(w.t))}</td>
-  <td class="s" style="color:${color(w.session)}" title="${esc(w.session)}">${esc(name)}</td>
-  <td class="st">${source}</td>
-</tr>
-<tr class="x" hidden><td colspan="7"><div class="todo">${more || '<div class="meta">No more details.</div>'}</div></td></tr>`;
-    })
-    .join("\n");
 }
 
 /**
@@ -364,15 +291,12 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
 </style></head><body>
 <header><span class="brand">${tasksView.icon("stamp", 20)}<strong>Imprimatur</strong><span class="dim">/</span><span>${esc(opts.repoName ?? path.basename(root))}</span></span>
 <nav aria-label="Görünümler"><button data-tab="home">Ana sayfa</button><button data-tab="tasks">Görevler</button><button data-tab="inbox">Bende bekleyenler ${inbox ? `<span class="badge">${inbox}</span>` : ""}</button><button data-tab="architecture">Mimari</button><button data-tab="product">Ürün</button><button data-tab="edits">Ajan değişiklikleri ${pending ? `<span class="badge">${pending}</span>` : ""}</button></nav>
-<input id="filter" type="search" aria-label="Ara" placeholder="Ara… (/)"><label id="ans" hidden><input type="checkbox" id="answered"> open only</label><button id="audit" class="acc on" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">Audit</button><button id="scan" class="acc on" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">Scan history</button>
-<span class="n" id="count-edits">${data.rows.filter((r) => !r.record && !r.activity).length} edits · ${data.rows.filter((r) => r.activity).length} other calls · ${data.rows.filter((r) => r.record).length} record changes · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span><span class="n" id="count-waiting">${open} open · ${turn.length} steps</span></header>
+<input id="filter" type="search" aria-label="Ara" placeholder="Ara… (/)"><button id="audit" class="acc on" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">Audit</button><button id="scan" class="acc on" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">Scan history</button>
+<span class="n" id="count-edits">${data.rows.filter((r) => !r.record && !r.activity).length} edits · ${data.rows.filter((r) => r.activity).length} other calls · ${data.rows.filter((r) => r.record).length} record changes · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span></header>
 <section id="edits"${tab === "edits" ? "" : " hidden"}><div id="kinds">${chips}</div><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
 <tbody>${body}</tbody></table>
 <script type="application/json" id="rows">${JSON.stringify((tab === "edits" ? data.rows : []).map((r) => (r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview, file: r.file, n: r.n, md: /\.mdx?$/i.test(r.file) } : null))).replace(/</g, "\\u003c")}</script></section>
 <section id="pane" data-tab="${tab}"${tab === "edits" ? " hidden" : ""}>${tab === "edits" ? '<p class="empty loading" data-k="loading">Yükleniyor…</p>' : opts.pane ?? ""}</section>
-<section id="waiting"${tab === "inbox" ? "" : " hidden"}><div class="legend"><span>☐ open: tick when done</span><span><span class="badge-ok">✓</span> done</span><span><span class="badge-gone">replaced</span> asked again later</span><span><span class="pill">Answered</span> question you answered</span></div>
-<table><thead><tr><th>Status</th><th></th><th>Waiting for</th><th>Request</th><th>Date</th><th>Session</th><th>By</th></tr></thead>
-<tbody>${tab === "inbox" ? waitingBody(waiting, data.sessions, root) : LOADING(7)}</tbody></table><p class="empty" id="none" hidden>Nothing open right now.</p></section>
 <div id="pop"></div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
@@ -417,14 +341,12 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       hideSoon();
     }
   });
-  // Tab, filters, the answered toggle, opened rows and half-typed text survive an update.
+  // Tab, filters, opened rows and half-typed text survive an update.
   // The repo goes into the saved state too: a panel restored after a reload shows the same one.
   // The host's view (tab, selected task, …) wins over the saved one: it opened the page.
-  const state = Object.assign({ tab: "edits", qs: {}, answered: false, expanded: [], kinds: ${JSON.stringify(Object.fromEntries(Object.keys({ edit: 1, record: 1, agent: 1, skill: 1, web: 1, mcp: 1, read: 0, search: 0, bash: 0, other: 0 }).map((k) => [k, ["edit", "record", "agent", "skill", "web", "mcp"].includes(k)])))}, agents: [], drafts: {}, back: [], showDone: [], old: [], edit: null }, vscode.getState(), ${JSON.stringify(view).replace(/</g, "\\u003c")}, { root: ${JSON.stringify(root).replace(/</g, "\\u003c")} });
+  const state = Object.assign({ tab: "edits", qs: {}, expanded: [], kinds: ${JSON.stringify(Object.fromEntries(Object.keys({ edit: 1, record: 1, agent: 1, skill: 1, web: 1, mcp: 1, read: 0, search: 0, bash: 0, other: 0 }).map((k) => [k, ["edit", "record", "agent", "skill", "web", "mcp"].includes(k)])))}, agents: [], drafts: {}, back: [], showDone: [], old: [], edit: null }, vscode.getState(), ${JSON.stringify(view).replace(/</g, "\\u003c")}, { root: ${JSON.stringify(root).replace(/</g, "\\u003c")} });
   if (typeof state.q === "string") { state.qs.edits = state.qs.edits ?? state.q; delete state.q; }
   const filter = document.getElementById("filter");
-  const answered = document.getElementById("answered");
-  answered.checked = state.answered;
   const HINTS = { home: "Görevlerde ara… (/)", tasks: "Görev, karar, soru ara… (/)", inbox: "Bekleyenlerde ara… (/)", architecture: "Bölümlerde ara… (/)", product: "Bölümlerde ara… (/)", edits: "Dosya, istek ya da cevap süz… (/)" };
   // The document tabs' mermaid blocks (#72): drawn with the extension's mermaid, loaded
   // once on the first block, into a shadow root of their div. The block patching compares
@@ -531,11 +453,9 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     // Drawn for another tab: dimmed, saying it loads, until the host's page comes.
     if (tab !== "edits" && paneEl.dataset.tab !== tab) paneEl.className = "stale";
     else paneEl.removeAttribute("class");
-    document.getElementById("waiting").hidden = tab !== "inbox";
     document.getElementById("count-edits").hidden = tab !== "edits";
-    document.getElementById("count-waiting").hidden = tab !== "inbox";
     document.querySelectorAll("nav [data-tab]").forEach((b) => { b.classList.toggle("on", b.dataset.tab === tab); b.setAttribute("aria-current", b.dataset.tab === tab ? "page" : "false"); });
-    for (const id of ["ans", "audit", "scan"]) document.getElementById(id).hidden = tab !== "inbox";
+    for (const id of ["audit", "scan"]) document.getElementById(id).hidden = tab !== "inbox";
     filter.placeholder = HINTS[tab] || "";
     if (document.activeElement !== filter) filter.value = state.qs[tab] || "";
     const q = (state.qs[tab] || "").toLowerCase();
@@ -544,12 +464,12 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     // Bende bekleyenler: a task chip and a bucket, each kept only while the page still has it; they combine.
     const chip = state.itask ? document.querySelector('#pane [data-act="itask"][data-id="' + state.itask + '"]') : null;
     const bucket = document.querySelector('#pane [data-act="ibucket"][data-b="' + state.ibucket + '"]') ? state.ibucket : null;
-    document.querySelectorAll("#edits tr[data-q], #waiting tr[data-q]").forEach((tr) => {
+    document.querySelectorAll("#edits tr[data-q]").forEach((tr) => {
       // A subagent's call shows with its open Agent row, whatever its kind; other rows by kind.
       const kindOn = tr.dataset.parent ? state.agents.includes(tr.dataset.parent) : !tr.dataset.kind || state.kinds[tr.dataset.kind] !== false;
       // A bucket chosen on Bende bekleyenler shows its turn-end asks alone.
       const bucketOn = tr.dataset.b === undefined || ((!bucket || tr.dataset.b === bucket) && (!chip || tr.dataset.tk === chip.dataset.key));
-      const show = kindOn && bucketOn && tr.dataset.q.toLowerCase().includes(q) && (!state.answered || !("done" in tr.dataset));
+      const show = kindOn && bucketOn && tr.dataset.q.toLowerCase().includes(q);
       tr.style.display = show ? "" : "none";
       if (tr.nextElementSibling?.classList.contains("x")) tr.nextElementSibling.hidden = !show || !state.expanded.includes(tr.dataset.key);
     });
@@ -563,11 +483,9 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       g.hidden = (!!chip && g.dataset.task !== chip.dataset.id) || ((!!q || !!bucket) && !g.querySelector("[data-b]:not([hidden])"));
     });
     // The counts follow the other filter: a bucket counts the chosen task's, a chip the chosen bucket's.
-    const turnRows = [...document.querySelectorAll("#waiting tr[data-b]")].filter((tr) => tr.dataset.b && says(tr));
     document.querySelectorAll('#pane [data-act="ibucket"]').forEach((b) => {
       const id = b.dataset.b;
-      const n = cards.filter((c) => c.says && c.b === id && (!chip || c.task === chip.dataset.id)).length
-        + turnRows.filter((tr) => tr.dataset.b === id && (!chip || tr.dataset.tk === chip.dataset.key)).length;
+      const n = cards.filter((c) => c.says && c.b === id && (!chip || c.task === chip.dataset.id)).length;
       b.querySelector(".n").textContent = String(n);
       b.classList.toggle("on", id === bucket);
       b.setAttribute("aria-pressed", String(id === bucket));
@@ -581,7 +499,6 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     });
     const ifnone = document.getElementById("ifnone");
     if (ifnone) ifnone.hidden = !(chip || bucket || q) || !cards.length || cards.some((c) => !c.el.hidden);
-    document.getElementById("none").hidden = !state.answered || !!q || document.querySelector("tr.w.s-open") !== null;
     drawDiagrams();
   };
   /** Change the view: the host draws the tab anew (it draws only the visible one). */
@@ -711,6 +628,10 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
         else el.closest(".card")?.classList.add("sent");
         return vscode.postMessage({ type: "rec", id: Number(d.id), op: d.op });
       }
+      case "turn":
+        // A turn-end ask ticked (or back) in its session's log; the update that follows confirms it.
+        el.closest(".card")?.classList.add("sent");
+        return vscode.postMessage({ type: "check", session: d.session, t: d.item, i: Number(d.i), on: d.on === "1", at: Date.now() });
     }
   };
   document.addEventListener("change", (e) => {
@@ -774,14 +695,6 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       }
       return vscode.postMessage({ type: accept ? "accept" : "open", file: edit.dataset.file, n: Number(edit.dataset.n), at: Date.now() });
     }
-    const w = t.closest("tr.w");
-    if (!w || t.closest("input, a, button, details")) return;
-    // The whole status cell ticks: a click beside the small box is not lost to the row.
-    const box = t.closest("td.ok")?.querySelector("input[data-tick]");
-    if (box) return box.click();
-    const k = w.dataset.key;
-    state.expanded = state.expanded.includes(k) ? state.expanded.filter((x) => x !== k) : [...state.expanded, k];
-    apply();
   });
   // Keyboard (#69): j/k move in the list, Enter opens, x ticks, a answers, / searches, Esc goes back.
   const NAV = { tasks: "#pane .rows", inbox: '#pane [data-navgroup="inbox"]', home: '#pane [data-navgroup="home"]', architecture: '#pane [data-navgroup="doc"]', product: '#pane [data-navgroup="doc"]' };
@@ -829,21 +742,8 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       if (box) { e.preventDefault(); box.focus(); }
     }
   });
-  // A tick shows at once and stays shown: an update made before the log had it
-  // must not untick it. Each is timed, click to confirmed, for the perf log.
-  const ticks = new Map();
   /** Accepted edits not yet drawn so by an update: "file#n" → click time. */
   const accepts = new Map();
-  const tickKey = (b) => b.dataset.session + " " + b.dataset.item + " " + b.dataset.i;
-  document.addEventListener("change", (e) => {
-    const t = e.target;
-    if (t === answered) { state.answered = answered.checked; return apply(); }
-    // Tick a step right in its row; the log keeps it, the next update redraws it.
-    if (t.matches("input[data-tick]")) {
-      ticks.set(tickKey(t), { on: t.checked, at: performance.now() });
-      vscode.postMessage({ type: "check", session: t.dataset.session, t: t.dataset.item, i: Number(t.dataset.i), on: t.checked, at: Date.now() });
-    }
-  });
   // An update waits while a click is under way, so it never lands between press
   // and release; it only swaps changed rows, so it need not wait any longer. A
   // release the page never sees (pointer let go outside it) holds it 300 ms at most.
@@ -854,8 +754,8 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   const html = (el) => el.outerHTML;
   const drawn = new Map();
   const remember = () => {
-    for (const sel of ["nav", "#audit", "#scan", "#count-edits", "#count-waiting", "#edits thead", "#waiting thead"]) drawn.set(sel, html(document.querySelector(sel)));
-    for (const id of ["edits", "waiting"]) drawn.set(id, [...document.querySelectorAll("#" + id + " tbody > tr")].map(html));
+    for (const sel of ["nav", "#audit", "#scan", "#count-edits", "#edits thead"]) drawn.set(sel, html(document.querySelector(sel)));
+    for (const id of ["edits"]) drawn.set(id, [...document.querySelectorAll("#" + id + " tbody > tr")].map(html));
   };
   remember();
   // Rows: keep the unchanged run at the start and at the end (a new step or
@@ -885,7 +785,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     const doc = new DOMParser().parseFromString(next, "text/html");
     next = undefined;
     const t1 = performance.now();
-    for (const sel of ["nav", "#audit", "#scan", "#count-edits", "#count-waiting", "#edits thead", "#waiting thead"]) {
+    for (const sel of ["nav", "#audit", "#scan", "#count-edits", "#edits thead"]) {
       const fresh = doc.querySelector(sel);
       if (fresh && html(fresh) !== drawn.get(sel)) {
         drawn.set(sel, html(fresh));
@@ -893,21 +793,12 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       }
     }
     patchRows("edits", doc);
-    patchRows("waiting", doc);
     const freshPane = doc.getElementById("pane");
     if (freshPane) morph(document.getElementById("pane"), freshPane);
     keepSteps();
     showFlash();
     const data = doc.getElementById("rows")?.textContent;
     if (data) { document.getElementById("rows").textContent = data; rows = JSON.parse(data); }
-    // Drawn from the log (the attribute) as ticked: confirmed. Not yet: keep the click's state.
-    const boxes = new Map([...document.querySelectorAll("input[data-tick]")].map((b) => [tickKey(b), b]));
-    for (const [k, t] of ticks) {
-      const b = boxes.get(k);
-      if (b && b.hasAttribute("checked") !== t.on) { b.checked = t.on; continue; }
-      ticks.delete(k);
-      vscode.postMessage({ type: "perf", ms: Math.round(performance.now() - t.at), parse: Math.round(t1 - t0), patch: Math.round(performance.now() - t1) });
-    }
     for (const [k, at] of accepts) {
       const tr = [...document.querySelectorAll("tr[data-file]")].find((r) => r.dataset.file + "#" + r.dataset.n === k);
       // "mine": the badge the click drew, not yet one an update drew.
@@ -1330,7 +1221,11 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
     try {
       inbox = tasksView.inboxCount(db, root, waiting, { all: view.all });
       // Only the visible tab is drawn.
-      if (view.tab !== "edits") pane = tasksView.paneHtml(db, root, view, { waiting, linkOf, error: records.lastError });
+      // A turn-end ask's task, as the edits' lanes find it; one lookup per draw.
+      const sessions = records.sessionTasks(root);
+      const cache = new Map();
+      const placeOfStep = (w) => placeOf(root, w, sessions, cache);
+      if (view.tab !== "edits") pane = tasksView.paneHtml(db, root, view, { waiting, linkOf, placeOf: placeOfStep, error: records.lastError });
     } catch (e) {
       pane = `<p class="empty" data-k="error">Imprimatur: ${esc(e instanceof Error ? e.message : String(e))}</p>`;
     }

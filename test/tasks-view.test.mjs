@@ -103,17 +103,17 @@ test("#69 Görevler: this repo by default, every repo when asked", () => {
 test("#69 Bende bekleyenler: buckets, groups by task, turn-end asks counted, today's done", () => {
   const s = seed();
   const waiting = [
-    { kind: "question", state: "open", session: "a" },
-    { kind: "verify", state: "open", session: "a" },
-    { kind: "verify", state: "open", session: "todo-files" },
-    { kind: "command", state: "done", session: "a" },
+    { kind: "question", state: "open", session: "a", item: "t1", i: 0, t: "2026-01-01T10:00:00Z", text: "Hangisi?" },
+    { kind: "verify", state: "open", session: "a", item: "t1", i: 1, t: "2026-01-01T10:00:00Z", text: "Bak" },
+    { kind: "verify", state: "open", session: "todo-files", item: "t2", i: 0, t: "2026-01-01T10:00:00Z", text: "x" },
+    { kind: "command", state: "done", session: "a", by: "audit", item: "t3", i: 0, t: "2026-01-01T10:00:00Z", text: "y" },
   ];
   let m = tv.inboxModel(s.db, s.root, { waiting });
   const n = Object.fromEntries(m.buckets.map((b) => [b.id, b.n]));
   assert.deepEqual(n, { question: 2, todo: 1, test: 2, done: 0 }, "the todo-files log mirrors records: not counted twice");
   assert.equal(m.count, 5);
   assert.equal(m.turn, 2);
-  assert.deepEqual(m.groups.map((g) => g.task.key), ["#1"]);
+  assert.deepEqual(m.groups.map((g) => g.task?.key ?? null), ["#1", null], "turn-end asks with no task: Görevsiz");
   assert.equal(m.groups[0].items[0].kind, "question", "questions first");
   assert.equal(tv.inboxCount(s.db, s.root, waiting), 5);
 
@@ -124,7 +124,32 @@ test("#69 Bende bekleyenler: buckets, groups by task, turn-end asks counted, tod
   assert.equal(m.buckets.find((b) => b.id === "todo").n, 0);
 
   const all = tv.inboxModel(s.db, s.root, { all: true });
-  assert.ok(all.groups.some((g) => g.task.key === "OT-1"));
+  assert.ok(all.groups.some((g) => g.task?.key === "OT-1"));
+});
+
+test("turn-end asks are cards under their task; the button ticks the step; ticked today shows done", () => {
+  const s = seed();
+  const now = Date.now();
+  const w = (/** @type {any} */ o) => ({ kind: "command", session: "s9", item: "2026-01-01T10:00:00Z", t: "2026-01-01T10:00:00Z", prompt: "deploy", ...o });
+  const waiting = [
+    w({ i: 0, state: "open", text: "#1: Deploy et", why: "prod bekliyor", detail: "uzun mesaj" }),
+    w({ i: 1, state: "open", kind: "verify", text: "Gözle bak" }),
+    w({ i: 2, state: "done", text: "#1: Logu sil", at: new Date(now).toISOString() }),
+    w({ i: 3, state: "done", by: "audit", text: "#1: Audit kapattı", at: new Date(now).toISOString() }),
+    w({ i: 4, state: "replaced", text: "#1: Eski soru" }),
+  ];
+  const placeOf = (/** @type {any} */ x) => (x.text.startsWith("#1") ? { task: "#1" } : {});
+  const m = tv.inboxModel(s.db, s.root, { waiting, placeOf, now });
+  const g1 = m.groups.find((g) => g.task?.key === "#1");
+  const turn = g1.items.filter((/** @type {any} */ r) => r.turn);
+  assert.deepEqual(turn.map((/** @type {any} */ r) => [r.title, r.done]), [["Deploy et", false], ["Logu sil", true]], "open and yours today; not audit's or replaced");
+  assert.equal(m.groups.find((g) => !g.task).items[0].kind, "test", "a verify ask is a test; no task: Görevsiz");
+  const html = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting, placeOf, now });
+  assert.match(html, /<button class="primary" data-act="turn" data-on="1" data-session="s9" data-item="2026-01-01T10:00:00Z" data-i="0">Yaptım<\/button>/);
+  assert.match(html, /data-act="turn" data-on="0" data-session="s9" data-item="2026-01-01T10:00:00Z" data-i="2">geri al/);
+  assert.ok(html.includes("tur sonu") && html.includes("prod bekliyor") && html.includes("Tam mesaj"));
+  assert.ok(html.includes("<span>Görevsiz</span>"));
+  assert.ok(!html.includes("Audit kapattı") && !html.includes("Eski soru"));
 });
 
 test("Bende bekleyenler: one chip per task, cards found by the task's title", () => {

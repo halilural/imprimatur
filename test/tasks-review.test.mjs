@@ -129,7 +129,7 @@ test("review 8: the hidden tab's table says it loads, not empty; a stale pane is
     const data = { rows: [{ file: "a.md", n: 1, t: Date.now(), added: 1, removed: 0, lane: 0 }], lanes: [{ first: 0, last: 0 }], sessions: [] };
     const onTasks = html(data, "/tmp/x", "N", [], { view: { tab: "tasks" }, pane: "<div data-k='x'></div>" });
     assert.match(onTasks.split('<section id="edits"')[1].split("</tbody>")[0], /Yükleniyor…/);
-    assert.match(onTasks.split('<section id="waiting"')[1].split("</tbody>")[0], /Yükleniyor…/);
+    assert.ok(!onTasks.includes('<section id="waiting"'), "turn-end asks are cards in Bende bekleyenler, no table");
     const onEdits = html(data, "/tmp/x", "N", [], { view: { tab: "edits" } });
     assert.match(onEdits.split('<section id="pane"')[1].split("</section>")[0], /Yükleniyor…/);
     assert.match(onEdits, /#pane\.stale::before/);
