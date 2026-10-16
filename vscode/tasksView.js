@@ -391,6 +391,9 @@ const kindChip = (kind, label) => `<span class="kchip k-${esc(kind)}">${esc(labe
 /** @param {number} id @param {string} status @param {string} key */
 const openTask = (id, status, key, cls = "mono key") => `<a href="#" class="${cls}" data-act="open" data-id="${id}" data-f="${bucketOf(status)}">${esc(key)}</a>`;
 
+/** A record's body as Markdown (raw HTML in it stays text: docsView's renderer). @param {string} text */
+const mdBody = (text) => `<div class="body md">${require("./docsView.js").renderMarkdown(text)}</div>`;
+
 /**
  * One thing that waits on the user: a question to answer, a todo or a manual test to finish.
  * @param {any} r @param {{flash?: number}} [o]
@@ -400,7 +403,7 @@ function askCard(r, o = {}) {
   const id = `${o.prefix ?? "rec"}-${r.id}`;
   const k = r.kind === "test" ? "test" : r.kind;
   const head = `<div class="row1">${kindChip(k)}<span class="ttl">${esc(r.title)}</span><span class="age">${esc(r.age ?? "")}</span></div>`;
-  const body = r.body ? `<div class="body">${esc(r.body)}</div>` : "";
+  const body = r.body ? mdBody(r.body) : "";
   const q = `data-q="${esc([r.title, r.body, r.task_key, r.task_title].filter(Boolean).join(" "))}" data-b="${r.done ? "done" : esc(k)}"`;
   if (r.done)
     return `<article class="card ask done" id="${id}" data-k="r${r.id}" data-nav tabindex="0" ${q}>${head}<span class="okline">${icon("check", 14)} Tamamlandı — ajan bir sonraki turda görecek · <a href="#" data-act="rec" data-op="open" data-id="${r.id}">geri al</a></span></article>`;
@@ -442,10 +445,10 @@ function taskBlocks(c) {
   const todos = `<section class="blk" data-k="todos" data-navgroup="todos" aria-label="Yapılacaklar"><div class="h2row" data-k="h"><h2>Yapılacaklar <span class="dim">· ${c.openTodos} açık</span></h2>${c.hiddenDone || c.showDone ? `<button class="ghost" data-act="showDone" data-task="${c.id}">${c.showDone ? "Bitenleri gizle" : `Bitenleri göster (${c.hiddenDone})`}</button>` : ""}</div><div class="todos" data-k="list">${c.todos.map(todo).join("") || '<p class="empty" data-k="none">Açık yapılacak yok.</p>'}</div>
 <label class="quick" data-k="add">${icon("plus")}<input data-draft="add-${c.id}" data-add data-task="${c.id}" placeholder="Ekle… ( ? soru · ! karar · # not · @ben sende )" aria-label="Yeni kayıt"></label></section>`;
   const notes = c.notes.length
-    ? `<section class="blk" data-k="notes" aria-label="Notlar ve cevaplanan sorular"><h2>Notlar ve cevaplanan sorular <span class="dim">· ${c.notes.length}</span></h2>${c.notes.map((r) => `<div class="note${fl(r.id)}" id="rec-${r.id}" data-k="r${r.id}" data-q="${esc(r.title)}">${kindChip(r.kind)}<div class="ncol"><span class="ttl">${esc(r.title)}</span>${r.body ? `<span class="body">${esc(r.body)}</span>` : ""}${r.answers.map((/** @type {any} */ a) => `<span class="ans">${icon("arrow", 12)} ${esc(a.title)}${a.body && a.body !== a.title ? `<span class="body">${esc(a.body)}</span>` : ""}</span>`).join("")}</div></div>`).join("")}</section>`
+    ? `<section class="blk" data-k="notes" aria-label="Notlar ve cevaplanan sorular"><h2>Notlar ve cevaplanan sorular <span class="dim">· ${c.notes.length}</span></h2>${c.notes.map((r) => `<div class="note${fl(r.id)}" id="rec-${r.id}" data-k="r${r.id}" data-q="${esc(r.title)}">${kindChip(r.kind)}<div class="ncol"><span class="ttl">${esc(r.title)}</span>${r.body ? mdBody(r.body) : ""}${r.answers.map((/** @type {any} */ a) => `<div class="ans">${icon("arrow", 12)} ${esc(a.title)}${a.body && a.body !== a.title ? mdBody(a.body) : ""}</div>`).join("")}</div></div>`).join("")}</section>`
     : "";
   const decisions = c.decisions.length
-    ? `<section class="blk" data-k="dec" aria-label="Kararlar ve tasarım"><h2>Kararlar ve tasarım <span class="dim">· ${c.decisions.length}</span></h2><div class="grid">${c.decisions.map((r) => `<details class="card dec${fl(r.id)}" id="rec-${r.id}" data-k="r${r.id}" data-q="${esc(r.title)}"${c.flash === r.id ? " open" : ""}><summary><span class="meta">${kindChip(r.kind)}<span class="dim">${esc(r.date)}</span><span class="dim">${esc(r.who)}</span></span><span class="ttl">${esc(r.title)}</span></summary>${r.body ? `<p class="body">${esc(r.body)}</p>` : '<p class="body dim">Açıklama yok.</p>'}</details>`).join("")}</div></section>`
+    ? `<section class="blk" data-k="dec" aria-label="Kararlar ve tasarım"><h2>Kararlar ve tasarım <span class="dim">· ${c.decisions.length}</span></h2><div class="grid">${c.decisions.map((r) => `<details class="card dec${fl(r.id)}" id="rec-${r.id}" data-k="r${r.id}" data-q="${esc(r.title)}"${c.flash === r.id ? " open" : ""}><summary><span class="meta">${kindChip(r.kind)}<span class="dim">${esc(r.date)}</span><span class="dim">${esc(r.who)}</span></span><span class="ttl">${esc(r.title)}</span></summary>${r.body ? mdBody(r.body) : '<p class="body dim">Açıklama yok.</p>'}</details>`).join("")}</div></section>`
     : "";
   const testState = (/** @type {string} */ s) => (s === "done" ? ["pass", "Geçti"] : s === "dropped" ? ["skip", "Bırakıldı"] : ["wait", "Bekliyor"]);
   const tests = c.tests.length
@@ -676,6 +679,7 @@ const TASKS_CSS = `
   .card.ask { display: flex; flex-direction: column; gap: 8px; }
   .row1 { display: flex; align-items: flex-start; gap: 10px; } .row1 .ttl { flex: 1; font-weight: 600; min-width: 0; } .age { flex: none; font-size: 12px; color: var(--vscode-descriptionForeground); }
   .body { white-space: pre-wrap; color: var(--vscode-descriptionForeground); font-size: 13px; }
+  .body.md { white-space: normal; font-size: 13px; line-height: 1.5; min-width: 0; max-width: 100%; } .body.md pre { white-space: pre; } .body.md p { margin: 6px 0; } .body.md ul, .body.md ol { margin: 6px 0; padding-left: 20px; }
   .answer { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
   .answer textarea { flex: 1 1 320px; resize: vertical; min-height: 40px; padding: 7px 10px; border-radius: 6px; font: inherit;
     border: 1px solid var(--vscode-input-border, var(--line)); background: var(--vscode-input-background); color: var(--vscode-input-foreground); }
