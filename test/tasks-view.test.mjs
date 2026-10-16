@@ -246,3 +246,13 @@ test("#69 the panel page: tabs, only the visible tab drawn, its script parses", 
     Module._load = load;
   }
 });
+
+test("record bodies are Markdown: bold, code blocks, links; raw HTML stays text", () => {
+  const s = seed();
+  s.db.addRecord(s.t1.id, { kind: "test", title: "Adhoc 03", body: "**Hazırlık:**\n```sql\nDELETE FROM T;\n```\n<script>alert(1)</script> [x](javascript:alert(1))" }, AGENT);
+  const inbox = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting: [] });
+  assert.ok(inbox.includes("<strong>Hazırlık:</strong>"));
+  assert.match(inbox, /<pre><code class="language-sql">DELETE FROM T;/);
+  assert.ok(!inbox.includes("<script>alert"), "raw HTML is text");
+  assert.ok(!inbox.includes('href="javascript:'), "no script links");
+});
