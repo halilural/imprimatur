@@ -14,6 +14,7 @@
 8. [Yol haritası](#roadmap)
 9. [Kapsam dışı](#non-goals)
 10. [Agent setup denetimi (planlandı)](#agent-setup-audit)
+11. [Proje sözlüğü](#glossary)
 
 <a id="summary"></a>
 
@@ -286,3 +287,14 @@ Ajan kurulumu (CLAUDE.md, AGENTS.md, `.claude/` ayarları, hook'lar, skill'ler, 
 - Sonra: LLM katmanı (kalite, çelişki, eskimiş talimat), ajanlar arası tutarlılık, bağlam maliyeti × kullanım (#29).
 
 Epic [#76](https://github.com/halilural/imprimatur/issues/76), ilk iş [#77](https://github.com/halilural/imprimatur/issues/77).
+
+<a id="glossary"></a>
+
+## 11. Proje sözlüğü
+
+Her repo, Mimari ve Ürün'ün yanında üçüncü bir yaşayan doküman tutar: **Sözlük**. Projenin terimleri tek yerde, tek anlamla durur.
+
+- Her terim bir bölümdür: başlık terim, metin tanımı (ne demek, nerede geçer, neyle karışmasın). Terimler alfabetik (Türkçe sıralama) ve numarasız listelenir.
+- Panelde **Sözlük** sekmesi ve başlatıcıda bir düğme: "Yeni terim" ile eklenir, "Düzenle" ile güncellenir; geçmişi bölüm gibi sürümlenir. Kullanılmayan terim silinmez, "Eskimiş say" ile sona iner.
+- Ajan sözlüğü MCP'den okur ve yazar (`doc_get` / `doc_section_upsert`, `kind: "glossary"`). Talimatı: yeni ya da anlamı değişen bir terim sözlüğe yazılır.
+- Repoya `docs/GLOSSARY.md` olarak yazılır; dosyadaki düzenlemeler Mimari/Ürün'deki gibi geri alınır.
