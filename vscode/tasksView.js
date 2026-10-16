@@ -303,11 +303,11 @@ function tasksPage(db, root, view = {}, opts = {}) {
 /**
  * The Bende bekleyenler tab: the user's open records grouped by task, with
  * buckets (answer, do, test by eye, done today). Turn-end asks (waiting.js
- * steps) count into the buckets; their table is drawn by the panel.
+ * steps) are cards too, under the task placeOf finds for them (else "Görevsiz").
  * @param {any} db @param {string} root
- * @param {{all?: boolean, waiting?: Array<{kind: string, state: string, session: string}>, now?: number}} [o]
+ * @param {{all?: boolean, waiting?: any[], now?: number, placeOf?: (step: any) => {task?: string}}} [o]
  */
-function inboxModel(db, root, { all = false, waiting = [], now = Date.now() } = {}) {
+function inboxModel(db, root, { all = false, waiting = [], now = Date.now(), placeOf } = {}) {
   const repos = scopeRepos(db, root, all);
   const byRepo = new Map(repos.map((r) => [r.id, r]));
   // One repo: asked of the database for that repo, so no limit cuts its records off.
@@ -322,20 +322,40 @@ function inboxModel(db, root, { all = false, waiting = [], now = Date.now() } = 
     { id: "test", n: n("test") + turn.filter((w) => w.kind === "verify").length, label: "Elle test", hint: "gözle bakılacaklar" },
     { id: "done", n: done.length, label: "Bugün bitirdin", hint: "ajan görecek" },
   ];
+  // Turn-end asks: the open ones, and the ones you ticked today (like the records you finished).
+  const here = repoOfRoot(db, root);
+  const start = today(now);
+  /** @type {Map<string, any>} */
+  const keyed = new Map();
+  const turnItem = (/** @type {any} */ w) => {
+    const key = placeOf?.(w)?.task;
+    if (key && here && !keyed.has(key)) keyed.set(key, db.taskByKey(here.id, key));
+    const task = key && here ? keyed.get(key) : undefined;
+    // The group names the task: the text need not start with it too ("LATD-13937: …").
+    const title = task && w.text.startsWith(task.key) ? w.text.slice(task.key.length).replace(/^[\s:–—-]+/, "") || w.text : w.text;
+    return { turn: true, kind: TURN_KIND[w.kind] ?? "todo", title, why: w.why, detail: w.detail, prompt: w.prompt, session: w.session, item: w.item, i: w.i,
+      created_at: Date.parse(w.t) || 0, task_id: task ? task.id : 0, repo_id: here?.id };
+  };
+  const turnDone = waiting.filter((w) => w.session !== "todo-files" && w.state === "done" && !w.by && w.at && Date.parse(w.at) >= start);
   /** @type {Map<number, {task: any, repo: any, items: any[]}>} */
   const groups = new Map();
   const add = (/** @type {any} */ r, /** @type {boolean} */ isDone) => {
-    if (!groups.has(r.task_id)) groups.set(r.task_id, { task: db.taskById(r.task_id), repo: byRepo.get(r.repo_id), items: [] });
+    // Task 0: turn-end asks no task is found for.
+    if (!groups.has(r.task_id)) groups.set(r.task_id, { task: r.task_id ? db.taskById(r.task_id) : null, repo: byRepo.get(r.repo_id), items: [] });
     const g = /** @type {any} */ (groups.get(r.task_id));
     // The task's title goes into the search text: a card is found by its task's name too.
-    g.items.push({ ...r, task_title: g.task?.title, age: age(r.created_at, now), done: isDone });
+    g.items.push({ ...r, task_key: r.task_key ?? g.task?.key, task_title: g.task?.title, age: age(r.created_at, now), done: isDone });
   };
   // Questions first (the agent waits on them), then todos, tests; newest first within.
   const rank = { question: 0, todo: 1, test: 2 };
-  open.sort((a, b) => (rank[/** @type {keyof typeof rank} */ (a.kind)] ?? 3) - (rank[/** @type {keyof typeof rank} */ (b.kind)] ?? 3) || b.created_at - a.created_at).forEach((r) => add(r, false));
+  [...open, ...turn.map(turnItem)].sort((a, b) => (rank[/** @type {keyof typeof rank} */ (a.kind)] ?? 3) - (rank[/** @type {keyof typeof rank} */ (b.kind)] ?? 3) || b.created_at - a.created_at).forEach((r) => add(r, false));
   done.forEach((/** @type {any} */ r) => add(r, true));
+  turnDone.map(turnItem).forEach((r) => add(r, true));
   return { all, buckets, groups: [...groups.values()], count: open.length + turn.length, records: open.length, turn: turn.length };
 }
+
+/** A turn-end ask's kind as a card's: what you answer, do or check by eye. */
+const TURN_KIND = /** @type {Record<string, string>} */ ({ question: "question", verify: "test", command: "todo", input: "todo" });
 
 /** Turn-end asks still open; the todo-files log only mirrors records, which count themselves. @param {Array<{session: string, state: string}>} waiting */
 const openTurn = (waiting) => waiting.filter((w) => w.session !== "todo-files" && w.state === "open");
@@ -408,6 +428,7 @@ const stepCount = (text) => {
  * @param {any} r @param {{flash?: number}} [o]
  */
 function askCard(r, o = {}) {
+  if (r.turn) return turnCard(r);
   // On a task page an open todo of yours shows twice (here and in Yapılacaklar): this copy gets its own id.
   const id = `${o.prefix ?? "rec"}-${r.id}`;
   const k = r.kind === "test" ? "test" : r.kind;
@@ -420,6 +441,27 @@ function askCard(r, o = {}) {
     ? `<div class="answer"><textarea rows="2" data-draft="ans-${r.id}" placeholder="Cevabını yaz (Ctrl+Enter gönderir)" aria-label="Cevabın"></textarea><button class="primary" data-act="answer" data-id="${r.id}">Cevapla</button></div>`
     : `<div class="acts"><button class="primary" data-act="rec" data-op="done" data-id="${r.id}">${r.kind === "test" ? "Geçti" : "Yaptım"}</button></div>`;
   return `<article class="card ask${o.flash === r.id ? " flash" : ""}" id="${id}" data-k="r${r.id}" data-nav data-rec="${r.id}" tabindex="0" ${q}>${head}${body}${action}</article>`;
+}
+
+/**
+ * A turn-end ask as a card: asked in the chat, not a record. Its button ticks the
+ * step in the session's waiting log (the panel's "check").
+ * @param {any} r
+ */
+function turnCard(r) {
+  const at = `data-session="${esc(r.session)}" data-item="${esc(r.item)}" data-i="${r.i}"`;
+  const head = `<div class="row1">${kindChip(r.kind)}<span class="ttl">${esc(r.title)}</span><span class="src" title="Ajan bunu turun sonunda sohbette sordu">tur sonu</span><span class="age">${esc(r.age ?? "")}</span></div>`;
+  const q = `data-q="${esc([r.title, r.why, r.prompt, r.task_key, r.task_title].filter(Boolean).join(" "))}" data-b="${r.done ? "done" : esc(r.kind)}"`;
+  const card = `class="card ask turn${r.done ? " done" : ""}" data-k="w${esc(r.session)}:${esc(r.item)}:${r.i}" data-nav tabindex="0" ${q}`;
+  if (r.done)
+    return `<article ${card}>${head}<span class="okline">${icon("check", 14)} Tamamlandı — ajan bir sonraki turda görecek · <a href="#" data-act="turn" data-on="0" ${at}>geri al</a></span></article>`;
+  const more = [
+    r.why ? `<p class="body">${esc(r.why)}</p>` : "",
+    r.prompt ? `<p class="body dim">İstek: ${esc(r.prompt)}</p>` : "",
+    r.detail && r.detail !== r.title ? `<details class="full"><summary>Tam mesaj</summary><pre>${esc(r.detail)}</pre></details>` : "",
+  ].join("");
+  const label = r.kind === "test" ? "Geçti" : r.kind === "question" ? "Cevapladım" : "Yaptım";
+  return `<article ${card}>${head}${more}<div class="acts"><button class="primary" data-act="turn" data-on="1" ${at}>${label}</button></div></article>`;
 }
 
 /** @param {ReturnType<typeof tasksPage>} m */
@@ -539,12 +581,12 @@ function inboxHtml(m) {
   const buckets = `<div class="buckets" role="group" aria-label="Tür" data-k="buckets">${m.buckets.map((b) => `<button class="bucket b-${b.id}" data-k="${b.id}" data-act="ibucket" data-b="${b.id}" aria-pressed="false"><span class="n">${b.n}</span><span class="bl">${b.label}</span><span class="dim">${b.hint}</span></button>`).join("")}</div>`;
   // One chip per task, with what is still open on it: a click shows that task alone (the page script filters).
   const chips = m.groups.length > 1
-    ? `<div class="seg itasks" role="group" aria-label="Görev" data-k="itasks">${m.groups.map((g) => `<button class="fpill" data-act="itask" data-id="${g.task.id}" data-key="${esc(g.task.key)}" aria-pressed="false" title="${esc(g.task.title)}"><span class="mono">${esc(g.task.key)}</span> <span class="dim cnt">${g.items.filter((r) => !r.done).length}</span></button>`).join("")}</div>`
+    ? `<div class="seg itasks" role="group" aria-label="Görev" data-k="itasks">${m.groups.map((g) => `<button class="fpill" data-act="itask" data-id="${g.task?.id ?? -1}" aria-pressed="false" title="${esc(g.task?.title ?? "Görevi bilinmeyen tur sonu soruları")}"><span class="mono">${esc(g.task?.key ?? "Görevsiz")}</span> <span class="dim cnt">${g.items.filter((r) => !r.done).length}</span></button>`).join("")}</div>`
     : "";
   const groups = m.groups.length
-    ? m.groups.map((g) => `<section class="igrp" data-k="g${g.task.id}" data-task="${g.task.id}"><h2>${openTask(g.task.id, g.task.status, g.task.key)}<span>${esc(g.task.title)}</span><span class="dim">${esc(g.repo?.name ?? "")}</span></h2>${g.items.map((r) => askCard(r)).join("")}</section>`).join("")
+    ? m.groups.map((g) => `<section class="igrp" data-k="g${g.task?.id ?? "none"}" data-task="${g.task?.id ?? -1}"><h2 data-k="h">${g.task ? `${openTask(g.task.id, g.task.status, g.task.key)}<span>${esc(g.task.title)}</span>` : `<span>Görevsiz</span><span class="dim">ajanın tur sonunda sorup göreve bağlamadıkları</span>`}<span class="dim">${esc(g.repo?.name ?? "")}</span></h2>${g.items.map((r) => askCard(r)).join("")}</section>`).join("")
     : `<p class="empty" data-k="none">Şu an kayıtlarda senden beklenen bir şey yok.</p>`;
-  return `<div class="inbox" data-k="inbox">${top}${buckets}${chips}<div class="igroups" data-k="groups" data-navgroup="inbox">${groups}<p class="empty" id="ifnone" data-k="ifnone" hidden>Bu filtrede senden beklenen bir şey yok.</p></div><h2 class="turn-h" data-k="turn">Tur sonunda sorulanlar <span class="dim">· ${m.turn} açık</span></h2></div>`;
+  return `<div class="inbox" data-k="inbox">${top}${buckets}${chips}<div class="igroups" data-k="groups" data-navgroup="inbox">${groups}<p class="empty" id="ifnone" data-k="ifnone" hidden>Bu filtrede senden beklenen bir şey yok.</p></div></div>`;
 }
 
 /** @param {ReturnType<typeof homeModel>} m */
@@ -568,7 +610,7 @@ function paneHtml(db, root, view, o = {}) {
   if (!db) return `<p class="empty" data-k="nodb">Imprimatur veritabanı açılamadı: ${esc(o.error ?? "kullanılamıyor")}</p>`;
   if (view.tab === "home") return homeHtml(homeModel(db, root, o));
   if (view.tab === "tasks") return tasksHtml(tasksPage(db, root, view, o));
-  if (view.tab === "inbox") return inboxHtml(inboxModel(db, root, { all: view.all, waiting: o.waiting, now: o.now }));
+  if (view.tab === "inbox") return inboxHtml(inboxModel(db, root, { all: view.all, waiting: o.waiting, now: o.now, placeOf: o.placeOf }));
   if (view.tab === "architecture" || view.tab === "product") {
     const docs = require("./docsView.js");
     return docs.docHtml(docs.docModel(db, root, view.tab, view));
@@ -705,6 +747,9 @@ const TASKS_CSS = `
   .card.ask.done { opacity: .75; } .card.ask.done .ttl { text-decoration: line-through; }
   .okline { font-size: 13px; font-weight: 600; color: var(--vscode-testing-iconPassed); display: inline-flex; align-items: center; gap: 6px; }
   .card.sent { opacity: .6; }
+  .row1 .src { flex: none; font-size: 12px; padding: 0 8px; border-radius: 10px; border: 1px dashed var(--line); color: var(--vscode-descriptionForeground); }
+  .card.turn p.body { margin: 0; }
+  .card.turn details.full summary { cursor: pointer; font-size: 13px; color: var(--vscode-descriptionForeground); } .card.turn details.full pre { white-space: pre-wrap; font-size: 12px; max-height: 320px; overflow: auto; }
   .flash { animation: flash 1.6s ease-out 1; }
   @keyframes flash { 0%, 30% { box-shadow: 0 0 0 2px var(--acc); background: color-mix(in srgb, var(--acc) 22%, transparent); } 100% { box-shadow: 0 0 0 0 transparent; } }
   /* Görevler */
