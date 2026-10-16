@@ -394,7 +394,7 @@ function health(db, repoId) {
   const docs = {};
   for (const kind of Object.keys(h)) docs[kind] = { ...h[kind], conflicts: conflicts[kind] ?? [] };
   const parts = Object.entries(docs).flatMap(([kind, d]) => {
-    const label = kind === "architecture" ? "architecture" : "product";
+    const label = kind;
     const rk = kind === "architecture" ? "ADR" : "PDR";
     const bits = [
       d.unlinked && `${d.sections} section${d.sections === 1 ? "" : "s"}, ${d.unlinked} ${rk}${d.unlinked === 1 ? "" : "s"} no section links`,

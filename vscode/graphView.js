@@ -290,7 +290,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   .todo .chat { font-size: 10px; padding: 0 5px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
 </style></head><body>
 <header><span class="brand">${tasksView.icon("stamp", 20)}<strong>Imprimatur</strong><span class="dim">/</span><span>${esc(opts.repoName ?? path.basename(root))}</span></span>
-<nav aria-label="Görünümler"><button data-tab="home">Ana sayfa</button><button data-tab="tasks">Görevler</button><button data-tab="inbox">Bende bekleyenler ${inbox ? `<span class="badge">${inbox}</span>` : ""}</button><button data-tab="architecture">Mimari</button><button data-tab="product">Ürün</button><button data-tab="edits">Ajan değişiklikleri ${pending ? `<span class="badge">${pending}</span>` : ""}</button></nav>
+<nav aria-label="Görünümler"><button data-tab="home">Ana sayfa</button><button data-tab="tasks">Görevler</button><button data-tab="inbox">Bende bekleyenler ${inbox ? `<span class="badge">${inbox}</span>` : ""}</button><button data-tab="architecture">Mimari</button><button data-tab="product">Ürün</button><button data-tab="glossary">Sözlük</button><button data-tab="edits">Ajan değişiklikleri ${pending ? `<span class="badge">${pending}</span>` : ""}</button></nav>
 <input id="filter" type="search" aria-label="Ara" placeholder="Ara… (/)"><button id="audit" class="acc on" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">Audit</button><button id="scan" class="acc on" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">Scan history</button>
 <span class="n" id="count-edits">${data.rows.filter((r) => !r.record && !r.activity).length} edits · ${data.rows.filter((r) => r.activity).length} other calls · ${data.rows.filter((r) => r.record).length} record changes · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span></header>
 <section id="edits"${tab === "edits" ? "" : " hidden"}><div id="kinds">${chips}</div><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
@@ -347,7 +347,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   const state = Object.assign({ tab: "edits", qs: {}, expanded: [], kinds: ${JSON.stringify(Object.fromEntries(Object.keys({ edit: 1, record: 1, agent: 1, skill: 1, web: 1, mcp: 1, read: 0, search: 0, bash: 0, other: 0 }).map((k) => [k, ["edit", "record", "agent", "skill", "web", "mcp"].includes(k)])))}, agents: [], drafts: {}, back: [], showDone: [], old: [], edit: null }, vscode.getState(), ${JSON.stringify(view).replace(/</g, "\\u003c")}, { root: ${JSON.stringify(root).replace(/</g, "\\u003c")} });
   if (typeof state.q === "string") { state.qs.edits = state.qs.edits ?? state.q; delete state.q; }
   const filter = document.getElementById("filter");
-  const HINTS = { home: "Görevlerde ara… (/)", tasks: "Görev, karar, soru ara… (/)", inbox: "Bekleyenlerde ara… (/)", architecture: "Bölümlerde ara… (/)", product: "Bölümlerde ara… (/)", edits: "Dosya, istek ya da cevap süz… (/)" };
+  const HINTS = { home: "Görevlerde ara… (/)", tasks: "Görev, karar, soru ara… (/)", inbox: "Bekleyenlerde ara… (/)", architecture: "Bölümlerde ara… (/)", product: "Bölümlerde ara… (/)", glossary: "Terimlerde ara… (/)", edits: "Dosya, istek ya da cevap süz… (/)" };
   // The document tabs' mermaid blocks (#72): drawn with the extension's mermaid, loaded
   // once on the first block, into a shadow root of their div. The block patching compares
   // outerHTML, which leaves a shadow root out: a refresh neither redraws nor flickers, and a
@@ -697,7 +697,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     }
   });
   // Keyboard (#69): j/k move in the list, Enter opens, x ticks, a answers, / searches, Esc goes back.
-  const NAV = { tasks: "#pane .rows", inbox: '#pane [data-navgroup="inbox"]', home: '#pane [data-navgroup="home"]', architecture: '#pane [data-navgroup="doc"]', product: '#pane [data-navgroup="doc"]' };
+  const NAV = { tasks: "#pane .rows", inbox: '#pane [data-navgroup="inbox"]', home: '#pane [data-navgroup="home"]', architecture: '#pane [data-navgroup="doc"]', product: '#pane [data-navgroup="doc"]', glossary: '#pane [data-navgroup="doc"]' };
   const visible = (el) => !el.hidden && el.offsetParent !== null;
   const move = (step) => {
     const at = document.activeElement?.closest?.("[data-nav]");
@@ -720,7 +720,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     if (typing) {
       if (t.matches("textarea[data-draft]") && e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        const doc = /^doc-(architecture|product)-(new|\\d+)$/.exec(t.dataset.draft);
+        const doc = /^doc-(architecture|product|glossary)-(new|\\d+)$/.exec(t.dataset.draft);
         return doc ? saveDoc(doc[1], doc[2]) : sendAnswer(t.dataset.draft.slice(4));
       }
       if (t.matches("input[data-add]") && e.key === "Enter") { e.preventDefault(); return sendAdd(t); }

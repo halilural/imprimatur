@@ -1,6 +1,6 @@
 // @ts-check
-// Design documents in the Imprimatur panel (#72): the "Mimari" (architecture) and
-// "Ürün" (product) tabs. A living document per repo and kind, in sections the agent
+// Design documents in the Imprimatur panel (#72): the "Mimari" (architecture), "Ürün"
+// (product) and "Sözlük" (glossary: one section per term, alphabetical) tabs. A living document per repo and kind, in sections the agent
 // writes through MCP (doc_section_upsert) and the user edits here; records (adr,
 // pdr, decision, …) contribute to sections. Pure like tasksView.js: the builders
 // take a database connection and return a model or HTML; the panel (graphView.js)
@@ -8,8 +8,8 @@
 "use strict";
 const { DOC_KINDS, SECTION_BODY_MAX } = require("./db.js");
 
-const DOC_TABS = /** @type {const} */ (["architecture", "product"]);
-const TAB_LABEL = { architecture: "Mimari", product: "Ürün" };
+const DOC_TABS = /** @type {const} */ (["architecture", "product", "glossary"]);
+const TAB_LABEL = { architecture: "Mimari", product: "Ürün", glossary: "Sözlük" };
 const WHO_TR = { user: "Sen", agent: "Ajan", hook: "Hook", import: "Eşitleme" };
 const FIELD_TR = { title: "başlık", body: "metin", position: "sıra", status: "durum", records: "katkı veren kayıtlar" };
 
@@ -154,7 +154,7 @@ function slugify(title) {
 
 /** The panel's edit state for this kind: a section id, "new", or undefined. @param {unknown} edit @param {string} kind */
 function editOf(edit, kind) {
-  const m = /^(architecture|product):(new|\d+)$/.exec(String(edit ?? ""));
+  const m = /^(architecture|product|glossary):(new|\d+)$/.exec(String(edit ?? ""));
   if (!m || m[1] !== kind) return undefined;
   return m[2] === "new" ? "new" : Number(m[2]);
 }
@@ -176,7 +176,7 @@ const repoOf = (db, root) => require("./tasksView.js").repoOfRoot(db, root);
 /**
  * One document tab's model. Reading never creates the document: an empty one shows until
  * the agent or the user writes its first section.
- * @param {any} db @param {string} root @param {string} kind "architecture" | "product"
+ * @param {any} db @param {string} root @param {string} kind "architecture" | "product" | "glossary"
  * @param {{edit?: string | null, docFlash?: string | null}} [view]
  */
 function docModel(db, root, kind, view = {}) {
@@ -190,7 +190,8 @@ function docModel(db, root, kind, view = {}) {
   const shape = (/** @type {any} */ s) => {
     const current = s.status === "current";
     return {
-      id: s.id, key: s.key, title: s.title, status: s.status, n: current ? ++n : null,
+      // Terms are not numbered: the glossary reads alphabetically.
+      id: s.id, key: s.key, title: s.title, status: s.status, n: current && kind !== "glossary" ? ++n : null,
       body: s.body ?? "", html: renderMarkdown(s.body),
       contributors: s.contributors.map((/** @type {any} */ r) => ({
         id: r.id, kind: r.kind, label: /** @type {any} */ (KIND_LABEL)[r.kind] ?? r.kind, title: r.title, task: r.task_key, status: r.status,
@@ -210,7 +211,7 @@ function docModel(db, root, kind, view = {}) {
     current, superseded, adding: edit === "new", empty: !sections.length,
     // The repo's docs/ file someone wrote by hand: the export leaves it alone (#72).
     manual: require("./docs-export.js").fileState(root, kind) === "manual"
-      ? `docs/${kind === "architecture" ? "ARCHITECTURE" : "PRODUCT"}.md` : undefined,
+      ? `docs/${/** @type {any} */ (require("./docs-export.js").FILES)[kind]}` : undefined,
   };
 }
 
@@ -219,8 +220,9 @@ function docModel(db, root, kind, view = {}) {
 /** @param {ReturnType<typeof docModel>} m @param {any} s */
 function editorHtml(m, s) {
   const id = s ? s.id : "new";
-  return `<div class="deditor" data-k="ed"><input class="dtitle" data-draft="doct-${m.kind}-${id}" value="${esc(s?.title ?? "")}" placeholder="Bölüm başlığı" aria-label="Bölüm başlığı">
-<textarea data-draft="doc-${m.kind}-${id}" rows="14" placeholder="Markdown (### alt başlık, listeler, kod, tablo)" aria-label="Bölüm metni (Markdown)">${esc(s?.body ?? "")}</textarea>
+  const g = m.kind === "glossary";
+  return `<div class="deditor" data-k="ed"><input class="dtitle" data-draft="doct-${m.kind}-${id}" value="${esc(s?.title ?? "")}" placeholder="${g ? "Terim" : "Bölüm başlığı"}" aria-label="${g ? "Terim" : "Bölüm başlığı"}">
+<textarea data-draft="doc-${m.kind}-${id}" rows="${g ? 6 : 14}" placeholder="${g ? "Tanımı (Markdown): ne demek, nerede geçer, neyle karışmasın" : "Markdown (### alt başlık, listeler, kod, tablo)"}" aria-label="${g ? "Terimin tanımı (Markdown)" : "Bölüm metni (Markdown)"}">${esc(s?.body ?? "")}</textarea>
 <div class="acts"><button class="primary" data-act="docSave" data-kind="${m.kind}" data-id="${id}">Kaydet</button><button class="ghost" data-act="docCancel" data-kind="${m.kind}" data-id="${id}">Vazgeç</button><span class="hint">Ctrl+Enter kaydeder · Esc kutudan çıkar</span></div></div>`;
 }
 
@@ -229,7 +231,7 @@ function sectionHtml(m, s) {
   const { kindChip, icon } = require("./tasksView.js");
   const q = esc([s.title, s.body, ...s.contributors.map((/** @type {any} */ r) => `${r.title} ${r.task}`)].join(" "));
   const acts = s.editing ? "" : `<div class="dacts"><button class="ghost" data-act="docEdit" data-kind="${m.kind}" data-id="${s.id}">Düzenle</button><button class="link" data-act="docStatus" data-id="${s.id}" data-status="${s.status === "current" ? "superseded" : "current"}">${s.status === "current" ? "Eskimiş say" : "Güncel yap"}</button></div>`;
-  const body = s.editing ? editorHtml(m, s) : s.html ? `<div class="md">${s.html}</div>` : '<p class="empty">Bu bölüm henüz boş.</p>';
+  const body = s.editing ? editorHtml(m, s) : s.html ? `<div class="md">${s.html}</div>` : `<p class="empty">${m.kind === "glossary" ? "Tanımı henüz yazılmadı." : "Bu bölüm henüz boş."}</p>`;
   // Folded by default: the section text is the point, the records are its trail.
   const contrib = s.contributors.length
     ? `<details class="contrib"><summary>Dayandığı kayıtlar · ${s.contributors.length}</summary><div class="rchips">${s.contributors.map((/** @type {any} */ r) => `<a href="#" class="rchip${r.status === "dropped" ? " gone" : ""}" data-act="showRecord" data-id="${r.id}" title="Görevler'de göster">${kindChip(r.kind, r.label)}<span class="rt">${esc(r.title)}</span><span class="mono dim">${esc(r.task)}</span></a>`).join("")}</div></details>`
@@ -238,21 +240,24 @@ function sectionHtml(m, s) {
     ? `<details class="hist"><summary>Geçmiş · ${s.versions.length}</summary>${s.versions.map((/** @type {any} */ v) => `<div class="ev"><span class="when">${esc(when(v.at))}</span><span class="who w-${esc(v.kind)}">${esc(v.who)}</span><span class="what">${esc(v.what)}</span></div>`).join("")}</details>`
     : "";
   return `<article class="dsec${s.status !== "current" ? " old" : ""}${s.flash ? " flash" : ""}" id="sec-${esc(s.key)}" data-k="s${s.id}" data-nav tabindex="0" data-q="${q}">
-<div class="dsec-h"><h2>${s.n ? `<span class="num">${s.n}.</span>` : `${icon("file", 14)}`}${esc(s.title)}</h2>${acts}</div>${body}${contrib}${hist}</article>`;
+<div class="dsec-h"><h2>${s.n ? `<span class="num">${s.n}.</span>` : s.status === "current" ? "" : `${icon("file", 14)}`}${esc(s.title)}</h2>${acts}</div>${body}${contrib}${hist}</article>`;
 }
 
 /** @param {ReturnType<typeof docModel>} m */
 function docHtml(m) {
   const { icon } = require("./tasksView.js");
-  const toc = `<aside class="dtoc" data-k="toc" data-scroll="dtoc" aria-label="İçindekiler"><div class="lbl" data-k="h">İçindekiler</div><ol data-k="list">${m.current.map((s) => `<li data-k="t${s.id}" data-q="${esc(`${s.title} ${s.body}`)}"><a href="#sec-${esc(s.key)}" data-act="docGo" data-key="${esc(s.key)}"><span class="num">${s.n}</span><span>${esc(s.title)}</span></a></li>`).join("") || '<li data-k="none" class="dim">Bölüm yok</li>'}</ol>${m.superseded.length ? `<a href="#sec-__old" class="dold" data-k="old" data-act="docGo" data-key="__old">Eskimiş bölümler · ${m.superseded.length}</a>` : ""}<button class="dashed" data-k="new" data-act="docEdit" data-kind="${m.kind}" data-id="new">${icon("plus")} Yeni bölüm</button></aside>`;
+  const g = m.kind === "glossary";
+  const toc = `<aside class="dtoc" data-k="toc" data-scroll="dtoc" aria-label="${g ? "Terimler" : "İçindekiler"}"><div class="lbl" data-k="h">${g ? `Terimler · ${m.current.length}` : "İçindekiler"}</div><ol data-k="list">${m.current.map((s) => `<li data-k="t${s.id}" data-q="${esc(`${s.title} ${s.body}`)}"><a href="#sec-${esc(s.key)}" data-act="docGo" data-key="${esc(s.key)}">${s.n ? `<span class="num">${s.n}</span>` : ""}<span>${esc(s.title)}</span></a></li>`).join("") || `<li data-k="none" class="dim">${g ? "Terim yok" : "Bölüm yok"}</li>`}</ol>${m.superseded.length ? `<a href="#sec-__old" class="dold" data-k="old" data-act="docGo" data-key="__old">${g ? "Eskimiş terimler" : "Eskimiş bölümler"} · ${m.superseded.length}</a>` : ""}<button class="dashed" data-k="new" data-act="docEdit" data-kind="${m.kind}" data-id="new">${icon("plus")} ${g ? "Yeni terim" : "Yeni bölüm"}</button></aside>`;
   const head = `<section class="dhead" data-k="head"><span class="lbl">${esc(m.label)} · ${esc(m.repoName)}</span><h1>${esc(m.title)}</h1><p class="lead">${m.last ? `Son güncelleme · ${esc(when(m.last.at))} · ${esc(m.last.who)}` : "Henüz güncellenmedi"}</p>${m.manual ? `<p class="dnote">${esc(m.manual)} elle yazılmış, üzerine yazılmadı</p>` : ""}</section>`;
-  const empty = m.empty && !m.adding
+  const empty = m.empty && !m.adding && g
+    ? `<div class="card dempty" data-k="empty"><p>Sözlük henüz boş. Ajan, projede yeni bir terim ortaya çıktığında ya da bir terimin anlamı değiştiğinde onu <span class="mono">doc_section_upsert</span> ile burada yazar.</p><p class="dim">Sen de soldan "Yeni terim" ile ekleyebilirsin. Sözlük repoya docs/GLOSSARY.md olarak da yazılır.</p></div>`
+    : m.empty && !m.adding
     ? `<div class="card dempty" data-k="empty"><p>Bu doküman henüz boş. Ajan, bir ${m.kind === "architecture" ? "ADR" : "PDR"} ya da karar eklediğinde ilgili bölümü <span class="mono">doc_section_upsert</span> ile burada yazar ve kaydı bağlar.</p><p class="dim">Sen de soldan "Yeni bölüm" ile bir bölüm ekleyebilirsin. Doküman repoya docs/${m.kind === "architecture" ? "ARCHITECTURE" : "PRODUCT"}.md olarak da yazılır.</p></div>`
     : "";
-  const adding = m.adding ? `<section class="dsec adding" data-k="new"><div class="dsec-h"><h2>Yeni bölüm</h2></div>${editorHtml(m, undefined)}</section>` : "";
+  const adding = m.adding ? `<section class="dsec adding" data-k="new"><div class="dsec-h"><h2>${g ? "Yeni terim" : "Yeni bölüm"}</h2></div>${editorHtml(m, undefined)}</section>` : "";
   const sections = m.current.map((s) => sectionHtml(m, s)).join("");
   const old = m.superseded.length
-    ? `<details class="dolds" id="sec-__old" data-k="old"${m.superseded.some((s) => s.editing || s.flash) ? " open" : ""}><summary>Eskimiş bölümler · ${m.superseded.length}</summary>${m.superseded.map((s) => sectionHtml(m, s)).join("")}</details>`
+    ? `<details class="dolds" id="sec-__old" data-k="old"${m.superseded.some((s) => s.editing || s.flash) ? " open" : ""}><summary>${g ? "Eskimiş terimler" : "Eskimiş bölümler"} · ${m.superseded.length}</summary>${m.superseded.map((s) => sectionHtml(m, s)).join("")}</details>`
     : "";
   return `<div class="doc" data-k="doc-${m.kind}">${toc}<main class="dpage" data-k="page" data-navgroup="doc">${head}${empty}${adding}${sections}${old}</main></div>`;
 }

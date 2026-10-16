@@ -169,6 +169,61 @@ const MIGRATIONS = [
   );
   CREATE INDEX doc_versions_section ON doc_versions(section_id, at);
   `,
+  // The project glossary: a third document kind, one section per term. SQLite cannot change
+  // a CHECK in place, so the four document tables are rebuilt: the new ones made and filled,
+  // the old ones dropped child first (no foreign key breaks), the new ones renamed (their
+  // references follow the renames).
+  `
+  CREATE TABLE documents_new (
+    id INTEGER PRIMARY KEY,
+    uid TEXT NOT NULL UNIQUE,
+    repo_id INTEGER NOT NULL REFERENCES repos(id),
+    kind TEXT NOT NULL CHECK (kind IN ('architecture', 'product', 'glossary')),
+    title TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE (repo_id, kind)
+  );
+  CREATE TABLE doc_sections_new (
+    id INTEGER PRIMARY KEY,
+    uid TEXT NOT NULL UNIQUE,
+    doc_id INTEGER NOT NULL REFERENCES documents_new(id),
+    key TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    position REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'current' CHECK (status IN ('current', 'superseded')),
+    updated_at INTEGER NOT NULL,
+    UNIQUE (doc_id, key)
+  );
+  CREATE TABLE doc_section_records_new (
+    section_id INTEGER NOT NULL REFERENCES doc_sections_new(id),
+    record_id INTEGER NOT NULL REFERENCES records(id),
+    PRIMARY KEY (section_id, record_id)
+  ) WITHOUT ROWID;
+  CREATE TABLE doc_versions_new (
+    id INTEGER PRIMARY KEY,
+    section_id INTEGER NOT NULL REFERENCES doc_sections_new(id),
+    at INTEGER NOT NULL,
+    actor_kind TEXT NOT NULL CHECK (actor_kind IN (${ACTORS.map((k) => `'${k}'`).join(", ")})),
+    actor TEXT,
+    before TEXT,
+    after TEXT
+  );
+  INSERT INTO documents_new SELECT id, uid, repo_id, kind, title, updated_at FROM documents;
+  INSERT INTO doc_sections_new SELECT id, uid, doc_id, key, title, body, position, status, updated_at FROM doc_sections;
+  INSERT INTO doc_section_records_new SELECT section_id, record_id FROM doc_section_records;
+  INSERT INTO doc_versions_new SELECT id, section_id, at, actor_kind, actor, before, after FROM doc_versions;
+  DROP TABLE doc_versions;
+  DROP TABLE doc_section_records;
+  DROP TABLE doc_sections;
+  DROP TABLE documents;
+  ALTER TABLE documents_new RENAME TO documents;
+  ALTER TABLE doc_sections_new RENAME TO doc_sections;
+  ALTER TABLE doc_section_records_new RENAME TO doc_section_records;
+  ALTER TABLE doc_versions_new RENAME TO doc_versions;
+  CREATE INDEX doc_section_records_record ON doc_section_records(record_id);
+  CREATE INDEX doc_versions_section ON doc_versions(section_id, at);
+  `,
 ];
 const VERSION = MIGRATIONS.length;
 
@@ -183,8 +238,8 @@ const SYNC_FIELDS = {
   record: ["task", "kind", "owner", "status", "title", "body", "position", "parent", "links", "created_at"],
   section: ["title", "body", "position", "status", "records"],
 };
-/** Design documents (#72): kind → the title a new one gets. */
-const DOC_KINDS = { architecture: "Mimari Tasarım Dokümanı", product: "Ürün Tasarım Dokümanı" };
+/** Design documents (#72) and the project glossary: kind → the title a new one gets. */
+const DOC_KINDS = { architecture: "Mimari Tasarım Dokümanı", product: "Ürün Tasarım Dokümanı", glossary: "Proje Sözlüğü" };
 const SECTION_STATUSES = ["current", "superseded"];
 /**
  * A section's body and title, at most (#72): the body JSON-encoded stays under the sync
@@ -891,16 +946,17 @@ class Db {
 
   /**
    * How a repo's design documents stand (#74): per kind its current sections and the ADRs
-   * (architecture) or PDRs (product), not dropped, that no current section links.
+   * (architecture) or PDRs (product), not dropped, that no current section links. The
+   * glossary has no record kind of its own: its unlinked is always 0.
    * @param {number} repoId @returns {Record<string, {sections: number, unlinked: number}>}
    */
   docHealth(repoId) {
     /** @type {Record<string, {sections: number, unlinked: number}>} */
     const out = {};
-    for (const [kind, rk] of /** @type {const} */ ([["architecture", "adr"], ["product", "pdr"]])) {
+    for (const [kind, rk] of /** @type {const} */ ([["architecture", "adr"], ["product", "pdr"], ["glossary", null]])) {
       const doc = this.docFind(repoId, kind);
       const sections = doc ? this.q("SELECT count(*) AS n FROM doc_sections WHERE doc_id = ? AND status = 'current'").get(doc.id).n : 0;
-      const unlinked = this.q(`SELECT count(*) AS n FROM records r JOIN tasks t ON t.id = r.task_id
+      const unlinked = rk === null ? 0 : this.q(`SELECT count(*) AS n FROM records r JOIN tasks t ON t.id = r.task_id
                                WHERE t.repo_id = ? AND r.kind = ? AND r.status != 'dropped'
                                  AND NOT EXISTS (SELECT 1 FROM doc_section_records l JOIN doc_sections s ON s.id = l.section_id
                                                  WHERE l.record_id = r.id AND s.status = 'current')`).get(repoId, rk).n;
@@ -1014,7 +1070,7 @@ class Db {
 
   /**
    * A repo's document of this kind, created on first use with its default title.
-   * @param {number} repoId @param {string} kind "architecture" | "product"
+   * @param {number} repoId @param {string} kind "architecture" | "product" | "glossary"
    */
   docOf(repoId, kind) {
     if (!Object.hasOwn(DOC_KINDS, kind)) throw new Error(`Imprimatur: document kind must be one of ${Object.keys(DOC_KINDS).join(", ")}`);
@@ -1038,10 +1094,13 @@ class Db {
                           FROM doc_section_records l JOIN doc_sections s ON s.id = l.section_id
                           JOIN records r ON r.id = l.record_id JOIN tasks t ON t.id = r.task_id
                           WHERE s.doc_id = ? ORDER BY r.id`).all(docId);
-    return this.q("SELECT * FROM doc_sections WHERE doc_id = ? ORDER BY position, id").all(docId).map((/** @type {any} */ s) => {
+    const out = this.q("SELECT * FROM doc_sections WHERE doc_id = ? ORDER BY position, id").all(docId).map((/** @type {any} */ s) => {
       const mine = links.filter((/** @type {any} */ l) => l.section_id === s.id).map(({ section_id, ...r }) => r);
       return { ...s, records: mine.map((r) => r.id), contributors: mine };
     });
+    // The glossary reads alphabetically, whatever order its terms were written in.
+    if (this.docById(docId)?.kind === "glossary") out.sort((a, b) => a.title.localeCompare(b.title, "tr", { sensitivity: "base" }) || a.id - b.id);
+    return out;
   }
 
   /** One section with its records, by document and key. @param {number} docId @param {string} key */

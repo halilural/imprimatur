@@ -14,6 +14,7 @@ const ROWS = [
   { id: "inbox", label: "Bende bekleyenler", icon: "bell", command: "imprimatur.openInbox", tooltip: "Ajanın senden beklediği her şey" },
   { id: "architecture", label: "Mimari", icon: "symbol-structure", command: "imprimatur.openArchitecture", tooltip: "Mimari tasarım dokümanı: nasıl kurulu" },
   { id: "product", label: "Ürün", icon: "package", command: "imprimatur.openProduct", tooltip: "Ürün tasarım dokümanı: kullanıcı ne alıyor" },
+  { id: "glossary", label: "Sözlük", icon: "book", command: "imprimatur.openGlossary", tooltip: "Proje sözlüğü: terimler ve anlamları" },
   { id: "edits", label: "Ajan değişiklikleri", icon: "git-merge", command: "imprimatur.openGraph", tooltip: "Agent Change Graph: ajanın düzenlemeleri" },
 ];
 

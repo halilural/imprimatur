@@ -72,7 +72,7 @@ test("where_we_left_off and session start tell how the design documents stand", 
   const pdr = db.addRecord(task.id, { kind: "pdr", title: "Tabs" }, agent);
   db.upsertSection(db.docOf(repo.id, "product").id, "tabs", { title: "Tabs", addRecords: [pdr.id] }, agent);
   const out = callTool(db, "where_we_left_off", { repo: root });
-  assert.deepEqual(out.docs, { architecture: { sections: 0, unlinked: 2, conflicts: [] }, product: { sections: 1, unlinked: 0, conflicts: [] } });
+  assert.deepEqual(out.docs, { architecture: { sections: 0, unlinked: 2, conflicts: [] }, product: { sections: 1, unlinked: 0, conflicts: [] }, glossary: { sections: 0, unlinked: 0, conflicts: [] } });
   assert.match(out.docs_problem, /^Design documents: architecture: 0 sections, 2 ADRs no section links\./);
   assert.match(digest("where_we_left_off", out), /\nDesign documents: architecture: 0 sections, 2 ADRs/);
   assert.match(run("SessionStart").context.join("\n"), /Design documents: architecture: 0 sections, 2 ADRs no section links/);
