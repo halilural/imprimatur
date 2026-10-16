@@ -326,7 +326,9 @@ function inboxModel(db, root, { all = false, waiting = [], now = Date.now() } = 
   const groups = new Map();
   const add = (/** @type {any} */ r, /** @type {boolean} */ isDone) => {
     if (!groups.has(r.task_id)) groups.set(r.task_id, { task: db.taskById(r.task_id), repo: byRepo.get(r.repo_id), items: [] });
-    /** @type {any} */ (groups.get(r.task_id)).items.push({ ...r, age: age(r.created_at, now), done: isDone });
+    const g = /** @type {any} */ (groups.get(r.task_id));
+    // The task's title goes into the search text: a card is found by its task's name too.
+    g.items.push({ ...r, task_title: g.task?.title, age: age(r.created_at, now), done: isDone });
   };
   // Questions first (the agent waits on them), then todos, tests; newest first within.
   const rank = { question: 0, todo: 1, test: 2 };
@@ -399,7 +401,7 @@ function askCard(r, o = {}) {
   const k = r.kind === "test" ? "test" : r.kind;
   const head = `<div class="row1">${kindChip(k)}<span class="ttl">${esc(r.title)}</span><span class="age">${esc(r.age ?? "")}</span></div>`;
   const body = r.body ? `<div class="body">${esc(r.body)}</div>` : "";
-  const q = `data-q="${esc([r.title, r.body, r.task_key].filter(Boolean).join(" "))}"`;
+  const q = `data-q="${esc([r.title, r.body, r.task_key, r.task_title].filter(Boolean).join(" "))}"`;
   if (r.done)
     return `<article class="card ask done" id="${id}" data-k="r${r.id}" data-nav tabindex="0" ${q}>${head}<span class="okline">${icon("check", 14)} Tamamlandı — ajan bir sonraki turda görecek · <a href="#" data-act="rec" data-op="open" data-id="${r.id}">geri al</a></span></article>`;
   const action = r.kind === "question"
@@ -522,10 +524,14 @@ function inboxHtml(m) {
   const seg = `<div class="seg" role="group" aria-label="Kapsam"><button class="fpill${m.all ? "" : " on"}" data-act="scope" data-all="0" aria-pressed="${!m.all}">Bu repo</button><button class="fpill${m.all ? " on" : ""}" data-act="scope" data-all="1" aria-pressed="${m.all}">Bütün repolar</button></div>`;
   const top = `<div class="toprow" data-k="top"><div><h1>Bende bekleyenler</h1><p class="lead">Ajanın senden beklediği her şey, görev görev. Cevaplayınca ya da yapınca ajan bir sonraki turda görür.</p></div>${seg}</div>`;
   const buckets = `<div class="buckets" data-k="buckets">${m.buckets.map((b) => `<div class="bucket b-${b.id}" data-k="${b.id}"><span class="n">${b.n}</span><span class="bl">${b.label}</span><span class="dim">${b.hint}</span></div>`).join("")}</div>`;
+  // One chip per task, with what is still open on it: a click shows that task alone (the page script filters).
+  const chips = m.groups.length > 1
+    ? `<div class="seg itasks" role="group" aria-label="Görev" data-k="itasks">${m.groups.map((g) => `<button class="fpill" data-act="itask" data-id="${g.task.id}" aria-pressed="false" title="${esc(g.task.title)}"><span class="mono">${esc(g.task.key)}</span> <span class="dim">${g.items.filter((r) => !r.done).length}</span></button>`).join("")}</div>`
+    : "";
   const groups = m.groups.length
-    ? m.groups.map((g) => `<section class="igrp" data-k="g${g.task.id}"><h2>${openTask(g.task.id, g.task.status, g.task.key)}<span>${esc(g.task.title)}</span><span class="dim">${esc(g.repo?.name ?? "")}</span></h2>${g.items.map((r) => askCard(r)).join("")}</section>`).join("")
+    ? m.groups.map((g) => `<section class="igrp" data-k="g${g.task.id}" data-task="${g.task.id}"><h2>${openTask(g.task.id, g.task.status, g.task.key)}<span>${esc(g.task.title)}</span><span class="dim">${esc(g.repo?.name ?? "")}</span></h2>${g.items.map((r) => askCard(r)).join("")}</section>`).join("")
     : `<p class="empty" data-k="none">Şu an kayıtlarda senden beklenen bir şey yok.</p>`;
-  return `<div class="inbox" data-k="inbox">${top}${buckets}<div class="igroups" data-k="groups" data-navgroup="inbox">${groups}</div><h2 class="turn-h" data-k="turn">Tur sonunda sorulanlar <span class="dim">· ${m.turn} açık</span></h2></div>`;
+  return `<div class="inbox" data-k="inbox">${top}${buckets}${chips}<div class="igroups" data-k="groups" data-navgroup="inbox">${groups}</div><h2 class="turn-h" data-k="turn">Tur sonunda sorulanlar <span class="dim">· ${m.turn} açık</span></h2></div>`;
 }
 
 /** @param {ReturnType<typeof homeModel>} m */
