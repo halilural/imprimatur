@@ -980,7 +980,9 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   const swap = (a, b) => {
     const act = document.activeElement;
     const inside = act && act !== document.body && a.contains(act);
-    const focus = inside && { draft: act.dataset?.draft, id: act.id, s: act.selectionStart, e: act.selectionEnd };
+    // A step's box has no id: found again by its record and line.
+    const step = inside && act.matches?.("input.mdstep") ? '[data-body="' + act.closest("[data-body]")?.dataset.body + '"] input.mdstep[data-line="' + act.dataset.line + '"]' : null;
+    const focus = inside && { draft: act.dataset?.draft, id: act.id, step, s: act.selectionStart, e: act.selectionEnd };
     const scrolls = [a, ...a.querySelectorAll("[data-scroll]")].filter((x) => x.dataset?.scroll).map((x) => [x.dataset.scroll, x.scrollTop]);
     a.replaceWith(b);
     restoreDrafts(b);
@@ -989,7 +991,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       if (x) x.scrollTop = top;
     }
     if (focus) {
-      const again = focus.draft ? b.querySelector('[data-draft="' + focus.draft + '"]') : focus.id ? document.getElementById(focus.id) : null;
+      const again = focus.draft ? b.querySelector('[data-draft="' + focus.draft + '"]') : focus.id ? document.getElementById(focus.id) : focus.step ? b.querySelector(focus.step) : null;
       if (again) {
         again.focus({ preventScroll: true });
         if (focus.s != null && again.setSelectionRange) try { again.setSelectionRange(focus.s, focus.e); } catch {}
