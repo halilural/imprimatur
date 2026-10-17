@@ -26,6 +26,7 @@
 20. [Recommendations: proje best practice incelemesi (#86, #87)](#best-practice-review)
 21. [Tasarım dokümanlarının tek seferlik doldurulması (backfill)](#docs-backfill)
 22. [Geçmiş taraması ve TODO.md görev takibi](#history-scan-todo)
+23. [Panel tasarım katmanı: tema değişkenleri, ikonlar, maskot](#ui-design)
 
 <a id="overview"></a>
 
@@ -678,3 +679,26 @@ Panelin "Scan history" düğmesi (ve bir projede panel ilk açıldığında kend
 - Görev klasörü `docs/todos/<anahtar>/TODO.md`; eski repolar için `todos/<anahtar>/TODO.md` de okunur (`TODO_DIRS`, yeni önce).
 - `todoFiles(root)` kök TODO.md'yi ve iki yerleşimdeki klasörleri döner; `todoOfKey(root, key)` ikisinde de varsa yeniyi seçer; `taskOfFile(file)` görev şeridini (`(docs/)todos/<anahtar>/…`) çıkarır.
 - Görev şeritleri, başlık, Jira adresi, `TODO: (K)` istekleri ve TODO.md bitişiyle kapanış bu yolları kullanır. Kökte yalnız README.md, CLAUDE.md, AGENTS.md, LICENSE kalır.
+
+<a id="ui-design"></a>
+
+## 23. Panel tasarım katmanı: tema değişkenleri, ikonlar, maskot
+
+Panelin görünümü üç küçük modülden gelir. Hepsi düz CommonJS; build adımı gerektirmez, CSP'ye takılmaz.
+
+- **`vscode/theme.js` (THEME_CSS):** `body` üzerinde tasarım değişkenleri tanımlar:
+  - `--acc`, tema tipine göre: açık `#c2410c`, koyu `#fb923c`, yüksek kontrast `#ffa94d` / `#9a3412`.
+  - `--acc-ink` (vurgu üstündeki yazı), `--acc-soft`, `--acc-line`.
+  - `--surface`, `--surface-2`, `--line`, `--muted`, `--shadow` (yüksek kontrastta yok).
+  - `--r-*` köşeler, `--fs-*` yazı ölçeği.
+
+  Aynı dosyada app bar stilleri de var: maskot, repo çipi, ikonlu sekmeler, arama kutusu, Audit/Scan düğmeleri. App bar yapışkandır; 760px altında yapışkan değildir. Yüksekliği `--appbar-h` olarak yazılır ve Görevler listesiyle İçindekiler paneli onun altına yapışır.
+- **`vscode/icons.js`:** Lucide ikonları (ISC lisansı). Elle düzenlenmez; `npm run icons` (`scripts/icons.mjs`) `lucide-static`'ten yalnızca NAMES listesindekileri üretir. `tasksView.icon(name, size)` bunları çizer. Ajan değişiklikleri sekmesindeki türler de bu ikonları kullanır.
+- **`vscode/mascot.js`:** `assets/logo.svg`'deki maskot satır içinde gömülüdür (gradyan id'lerine `imp-` öneki eklenmiştir). Başlıkta ve boş ekranlarda (`.emptyhero`) gösterilir.
+
+**Kurallar:**
+- Tasks CSS'inde sabit hex renk yok (test bunu denetler).
+- İkincil metin opaklıkla değil, `--muted` rengiyle yazılır.
+- Mermaid diyagramları `theme: base` ile çizilir; renkleri sayfanın `--vscode-editor-background`, `--vscode-foreground` ve `--acc` değerlerinden hesaplanır.
+
+vscode-elements bilerek kullanılmadı; gerekçe bağlı ADR'de.
