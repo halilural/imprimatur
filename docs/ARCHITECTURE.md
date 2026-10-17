@@ -24,6 +24,7 @@
 18. [Agent setup denetimi (agnix)](#agent-setup-audit)
 19. [Denetim: bulgu etkin mi (#78)](#audit-effect)
 20. [Recommendations: proje best practice incelemesi (#86, #87)](#best-practice-review)
+21. [Tasarım dokümanlarının tek seferlik doldurulması (backfill)](#docs-backfill)
 
 <a id="overview"></a>
 
@@ -625,3 +626,16 @@ Alt süreç: `--permission-mode dontAsk`, yalnız Read/Glob/Grep, `.env*`/anahta
 ### Görünüm
 
 Agent Setup ampulü bir menü açar: ajan kurulumunu denetle (agnix), projeyi incele (Claude), ikisi. Recommendations ağacında kök → "Agent setup" / "Project" → durum → (reddedilende gerekçe) → kategori → alt kategori → öneri. Görevler'de tek RECS sayfası: "Ajan kurulumu" ve "Proje" bölümleri, kaynak haritası; Uygulandı / Reddet… / Geri aç her iki üreticide (`recs-ui.js`): gerekçe tek listeden (üreticiye uyanlar, olası olan önde), "Bilerek yapmadık" kararı seçtirir.
+
+<a id="docs-backfill"></a>
+
+## 21. Tasarım dokümanlarının tek seferlik doldurulması (backfill)
+
+Dokümanı hiç olmayan ya da eski ADR/PDR'leri dokümana girmemiş projeler, kullanıcı bir şey yapmadan bir kez doldurulur.
+
+- **Tetik:** SessionStart (`vscode/process.js`). Imprimatur'un bildiği her repoda çalışır; `.claude/imprimatur.json` gerekmez.
+- **Koşul** (`docs-backfill.js` `due`): repo daha önce backfill edilmemiş olmalı, en az 10 kaydı olmalı, ev dizini olmamalı ve en az bir doküman (architecture, product, glossary) boş olmalı ya da bölümlerin bağlamadığı ADR/PDR'leri olmalı.
+- **Bir kez:** `meta "backfill:<repoId>"` başlamadan önce `claimMeta` (INSERT OR IGNORE) ile alınır. Aynı anda açılan iki oturumdan yalnızca biri başlatır. Çalışma başarısız olsa bile bir daha denenmez.
+- **Çalışma:** `hooks/backfill.mjs` oturumdan bağımsız (detached) bir süreç olarak açılır ve `claude -p` çalıştırır. Ayarlar: sonnet, $3 bütçe, 120 tur, 30 dakika, ayar dosyası yüklenmez (hook çalışmaz), araçlar yalnızca Read/Glob/Grep ve Imprimatur MCP'nin `doc_get`, `doc_section_upsert`, `search`, `task_get`, `task_list` araçları. Gizli dosyalar best-practice'teki DENY listesiyle engellenir. Prompt'ta bağlanmamış kayıtlar id'leriyle listelenir; ajan bölümleri yazar ve kayıtları bağlar.
+- **Sonuç:** durum (done/failed/nothing), maliyet, ajanın son satırı ve doküman başına bölüm sayısı aynı meta alanına yazılır.
+- Bu tek seferden sonra dokümanları docUpdate güncel tutar (bkz. Süreç kontrolleri).
