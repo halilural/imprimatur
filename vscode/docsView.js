@@ -269,9 +269,9 @@ function docHtml(m) {
   const toc = `<aside class="dtoc" data-k="toc" data-scroll="dtoc" aria-label="${g ? "Terimler" : "İçindekiler"}"><div class="lbl" data-k="h">${g ? `Terimler · ${m.current.length}` : "İçindekiler"}</div><ol data-k="list">${m.current.map((s) => `<li data-k="t${s.id}" data-q="${esc(`${s.title} ${s.body}`)}"><a href="#sec-${esc(s.key)}" data-act="docGo" data-key="${esc(s.key)}">${s.n ? `<span class="num">${s.n}</span>` : ""}<span>${esc(s.title)}</span></a></li>`).join("") || `<li data-k="none" class="dim">${g ? "Terim yok" : "Bölüm yok"}</li>`}</ol>${m.superseded.length ? `<a href="#sec-__old" class="dold" data-k="old" data-act="docGo" data-key="__old">${g ? "Eskimiş terimler" : "Eskimiş bölümler"} · ${m.superseded.length}</a>` : ""}<button class="dashed" data-k="new" data-act="docEdit" data-kind="${m.kind}" data-id="new">${icon("plus")} ${g ? "Yeni terim" : "Yeni bölüm"}</button></aside>`;
   const head = `<section class="dhead" data-k="head"><span class="lbl">${esc(m.label)} · ${esc(m.repoName)}</span><h1>${esc(m.title)}</h1><p class="lead">${m.last ? `Son güncelleme · ${esc(when(m.last.at))} · ${esc(m.last.who)}` : "Henüz güncellenmedi"}</p>${m.manual ? `<p class="dnote">${esc(m.manual)} elle yazılmış, üzerine yazılmadı</p>` : ""}</section>`;
   const empty = m.empty && !m.adding && g
-    ? `<div class="card dempty" data-k="empty"><p>Sözlük henüz boş. Ajan, projede yeni bir terim ortaya çıktığında ya da bir terimin anlamı değiştiğinde onu <span class="mono">doc_section_upsert</span> ile burada yazar.</p><p class="dim">Sen de soldan "Yeni terim" ile ekleyebilirsin. Sözlük repoya docs/GLOSSARY.md olarak da yazılır.</p></div>`
+    ? `<div class="card dempty emptyhero" data-k="empty">${require("./mascot.js").mascot(56)}<div><p>Sözlük henüz boş. Ajan, projede yeni bir terim ortaya çıktığında ya da bir terimin anlamı değiştiğinde onu <span class="mono">doc_section_upsert</span> ile burada yazar.</p><p class="dim">Sen de soldan "Yeni terim" ile ekleyebilirsin. Sözlük repoya docs/GLOSSARY.md olarak da yazılır.</p></div></div>`
     : m.empty && !m.adding
-    ? `<div class="card dempty" data-k="empty"><p>Bu doküman henüz boş. Ajan, bir ${m.kind === "architecture" ? "ADR" : "PDR"} ya da karar eklediğinde ilgili bölümü <span class="mono">doc_section_upsert</span> ile burada yazar ve kaydı bağlar.</p><p class="dim">Sen de soldan "Yeni bölüm" ile bir bölüm ekleyebilirsin. Doküman repoya docs/${m.kind === "architecture" ? "ARCHITECTURE" : "PRODUCT"}.md olarak da yazılır.</p></div>`
+    ? `<div class="card dempty emptyhero" data-k="empty">${require("./mascot.js").mascot(56)}<div><p>Bu doküman henüz boş. Ajan, bir ${m.kind === "architecture" ? "ADR" : "PDR"} ya da karar eklediğinde ilgili bölümü <span class="mono">doc_section_upsert</span> ile burada yazar ve kaydı bağlar.</p><p class="dim">Sen de soldan "Yeni bölüm" ile bir bölüm ekleyebilirsin. Doküman repoya docs/${m.kind === "architecture" ? "ARCHITECTURE" : "PRODUCT"}.md olarak da yazılır.</p></div></div>`
     : "";
   const adding = m.adding ? `<section class="dsec adding" data-k="new"><div class="dsec-h"><h2>${g ? "Yeni terim" : "Yeni bölüm"}</h2></div>${editorHtml(m, undefined)}</section>` : "";
   const sections = m.current.map((s) => sectionHtml(m, s)).join("");
@@ -321,12 +321,12 @@ function applyDocMessage(db, m, actor, root) {
 
 /** Styles of the document tabs: VS Code theme colours only, like the other tabs. */
 const DOCS_CSS = `
-  .doc { display: flex; align-items: stretch; margin: 0 -12px; border-top: 1px solid var(--line); min-height: calc(100vh - 60px); }
+  .doc { display: flex; align-items: stretch; margin: 0 -12px; border-top: 1px solid var(--line); min-height: calc(100vh - var(--appbar-h, 52px)); }
   .dtoc { flex: 1 1 220px; max-width: 280px; min-width: 0; padding: 18px 12px; background: var(--vscode-sideBar-background); border-right: 1px solid var(--line);
-    display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 60px); overflow: auto; position: sticky; top: 0; box-sizing: border-box; }
+    display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - var(--appbar-h, 52px)); overflow: auto; position: sticky; top: var(--appbar-h, 52px); box-sizing: border-box; }
   .dtoc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
   .dtoc li a { display: flex; gap: 8px; padding: 5px 8px; border-radius: 6px; color: var(--vscode-foreground) !important; font-weight: 600; }
-  .dtoc li a:hover { background: var(--vscode-list-hoverBackground); text-decoration: none !important; }
+  .dtoc li a:hover { background: var(--acc-soft); text-decoration: none !important; }
   .dtoc .num { flex: none; min-width: 18px; color: var(--acc); font-weight: 700; }
   /* A narrow panel: the contents sit above the page and scroll away with it, or a sticky
      one would cover the section a click scrolls to. */
@@ -338,8 +338,8 @@ const DOCS_CSS = `
   .dpage { flex: 999 1 520px; min-width: 0; max-width: 980px; padding: 22px 30px 48px; display: flex; flex-direction: column; gap: 18px; box-sizing: border-box; }
   .dhead { display: flex; flex-direction: column; gap: 4px; }
   .dnote { margin: 4px 0 0; font-weight: 600; color: var(--vscode-editorWarning-foreground, var(--acc)); }
-  .dempty { display: flex; flex-direction: column; gap: 6px; } .dempty p { margin: 0; }
-  .dsec { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); scroll-margin-top: 12px; }
+  .dempty { display: flex; gap: 16px; } .dempty > div { display: flex; flex-direction: column; gap: 6px; } .dempty p { margin: 0; }
+  .dsec { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 18px 22px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--card); box-shadow: var(--shadow); scroll-margin-top: calc(var(--appbar-h, 52px) + 12px); }
   body.vscode-high-contrast .dsec, body.vscode-high-contrast-light .dsec { border-color: var(--vscode-contrastBorder); }
   .dsec.old { opacity: .85; } .dsec.adding { border-color: var(--acc); }
   .dsec-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }

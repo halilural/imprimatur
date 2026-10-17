@@ -111,7 +111,8 @@ addEventListener("click", (e) => { const a = e.target.closest("a[href]"); if (!a
   e.preventDefault(); });
 setTimeout(() => { document.querySelector('.dtoc a[data-key="s4"]').click(); setTimeout(() => {
 const r = document.getElementById("sec-s4").getBoundingClientRect();
-document.title = "T:" + Math.round(r.top) + ":" + document.elementFromPoint(r.left + 20, r.top + 20)?.closest(".dsec, .dtoc")?.id; }, 300); }, 500);</script></head>`;
+// The section lands 12px under the sticky app bar (static in a narrow panel), not under it.
+document.title = "T:" + Math.round(r.top - (parseFloat(document.body.style.getPropertyValue("--appbar-h")) || 0)) + ":" + document.elementFromPoint(r.left + 20, r.top + 20)?.closest(".dsec, .dtoc")?.id; }, 300); }, 500);</script></head>`;
     const file = path.join(dir, "page.html");
     fs.writeFileSync(file, page.replace("</head>", probe));
     for (const width of [500, 1200]) {
