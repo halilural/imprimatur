@@ -457,10 +457,10 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     hint.className = "hint";
     hint.textContent = "Ctrl+tekerlek: yakınlaştır · sürükle: kaydır";
     tools.appendChild(hint);
-    button("−", "Uzaklaştır", () => center(1 / 1.25));
+    button("−", "Uzaklaştır", () => center(1 / 1.5));
     const pct = button("100%", "Sığdır", fit);
     pct.className = "pct";
-    button("+", "Yakınlaştır", () => center(1.25));
+    button("+", "Yakınlaştır", () => center(1.5));
     const full = button("Tam ekran", "Tam ekran (Esc kapatır)", () => setFull(!wrap.classList.contains("full")));
     const onKey = (e) => { if (e.key === "Escape") setFull(false); };
     const setFull = (on) => {
@@ -474,7 +474,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       if (!e.ctrlKey && !e.metaKey && !wrap.classList.contains("full")) return;
       e.preventDefault();
       const r = vp.getBoundingClientRect();
-      zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+      zoomAt(Math.exp(-e.deltaY * 0.0035), e.clientX - r.left, e.clientY - r.top);
     }, { passive: false });
     let drag = null;
     vp.addEventListener("pointerdown", (e) => {
