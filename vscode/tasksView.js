@@ -28,20 +28,8 @@ const bucketOf = (s) => (s === "active" ? "active" : s === "open" ? "open" : "do
 
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-/** Small line icons (no emoji): 24×24 paths, stroked in currentColor. */
-const ICON = {
-  arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
-  check: '<path d="M5 12l5 5 9-10"/>',
-  plus: '<path d="M12 5v14M5 12h14"/>',
-  search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
-  stamp: '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>',
-  external: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
-  question: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.7M12 17h.01"/>',
-  terminal: '<path d="M4 6l5 6-5 6M12 18h8"/>',
-  eye: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/>',
-  hand: '<path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11M11 10V4.5a1.5 1.5 0 0 1 3 0V11M14 10.5V6a1.5 1.5 0 0 1 3 0v8a6 6 0 0 1-6 6h-1a5 5 0 0 1-4.2-2.3L3.5 14a1.5 1.5 0 0 1 2.5-1.6L8 15"/>',
-  file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
-};
+/** Small line icons (no emoji): Lucide's 24×24 paths (icons.js), stroked in currentColor. */
+const { ICONS: ICON } = require("./icons.js");
 /** @param {keyof typeof ICON} name @param {number} [size] */
 const icon = (name, size = 16) => `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[name]}</svg>`;
 
@@ -475,7 +463,7 @@ function tasksHtml(m) {
     : `<p class="empty" data-k="empty">Bu filtrede görev yok.</p>`;
   const list = `<aside class="tlist" data-k="list" data-scroll="tlist" aria-label="Görevler"><div class="pills" data-k="filters" role="group" aria-label="Durum">${f("active", "Aktif")}${f("open", "Açık")}${f("done", "Biten")}</div><div class="tl-head" data-k="head"><span>${esc(m.all ? "Bütün repolar" : m.repoName)}</span><button class="link" data-act="scope" data-all="${m.all ? 0 : 1}">${m.all ? "Bu repo" : "Bütün repolar"}</button></div><div class="rows" data-k="rows" data-navgroup="list">${rows}</div><button class="dashed" data-k="new" data-act="newTask">${icon("plus")} Yeni görev</button></aside>`;
   const c = m.cur;
-  if (!c) return `<div class="tl" data-k="tl">${list}<main class="tpage" data-k="page"><p class="empty" data-k="none">Bu repoda henüz görev yok: ajan Imprimatur'un MCP araçlarıyla ekler, ya da soldan "Yeni görev".</p></main></div>`;
+  if (!c) return `<div class="tl" data-k="tl">${list}<main class="tpage" data-k="page"><div class="emptyhero" data-k="none">${require("./mascot.js").mascot(56)}<p>Bu repoda henüz görev yok: ajan Imprimatur'un MCP araçlarıyla ekler, ya da soldan "Yeni görev".</p></div></main></div>`;
   return `<div class="tl" data-k="tl">${list}<main class="tpage" data-k="page">${taskBlocks(c)}</main>${railHtml(c)}</div>`;
 }
 
@@ -585,7 +573,7 @@ function inboxHtml(m) {
     : "";
   const groups = m.groups.length
     ? m.groups.map((g) => `<section class="igrp" data-k="g${g.task?.id ?? "none"}" data-task="${g.task?.id ?? -1}"><h2 data-k="h">${g.task ? `${openTask(g.task.id, g.task.status, g.task.key)}<span>${esc(g.task.title)}</span>` : `<span>Görevsiz</span><span class="dim">ajanın tur sonunda sorup göreve bağlamadıkları</span>`}<span class="dim">${esc(g.repo?.name ?? "")}</span></h2>${g.items.map((r) => askCard(r)).join("")}</section>`).join("")
-    : `<p class="empty" data-k="none">Şu an kayıtlarda senden beklenen bir şey yok.</p>`;
+    : `<div class="emptyhero" data-k="none">${require("./mascot.js").mascot(56)}<p><b>Her şey yolunda.</b><br>Şu an kayıtlarda senden beklenen bir şey yok.</p></div>`;
   return `<div class="inbox" data-k="inbox">${top}${buckets}${chips}<div class="igroups" data-k="groups" data-navgroup="inbox">${groups}<p class="empty" id="ifnone" data-k="ifnone" hidden>Bu filtrede senden beklenen bir şey yok.</p></div></div>`;
 }
 
@@ -699,17 +687,16 @@ function cleanView(v) {
   return out;
 }
 
-/** Styles of the three tabs: VS Code theme colours only; the orange accent is charts.orange. */
+/** Styles of the tabs: theme.js's tokens (accent, surfaces, radii, type) over the theme's own colours. */
 const TASKS_CSS = `
   [hidden] { display: none !important; }
   .ic { flex: none; vertical-align: -3px; }
   .mono { font-family: var(--vscode-editor-font-family); font-size: 12px; font-weight: 600; }
   .dim { color: var(--vscode-descriptionForeground); }
-  .mine { color: var(--vscode-charts-orange); font-weight: 700; }
-  #pane { --acc: var(--vscode-charts-orange); --line: var(--vscode-panel-border, var(--vscode-widget-border, rgba(128,128,128,.35)));
-    --card: var(--vscode-sideBar-background, var(--vscode-editorWidget-background)); line-height: 1.5; padding-bottom: 32px; }
-  #pane h1 { margin: 0; font-size: 22px; line-height: 1.25; font-weight: 700; }
-  #pane h2 { margin: 0; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .mine { color: var(--acc); font-weight: 700; }
+  #pane { --card: var(--surface); line-height: 1.5; padding-bottom: 32px; }
+  #pane h1 { margin: 0; font-size: var(--fs-h1); line-height: 1.25; font-weight: 800; letter-spacing: -.01em; }
+  #pane h2 { margin: 0; font-size: var(--fs-h3); font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   #pane a { color: var(--vscode-textLink-foreground); text-decoration: none; } #pane a:hover { color: var(--vscode-textLink-activeForeground); text-decoration: underline; }
   #pane button { font: inherit; color: inherit; cursor: pointer; }
   #pane :focus-visible, #pane .trow:focus-visible, #pane [data-nav]:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 1px; }
@@ -723,17 +710,17 @@ const TASKS_CSS = `
   .ghost { padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px; background: transparent; font-size: 12px; font-weight: 600; }
   .ghost:hover, .dashed:hover { background: var(--vscode-list-hoverBackground); }
   .dashed { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px dashed var(--line); border-radius: 6px; background: transparent; font-weight: 600; }
-  .primary { padding: 6px 14px; border: 0; border-radius: 6px; background: var(--vscode-button-background); color: var(--vscode-button-foreground) !important; font-weight: 700; }
-  .primary:hover { background: var(--vscode-button-hoverBackground); }
-  .mini { padding: 0 6px; border: 1px solid var(--line); border-radius: 8px; background: transparent; font-size: 11px; opacity: 0; }
+  .primary { padding: 6px 14px; border: 0; border-radius: var(--r-md); background: var(--acc); color: var(--acc-ink) !important; font-weight: 700; }
+  .primary:hover { background: color-mix(in srgb, var(--acc) 88%, var(--vscode-foreground)); }
+  .mini { padding: 0 6px; border: 1px solid var(--line); border-radius: var(--r-pill); background: transparent; font-size: var(--fs-xs); font-weight: 600; opacity: 0; }
   .trec:hover .mini, .trec:focus-within .mini { opacity: .9; }
   .st { display: inline-flex; padding: 1px 9px; border-radius: 10px; font-weight: 700; font-size: 12px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); }
   .st-active { --c: var(--vscode-charts-blue); } .st-open { --c: var(--vscode-descriptionForeground); } .st-done { --c: var(--vscode-charts-green); } .st-dropped { --c: var(--vscode-disabledForeground); }
   .kchip { flex: none; display: inline-flex; padding: 0 8px; border-radius: 10px; font-size: 12px; font-weight: 700; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); }
-  .k-question { --c: var(--vscode-charts-orange); } .k-todo { --c: var(--vscode-charts-blue); } .k-test { --c: var(--vscode-charts-yellow); }
+  .k-question { --c: var(--acc); } .k-todo { --c: var(--vscode-charts-blue); } .k-test { --c: var(--vscode-charts-yellow); }
   .k-decision { --c: var(--vscode-charts-purple); } .k-adr { --c: var(--vscode-charts-green); } .k-pdr { --c: var(--vscode-charts-yellow); }
   .k-note, .k-answer { --c: var(--vscode-descriptionForeground); } .k-fixme { --c: var(--vscode-charts-red); }
-  .card { padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+  .card { padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--card); box-shadow: var(--shadow); }
   body.vscode-high-contrast .card, body.vscode-high-contrast-light .card { border-color: var(--vscode-contrastBorder); }
   .card.ask { display: flex; flex-direction: column; gap: 8px; }
   .row1 { display: flex; align-items: flex-start; gap: 10px; } .row1 .ttl { flex: 1; font-weight: 600; min-width: 0; } .age { flex: none; font-size: 12px; color: var(--vscode-descriptionForeground); }
@@ -744,7 +731,7 @@ const TASKS_CSS = `
   .answer textarea { flex: 1 1 320px; resize: vertical; min-height: 40px; padding: 7px 10px; border-radius: 6px; font: inherit;
     border: 1px solid var(--vscode-input-border, var(--line)); background: var(--vscode-input-background); color: var(--vscode-input-foreground); }
   .acts { display: flex; gap: 8px; }
-  .card.ask.done { opacity: .75; } .card.ask.done .ttl { text-decoration: line-through; }
+  .card.ask.done { box-shadow: none; } .card.ask.done .ttl { text-decoration: line-through; }
   .okline { font-size: 13px; font-weight: 600; color: var(--vscode-testing-iconPassed); display: inline-flex; align-items: center; gap: 6px; }
   .card.sent { opacity: .6; }
   .row1 .src { flex: none; font-size: 12px; padding: 0 8px; border-radius: 10px; border: 1px dashed var(--line); color: var(--vscode-descriptionForeground); }
@@ -753,20 +740,20 @@ const TASKS_CSS = `
   .flash { animation: flash 1.6s ease-out 1; }
   @keyframes flash { 0%, 30% { box-shadow: 0 0 0 2px var(--acc); background: color-mix(in srgb, var(--acc) 22%, transparent); } 100% { box-shadow: 0 0 0 0 transparent; } }
   /* Görevler */
-  .tl { display: flex; flex-wrap: wrap; align-items: stretch; margin: 0 -12px; border-top: 1px solid var(--line); min-height: calc(100vh - 60px); }
+  .tl { display: flex; flex-wrap: wrap; align-items: stretch; margin: 0 -12px; border-top: 1px solid var(--line); min-height: calc(100vh - var(--appbar-h, 52px)); }
   .tlist { flex: 1 1 260px; max-width: 320px; min-width: 0; padding: 14px 10px; background: var(--vscode-sideBar-background); border-right: 1px solid var(--line);
-    display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 60px); overflow: auto; position: sticky; top: 0; box-sizing: border-box; }
+    display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - var(--appbar-h, 52px)); overflow: auto; position: sticky; top: var(--appbar-h, 52px); box-sizing: border-box; }
   .tl-head { display: flex; justify-content: space-between; align-items: center; padding: 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--vscode-descriptionForeground); }
   .tl-head .link { text-transform: none; letter-spacing: 0; }
   .rows { display: flex; flex-direction: column; gap: 2px; } .grp { display: flex; flex-direction: column; gap: 2px; }
   .grp-h { padding: 8px 8px 2px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--vscode-descriptionForeground); }
   .trow { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 7px 8px; border: 0; border-radius: 6px; background: transparent; text-align: left; }
   .trow:hover { background: var(--vscode-list-hoverBackground); }
-  .trow.on { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground) !important; }
+  .trow.on { background: var(--acc-soft); box-shadow: inset 3px 0 0 var(--acc); color: var(--vscode-foreground) !important; }
   .sdot { margin-top: 5px; width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--c); }
   .s-active { --c: var(--vscode-charts-blue); } .s-open { --c: var(--vscode-descriptionForeground); } .s-done { --c: var(--vscode-charts-green); } .s-dropped { --c: var(--vscode-disabledForeground); }
   .tcol { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-  .tmeta { display: flex; gap: 8px; font-size: 12px; opacity: .85; } .tttl { font-weight: 600; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .tmeta { display: flex; gap: 8px; font-size: var(--fs-sm); color: var(--muted); } .trow.on .tmeta { color: inherit; } .tttl { font-weight: 600; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .tpage { flex: 999 1 520px; min-width: 0; padding: 20px 28px 40px; display: flex; flex-direction: column; gap: 22px; box-sizing: border-box; }
   .thead { display: flex; flex-direction: column; gap: 8px; } .thead .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
   .thead .key { font-size: 13px; color: var(--vscode-descriptionForeground); } .sum { margin: 0; max-width: 820px; white-space: pre-line; color: var(--vscode-descriptionForeground); }
@@ -800,13 +787,13 @@ const TASKS_CSS = `
   #pane.stale::before { content: "Yükleniyor…"; display: block; padding: 12px 0; color: var(--vscode-descriptionForeground); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
   .bfind { padding: 8px 0 8px 16px; border-bottom: 1px solid var(--vscode-widget-border, transparent); } .bfind .row1 { display: flex; gap: 8px; align-items: baseline; }
-  .bfind .ttl { font-weight: 600; } .bfind.s-done .ttl, .bfind.s-dropped .ttl { opacity: .7; } .bwhy { margin: 4px 0; }
+  .bfind .ttl { font-weight: 600; } .bfind.s-done .ttl, .bfind.s-dropped .ttl { color: var(--muted); } .bwhy { margin: 4px 0; }
   .bmeta { display: flex; flex-direction: column; gap: 2px; font-size: .92em; } .bfind .acts { display: flex; gap: 8px; margin-top: 6px; }
   .sev { font-size: .8em; font-weight: 700; padding: 1px 6px; border-radius: 8px; } .sev-high { background: var(--vscode-inputValidation-errorBackground, rgba(255,0,0,.2)); }
   .sev-medium { background: var(--vscode-inputValidation-warningBackground, rgba(255,165,0,.2)); } .sev-low { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
   .agrp { margin: 2px 0; } .agrp > summary { cursor: pointer; display: flex; gap: 8px; align-items: baseline; padding: 4px 0; font-weight: 600; }
   .agrp .agrp { margin-left: 16px; } .agrp.d0 > summary { font-size: 1.05em; } .abody { padding-left: 2px; }
-  .afind { display: flex; gap: 8px; align-items: baseline; padding: 3px 0 3px 16px; } .afind .ttl { flex: 1; } .afind.s-done .ttl, .afind.s-dropped .ttl { opacity: .7; }
+  .afind { display: flex; gap: 8px; align-items: baseline; padding: 3px 0 3px 16px; } .afind .ttl { flex: 1; } .afind.s-done .ttl, .afind.s-dropped .ttl { color: var(--muted); }
   .adot { width: 8px; height: 8px; border-radius: 50%; flex: none; align-self: center; } .adot.a-error { background: var(--vscode-problemsErrorIcon-foreground); }
   .adot.a-warning { background: var(--vscode-problemsWarningIcon-foreground); } .adot.a-info { background: var(--vscode-problemsInfoIcon-foreground); }
   .alv { font-size: .85em; font-weight: 500; } .alv.a-error { color: var(--vscode-problemsErrorIcon-foreground); } .alv.a-warning { color: var(--vscode-problemsWarningIcon-foreground); } .alv.a-info { color: var(--vscode-problemsInfoIcon-foreground); }
@@ -826,29 +813,32 @@ const TASKS_CSS = `
   .home { max-width: 1180px; gap: 26px; }
   .toprow { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
   .buckets { display: flex; flex-wrap: wrap; gap: 10px; }
-  .bucket { flex: 1 1 170px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); display: flex; flex-direction: column; gap: 1px; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+  .bucket { flex: 1 1 170px; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--card); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 1px; font: inherit; color: inherit; text-align: left; cursor: pointer; }
   .bucket:hover { border-color: var(--c); } .bucket.on { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); background: color-mix(in srgb, var(--c) 12%, var(--card)); }
-  .bucket .n { opacity: 1; font-size: 24px; font-weight: 700; color: var(--c); } .bucket .bl { font-weight: 600; } .bucket .dim { font-size: 12px; }
-  .b-question { --c: var(--vscode-charts-orange); } .b-todo { --c: var(--vscode-charts-blue); } .b-test { --c: var(--vscode-charts-yellow); } .b-done { --c: var(--vscode-charts-green); }
+  .bucket .n { opacity: 1; font-size: 28px; font-weight: 800; line-height: 1.1; color: var(--c); } .bucket .bl { font-weight: 600; } .bucket .dim { font-size: 12px; }
+  .b-question { --c: var(--acc); } .b-todo { --c: var(--vscode-charts-blue); } .b-test { --c: var(--vscode-charts-yellow); } .b-done { --c: var(--vscode-charts-green); }
   .igroups { display: flex; flex-direction: column; gap: 18px; } .igrp { display: flex; flex-direction: column; gap: 8px; }
   .igrp h2 { align-items: baseline; gap: 10px; }
   .turn-h { margin-top: 8px !important; }
   /* Ana sayfa */
-  .progress { margin-top: 10px; height: 8px; border-radius: 4px; background: var(--line); max-width: 520px; } .progress div { height: 8px; border-radius: 4px; background: var(--acc); }
+  .progress { margin-top: 12px; height: 10px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); max-width: 520px; overflow: hidden; }
+  .progress div { height: 10px; border-radius: var(--r-pill); background: linear-gradient(90deg, color-mix(in srgb, var(--acc) 65%, var(--vscode-editor-background)), var(--acc)); }
   .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
-  .grid2 .card { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: 10px; }
+  .grid2 .card { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; }
   .card.left { border-color: var(--acc); background: color-mix(in srgb, var(--acc) 9%, var(--card)); }
   .cap { font-size: 12px !important; letter-spacing: .04em; text-transform: uppercase; } .card.left .cap { color: var(--acc); }
   .cap.row { justify-content: space-between; } .cap a { text-transform: none; letter-spacing: 0; }
   .ptr { display: flex; flex-direction: column; gap: 1px; padding: 7px 10px; border-radius: 6px; background: var(--vscode-editor-background); color: var(--vscode-foreground) !important; }
   .ptr:hover { text-decoration: none !important; background: var(--vscode-list-hoverBackground); } .pm { display: flex; gap: 8px; font-size: 12px; } .pm .mono { color: var(--acc); }
   .hask { display: flex; align-items: flex-start; gap: 10px; color: var(--vscode-foreground) !important; } .hask .ttl { flex: 1; min-width: 0; }
-  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow); }
   .htable { width: 100%; min-width: 720px; border-collapse: collapse; }
-  .htable th { padding: 8px 12px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--vscode-descriptionForeground); background: var(--card); border: 0; }
+  .htable th { padding: 9px 12px; font-size: var(--fs-xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); background: var(--surface-2); border: 0; }
   .htable td { height: auto; padding: 8px 12px; white-space: normal; max-width: none; border-top: 1px solid var(--line); }
   .htable tr[data-nav] { cursor: pointer; } .htable tr[data-nav]:hover { background: var(--vscode-list-hoverBackground); }
   .hint { font-size: 12px; color: var(--vscode-descriptionForeground); margin: 0; }
+  .emptyhero { display: flex; align-items: center; gap: 16px; padding: 18px 20px; border: 1px dashed var(--acc-line); border-radius: var(--r-lg); background: var(--acc-soft); }
+  .emptyhero p { margin: 0; } .emptyhero b { font-size: var(--fs-h3); }
 `;
 
 module.exports = {

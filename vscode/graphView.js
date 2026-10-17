@@ -83,18 +83,23 @@ const reviewStyle = () => (reviewCss ??= (() => {
 /** A table's rows until the host draws its tab (it draws only the visible one). @param {number} cols */
 const LOADING = (cols) => `<tr class="loading"><td colspan="${cols}" class="empty">Yükleniyor…</td></tr>`;
 
+const { THEME_CSS } = require("./theme.js");
+const { mascot } = require("./mascot.js");
+/** The panel's tabs: key (also its icon) and label. */
+const TAB_BUTTONS = [["home", "Ana sayfa"], ["tasks", "Görevler"], ["inbox", "Bende bekleyenler"], ["architecture", "Mimari"], ["product", "Ürün"], ["glossary", "Sözlük"], ["edits", "Ajan değişiklikleri"]];
+
 /** Row kinds of the graph's filter (#55): badge and label. */
 const ACTIVITY = {
-  edit: ["✎", "Edits"],
-  record: ["≡", "Records"],
-  agent: ["⑃", "Subagents"],
-  skill: ["★", "Skills"],
-  mcp: ["⚙", "MCP"],
-  web: ["⌁", "Web"],
-  read: ["◱", "Reads"],
-  search: ["⌕", "Searches"],
-  bash: ["$", "Bash"],
-  other: ["·", "Other"],
+  edit: ["edit", "Edits"],
+  record: ["record", "Records"],
+  agent: ["agent", "Subagents"],
+  skill: ["skill", "Skills"],
+  mcp: ["mcp", "MCP"],
+  web: ["web", "Web"],
+  read: ["read", "Reads"],
+  search: ["search", "Searches"],
+  bash: ["terminal", "Bash"],
+  other: ["other", "Other"],
 };
 
 /** The waiting log that mirrors the user's open records (history.js): the records show in Bende bekleyenler themselves. */
@@ -170,7 +175,7 @@ function html(data, root, nonce, waiting = [], opts = {}) {
   });
   // A record change: shown in its task's lane; it opens the record, nothing to accept (#60).
   const recordRow = (r, i) => `<tr class="rec" data-kind="record" data-record="${r.record}" data-i="${i}" data-q="${esc([r.file, r.intent, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}" title="Record change: click to show the record">
-  <td class="ok"><span class="badge-rec" title="Record change (nothing to accept)">≡</span></td>
+  <td class="ok"><span class="badge-rec" title="Record change (nothing to accept)">${tasksView.icon("record", 14)}</span></td>
   ${lanes ? `<td class="g">${laneSvg(i, r, data.lanes, cols)}</td>` : ""}
   <td class="d">${esc(r.intent ?? r.summary)}</td>
   <td class="tk">${taskCell[r.lane]}</td>
@@ -187,9 +192,9 @@ function html(data, root, nonce, waiting = [], opts = {}) {
     const [icon, label] = ACTIVITY[r.kind] ?? ACTIVITY.other;
     const fold = r.agentId && calls.get(r.agentId) ? `<a href="#" class="grp" data-agent="${esc(r.agentId)}" title="Show or hide the subagent's calls">▸ ${calls.get(r.agentId)} calls</a> ` : "";
     return `<tr class="act${r.agent ? " sub" : ""}${r.failed ? " failed" : ""}" data-kind="${esc(r.kind ?? "other")}"${r.agent ? ` data-parent="${esc(r.agent)}"` : ""} data-i="${i}" data-q="${esc([r.tool, r.intent, r.summary, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}" title="${esc([`${r.tool}${r.failed ? " (failed)" : ""}${r.ms != null ? ` · ${r.ms} ms` : ""}`, r.intent, r.summary && `→ ${r.summary}`].filter(Boolean).join("\n"))}">
-  <td class="ok"><span class="badge-kind" title="${esc(label)}">${icon}</span></td>
+  <td class="ok"><span class="badge-kind" title="${esc(label)}">${tasksView.icon(/** @type {any} */ (icon), 14)}</span></td>
   ${lanes ? `<td class="g">${laneSvg(i, r, data.lanes, cols)}</td>` : ""}
-  <td class="d">${r.agent ? "↳ " : ""}${fold}${esc(r.intent ?? "")}${r.summary ? ` <span class="out">→ ${esc(r.summary)}</span>` : ""}</td>
+  <td class="d">${r.agent ? tasksView.icon("sub", 13) + " " : ""}${fold}${esc(r.intent ?? "")}${r.summary ? ` <span class="out">→ ${esc(r.summary)}</span>` : ""}</td>
   <td class="tk">${taskCell[r.lane]}</td>
   <td class="f">${esc(r.tool ?? "")}</td>
   <td class="t">${esc(time(r.t))}</td>
@@ -204,7 +209,7 @@ function html(data, root, nonce, waiting = [], opts = {}) {
   }
   const chips = Object.entries(ACTIVITY)
     .filter(([k]) => kindCount.get(k))
-    .map(([k, [icon, label]]) => `<button class="chip" data-kind="${k}" title="Show or hide: ${esc(label)}">${icon} ${esc(label)} <span class="n">${kindCount.get(k)}</span></button>`)
+    .map(([k, [icon, label]]) => `<button class="chip" data-kind="${k}" title="Show or hide: ${esc(label)}">${tasksView.icon(/** @type {any} */ (icon), 13)} ${esc(label)} <span class="n">${kindCount.get(k)}</span></button>`)
     .join("");
   const body = tab !== "edits" ? LOADING(8) : data.rows.length
     ? data.rows
@@ -229,41 +234,52 @@ function html(data, root, nonce, waiting = [], opts = {}) {
 ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.src)}">` : ""}
 <meta name="imprimatur-zoom" content="${Number(opts.zoomStep ?? 40)}">
 <style>
-  body { font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); padding: 0 12px; }
-  header { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 0; }
-  header > *, nav button { white-space: nowrap; }
+  ${THEME_CSS}
+  body { font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); padding: 0 12px; margin: 0; }
   label { display: inline-flex; align-items: center; gap: 4px; } label input { margin: 0; }
-  #filter { background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); padding: 3px 6px; width: 280px; max-width: 100%; }
   table { border-collapse: collapse; width: 100%; }
   th { text-align: left; font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--vscode-panel-border); }
+  /* Ajan değişiklikleri */
+  #edits { padding-top: 14px; }
+  .ehead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding-bottom: 10px; }
+  #count-edits { color: var(--muted); font-size: var(--fs-sm); font-weight: 600; }
+  .etable { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow); margin-bottom: 24px; }
+  #edits table { border-collapse: separate; border-spacing: 0; }
+  #edits table th { padding: 9px 8px; font-size: var(--fs-xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted);
+    background: var(--surface-2); border-bottom: 1px solid var(--line); }
+  #edits table td { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
   td { padding: 0 8px; height: ${ROW}px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 520px; }
   td.ok { width: 64px; min-width: 64px; text-align: center; }
   tr.w td.ok:has(input[data-tick]) { cursor: pointer; } td.ok input[data-tick] { width: 16px; height: 16px; margin: 0; cursor: pointer; vertical-align: middle; }
   .badge-ok { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
     background: var(--vscode-testing-iconPassed, #73c991); color: var(--vscode-editor-background); }
-  .badge-gone { font-size: 10px; padding: 0 5px; border-radius: 8px; border: 1px solid var(--vscode-disabledForeground, #888); color: var(--vscode-disabledForeground, #888); }
-  tr.gone td.d, tr.gone td.f { opacity: .55; }
-  tr.outside td.d, tr.outside td.s { font-style: italic; opacity: .75; }
-  .legend { display: flex; gap: 14px; align-items: center; opacity: .8; font-size: 12px; padding: 0 0 6px; }
-  .badge-open { color: var(--vscode-editorWarning-foreground, #cca700); font-size: 14px; }
+  .badge-gone { font-size: var(--fs-xs); font-weight: 700; padding: 0 6px; border-radius: var(--r-pill); border: 1px solid var(--line); color: var(--muted); }
+  tr.gone td.d, tr.gone td.f { color: var(--muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); }
+  tr.outside td.d, tr.outside td.s { font-style: italic; color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; color: var(--muted); font-size: var(--fs-sm); font-weight: 600; padding: 0 0 10px; }
+  .legend > span { display: inline-flex; align-items: center; gap: 6px; }
+  .badge-open { color: var(--warn); font-size: 14px; }
   button.acc { display: none; font: inherit; font-size: 11px; padding: 1px 8px; border-radius: 2px; cursor: pointer; border: none;
     background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
   button.acc:hover { background: var(--vscode-button-hoverBackground); }
   button.acc.on { display: inline-block; font-size: 12px; padding: 2px 10px; } button.acc.on[hidden] { display: none; }
   tr:hover button.acc { display: inline-block; } tr:hover .badge-open { display: none; }
   td.g { padding: 0; width: 1px; } td.g svg { display: block; }
-  #kinds { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 6px; }
-  .chip { font: inherit; font-size: 12px; padding: 1px 8px; border-radius: 10px; cursor: pointer; border: 1px solid var(--vscode-button-border, var(--vscode-panel-border));
-    background: transparent; color: var(--vscode-foreground); opacity: .55; } .chip.on { opacity: 1; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
-  .badge-kind { display: inline-flex; min-width: 18px; justify-content: center; font-size: 12px; opacity: .85; }
-  tr.act td.d .out { opacity: .65; } tr.act.failed td.d { color: var(--vscode-errorForeground); } tr.sub td.d { padding-left: 22px; }
-  a.grp { text-decoration: none; font-size: 11px; opacity: .8; margin-right: 4px; }
+  #kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: var(--fs-sm); font-weight: 600; padding: 3px 10px; border-radius: var(--r-pill); cursor: pointer;
+    border: 1px dashed var(--line); background: transparent; color: var(--muted); }
+  .chip:hover { border-style: solid; color: var(--vscode-foreground); }
+  .chip.on { border: 1px solid var(--acc-line); background: var(--acc-soft); color: var(--vscode-foreground); } .chip.on .ic { color: var(--acc); }
+  .chip .n { opacity: 1; font-weight: 700; color: var(--muted); } .chip.on .n { color: var(--acc); }
+  .badge-kind { display: inline-flex; min-width: 18px; justify-content: center; color: var(--muted); }
+  tr.act td.d .out { color: var(--muted); } tr.act.failed td.d { color: var(--vscode-errorForeground); } tr.sub td.d { padding-left: 22px; } td.d .ic { color: var(--muted); }
+  a.grp { text-decoration: none; font-size: var(--fs-xs); font-weight: 700; color: var(--muted); margin-right: 4px; }
   tr.rec { cursor: pointer; } tr.rec:hover { background: var(--vscode-list-hoverBackground); }
-  .badge-rec { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
-    border: 1px solid var(--vscode-charts-blue, #3794ff); color: var(--vscode-charts-blue, #3794ff); }
+  .badge-rec { display: inline-flex; width: 22px; height: 22px; border-radius: var(--r-pill); align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--info) 16%, transparent); color: var(--info); }
   tr[data-file] { cursor: pointer; } tr[data-file]:hover, tr.w:hover { background: var(--vscode-list-hoverBackground); }
-  .n, .t { opacity: .75; } .a { color: var(--vscode-gitDecoration-addedResourceForeground, #81b88b); } .r { color: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39); }
-  .empty { opacity: .7; padding: 12px; }
+  .n, .t { color: var(--muted); } .a { color: var(--vscode-gitDecoration-addedResourceForeground, #81b88b); } .r { color: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39); }
+  .empty { color: var(--muted); padding: 12px; }
   #pop { display: none; position: fixed; z-index: 10; max-width: min(900px, 92vw); max-height: 55vh; overflow: auto; padding: 6px 0;
     background: var(--vscode-editorHoverWidget-background); color: var(--vscode-editorHoverWidget-foreground);
     border: 1px solid var(--vscode-editorHoverWidget-border); box-shadow: 0 2px 8px var(--vscode-widget-shadow);
@@ -282,18 +298,14 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   #pop .review .gap { text-align: center; opacity: .5; padding: 0; }
   #pop .review .imprimatur-old { padding: 4px 9px; }
   ${reviewStyle()}
-  nav { display: flex; gap: 4px; } nav button { background: none; color: var(--vscode-foreground); border: none; border-bottom: 2px solid transparent; padding: 4px 8px; cursor: pointer; opacity: .75; font: inherit; }
-  nav button.on { border-bottom-color: var(--vscode-charts-orange); opacity: 1; font-weight: 600; }
-  nav button:focus-visible, #filter:focus-visible, .chip:focus-visible, button.acc:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 1px; }
-  header .brand { display: inline-flex; align-items: center; gap: 8px; } header .brand .ic { color: var(--vscode-charts-orange); }
-  #filter:focus { outline: 1px solid var(--vscode-focusBorder); }
+  .chip:focus-visible, button.acc:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 1px; }
   ${tasksView.TASKS_CSS}
   ${docsView.DOCS_CSS}
-  .badge { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); border-radius: 8px; padding: 0 6px; font-size: 90%; }
+  .badge { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); border-radius: var(--r-pill); padding: 0 6px; font-size: var(--fs-xs); font-weight: 700; }
   section[hidden] { display: none; }
-  tr.w { cursor: pointer; } tr.w.done { opacity: .6; }
-  td.tk { max-width: 260px; } td.tk .none { opacity: .7; font-style: italic; } td.s { opacity: .8; }
-  td.k { width: 1px; text-align: center; } td.p { opacity: .75; max-width: 320px; } td.s { max-width: 200px; }
+  tr.w { cursor: pointer; } tr.w.done td { color: var(--muted); }
+  td.tk { max-width: 260px; } td.tk .none { font-style: italic; } td.s { color: var(--muted); }
+  td.k { width: 1px; text-align: center; } td.p { color: var(--muted); max-width: 320px; } td.s { max-width: 200px; }
   .more { font-size: 11px; opacity: .7; padding: 0 5px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
   .pill { font-size: 11px; padding: 1px 7px; border-radius: 9px; border: 1px solid var(--vscode-panel-border); }
   .pill.open { border-color: var(--vscode-editorWarning-foreground, #cca700); color: var(--vscode-editorWarning-foreground, #cca700); font-weight: 600; }
@@ -311,12 +323,11 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   .task.file { margin-right: 6px; opacity: .7; } a.task.file:hover { opacity: 1; }
   .todo .chat { font-size: 10px; padding: 0 5px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
 </style></head><body>
-<header><span class="brand">${tasksView.icon("stamp", 20)}<strong>Imprimatur</strong><span class="dim">/</span><span>${esc(opts.repoName ?? path.basename(root))}</span></span>
-<nav aria-label="Görünümler"><button data-tab="home">Ana sayfa</button><button data-tab="tasks">Görevler</button><button data-tab="inbox">Bende bekleyenler ${inbox ? `<span class="badge">${inbox}</span>` : ""}</button><button data-tab="architecture">Mimari</button><button data-tab="product">Ürün</button><button data-tab="glossary">Sözlük</button><button data-tab="edits">Ajan değişiklikleri ${pending ? `<span class="badge">${pending}</span>` : ""}</button></nav>
-<input id="filter" type="search" aria-label="Ara" placeholder="Ara… (/)"><button id="audit" class="acc on" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">Audit</button><button id="scan" class="acc on" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">Scan history</button>
-<span class="n" id="count-edits">${data.rows.filter((r) => !r.record && !r.activity).length} edits · ${data.rows.filter((r) => r.activity).length} other calls · ${data.rows.filter((r) => r.record).length} record changes · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span></header>
-<section id="edits"${tab === "edits" ? "" : " hidden"}><div id="kinds">${chips}</div><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
-<tbody>${body}</tbody></table>
+<header class="appbar"><span class="brand">${mascot(26)}<strong>Imprimatur</strong><span class="repo">${esc(opts.repoName ?? path.basename(root))}</span></span>
+<nav class="tabs" aria-label="Görünümler">${TAB_BUTTONS.map(([t, label]) => `<button data-tab="${t}">${tasksView.icon(/** @type {any} */ (t), 15)}${label}${t === "inbox" && inbox ? ` <span class="badge">${inbox}</span>` : t === "edits" && pending ? ` <span class="badge">${pending}</span>` : ""}</button>`).join("")}</nav>
+<span class="tools-r"><label class="searchbox">${tasksView.icon("search", 14)}<input id="filter" type="search" aria-label="Ara" placeholder="Ara… (/)"></label><button id="audit" class="tbtn" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">${tasksView.icon("audit", 14)}Audit</button><button id="scan" class="tbtn" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">${tasksView.icon("scan", 14)}Scan history</button></span></header>
+<section id="edits"${tab === "edits" ? "" : " hidden"}><div class="ehead"><div id="kinds">${chips}</div><span class="n" id="count-edits">${data.rows.filter((r) => !r.record && !r.activity).length} edits · ${data.rows.filter((r) => r.activity).length} other calls · ${data.rows.filter((r) => r.record).length} record changes · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span></div><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><div class="etable"><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
+<tbody>${body}</tbody></table></div>
 <script type="application/json" id="rows">${JSON.stringify((tab === "edits" ? data.rows : []).map((r) => (r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview, file: r.file, n: r.n, md: /\.mdx?$/i.test(r.file) } : null))).replace(/</g, "\\u003c")}</script></section>
 <section id="pane" data-tab="${tab}"${tab === "edits" ? " hidden" : ""}>${tab === "edits" ? '<p class="empty loading" data-k="loading">Yükleniyor…</p>' : opts.pane ?? ""}</section>
 <div id="pop"></div>
@@ -369,6 +380,11 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   const state = Object.assign({ tab: "edits", qs: {}, expanded: [], kinds: ${JSON.stringify(Object.fromEntries(Object.keys({ edit: 1, record: 1, agent: 1, skill: 1, web: 1, mcp: 1, read: 0, search: 0, bash: 0, other: 0 }).map((k) => [k, ["edit", "record", "agent", "skill", "web", "mcp"].includes(k)])))}, agents: [], drafts: {}, back: [], showDone: [], old: [], edit: null }, vscode.getState(), ${JSON.stringify(view).replace(/</g, "\\u003c")}, { root: ${JSON.stringify(root).replace(/</g, "\\u003c")} });
   if (typeof state.q === "string") { state.qs.edits = state.qs.edits ?? state.q; delete state.q; }
   const filter = document.getElementById("filter");
+  // The app bar's height, for what sits sticky under it (the task list, the contents).
+  const appbar = document.querySelector("header.appbar");
+  const barHeight = () => document.body.style.setProperty("--appbar-h", (appbar && getComputedStyle(appbar).position === "sticky" ? appbar.offsetHeight : 0) + "px");
+  barHeight();
+  if (appbar) new ResizeObserver(barHeight).observe(appbar);
   const HINTS = { home: "Görevlerde ara… (/)", tasks: "Görev, karar, soru ara… (/)", inbox: "Bekleyenlerde ara… (/)", architecture: "Bölümlerde ara… (/)", product: "Bölümlerde ara… (/)", glossary: "Terimlerde ara… (/)", edits: "Dosya, istek ya da cevap süz… (/)" };
   // The document tabs' mermaid blocks (#72): drawn with the extension's mermaid, loaded
   // once on the first block, into a shadow root of their div. The block patching compares
@@ -390,8 +406,28 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     const cl = document.body.classList;
     if (cl.contains("vscode-high-contrast-light")) return { key: "hc-light", theme: "base", themeVariables: HC("#000000", "#ffffff") };
     if (cl.contains("vscode-high-contrast")) return { key: "hc", theme: "base", themeVariables: HC("#ffffff", "#000000") };
-    if (cl.contains("vscode-light")) return { key: "light", theme: "default" };
-    return { key: "dark", theme: "dark" };
+    // Light and dark: mermaid's base theme in the panel's own colours (the editor background,
+    // its text, the accent as the node border), so a diagram reads as part of the page.
+    const css = (n) => getComputedStyle(document.body).getPropertyValue(n).trim();
+    const rgb = (c) => {
+      const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(c);
+      if (!m) return null;
+      const h = m[1].length === 3 ? m[1].replace(/./g, "$&$&") : m[1];
+      return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+    };
+    const mix = (a, b, t) => "#" + a.map((v, i) => Math.round(v + (b[i] - v) * t).toString(16).padStart(2, "0")).join("");
+    const light = cl.contains("vscode-light");
+    const bg = rgb(css("--vscode-editor-background")) || (light ? [255, 255, 255] : [30, 30, 30]);
+    const fg = rgb(css("--vscode-foreground")) || (light ? [59, 59, 59] : [204, 204, 204]);
+    const acc = rgb(css("--acc")) || (light ? [194, 65, 12] : [251, 146, 60]);
+    const node = mix(bg, fg, light ? 0.04 : 0.09);
+    return { key: light ? "light" : "dark", theme: "base", themeVariables: {
+      darkMode: !light, background: mix(bg, bg, 0), mainBkg: node, primaryColor: node, primaryTextColor: mix(fg, fg, 0), primaryBorderColor: mix(acc, acc, 0),
+      nodeBorder: mix(acc, acc, 0), secondaryColor: mix(bg, acc, 0.12), tertiaryColor: mix(bg, fg, 0.03), lineColor: mix(bg, fg, 0.6), textColor: mix(fg, fg, 0),
+      titleColor: mix(fg, fg, 0), clusterBkg: mix(bg, acc, light ? 0.05 : 0.07), clusterBorder: mix(bg, fg, 0.28), edgeLabelBackground: mix(bg, bg, 0),
+      noteBkgColor: mix(bg, acc, 0.14), noteTextColor: mix(fg, fg, 0), noteBorderColor: mix(acc, acc, 0), actorBkg: node, actorBorder: mix(acc, acc, 0),
+      actorTextColor: mix(fg, fg, 0), signalColor: mix(bg, fg, 0.7), signalTextColor: mix(fg, fg, 0), labelBoxBkgColor: node, labelBoxBorderColor: mix(acc, acc, 0),
+    } };
   };
   const loadMermaid = () => {
     mermaidState = "loading";
@@ -402,7 +438,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     s.onerror = () => { mermaidState = "failed"; };
     document.head.appendChild(s);
   };
-  const DIAGRAM_CSS = ":host { display: block; } svg { max-width: 100%; height: auto; } .wrap { position: relative; } .vp { overflow: hidden; cursor: grab; border-radius: 6px; touch-action: none; } .vp.drag { cursor: grabbing; } .vp svg { display: block; transform-origin: 0 0; margin: 0 auto; } .tools { display: flex; justify-content: flex-end; gap: 2px; align-items: center; margin-bottom: 4px; opacity: .7; } .wrap:hover .tools, .wrap.full .tools { opacity: 1; } .tools button { min-width: 26px; height: 24px; padding: 0 6px; border: 0; border-radius: 4px; font: 600 13px var(--vscode-font-family); color: var(--vscode-foreground); background: transparent; cursor: pointer; } .tools button:hover { background: var(--vscode-toolbar-hoverBackground); } .tools .pct { min-width: 44px; font-size: 12px; } .tools .hint { padding: 0 6px; font-size: 11px; color: var(--vscode-descriptionForeground); white-space: nowrap; } .wrap.full { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; padding: 8px 12px 12px; box-sizing: border-box; background: var(--vscode-editor-background); } .wrap.full .vp { flex: 1; min-height: 0; } .wrap.full .vp svg { width: 100%; height: 100%; max-width: none !important; } .err { margin: 0 0 6px; font-weight: 600; color: var(--vscode-errorForeground); } pre { margin: 0; padding: 10px 12px; border-radius: 6px; background: var(--vscode-textCodeBlock-background); font-family: var(--vscode-editor-font-family); font-size: 12.5px; white-space: pre-wrap; overflow-x: auto; }";
+  const DIAGRAM_CSS = ":host { display: block; } svg { max-width: 100%; height: auto; } .wrap { position: relative; } .vp { overflow: hidden; cursor: grab; border-radius: 6px; touch-action: none; } .vp.drag { cursor: grabbing; } .vp svg { display: block; transform-origin: 0 0; margin: 0 auto; } .tools { display: flex; justify-content: flex-end; gap: 2px; align-items: center; margin-bottom: 4px; } .wrap:hover .tools, .wrap.full .tools { opacity: 1; } .tools button { min-width: 26px; height: 24px; padding: 0 6px; border: 0; border-radius: 4px; font: 600 13px var(--vscode-font-family); color: var(--vscode-foreground); background: transparent; cursor: pointer; } .tools button:hover { background: var(--vscode-toolbar-hoverBackground); } .tools .pct { min-width: 44px; font-size: 12px; } .tools .hint { padding: 0 6px; font-size: 11px; font-weight: 600; color: var(--vscode-descriptionForeground); white-space: nowrap; } .wrap.full { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; padding: 8px 12px 12px; box-sizing: border-box; background: var(--vscode-editor-background); } .wrap.full .vp { flex: 1; min-height: 0; } .wrap.full .vp svg { width: 100%; height: 100%; max-width: none !important; } .err { margin: 0 0 6px; font-weight: 600; color: var(--vscode-errorForeground); } pre { margin: 0; padding: 10px 12px; border-radius: 6px; background: var(--vscode-textCodeBlock-background); font-family: var(--vscode-editor-font-family); font-size: 12.5px; white-space: pre-wrap; overflow-x: auto; }";
   const showDiagram = (div, entry) => {
     const root = div.shadowRoot || div.attachShadow({ mode: "open" });
     const style = document.createElement("style");
@@ -770,7 +806,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     const run = t.closest("#audit, #scan");
     if (run) {
       run.disabled = true;
-      run.textContent = run.id === "audit" ? "Auditing…" : "Scanning…";
+      run.lastChild.textContent = run.id === "audit" ? "Auditing…" : "Scanning…";
       return vscode.postMessage({ type: run.id });
     }
     const chip = t.closest("#kinds .chip");
