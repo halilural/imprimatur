@@ -25,6 +25,7 @@
 19. [Denetim: bulgu etkin mi (#78)](#audit-effect)
 20. [Recommendations: proje best practice incelemesi (#86, #87)](#best-practice-review)
 21. [Tasarım dokümanlarının tek seferlik doldurulması (backfill)](#docs-backfill)
+22. [Geçmiş taraması ve TODO.md görev takibi](#history-scan-todo)
 
 <a id="overview"></a>
 
@@ -639,3 +640,41 @@ Dokümanı hiç olmayan ya da eski ADR/PDR'leri dokümana girmemiş projeler, ku
 - **Çalışma:** `hooks/backfill.mjs` oturumdan bağımsız (detached) bir süreç olarak açılır ve `claude -p` çalıştırır. Ayarlar: sonnet, $3 bütçe, 120 tur, 30 dakika, ayar dosyası yüklenmez (hook çalışmaz), araçlar yalnızca Read/Glob/Grep ve Imprimatur MCP'nin `doc_get`, `doc_section_upsert`, `search`, `task_get`, `task_list` araçları. Gizli dosyalar best-practice'teki DENY listesiyle engellenir. Prompt'ta bağlanmamış kayıtlar id'leriyle listelenir; ajan bölümleri yazar ve kayıtları bağlar.
 - **Sonuç:** durum (done/failed/nothing), maliyet, ajanın son satırı ve doküman başına bölüm sayısı aynı meta alanına yazılır.
 - Bu tek seferden sonra dokümanları docUpdate güncel tutar (bkz. Süreç kontrolleri).
+
+<a id="history-scan-todo"></a>
+
+## 22. Geçmiş taraması ve TODO.md görev takibi
+
+Panelin "Scan history" düğmesi (ve bir projede panel ilk açıldığında kendiliğinden, bir kez) `vscode/history.js` `scanHistory(root)`'u çalıştırır.
+
+### Kaynaklar
+
+- Claude Code transkriptleri: `~/.claude/projects/<slug>/*.jsonl` (slug = yolun harf/rakam dışı karakterleri `-`); `cwd` kök dizinin içindeyse alt dizinlerde açılan oturumlar da taranır; son 30 gün.
+- TODO.md ve görev klasörlerindeki `TODO: (K)` satırları `todo-files` oturumunda birer adım olur.
+
+### Davranış
+
+- Önceki turların 👉 satırları adım olur, sonraki kullanıcı mesajları `answer` kaydıyla not düşülür, son tur `audit()` ile denetlenir; kayıtlar turun kendi zamanını taşır (`turn.at`).
+- Logu olan (hook çalışmış) ya da `.claude/imprimatur/scanned.json`'da olan oturum atlanır; aynı anda en çok 4 model çağrısı yapılır.
+- Her taramada DONE olan ya da dosyadan silinen açık TODO adımı `by: "file"` ile tiklenir.
+
+### Adım metni ve iş bağlama (audit)
+
+- `audit()` Haiku'dan `asks: [{text, why}]` ve `task` ister: adım bir hafta sonra sohbetsiz anlaşılır olmalı (iş anahtarı, kişi, dosya, somut şey; ≤ ~25 kelime), `why` tek cümlelik bağlam.
+- 👉 satırları "tam N kayıt, aynı sıra, aynı anlam" diye açılır; sayı tutmazsa kelimesi kelimesine kalır. Rutin adımlar (ör. Reload Window) boş bırakılıp düşer. Dil ayrı satırda zorunludur (aksi halde model Türkçe istense de İngilizce yazabiliyordu).
+- `task_hint`: istekteki/mesajdaki anahtar, yoksa oturumun son düzenlediği TODO.md'nin klasörü; yalnız o işle ilgili adımlarda kullanılır.
+- `stepTask`/`normKey` (`vscode/tasks.js`): adımın metni bir anahtarla başlıyorsa o işe ("#88: …"), yoksa maddenin görevine; model `"80"` yazarsa `#80`'e normalleşir. Bütün `asks` aynı anahtarla başlıyorsa maddeye o görev yazılır.
+
+### Panelde görev eşleme (placeOf)
+
+- Anahtar kayıttan ya da metinden çıkar (Jira `ABC-123`; `MT-AR-011` gibi uzun kodların içi sayılmaz; GitHub `#n`).
+- Hedef dosya: kaydın kendi TODO.md'si, ya da oturumun düzenlediği ve anahtarı klasör adında olan/adımı söyleyen (kelimelerin ≥ %40'ı) dosya; çok konulu oturum her adımına son TODO.md'yi basmaz.
+- Rozet: TODO.md'deki anahtarı içeren ilk bağlantıyı açar (Jira adresi ayarsızsa açılmaz); `#n` için yoksa origin'in GitHub issue'su; 📄 dosyayı o satırda açar (repo dışı yol açılmaz).
+- Oturum düzenlememiş olsa da işin kendi görev klasöründeki TODO.md'si kullanılır (taranmış eski oturumlar); Jira anahtarı için TODO.md yoksa adres başka TODO.md'lerdeki `…/browse/<PROJE>-n` bağlantılarından öğrenilir. Hedefi olmayan anahtar tıklanmaz, düz etikettir.
+- Modelin JSON'u çok satırlı ve çitli (fenced) gelebilir (`lastJson`).
+
+### Görev klasörlerinin yeri
+
+- Görev klasörü `docs/todos/<anahtar>/TODO.md`; eski repolar için `todos/<anahtar>/TODO.md` de okunur (`TODO_DIRS`, yeni önce).
+- `todoFiles(root)` kök TODO.md'yi ve iki yerleşimdeki klasörleri döner; `todoOfKey(root, key)` ikisinde de varsa yeniyi seçer; `taskOfFile(file)` görev şeridini (`(docs/)todos/<anahtar>/…`) çıkarır.
+- Görev şeritleri, başlık, Jira adresi, `TODO: (K)` istekleri ve TODO.md bitişiyle kapanış bu yolları kullanır. Kökte yalnız README.md, CLAUDE.md, AGENTS.md, LICENSE kalır.

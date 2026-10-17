@@ -31,6 +31,8 @@ let logLine = () => {};
 const allowed = trustGate(() => vscode.workspace.isTrusted, (msg) => logLine(msg));
 /** @param {(msg: string) => void} fn */
 const setGraphLog = (fn) => void (logLine = fn);
+/** The diagrams' zoom per wheel notch, in percent (setting imprimatur.diagramZoomStep). */
+const zoomStep = () => Math.min(200, Math.max(5, Number(vscode.workspace.getConfiguration("imprimatur").get("diagramZoomStep", 40)) || 40));
 /** The extension's folder (activate sets it): the page loads mermaid from its dist/ (#72). @type {vscode.Uri | undefined} */
 let extensionUri;
 /** @param {vscode.Uri} uri */
@@ -225,6 +227,7 @@ function html(data, root, nonce, waiting = [], opts = {}) {
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'${opts.mermaid ? ` ${esc(opts.mermaid.csp)}` : ""};${opts.mermaid ? ` img-src ${esc(opts.mermaid.csp)};` : ""} form-action 'none'; base-uri 'none';">
 ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.src)}">` : ""}
+<meta name="imprimatur-zoom" content="${Number(opts.zoomStep ?? 40)}">
 <style>
   body { font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); padding: 0 12px; }
   header { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 0; }
@@ -420,6 +423,8 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   // A drawn diagram zooms and pans: Ctrl+wheel (a plain wheel in full view) zooms at the
   // pointer, a drag pans, a double click fits; the buttons do the same, and ⛶ shows it over
   // the whole panel (Esc closes).
+  // How much one wheel notch zooms, in percent (the imprimatur.diagramZoomStep setting).
+  let zoomStep = Number(document.querySelector('meta[name="imprimatur-zoom"]')?.content) || 40;
   const zoomable = (content) => {
     const wrap = document.createElement("div");
     wrap.className = "wrap";
@@ -457,10 +462,10 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     hint.className = "hint";
     hint.textContent = "Ctrl+tekerlek: yakınlaştır · sürükle: kaydır";
     tools.appendChild(hint);
-    button("−", "Uzaklaştır", () => center(1 / 1.5));
+    button("−", "Uzaklaştır", () => center(1 / (1 + zoomStep / 100)));
     const pct = button("100%", "Sığdır", fit);
     pct.className = "pct";
-    button("+", "Yakınlaştır", () => center(1.5));
+    button("+", "Yakınlaştır", () => center(1 + zoomStep / 100));
     const full = button("Tam ekran", "Tam ekran (Esc kapatır)", () => setFull(!wrap.classList.contains("full")));
     const onKey = (e) => { if (e.key === "Escape") setFull(false); };
     const setFull = (on) => {
@@ -474,7 +479,9 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       if (!e.ctrlKey && !e.metaKey && !wrap.classList.contains("full")) return;
       e.preventDefault();
       const r = vp.getBoundingClientRect();
-      zoomAt(Math.exp(-e.deltaY * 0.0035), e.clientX - r.left, e.clientY - r.top);
+      // A notch is deltaY 100 (in pixels; a line-mode wheel reports about 3 per notch).
+      const notches = -e.deltaY / (e.deltaMode === 1 ? 3 : 100);
+      zoomAt(Math.pow(1 + zoomStep / 100, notches), e.clientX - r.left, e.clientY - r.top);
     }, { passive: false });
     let drag = null;
     vp.addEventListener("pointerdown", (e) => {
@@ -1017,6 +1024,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     if (e.data?.type === "preview") return showReview(e.data);
     // The host moved the page (a link from elsewhere): its tab and task.
     if (e.data?.type === "view") { Object.assign(state, e.data.view); return apply(); }
+    if (e.data?.type === "zoomStep") { zoomStep = Number(e.data.step) || zoomStep; return; }
     // A write that failed: the text the box held goes back into it.
     if (e.data?.type === "failed") {
       // A section that did not save: its editor opens again with the text.
@@ -1275,7 +1283,12 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
         refresh?.(false);
       }
     });
+    // The zoom setting changed: the open page takes it at once.
+    const onConfig = vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("imprimatur.diagramZoomStep")) panel?.webview.postMessage({ type: "zoomStep", step: zoomStep() });
+    });
     panel.onDidDispose(() => {
+      onConfig.dispose();
       hooks.visible(false);
       panel = undefined;
       refresh = undefined;
@@ -1325,7 +1338,7 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
       pane = `<p class="empty" data-k="error">Imprimatur: ${esc(e instanceof Error ? e.message : String(e))}</p>`;
     }
     const repoName = (db && tasksView.repoOfRoot(db, root)?.name) || path.basename(root);
-    return html(edits, root, nonce, waiting, { view: pageView(), pane, inbox, repoName, mermaid: mermaidSrc(p.webview) });
+    return html(edits, root, nonce, waiting, { view: pageView(), pane, inbox, repoName, mermaid: mermaidSrc(p.webview), zoomStep: zoomStep() });
   };
   // An edit refreshes three times (extension.js refreshSoon): send only what changed.
   let sent = "";

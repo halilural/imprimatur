@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.59.1",
+  "version": "0.60.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -615,6 +615,13 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Keep the repo's design documents (the panel's **Mimari** and **Ürün** tabs) and their files `ARCHITECTURE.md` and `PRODUCT.md` in step: in `docs/`, or the folder `.claude/imprimatur.json` names (`{\"docs\": {\"dir\": \"docs/design\"}}`). 2 s after a change, the file is written; an edit saved in the file is taken in; a hand-written file is adopted. A section changed on both sides is a conflict: `npm run docs -- sync --take file|db`."
+        },
+        "imprimatur.diagramZoomStep": {
+          "type": "number",
+          "default": 40,
+          "minimum": 5,
+          "maximum": 200,
+          "markdownDescription": "How much a diagram in the Mimari/Ürün/Sözlük tabs zooms per mouse-wheel notch (Ctrl+wheel, or the wheel in full screen), in percent; the − and + buttons use the same step. Higher: faster. Default 40 (×1.4 per notch)."
         }
       }
     },
