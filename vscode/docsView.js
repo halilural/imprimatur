@@ -42,14 +42,33 @@ function renderMarkdown(text, { steps = false } = {}) {
   return out;
 }
 
-/** markdown-it, set up once: safe links, mermaid fences, "- [ ] step" checkboxes. */
+/** A path with no scheme, not absolute: a file beside the documents. */
+const RELATIVE = /^(?![a-z][a-z0-9+.-]*:)(?![\\/])\S/i;
+/** The prefix of a relative image's src, which the panel replaces with the documents folder's webview URI. */
+const DOC_IMG = "imprimatur-doc:";
+
+/** markdown-it, set up once: safe links, relative images, mermaid fences, "- [ ] step" checkboxes. */
 function markdown() {
   if (md === undefined) {
     const MarkdownIt = require("markdown-it");
     md = new MarkdownIt({ html: false, linkify: true, typographer: false });
     const valid = md.validateLink.bind(md);
-    md.validateLink = (/** @type {string} */ url) => valid(url) && /^(https?:|mailto:|#)/i.test(url.trim());
+    md.validateLink = (/** @type {string} */ url) => valid(url) && (/^(https?:|mailto:|#)/i.test(url.trim()) || RELATIVE.test(url.trim()));
     md.renderer.rules.fence = mermaidFence(md.renderer.rules.fence);
+    // A relative path: an image is a file next to the design documents (the panel turns
+    // DOC_IMG into its webview URI); a link to one goes nowhere in the panel, its text stays.
+    const image = md.renderer.rules.image;
+    md.renderer.rules.image = (tokens, idx, options, env, self) => {
+      const src = tokens[idx].attrGet("src") ?? "";
+      if (RELATIVE.test(src)) tokens[idx].attrSet("src", DOC_IMG + src.replace(/^\.\//, ""));
+      tokens[idx].attrJoin("class", "mdimg");
+      return /** @type {any} */ (image)(tokens, idx, options, env, self);
+    };
+    const linkOpen = md.renderer.rules.link_open ?? ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
+    md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+      if (RELATIVE.test(tokens[idx].attrGet("href") ?? "")) tokens[idx].attrs = (tokens[idx].attrs ?? []).filter(([k]) => k !== "href");
+      return linkOpen(tokens, idx, options, env, self);
+    };
     md.core.ruler.after("inline", "steps", stepRule);
   }
   return md;
@@ -320,7 +339,7 @@ const DOCS_CSS = `
   .dhead { display: flex; flex-direction: column; gap: 4px; }
   .dnote { margin: 4px 0 0; font-weight: 600; color: var(--vscode-editorWarning-foreground, var(--acc)); }
   .dempty { display: flex; flex-direction: column; gap: 6px; } .dempty p { margin: 0; }
-  .dsec { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); scroll-margin-top: 12px; }
+  .dsec { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); scroll-margin-top: 12px; }
   body.vscode-high-contrast .dsec, body.vscode-high-contrast-light .dsec { border-color: var(--vscode-contrastBorder); }
   .dsec.old { opacity: .85; } .dsec.adding { border-color: var(--acc); }
   .dsec-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -333,7 +352,10 @@ const DOCS_CSS = `
   .mermaid-src > pre { white-space: pre-wrap; }
   .md pre { padding: 10px 12px; border-radius: 6px; background: var(--vscode-textCodeBlock-background); overflow-x: auto; } .md pre code { padding: 0; background: none; }
   .md blockquote { margin: 8px 0; padding: 4px 12px; border-left: 3px solid var(--vscode-textBlockQuote-border, var(--acc)); background: var(--vscode-textBlockQuote-background); }
-  .md table { border-collapse: collapse; margin: 8px 0; } .md th, .md td { border: 1px solid var(--line); padding: 4px 10px; text-align: left; }
+  /* A wide table scrolls inside its section instead of running out of it. */
+  .md table { display: block; max-width: 100%; width: max-content; overflow-x: auto; border-collapse: collapse; margin: 8px 0; }
+  .md th, .md td { border: 1px solid var(--line); padding: 4px 10px; text-align: left; vertical-align: top; min-width: 60px; max-width: 420px; overflow-wrap: break-word; }
+  .md img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--line); }
   .md a { color: var(--vscode-textLink-foreground); }
   .md li.step { list-style: none; margin-left: -20px; } .md li.step > p { margin: 2px 0; }
   .md input.mdstep { margin: 0 8px 0 0; width: 15px; height: 15px; vertical-align: -2px; accent-color: var(--acc); cursor: pointer; } .md input.mdstep:disabled { cursor: default; }
@@ -350,4 +372,4 @@ const DOCS_CSS = `
   .deditor .acts { align-items: center; flex-wrap: wrap; }
 `;
 
-module.exports = { DOC_TABS, TAB_LABEL, DOCS_CSS, SECTION_BODY_MAX, docModel, docHtml, applyDocMessage, renderMarkdown, stepsOf, toggleStep, mermaidKey, slugify, editOf, describeSectionVersion };
+module.exports = { DOC_IMG, DOC_TABS, TAB_LABEL, DOCS_CSS, SECTION_BODY_MAX, docModel, docHtml, applyDocMessage, renderMarkdown, stepsOf, toggleStep, mermaidKey, slugify, editOf, describeSectionVersion };

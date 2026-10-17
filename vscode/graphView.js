@@ -35,8 +35,27 @@ const setGraphLog = (fn) => void (logLine = fn);
 let extensionUri;
 /** @param {vscode.Uri} uri */
 const setGraphExtensionUri = (uri) => void (extensionUri = uri);
-/** Options of the panel's webview: scripts, and local files only from the extension's dist/ (mermaid.min.js). */
-const webviewOptions = () => ({ enableScripts: true, localResourceRoots: extensionUri ? [vscode.Uri.joinPath(extensionUri, "dist")] : [] });
+/** The folder of the repo's design documents, whose images the document tabs show. @param {string | undefined} root */
+const docsDirOf = (root) => (root ? vscode.Uri.file(require("./docs-export.js").dirOf(root)) : undefined);
+/**
+ * Options of the panel's webview: scripts, and local files only from the extension's dist/
+ * (mermaid.min.js) and the repo's documents folder (images of the document tabs).
+ * @param {string} [root]
+ */
+const webviewOptions = (root) => {
+  const docs = docsDirOf(root);
+  return { enableScripts: true, localResourceRoots: [...(extensionUri ? [vscode.Uri.joinPath(extensionUri, "dist")] : []), ...(docs ? [docs] : [])] };
+};
+/**
+ * The pane with its relative images (docsView.js DOC_IMG) pointing into the documents folder.
+ * @param {string} pane @param {vscode.Webview} webview @param {string} root
+ */
+const withDocImages = (pane, webview, root) => {
+  const { DOC_IMG } = require("./docsView.js");
+  if (!pane.includes(`src="${DOC_IMG}`)) return pane;
+  const base = webview.asWebviewUri(/** @type {vscode.Uri} */ (docsDirOf(root))).toString().replace(/\/$/, "");
+  return pane.split(`src="${DOC_IMG}`).join(`src="${base}/`);
+};
 /**
  * The page's mermaid script: its webview URI and the CSP source that allows it (the webview's
  * cspSource: a URI's "file+" host is no valid CSP host, and localResourceRoots leaves only dist/).
@@ -204,7 +223,7 @@ function html(data, root, nonce, waiting = [], opts = {}) {
     : `<tr><td colspan="8" class="empty">No agent edits recorded in ${esc(root)} yet.</td></tr>`;
   const pending = data.rows.filter((r) => !r.accepted).length;
   return `<!doctype html><html><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'${opts.mermaid ? ` ${esc(opts.mermaid.csp)}` : ""}; form-action 'none'; base-uri 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'${opts.mermaid ? ` ${esc(opts.mermaid.csp)}` : ""};${opts.mermaid ? ` img-src ${esc(opts.mermaid.csp)};` : ""} form-action 'none'; base-uri 'none';">
 ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.src)}">` : ""}
 <style>
   body { font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); padding: 0 12px; }
@@ -380,7 +399,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     s.onerror = () => { mermaidState = "failed"; };
     document.head.appendChild(s);
   };
-  const DIAGRAM_CSS = ":host { display: block; overflow-x: auto; } svg { max-width: 100%; height: auto; } .err { margin: 0 0 6px; font-weight: 600; color: var(--vscode-errorForeground); } pre { margin: 0; padding: 10px 12px; border-radius: 6px; background: var(--vscode-textCodeBlock-background); font-family: var(--vscode-editor-font-family); font-size: 12.5px; white-space: pre-wrap; overflow-x: auto; }";
+  const DIAGRAM_CSS = ":host { display: block; } svg { max-width: 100%; height: auto; } .wrap { position: relative; } .vp { overflow: hidden; cursor: grab; border-radius: 6px; touch-action: none; } .vp.drag { cursor: grabbing; } .vp svg { display: block; transform-origin: 0 0; margin: 0 auto; } .tools { display: flex; justify-content: flex-end; gap: 2px; align-items: center; margin-bottom: 4px; opacity: .7; } .wrap:hover .tools, .wrap.full .tools { opacity: 1; } .tools button { min-width: 26px; height: 24px; padding: 0 6px; border: 0; border-radius: 4px; font: 600 13px var(--vscode-font-family); color: var(--vscode-foreground); background: transparent; cursor: pointer; } .tools button:hover { background: var(--vscode-toolbar-hoverBackground); } .tools .pct { min-width: 44px; font-size: 12px; } .tools .hint { padding: 0 6px; font-size: 11px; color: var(--vscode-descriptionForeground); white-space: nowrap; } .wrap.full { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; padding: 8px 12px 12px; box-sizing: border-box; background: var(--vscode-editor-background); } .wrap.full .vp { flex: 1; min-height: 0; } .wrap.full .vp svg { width: 100%; height: 100%; max-width: none !important; } .err { margin: 0 0 6px; font-weight: 600; color: var(--vscode-errorForeground); } pre { margin: 0; padding: 10px 12px; border-radius: 6px; background: var(--vscode-textCodeBlock-background); font-family: var(--vscode-editor-font-family); font-size: 12.5px; white-space: pre-wrap; overflow-x: auto; }";
   const showDiagram = (div, entry) => {
     const root = div.shadowRoot || div.attachShadow({ mode: "open" });
     const style = document.createElement("style");
@@ -389,7 +408,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       // The SVG mermaid made in strict mode (sanitised): parsed by a template, never pasted into the page's HTML.
       const t = document.createElement("template");
       t.innerHTML = entry.svg;
-      return root.replaceChildren(style, t.content);
+      return root.replaceChildren(style, zoomable(t.content));
     }
     const err = document.createElement("p");
     err.className = "err";
@@ -397,6 +416,80 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     const pre = document.createElement("pre");
     pre.textContent = div.textContent;
     root.replaceChildren(style, err, pre);
+  };
+  // A drawn diagram zooms and pans: Ctrl+wheel (a plain wheel in full view) zooms at the
+  // pointer, a drag pans, a double click fits; the buttons do the same, and ⛶ shows it over
+  // the whole panel (Esc closes).
+  const zoomable = (content) => {
+    const wrap = document.createElement("div");
+    wrap.className = "wrap";
+    const vp = document.createElement("div");
+    vp.className = "vp";
+    vp.appendChild(content);
+    const svg = vp.querySelector("svg");
+    const tools = document.createElement("div");
+    tools.className = "tools";
+    const button = (label, title, fn) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = label;
+      b.title = title;
+      b.setAttribute("aria-label", title);
+      b.addEventListener("click", (e) => { e.stopPropagation(); fn(); });
+      tools.appendChild(b);
+      return b;
+    };
+    let k = 1, x = 0, y = 0;
+    const draw = () => {
+      if (svg) svg.style.transform = "translate(" + x + "px, " + y + "px) scale(" + k + ")";
+      pct.textContent = Math.round(k * 100) + "%";
+    };
+    const zoomAt = (f, px, py) => {
+      const nk = Math.min(12, Math.max(0.2, k * f));
+      x = px - (px - x) * (nk / k);
+      y = py - (py - y) * (nk / k);
+      k = nk;
+      draw();
+    };
+    const center = (f) => { const r = vp.getBoundingClientRect(); zoomAt(f, r.width / 2, r.height / 2); };
+    const fit = () => { k = 1; x = 0; y = 0; draw(); };
+    const hint = document.createElement("span");
+    hint.className = "hint";
+    hint.textContent = "Ctrl+tekerlek: yakınlaştır · sürükle: kaydır";
+    tools.appendChild(hint);
+    button("−", "Uzaklaştır", () => center(1 / 1.25));
+    const pct = button("100%", "Sığdır", fit);
+    pct.className = "pct";
+    button("+", "Yakınlaştır", () => center(1.25));
+    const full = button("Tam ekran", "Tam ekran (Esc kapatır)", () => setFull(!wrap.classList.contains("full")));
+    const onKey = (e) => { if (e.key === "Escape") setFull(false); };
+    const setFull = (on) => {
+      wrap.classList.toggle("full", on);
+      full.textContent = on ? "Kapat" : "Tam ekran";
+      hint.textContent = on ? "tekerlek: yakınlaştır · sürükle: kaydır · Esc: kapat" : "Ctrl+tekerlek: yakınlaştır · sürükle: kaydır";
+      if (on) document.addEventListener("keydown", onKey); else document.removeEventListener("keydown", onKey);
+      fit();
+    };
+    vp.addEventListener("wheel", (e) => {
+      if (!e.ctrlKey && !e.metaKey && !wrap.classList.contains("full")) return;
+      e.preventDefault();
+      const r = vp.getBoundingClientRect();
+      zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+    }, { passive: false });
+    let drag = null;
+    vp.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      drag = { id: e.pointerId, sx: e.clientX - x, sy: e.clientY - y };
+      vp.setPointerCapture(e.pointerId);
+      vp.classList.add("drag");
+    });
+    vp.addEventListener("pointermove", (e) => { if (drag && drag.id === e.pointerId) { x = e.clientX - drag.sx; y = e.clientY - drag.sy; draw(); } });
+    const end = () => { drag = null; vp.classList.remove("drag"); };
+    vp.addEventListener("pointerup", end);
+    vp.addEventListener("pointercancel", end);
+    vp.addEventListener("dblclick", fit);
+    wrap.append(tools, vp);
+    return wrap;
   };
   async function drawDiagrams() {
     if (!MERMAID_SRC) return;
@@ -1164,8 +1257,8 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
     return panel.reveal();
   }
   if (!panel) {
-    if (restored) restored.webview.options = webviewOptions();
-    panel = restored ?? vscode.window.createWebviewPanel("imprimatur.graph", "Imprimatur", vscode.ViewColumn.Active, webviewOptions());
+    if (restored) restored.webview.options = webviewOptions(root);
+    panel = restored ?? vscode.window.createWebviewPanel("imprimatur.graph", "Imprimatur", vscode.ViewColumn.Active, webviewOptions(root));
     panel.title = "Imprimatur";
     panel.webview.onDidReceiveMessage(onMessage);
     // A hidden webview is torn down and gets no messages: shown again, it reloads from the html, so make that current.
@@ -1191,6 +1284,8 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
     });
   }
   const p = panel;
+  // Another repo in the open panel: its documents folder is the one the page may load images from.
+  if (shown !== undefined && shown !== root) p.webview.options = webviewOptions(root);
   shown = root;
   if (at && !moveView(at)) vscode.window.showInformationMessage(`Imprimatur: ${at.task ?? "this record"} has no records yet.`);
   actions = {
@@ -1225,7 +1320,7 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
       const sessions = records.sessionTasks(root);
       const cache = new Map();
       const placeOfStep = (w) => placeOf(root, w, sessions, cache);
-      if (view.tab !== "edits") pane = tasksView.paneHtml(db, root, view, { waiting, linkOf, placeOf: placeOfStep, error: records.lastError });
+      if (view.tab !== "edits") pane = withDocImages(tasksView.paneHtml(db, root, view, { waiting, linkOf, placeOf: placeOfStep, error: records.lastError }), p.webview, root);
     } catch (e) {
       pane = `<p class="empty" data-k="error">Imprimatur: ${esc(e instanceof Error ? e.message : String(e))}</p>`;
     }

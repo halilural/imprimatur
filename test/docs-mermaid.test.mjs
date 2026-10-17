@@ -70,11 +70,14 @@ test("#72 the panel's document tab draws a mermaid block as an <svg> under its C
     };
     const page = html({ rows: [], lanes: [], sessions: [] }, dir, "N", [], { view: { tab: "architecture" }, pane: dv.docHtml(model), repoName: "repo", mermaid: { src, csp: "file:" } });
     assert.ok(page.includes("script-src 'nonce-N' file:;"), "the nonce and the webview's cspSource");
-    assert.ok(!/img-src|unsafe-eval/.test(page.match(/Content-Security-Policy" content="([^"]*)"/)[1]));
+    const csp = page.match(/Content-Security-Policy" content="([^"]*)"/)[1];
+    assert.ok(!/unsafe-eval/.test(csp));
+    // Images only from the webview's own resources (the documents folder), nothing remote.
+    assert.deepEqual(csp.match(/img-src [^;]*/g), ["img-src file:"]);
     // The webview's API, and a probe that reports what the shadow roots hold in the title.
     const stub = `<script nonce="N">window.acquireVsCodeApi = () => ({ postMessage() {}, setState() {}, getState() {} });
 const errs = []; document.addEventListener("securitypolicyviolation", (e) => errs.push(e.violatedDirective + " " + e.blockedURI));
-setInterval(() => { const d = [...document.querySelectorAll(".mermaid-src")].map((x) => x.shadowRoot ? (x.shadowRoot.querySelector("svg") ? "svg" : x.shadowRoot.querySelector(".err") ? "err" : "?") : "-");
+setInterval(() => { const d = [...document.querySelectorAll(".mermaid-src")].map((x) => x.shadowRoot ? (x.shadowRoot.querySelector(".vp svg") && x.shadowRoot.querySelectorAll(".tools button").length === 4 ? "svg" : x.shadowRoot.querySelector(".err") ? "err" : "?") : "-");
 document.title = "R:" + d.join(",") + "|CSP:" + errs.join(";"); }, 50);</script></head>`;
     const file = path.join(dir, "page.html");
     fs.writeFileSync(file, page.replace("</head>", stub));
