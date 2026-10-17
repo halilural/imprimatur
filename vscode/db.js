@@ -966,6 +966,23 @@ class Db {
   }
 
   /**
+   * The ADRs or PDRs, not dropped, that no current section of a document links (docHealth's
+   * unlinked, one row each), oldest first. @param {number} repoId @param {"adr" | "pdr"} kind
+   */
+  unlinkedRecords(repoId, kind) {
+    return this.q(`SELECT r.id, r.kind, r.title, r.body, t.key AS task FROM records r JOIN tasks t ON t.id = r.task_id
+                   WHERE t.repo_id = ? AND r.kind = ? AND r.status != 'dropped'
+                     AND NOT EXISTS (SELECT 1 FROM doc_section_records l JOIN doc_sections s ON s.id = l.section_id
+                                     WHERE l.record_id = r.id AND s.status = 'current')
+                   ORDER BY r.id`).all(repoId, kind);
+  }
+
+  /** How many records a repo has. @param {number} repoId @returns {number} */
+  recordCount(repoId) {
+    return Number(this.q("SELECT count(*) AS n FROM records r JOIN tasks t ON t.id = r.task_id WHERE t.repo_id = ?").get(repoId).n);
+  }
+
+  /**
    * Records whose title or body contains the text (case-insensitive for ASCII), newest first.
    * @param {string} text @param {{repoId?: number, kind?: string, limit?: number}} [o]
    */
@@ -1214,6 +1231,14 @@ class Db {
   setMeta(k, v) {
     if (v == null) this.q("DELETE FROM meta WHERE k = ?").run(k);
     else this.q("INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v").run(k, String(v));
+  }
+
+  /**
+   * Sets a key only when it is not set yet: true when this call set it (two processes
+   * racing for a one-time job, exactly one wins). @param {string} k @param {string} v
+   */
+  claimMeta(k, v) {
+    return Number(this.q("INSERT OR IGNORE INTO meta (k, v) VALUES (?, ?)").run(k, v).changes) > 0;
   }
 
   /** Whether local writes are queued for sync. Off: writes cost what they did before #61. */

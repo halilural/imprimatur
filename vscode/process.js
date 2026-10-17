@@ -19,6 +19,8 @@
 //   PostToolUse MCP,    docUpdate       an ADR/PDR/decision added or changed (record_add/record_update) that no design
 //   Stop, next event                    document section links, or whose sections did not change after it (#74; a
 //                                       decision only once linked): told to the agent at its next tool call or session start
+//   SessionStart        (always)        a repo never backfilled: its documents and glossary written once, in the
+//                                       background (docs-backfill.js), with or without .claude/imprimatur.json
 //   SessionStart,       docSync         the design documents and their Markdown files synced (docs-sync.js, #73):
 //   PostToolUse edits                   adoptions, edits taken in and conflicts told to the agent
 
@@ -343,6 +345,15 @@ function check(event, input, deps = {}) {
   const ghRun = deps.gh ?? gh;
   const root = repoOf(input.cwd ?? process.cwd());
   if (!root) return {};
+  // The design documents written once for a repo that never had them (docs-backfill.js):
+  // every known repo, with or without .claude/imprimatur.json.
+  if (event === "SessionStart") {
+    try {
+      const records = deps.records ?? require("./records.js");
+      const id = records.repoId(root);
+      if (id !== undefined) require("./docs-backfill.js").maybeStart(records.dbOf(), id, root, deps.backfill);
+    } catch {}
+  }
   const s = settingsOf(root);
   if (!s) return {};
   /** @type {string[]} */ const context = [];
