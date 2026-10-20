@@ -49,6 +49,12 @@ function repo() {
   put(root, `${I}/waiting/s1.jsonl`, jsonl([{ t: ago(12), kind: "question", text: "Merge?" }, { t: ago(11), kind: "answer", answer: "yes" }]));
   put(root, `${I}/waiting/s2.jsonl`, jsonl([{ t: ago(12), kind: "question", text: "Ship?" }, { t: ago(2), kind: "answer", answer: "ok" }]));
   put(root, `${I}/waiting/s3.jsonl`, jsonl([{ t: ago(20), kind: "verify", text: "Check the board" }]));
+  // Each log last written when its last record was, in NOW's time: the archive also reads
+  // the file's mtime, and the real clock passing NOW - 7 days must not change the outcome.
+  for (const [name, last] of [["s1", 11], ["s2", 2], ["s3", 20]]) {
+    const at = new Date(NOW - last * 86_400_000);
+    fs.utimesSync(path.join(root, `${I}/waiting/${name}.jsonl`), at, at);
+  }
   return root;
 }
 
