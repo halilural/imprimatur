@@ -577,6 +577,20 @@ function analysisHub(db, root) {
 }
 
 /**
+ * A title as text: a Markdown link keeps its text ("[#620](https://…) — T6: x" → "#620 — T6: x"),
+ * and a key the title starts with goes when the page already shows it ("T6: x").
+ * @param {string | undefined} title @param {string} [key]
+ */
+function plainTitle(title, key) {
+  let t = String(title ?? "").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\s+/g, " ").trim();
+  if (key && t.toLowerCase().startsWith(key.toLowerCase())) {
+    const rest = t.slice(key.length).replace(/^[\s:·–—-]+/, "");
+    if (rest) t = rest;
+  }
+  return t;
+}
+
+/**
  * Görev analizleri laid out like Mimari and Ürün (TASK-ANALYSIS): on the left the tasks and,
  * under the chosen one, its contents; on the right its files in full, each section a
  * document section. Every task is drawn; the page shows the chosen one (state.asel).
@@ -588,12 +602,12 @@ function analysisHubHtml(m) {
   }
   const { renderMarkdown } = require("./docsView.js");
   const name = (/** @type {string} */ src) => (src.startsWith("plan:") ? "Plan (plan modu)" : src || "Analiz");
-  const toc = (/** @type {any} */ d) => `<ol class="atoc" data-k="toc-${esc(d.key)}" data-ak="${esc(d.key)}">${d.files.map((/** @type {any} */ f) => `<li class="afile" data-k="tf-${esc(f.source)}">${icon("file", 12)}<span class="mono">${esc(name(f.source))}</span></li>${f.sections.map((/** @type {any} */ s) => `<li data-k="t${s.id}"><a href="#sec-a${s.id}" data-act="docGo" data-key="a${s.id}"><span>${esc(s.title)}</span></a></li>`).join("")}`).join("")}</ol>`;
-  const item = (/** @type {any} */ d) => `<button class="aitem" data-act="asel" data-key="${esc(d.key)}" data-nav data-q="${esc(`${d.key} ${d.task?.title ?? ""} ${d.files.map((/** @type {any} */ f) => f.source).join(" ")}`)}"><span class="mono key">${esc(d.key)}</span><span class="ttl">${esc(d.task?.title || d.key)}</span><span class="dim">${d.files.length} dosya · ${esc(day(d.at))}</span></button>${toc(d)}`;
+  const toc = (/** @type {any} */ d) => `<ol class="atoc" data-k="toc-${esc(d.key)}" data-ak="${esc(d.key)}">${d.files.map((/** @type {any} */ f) => `<li class="afile" data-k="tf-${esc(f.source)}">${icon("file", 12)}<span class="mono">${esc(name(f.source))}</span></li>${f.sections.map((/** @type {any} */ s) => `<li data-k="t${s.id}"><a href="#sec-a${s.id}" data-act="docGo" data-key="a${s.id}"><span>${esc(plainTitle(s.title))}</span></a></li>`).join("")}`).join("")}</ol>`;
+  const item = (/** @type {any} */ d) => `<button class="aitem" data-act="asel" data-key="${esc(d.key)}" data-nav data-q="${esc(`${d.key} ${d.task?.title ?? ""} ${d.files.map((/** @type {any} */ f) => f.source).join(" ")}`)}"><span class="mono key">${esc(d.key)}</span><span class="ttl">${esc(plainTitle(d.task?.title, d.key) || d.key)}</span><span class="dim">${d.files.length} dosya · ${esc(day(d.at))}</span></button>${toc(d)}`;
   const aside = `<aside class="dtoc alist" data-k="alist" data-scroll="dtoc" data-navgroup="analysis"><div class="lbl" data-k="h">Görevler · ${m.docs.length}</div>${m.docs.map(item).join("")}${m.orphans.length ? `<button class="aitem orph" data-act="asel" data-key="__orphans" data-nav><span class="ttl">Görevsiz analizler</span><span class="dim">${m.orphans.length} dosya</span></button>` : ""}</aside>`;
   const open = (/** @type {any} */ f) => (f.local && !f.source.startsWith("plan:") ? `<button class="mini" data-act="anaOpen" data-file="${esc(f.source)}" data-repo="${m.repo?.id ?? ""}" title="Dosyayı aç">${icon("external", 12)} aç</button>` : "");
-  const file = (/** @type {any} */ f) => `<div class="afhead" data-k="fh-${esc(f.source)}">${icon("file", 14)}<span class="mono">${esc(name(f.source))}</span><span class="dim">${esc(day(f.at))} · ${f.sections.length} bölüm</span>${open(f)}</div>${f.sections.map((/** @type {any} */ s) => `<article class="dsec" id="sec-a${s.id}" data-k="s${s.id}" data-nav tabindex="0"><div class="dsec-h"><h2>${esc(s.title)}</h2></div>${s.body ? `<div class="md">${renderMarkdown(s.body)}</div>` : '<p class="empty">Bu bölüm boş.</p>'}</article>`).join("")}`;
-  const pane = (/** @type {any} */ d) => `<div class="apane" data-k="ap-${esc(d.key)}" data-ak="${esc(d.key)}"><section class="dhead" data-k="head"><span class="lbl">Görev analizi · ${esc(m.repo?.name ?? "")}</span><h1><span class="mono key">${esc(d.key)}</span> ${esc(d.task?.title || "")}</h1><p class="lead">Son güncelleme · ${esc(when(d.at))} · ${d.files.length} dosya${d.task ? ` · <button class="link" data-act="open" data-id="${d.task.id}" data-f="${bucketOf(d.task.status)}">Göreve git ${icon("arrow", 12)}</button>` : ""}</p></section>${d.files.map(file).join("")}</div>`;
+  const file = (/** @type {any} */ f) => `<div class="afhead" data-k="fh-${esc(f.source)}">${icon("file", 14)}<span class="mono">${esc(name(f.source))}</span><span class="dim">${esc(day(f.at))} · ${f.sections.length} bölüm</span>${open(f)}</div>${f.sections.map((/** @type {any} */ s) => `<article class="dsec" id="sec-a${s.id}" data-k="s${s.id}" data-nav tabindex="0"><div class="dsec-h"><h2>${esc(plainTitle(s.title))}</h2></div>${s.body ? `<div class="md">${renderMarkdown(s.body)}</div>` : '<p class="empty">Bu bölüm boş.</p>'}</article>`).join("")}`;
+  const pane = (/** @type {any} */ d) => `<div class="apane" data-k="ap-${esc(d.key)}" data-ak="${esc(d.key)}"><section class="dhead" data-k="head"><span class="lbl">Görev analizi · <span class="mono">${esc(d.key)}</span> · ${esc(m.repo?.name ?? "")}</span><h1>${esc(plainTitle(d.task?.title, d.key) || d.key)}</h1><p class="lead">Son güncelleme · ${esc(when(d.at))} · ${d.files.length} dosya${d.task ? ` · <button class="link" data-act="open" data-id="${d.task.id}" data-f="${bucketOf(d.task.status)}">Göreve git ${icon("arrow", 12)}</button>` : ""}</p></section>${d.files.map(file).join("")}</div>`;
   const options = m.tasks.map((/** @type {any} */ t) => `<option value="${t.id}">${esc(t.key)} · ${esc((t.title || "").slice(0, 60))}</option>`).join("");
   const orphans = m.orphans.length
     ? `<div class="apane" data-k="ap-orphans" data-ak="__orphans"><section class="dhead" data-k="head"><span class="lbl">Görev analizi · ${esc(m.repo?.name ?? "")}</span><h1>Görevsiz analizler</h1><p class="lead">Görevi bulunamayan analiz dosyaları: bir göreve bağla, o görevin analizine geçer.</p></section>${m.orphans.map((o) => `<div class="orow dsec" data-k="o-${esc(o.source)}" data-q="${esc(o.source)}"><span class="mono">${esc(o.source)}</span><span class="dim">${esc(day(o.at))}</span><select data-change="anaAssign" data-file="${esc(o.source)}" aria-label="Göreve bağla"><option value="">Göreve bağla…</option>${options}</select></div>`).join("")}</div>`
@@ -913,7 +927,7 @@ const TASKS_CSS = `
   .hubnav { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 14px; border-bottom: 1px solid var(--line); }
   .alist .aitem { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 8px 10px; border: 1px solid transparent; border-radius: var(--r-md, 8px); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
   .alist .aitem:hover { background: var(--acc-soft); } .alist .aitem.on { border-color: var(--acc); background: var(--acc-soft); }
-  .alist .aitem .ttl { font-weight: 700; } .alist .aitem.orph { margin-top: 8px; }
+  .alist .aitem .ttl { font-weight: 700; overflow-wrap: anywhere; } .alist { overflow-x: hidden; } .alist .aitem.orph { margin-top: 8px; }
   .atoc { list-style: none; margin: 4px 0 10px 10px; padding: 0 0 0 10px; border-left: 2px solid var(--acc-line); display: flex; flex-direction: column; gap: 2px; }
   .atoc a { display: block; padding: 3px 6px; border-radius: 6px; color: inherit !important; } .atoc a:hover { background: var(--acc-soft); text-decoration: none !important; }
   .atoc .afile { display: flex; gap: 6px; align-items: center; margin-top: 6px; color: var(--vscode-descriptionForeground); font-size: var(--fs-xs); }
@@ -971,6 +985,6 @@ const TASKS_CSS = `
 `;
 
 module.exports = {
-  TABS, ANALYSIS_TABS, FILTERS, TASKS_CSS, analysisHub, analysisHubHtml, ICON, icon, KIND_LABEL, kindChip, bucketOf, userActor, parseQuickAdd, isAsk, repoOfRoot, scopeRepos, describeVersion,
+  TABS, ANALYSIS_TABS, FILTERS, plainTitle, TASKS_CSS, analysisHub, analysisHubHtml, ICON, icon, KIND_LABEL, kindChip, bucketOf, userActor, parseQuickAdd, isAsk, repoOfRoot, scopeRepos, describeVersion,
   tasksPage, inboxModel, inboxCount, openTurn, splitText, TITLE_MAX, BODY_MAX, homeModel, tasksHtml, inboxHtml, homeHtml, paneHtml, applyMessage, cleanView, esc,
 };
