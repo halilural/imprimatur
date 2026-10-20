@@ -185,6 +185,8 @@ function taskFor(db, repoId, it) {
   const title = titleOf(it.text);
   const tries = [
     () => taskOfFile(it.rel),
+    // A task folder named by a key with no number (docs/todos/DOCS-BACKFILL/…).
+    () => /^(?:docs\/)?todos\/([^/]+)\/[^/]+$/.exec(it.rel)?.[1],
     () => keyInPath(it.rel),
     () => keyInBranch(it.branch),
     () => (it.session ? db.sessionTaskAt(repoId, it.session, it.at) : undefined),
@@ -192,8 +194,11 @@ function taskFor(db, repoId, it) {
     () => (title ? leadKey(title) ?? taskKeyIn(title) : undefined),
   ];
   for (const t of tries) {
-    const key = normKey(t() ?? "") ?? undefined;
-    if (key && !SPECIAL.has(key) && db.taskByKey(repoId, key)) return key;
+    const raw = String(t() ?? "").trim();
+    // A key as the database has it (TASK-ANALYSIS: no number, not one normKey knows), else normalised ("80" → "#80").
+    for (const key of [raw, normKey(raw)]) {
+      if (key && !SPECIAL.has(key) && db.taskByKey(repoId, key)) return key;
+    }
   }
   return undefined;
 }

@@ -98,6 +98,11 @@ test("taskFor: task folder, key in the path, branch, the session's task, the req
   assert.equal(t({ rel: "notes/a.md", branch: "feature/LATD-12-cache" }), "LATD-12");
   assert.equal(t({ rel: "notes/a.md", prompt: "LATD-12 için analiz yaz" }), "LATD-12");
   assert.equal(t({ rel: "notes/a.md", text: "# #5 önbellek analizi" }), "#5");
+  // A key with no number: its folder, and the session's task.
+  const plain = db.upsertTask(repo.id, "DOCS-BACKFILL", {});
+  assert.equal(t({ rel: "docs/todos/DOCS-BACKFILL/notes.md" }), "DOCS-BACKFILL");
+  db.addRecord(plain.id, { kind: "note", title: "p" }, agent("S7"));
+  assert.equal(t({ rel: "notes/a.md", session: "S7" }), "DOCS-BACKFILL");
   // Unknown to Imprimatur: no task.
   assert.equal(t({ rel: "docs/research/99-x.md" }), undefined);
   // The session's task at the time: the record it wrote last before.
