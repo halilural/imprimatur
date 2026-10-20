@@ -86,7 +86,8 @@ const LOADING = (cols) => `<tr class="loading"><td colspan="${cols}" class="empt
 const { THEME_CSS } = require("./theme.js");
 const { mascot } = require("./mascot.js");
 /** The panel's tabs: key (also its icon) and label. */
-const TAB_BUTTONS = [["home", "Ana sayfa"], ["tasks", "Görevler"], ["inbox", "Bende bekleyenler"], ["analysis", "Analiz"], ["edits", "Ajan değişiklikleri"]];
+// No Bende bekleyenler tab: a task's asks are on its page, the ones with no task on Ana sayfa (its badge counts them all).
+const TAB_BUTTONS = [["home", "Ana sayfa"], ["tasks", "Görevler"], ["analysis", "Analiz"], ["edits", "Ajan değişiklikleri"]];
 /** The pages under the Analiz tab (TASK-ANALYSIS): its button is on for each. */
 const HUB_TABS = ["architecture", "product", "glossary", "analysis"];
 
@@ -326,7 +327,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   .todo .chat { font-size: 10px; padding: 0 5px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
 </style></head><body>
 <header class="appbar"><span class="brand">${mascot(26)}<strong>Imprimatur</strong><span class="repo">${esc(opts.repoName ?? path.basename(root))}</span></span>
-<nav class="tabs" aria-label="Görünümler">${TAB_BUTTONS.map(([t, label]) => `<button data-tab="${t}">${tasksView.icon(/** @type {any} */ (t), 15)}${label}${t === "inbox" && inbox ? ` <span class="badge">${inbox}</span>` : t === "edits" && pending ? ` <span class="badge">${pending}</span>` : ""}</button>`).join("")}</nav>
+<nav class="tabs" aria-label="Görünümler">${TAB_BUTTONS.map(([t, label]) => `<button data-tab="${t}">${tasksView.icon(/** @type {any} */ (t), 15)}${label}${t === "home" && inbox ? ` <span class="badge" title="${inbox} senden bekleniyor">${inbox}</span>` : t === "edits" && pending ? ` <span class="badge">${pending}</span>` : ""}</button>`).join("")}</nav>
 <span class="tools-r"><label class="searchbox">${tasksView.icon("search", 14)}<input id="filter" type="search" aria-label="Ara" placeholder="Ara… (/)"></label><button id="audit" class="tbtn" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">${tasksView.icon("audit", 14)}Audit</button><button id="scan" class="tbtn" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">${tasksView.icon("scan", 14)}Scan history</button></span></header>
 <section id="edits"${tab === "edits" ? "" : " hidden"}><div class="ehead"><div id="kinds">${chips}</div><span class="n" id="count-edits">${data.rows.filter((r) => !r.record && !r.activity).length} edits · ${data.rows.filter((r) => r.activity).length} other calls · ${data.rows.filter((r) => r.record).length} record changes · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span></div><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><div class="etable"><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
 <tbody>${body}</tbody></table></div>
@@ -380,6 +381,8 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   // The repo goes into the saved state too: a panel restored after a reload shows the same one.
   // The host's view (tab, selected task, …) wins over the saved one: it opened the page.
   const state = Object.assign({ tab: "edits", qs: {}, expanded: [], kinds: ${JSON.stringify(Object.fromEntries(Object.keys({ edit: 1, record: 1, agent: 1, skill: 1, web: 1, mcp: 1, read: 0, search: 0, bash: 0, other: 0 }).map((k) => [k, ["edit", "record", "agent", "skill", "web", "mcp"].includes(k)])))}, agents: [], drafts: {}, back: [], showDone: [], old: [], edit: null }, vscode.getState(), ${JSON.stringify(view).replace(/</g, "\\u003c")}, { root: ${JSON.stringify(root).replace(/</g, "\\u003c")} });
+  // Bende bekleyenler is gone: a page saved on it opens Ana sayfa.
+  if (state.tab === "inbox") state.tab = "home";
   if (typeof state.q === "string") { state.qs.edits = state.qs.edits ?? state.q; delete state.q; }
   const filter = document.getElementById("filter");
   // The app bar's height, for what sits sticky under it (the task list, the contents).
@@ -625,7 +628,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     const top = HUB_TABS.includes(tab) ? "analysis" : tab;
     if (HUB_TABS.includes(tab)) state.atab = tab;
     document.querySelectorAll("nav.tabs [data-tab]").forEach((b) => { b.classList.toggle("on", b.dataset.tab === top); b.setAttribute("aria-current", b.dataset.tab === top ? "page" : "false"); });
-    for (const id of ["audit", "scan"]) document.getElementById(id).hidden = tab !== "inbox";
+    for (const id of ["audit", "scan"]) document.getElementById(id).hidden = tab !== "home";
     filter.placeholder = HINTS[tab] || "";
     if (document.activeElement !== filter) filter.value = state.qs[tab] || "";
     const q = (state.qs[tab] || "").toLowerCase();

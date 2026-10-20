@@ -148,6 +148,14 @@ test("turn-end asks are cards under their task; the button ticks the step; ticke
   assert.match(html, /<button class="primary" data-act="turn" data-on="1" data-session="s9" data-item="2026-01-01T10:00:00Z" data-i="0">Yaptım<\/button>/);
   assert.match(html, /data-act="turn" data-on="0" data-session="s9" data-item="2026-01-01T10:00:00Z" data-i="2">geri al/);
   assert.ok(html.includes("tur sonu") && html.includes("prod bekliyor") && html.includes("Tam mesaj"));
+  // With no Bende bekleyenler tab: the open ones on their task's page, the ones with no task on Ana sayfa.
+  const page = tv.paneHtml(s.db, s.root, { tab: "tasks", sel: g1.task.id }, { waiting, placeOf, now });
+  assert.match(page, /data-act="turn" data-on="1" data-session="s9" data-item="2026-01-01T10:00:00Z" data-i="0">Yaptım/);
+  assert.ok(!page.includes('data-i="2"'), "done ones stay off the task page");
+  const home = tv.paneHtml(s.db, s.root, { tab: "home" }, { waiting, placeOf, now });
+  assert.match(home, /Görevsiz bekleyenler[\s\S]*?Gözle bak/);
+  assert.ok(!home.includes("Deploy et"), "one with a task is on its page, not on Ana sayfa");
+  assert.equal(tv.cleanView({ tab: "inbox" }).tab, "home", "a view saved on the old tab opens Ana sayfa");
   assert.ok(html.includes("<span>Görevsiz</span>"));
   assert.ok(!html.includes("Audit kapattı") && !html.includes("Eski soru"));
 });
@@ -239,7 +247,10 @@ test("#69 the tabs' HTML: Turkish labels, escaped text, keyed blocks, no emoji i
   for (const text of ["Bende bekleyenler", "Cevap bekliyor", "Senin işin", "Elle test", "Bugün bitirdin", "Bu repo", "Bütün repolar", "Yaptım", "Geçti"])
     assert.ok(inbox.includes(text), text);
   const home = tv.paneHtml(s.db, s.root, { tab: "home" });
-  for (const text of ["1 / 4 görev bitti", "Nerede kaldık", "Senden beklenen", "hepsi (3)", "Son değişiklik"]) assert.ok(home.includes(text), text);
+  for (const text of ["1 / 4 görev bitti", "Nerede kaldık", "Senden beklenen", "Son değişiklik"]) assert.ok(home.includes(text), text);
+  // No Bende bekleyenler tab to link to: the count only.
+  assert.match(home, /<span>Senden beklenen<\/span><span class="dim">3<\/span>/);
+  assert.ok(!home.includes('data-tab="inbox"'));
   assert.equal(tv.paneHtml(s.db, s.root, { tab: "edits" }), "");
   for (const page of [tasks, inbox, home]) assert.doesNotMatch(page, /\p{Extended_Pictographic}/u, "SVG icons, no emoji");
   assert.doesNotMatch(tv.TASKS_CSS, /#[0-9a-f]{3,8}\b/i, "theme colours only");
@@ -258,7 +269,10 @@ test("#69 the panel page: tabs, only the visible tab drawn, its script parses", 
     const data = { rows: [{ file: "a.md", n: 1, t: Date.now(), added: 1, removed: 0, lane: 0, intent: "Edit a" }], lanes: [{ first: 0, last: 0 }], sessions: [] };
     const pane = tv.paneHtml(s.db, s.root, { tab: "tasks" });
     const page = html(data, s.root, "N", [], { view: { tab: "tasks", sel: s.t1.id }, pane, inbox: 4, repoName: "repo" });
-    for (const label of ["Ana sayfa", "Görevler", "Bende bekleyenler", "Ajan değişiklikleri"]) assert.ok(page.includes(`>${label}`), label);
+    for (const label of ["Ana sayfa", "Görevler", "Analiz", "Ajan değişiklikleri"]) assert.ok(page.includes(`>${label}`), label);
+    // No Bende bekleyenler tab: what waits is counted on Ana sayfa.
+    assert.ok(!page.includes('data-tab="inbox"'));
+    assert.match(page, /data-tab="home">[\s\S]*?Ana sayfa <span class="badge" title="4 senden bekleniyor">4<\/span>/);
     assert.match(page, /<section id="pane" data-tab="tasks">/);
     assert.match(page, /<section id="edits" hidden>/);
     assert.ok(!page.includes('data-file="a.md"'), "the edits table is not drawn on another tab");

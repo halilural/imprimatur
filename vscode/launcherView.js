@@ -11,7 +11,6 @@ const vscode = require("vscode");
 const ROWS = [
   { id: "home", label: "Ana sayfa", icon: "home", command: "imprimatur.openHome", tooltip: "Nerede kaldık, senden beklenenler, görevler" },
   { id: "tasks", label: "Görevler", icon: "checklist", command: "imprimatur.openTasks", tooltip: "Görevler ve kayıtları" },
-  { id: "inbox", label: "Bende bekleyenler", icon: "bell", command: "imprimatur.openInbox", tooltip: "Ajanın senden beklediği her şey" },
   { id: "architecture", label: "Mimari", icon: "symbol-structure", command: "imprimatur.openArchitecture", tooltip: "Mimari tasarım dokümanı: nasıl kurulu" },
   { id: "product", label: "Ürün", icon: "package", command: "imprimatur.openProduct", tooltip: "Ürün tasarım dokümanı: kullanıcı ne alıyor" },
   { id: "glossary", label: "Sözlük", icon: "book", command: "imprimatur.openGlossary", tooltip: "Proje sözlüğü: terimler ve anlamları" },
@@ -48,10 +47,11 @@ class LauncherView {
 
   /** @param {typeof ROWS[number]} row */
   getTreeItem(row) {
-    const label = row.id === "inbox" && this.now.inbox ? `${row.label} (${this.now.inbox})` : row.label;
+    // What waits on the user counts on Ana sayfa (no Bende bekleyenler row): asks are on their task pages.
+    const label = row.id === "home" && this.now.inbox ? `${row.label} (${this.now.inbox})` : row.label;
     const it = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
     it.id = row.id;
-    it.iconPath = new vscode.ThemeIcon(row.icon, row.id === "inbox" && this.now.inbox ? new vscode.ThemeColor("charts.orange") : undefined);
+    it.iconPath = new vscode.ThemeIcon(row.icon, row.id === "home" && this.now.inbox ? new vscode.ThemeColor("charts.orange") : undefined);
     it.tooltip = row.tooltip;
     if (row.id === "edits" && this.now.edits) it.description = `${this.now.edits} incelemede`;
     it.command = { command: row.command, title: row.label };

@@ -614,7 +614,8 @@ function activate(ctx) {
     vscode.commands.registerCommand("imprimatur.openHome", () => showGraph({ tab: "home" })),
     vscode.commands.registerCommand("imprimatur.openTasks", () => showGraph({ tab: "tasks" })),
     vscode.commands.registerCommand("imprimatur.bestPractices.run", () => runBestPractices()),
-    vscode.commands.registerCommand("imprimatur.openInbox", () => showGraph({ tab: "inbox" })),
+    // Bende bekleyenler is gone (asks are on their task pages): the old command opens Ana sayfa.
+    vscode.commands.registerCommand("imprimatur.openInbox", () => showGraph({ tab: "home" })),
     // Design documents (#72): the Mimari, Ürün and Sözlük tabs; docs.reveal opens one on a section.
     vscode.commands.registerCommand("imprimatur.openArchitecture", () => showGraph({ tab: "architecture" })),
     vscode.commands.registerCommand("imprimatur.openProduct", () => showGraph({ tab: "product" })),

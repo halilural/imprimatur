@@ -118,13 +118,14 @@ While the plugin is enabled, a plain `npm run setup` writes no hooks.
   and changed blocks marked, old text in red boxes, one block of context around each. The status bar's **Agent Graph** button opens it and shows
   how many asks wait on you.
 - **Imprimatur panel tabs** (#69): next to the edits (**Ajan değişiklikleri**),
-  **Ana sayfa** (progress, where each task was left, the top asks, every task),
+  **Ana sayfa** (progress, where each task was left, the top asks, the turn-end
+  asks with no task, Audit and Scan history; its badge counts what waits on you),
   **Görevler** (the task list by status, this repo or every repo; a task's page:
-  where we left off, what waits on you with an answer box, todos to tick, a
-  quick-add box (`?` question, `!` decision, `#` note, `@ben` your todo),
-  decisions, ADRs, PDRs, manual tests, activity) and **Bende bekleyenler**
-  (everything waiting on you, by task, plus the turn-end asks). Keyboard: j/k,
-  Enter, x, a, /, Esc. Writes go to Imprimatur's database as you.
+  where we left off, then tabs: what waits on you, with the turn-end asks for it
+  and an answer box, todos to tick and a quick-add box (`?` question, `!`
+  decision, `#` note, `@ben` your todo), decisions, notes, manual tests,
+  activity) and **Analiz** (Mimari, Ürün, Sözlük and each task's analyses).
+  Keyboard: j/k, Enter, x, a, /, Esc. Writes go to Imprimatur's database as you.
 - **Imprimatur side bar** (its own icon in the activity bar): rows that open
   the panel on a tab (the badge counts what waits on you), then **Agent setup**: every file in the repo, and in your home folder, that
   shapes a coding agent, whatever the tool: Claude Code (CLAUDE.md, settings
@@ -230,13 +231,14 @@ While the plugin is enabled, a plain `npm run setup` writes no hooks.
   and changed blocks marked, old text in red boxes, one block of context around each. The status bar's **Agent Graph** button opens it and shows
   how many asks wait on you.
 - **Imprimatur panel tabs** (#69): next to the edits (**Ajan değişiklikleri**),
-  **Ana sayfa** (progress, where each task was left, the top asks, every task),
+  **Ana sayfa** (progress, where each task was left, the top asks, the turn-end
+  asks with no task, Audit and Scan history; its badge counts what waits on you),
   **Görevler** (the task list by status, this repo or every repo; a task's page:
-  where we left off, what waits on you with an answer box, todos to tick, a
-  quick-add box (`?` question, `!` decision, `#` note, `@ben` your todo),
-  decisions, ADRs, PDRs, manual tests, activity) and **Bende bekleyenler**
-  (everything waiting on you, by task, plus the turn-end asks). Keyboard: j/k,
-  Enter, x, a, /, Esc. Writes go to Imprimatur's database as you.
+  where we left off, then tabs: what waits on you, with the turn-end asks for it
+  and an answer box, todos to tick and a quick-add box (`?` question, `!`
+  decision, `#` note, `@ben` your todo), decisions, notes, manual tests,
+  activity) and **Analiz** (Mimari, Ürün, Sözlük and each task's analyses).
+  Keyboard: j/k, Enter, x, a, /, Esc. Writes go to Imprimatur's database as you.
 - **Imprimatur side bar** (its own icon in the activity bar): rows that open
   the panel on a tab (the badge counts what waits on you), then **Agent setup**: every file in the repo, and in your home folder, that
   shapes a coding agent, whatever the tool: Claude Code (CLAUDE.md, settings
