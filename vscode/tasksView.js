@@ -549,18 +549,6 @@ function taskTabs(c, tabs) {
 }
 
 /**
- * A task's analysis files (TASK-ANALYSIS) as cards, each with its sections, the newest open.
- * @param {any[]} files analysisOf's files @param {number | undefined} repoId the "aç" button's repo
- */
-function fileCards(files, repoId) {
-  const { renderMarkdown } = require("./docsView.js");
-  const name = (/** @type {string} */ src) => (src.startsWith("plan:") ? "Plan (plan modu)" : src || "Analiz");
-  const open = (/** @type {any} */ f) => (f.local && !f.source.startsWith("plan:") ? `<button class="mini" data-act="anaOpen" data-file="${esc(f.source)}" data-repo="${repoId ?? ""}" title="Dosyayı aç">${icon("external", 12)} aç</button>` : "");
-  return files.map((/** @type {any} */ f, /** @type {number} */ i) => `<details class="card ana" data-k="ana-${esc(f.source)}"${i === 0 ? " open" : ""}><summary><span class="meta">${icon("file", 14)}<span class="mono">${esc(name(f.source))}</span><span class="dim">${esc(day(f.at))} · ${f.sections.length} bölüm</span>${open(f)}</span></summary>
-${f.sections.map((/** @type {any} */ s) => `<div class="asec" data-k="s${s.id}"><h3>${esc(s.title)}</h3>${s.body ? `<div class="body md">${renderMarkdown(s.body)}</div>` : ""}</div>`).join("")}</details>`).join("");
-}
-
-/**
  * The Analiz tab's sub-pages, over each of them: Mimari, Ürün, Sözlük, Görev analizleri (how many tasks have one).
  * @param {any} db @param {string} root @param {string} cur
  */
@@ -588,19 +576,29 @@ function analysisHub(db, root) {
   return { repo: { id: repo.id, name: repo.name }, docs, orphans, tasks };
 }
 
-/** @param {ReturnType<typeof analysisHub>} m */
+/**
+ * Görev analizleri laid out like Mimari and Ürün (TASK-ANALYSIS): on the left the tasks and,
+ * under the chosen one, its contents; on the right its files in full, each section a
+ * document section. Every task is drawn; the page shows the chosen one (state.asel).
+ * @param {ReturnType<typeof analysisHub>} m
+ */
 function analysisHubHtml(m) {
   if (!m.docs.length && !m.orphans.length) {
     return `<div class="emptyhero" data-k="none">${require("./mascot.js").mascot(56)}<p>Bu repoda henüz görev analizi yok. Ajan bir görev için analiz, plan ya da araştırma notu yazdığında burada görünür; geçmiş oturumlar için "Imprimatur: Take Task Analyses from Past Sessions".</p></div>`;
   }
-  const item = (/** @type {any} */ d) => `<button class="aitem" data-act="asel" data-key="${esc(d.key)}" data-nav data-q="${esc(`${d.key} ${d.task?.title ?? ""} ${d.files.map((/** @type {any} */ f) => f.source).join(" ")}`)}"><span class="mono key">${esc(d.key)}</span><span class="ttl">${esc(d.task?.title || d.key)}</span><span class="dim">${d.files.length} dosya · ${esc(day(d.at))}</span></button>`;
-  const list = `<aside class="alist" data-k="alist" data-navgroup="analysis">${m.docs.map(item).join("")}${m.orphans.length ? `<button class="aitem orph" data-act="asel" data-key="__orphans" data-nav><span class="ttl">Görevsiz analizler</span><span class="dim">${m.orphans.length} dosya</span></button>` : ""}</aside>`;
-  const pane = (/** @type {any} */ d) => `<div class="apane" data-k="ap-${esc(d.key)}" data-ak="${esc(d.key)}"><div class="h2row"><h2><span class="mono key">${esc(d.key)}</span> ${esc(d.task?.title || "")}</h2>${d.task ? `<button class="mini" data-act="open" data-id="${d.task.id}" data-f="${bucketOf(d.task.status)}">Göreve git ${icon("arrow", 12)}</button>` : ""}</div>${fileCards(d.files, m.repo?.id)}</div>`;
+  const { renderMarkdown } = require("./docsView.js");
+  const name = (/** @type {string} */ src) => (src.startsWith("plan:") ? "Plan (plan modu)" : src || "Analiz");
+  const toc = (/** @type {any} */ d) => `<ol class="atoc" data-k="toc-${esc(d.key)}" data-ak="${esc(d.key)}">${d.files.map((/** @type {any} */ f) => `<li class="afile" data-k="tf-${esc(f.source)}">${icon("file", 12)}<span class="mono">${esc(name(f.source))}</span></li>${f.sections.map((/** @type {any} */ s) => `<li data-k="t${s.id}"><a href="#sec-a${s.id}" data-act="docGo" data-key="a${s.id}"><span>${esc(s.title)}</span></a></li>`).join("")}`).join("")}</ol>`;
+  const item = (/** @type {any} */ d) => `<button class="aitem" data-act="asel" data-key="${esc(d.key)}" data-nav data-q="${esc(`${d.key} ${d.task?.title ?? ""} ${d.files.map((/** @type {any} */ f) => f.source).join(" ")}`)}"><span class="mono key">${esc(d.key)}</span><span class="ttl">${esc(d.task?.title || d.key)}</span><span class="dim">${d.files.length} dosya · ${esc(day(d.at))}</span></button>${toc(d)}`;
+  const aside = `<aside class="dtoc alist" data-k="alist" data-scroll="dtoc" data-navgroup="analysis"><div class="lbl" data-k="h">Görevler · ${m.docs.length}</div>${m.docs.map(item).join("")}${m.orphans.length ? `<button class="aitem orph" data-act="asel" data-key="__orphans" data-nav><span class="ttl">Görevsiz analizler</span><span class="dim">${m.orphans.length} dosya</span></button>` : ""}</aside>`;
+  const open = (/** @type {any} */ f) => (f.local && !f.source.startsWith("plan:") ? `<button class="mini" data-act="anaOpen" data-file="${esc(f.source)}" data-repo="${m.repo?.id ?? ""}" title="Dosyayı aç">${icon("external", 12)} aç</button>` : "");
+  const file = (/** @type {any} */ f) => `<div class="afhead" data-k="fh-${esc(f.source)}">${icon("file", 14)}<span class="mono">${esc(name(f.source))}</span><span class="dim">${esc(day(f.at))} · ${f.sections.length} bölüm</span>${open(f)}</div>${f.sections.map((/** @type {any} */ s) => `<article class="dsec" id="sec-a${s.id}" data-k="s${s.id}" data-nav tabindex="0"><div class="dsec-h"><h2>${esc(s.title)}</h2></div>${s.body ? `<div class="md">${renderMarkdown(s.body)}</div>` : '<p class="empty">Bu bölüm boş.</p>'}</article>`).join("")}`;
+  const pane = (/** @type {any} */ d) => `<div class="apane" data-k="ap-${esc(d.key)}" data-ak="${esc(d.key)}"><section class="dhead" data-k="head"><span class="lbl">Görev analizi · ${esc(m.repo?.name ?? "")}</span><h1><span class="mono key">${esc(d.key)}</span> ${esc(d.task?.title || "")}</h1><p class="lead">Son güncelleme · ${esc(when(d.at))} · ${d.files.length} dosya${d.task ? ` · <button class="link" data-act="open" data-id="${d.task.id}" data-f="${bucketOf(d.task.status)}">Göreve git ${icon("arrow", 12)}</button>` : ""}</p></section>${d.files.map(file).join("")}</div>`;
   const options = m.tasks.map((/** @type {any} */ t) => `<option value="${t.id}">${esc(t.key)} · ${esc((t.title || "").slice(0, 60))}</option>`).join("");
   const orphans = m.orphans.length
-    ? `<div class="apane" data-k="ap-orphans" data-ak="__orphans"><h2>Görevsiz analizler <span class="dim">· ${m.orphans.length}</span></h2><p class="dim">Görevi bulunamayan analiz dosyaları: bir göreve bağla, o görevin analizine geçer.</p>${m.orphans.map((o) => `<div class="orow" data-k="o-${esc(o.source)}" data-q="${esc(o.source)}"><span class="mono">${esc(o.source)}</span><span class="dim">${esc(day(o.at))}</span><select data-change="anaAssign" data-file="${esc(o.source)}" aria-label="Göreve bağla"><option value="">Göreve bağla…</option>${options}</select></div>`).join("")}</div>`
+    ? `<div class="apane" data-k="ap-orphans" data-ak="__orphans"><section class="dhead" data-k="head"><span class="lbl">Görev analizi · ${esc(m.repo?.name ?? "")}</span><h1>Görevsiz analizler</h1><p class="lead">Görevi bulunamayan analiz dosyaları: bir göreve bağla, o görevin analizine geçer.</p></section>${m.orphans.map((o) => `<div class="orow dsec" data-k="o-${esc(o.source)}" data-q="${esc(o.source)}"><span class="mono">${esc(o.source)}</span><span class="dim">${esc(day(o.at))}</span><select data-change="anaAssign" data-file="${esc(o.source)}" aria-label="Göreve bağla"><option value="">Göreve bağla…</option>${options}</select></div>`).join("")}</div>`
     : "";
-  return `<div class="ahub" data-k="ahub">${list}<main class="adoc" data-k="adoc">${m.docs.map(pane).join("")}${orphans}</main></div>`;
+  return `<div class="doc ahub" data-k="ahub">${aside}<main class="dpage adoc" data-k="adoc">${m.docs.map(pane).join("")}${orphans}</main></div>`;
 }
 
 const SEV_TR = { high: "yüksek", medium: "orta", low: "düşük" };
@@ -913,18 +911,18 @@ const TASKS_CSS = `
   .ttab:hover { color: var(--acc); } .ttab.on { border-bottom-color: var(--acc); color: var(--acc); }
   .ttab .n { display: inline-block; min-width: 18px; padding: 0 6px; border-radius: var(--r-pill); background: var(--acc-soft); color: var(--acc); font-size: var(--fs-xs); text-align: center; }
   .hubnav { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 14px; border-bottom: 1px solid var(--line); }
-  .ahub { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 18px; align-items: start; }
-  .alist { display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; max-height: calc(100vh - 140px); overflow: auto; }
-  .aitem { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border: 1px solid transparent; border-radius: var(--r-md, 8px); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-  .aitem:hover { background: var(--acc-soft); } .aitem.on { border-color: var(--acc); background: var(--acc-soft); }
-  .aitem .ttl { font-weight: 700; } .aitem.orph { margin-top: 8px; border-top: 1px dashed var(--line); }
-  .adoc h2 { margin-bottom: 10px; } .adoc .h2row { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .alist .aitem { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 8px 10px; border: 1px solid transparent; border-radius: var(--r-md, 8px); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .alist .aitem:hover { background: var(--acc-soft); } .alist .aitem.on { border-color: var(--acc); background: var(--acc-soft); }
+  .alist .aitem .ttl { font-weight: 700; } .alist .aitem.orph { margin-top: 8px; }
+  .atoc { list-style: none; margin: 4px 0 10px 10px; padding: 0 0 0 10px; border-left: 2px solid var(--acc-line); display: flex; flex-direction: column; gap: 2px; }
+  .atoc a { display: block; padding: 3px 6px; border-radius: 6px; color: inherit !important; } .atoc a:hover { background: var(--acc-soft); text-decoration: none !important; }
+  .atoc .afile { display: flex; gap: 6px; align-items: center; margin-top: 6px; color: var(--vscode-descriptionForeground); font-size: var(--fs-xs); }
+  .adoc .apane { display: flex; flex-direction: column; gap: 18px; }
+  .afhead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .afhead .mini { margin-left: auto; opacity: 1; padding: 2px 10px; border-color: var(--acc); color: var(--acc); font-size: var(--fs-sm); font-weight: 700; cursor: pointer; }
+  .orow.dsec { flex-direction: row; align-items: center; }
   .analink { opacity: 1; border-color: var(--acc); color: var(--acc); font-size: var(--fs-sm); font-weight: 700; cursor: pointer; padding: 2px 10px; }
   .orow select { margin-left: auto; max-width: 280px; }
-  @media (max-width: 720px) { .ahub { grid-template-columns: 1fr; } .alist { position: static; max-height: none; } }
-  .ana summary { cursor: pointer; list-style: none; } .ana summary::-webkit-details-marker { display: none; }
-  .ana .meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .ana .meta .mini { margin-left: auto; }
-  .ana + .ana { margin-top: 8px; } .asec { margin-top: 12px; } .asec h3 { margin: 0 0 4px; font-size: var(--fs-body); font-weight: 700; }
   .aorph { margin-top: 10px; } .orow { display: flex; gap: 8px; align-items: center; padding: 4px 0; } .orow .mini { margin-left: auto; }
   .ana .mini, .orow .mini { opacity: 1; padding: 2px 10px; border-color: var(--acc); color: var(--acc); font-size: var(--fs-sm); font-weight: 700; cursor: pointer; }
   .ana .mini:hover, .orow .mini:hover { background: var(--acc-soft); }

@@ -595,7 +595,8 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     const has = (k) => !!k && !!list.querySelector('[data-key="' + CSS.escape(k) + '"]');
     const cur = has(state.asel) ? state.asel : list.querySelector("[data-key]")?.dataset.key;
     list.querySelectorAll(".aitem").forEach((b) => b.classList.toggle("on", b.dataset.key === cur));
-    document.querySelectorAll("#pane .apane").forEach((p) => { p.hidden = q ? !p.textContent.toLowerCase().includes(q) : p.dataset.ak !== cur; });
+    // The chosen task's contents (left) and files (right); searching shows every task's files that say it.
+    document.querySelectorAll("#pane [data-ak]").forEach((p) => { p.hidden = q ? p.classList.contains("atoc") || !p.textContent.toLowerCase().includes(q) : p.dataset.ak !== cur; });
   };
   const taskTabs = () => {
     const q = (state.qs[state.tab] || "").toLowerCase();
