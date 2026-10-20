@@ -20,15 +20,15 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { SECTION_BODY_MAX, SECTION_TITLE_MAX } = require("./db.js");
-const { taskOfFile, taskKeyIn, normKey, leadKey } = require("./tasks.js");
+const { taskKeyIn, normKey, leadKey } = require("./tasks.js");
 
 const CONFIG = path.join(".claude", "imprimatur.json");
 /** Tasks that are not work items: their records are Imprimatur's own lists. */
 const SPECIAL = new Set(["ADR", "PDR", "TEST", "AUDIT", "BEST", "RECS"]);
 /** Files a repo keeps for its readers, or Imprimatur keeps already. */
 const NOT_ANALYSIS = /^(README|CHANGELOG|CHANGES|LICENSE|LICENCE|CONTRIBUTING|CODE_OF_CONDUCT|SECURITY|TODO|CLAUDE|AGENTS|GEMINI|SKILL|ARCHITECTURE|PRODUCT|GLOSSARY|THIRD_PARTY_NOTICES|NOTICE|TEMPLATE)\.mdx?$/i;
-/** Folders whose files are something else: Imprimatur's own, tools', dependencies', the design documents', the sprint plans. */
-const NOT_UNDER = /(^|\/)(node_modules|\.git|\.claude\/(imprimatur|commands|agents|skills)|\.cursor|\.github|vendor|dist|build|docs\/(design|product|testing)|(docs\/)?todos\/sprints)(\/|$)/;
+/** Folders whose files are something else: Imprimatur's own, tools' and agent rules, agent memory, dependencies', the design documents', prompt templates, the sprint plans. */
+const NOT_UNDER = /(^|\/)(node_modules|\.git|\.claude\/(imprimatur|commands|agents|skills)|\.cursor|\.github|vendor|dist|build|\.claude\/(rules|hooks)|memory|docs\/(design|product|testing|prompts)|(docs\/)?todos\/sprints)(\/|$)/;
 /** Paths that say "analysis" by themselves. */
 const ANALYSIS_PATH = /(^|\/)((docs\/)?todos\/[^/]+\/[^/]+$|docs\/(research|analysis|analiz|spikes?|plans?|rfcs?|adr)\/|spikes?\/|~\/\.claude\/plans\/|plan:)/i;
 const ANALYSIS_NAME = /(analy[sz]|analiz|plan|spike|rfc|research|ara[sş]t[iı]rma|findings|bulgular|result|sonu[cç]|investigation|inceleme|discovery|kesif|keşif|design-?notes|post-?mortem|walkthrough)/i;
@@ -105,7 +105,7 @@ function heuristic(rel, text) {
 }
 
 /** @param {string} rel @param {string} text */
-const modelPrompt = (rel, text) => `A coding agent wrote this Markdown file in a software repo. Is it an analysis, plan, investigation, research note, spike result or design note written for a piece of work (a task), as opposed to documentation for the project's readers (a guide, README, API reference, changelog, prompt template, test spec, blog post)?
+const modelPrompt = (rel, text) => `A coding agent wrote this Markdown file in a software repo. Is it an analysis, plan, investigation, research note, spike result or design note written for a piece of work (a task), as opposed to documentation for the project's readers (a guide, README, API reference, changelog, prompt template, test spec, blog post), agent rules or instructions (.claude/rules, CLAUDE.md-like files), agent memory notes, or environment or setup notes?
 Answer with one word: YES or NO.
 
 Path: ${rel}
@@ -151,14 +151,21 @@ async function verdictOf(db, repoId, rel, text, o = {}) {
 /** A Jira-style key in a name, whatever its case and what follows: latd-12-cache → LATD-12. @param {string} s */
 const jiraIn = (s) => /(?<![A-Za-z0-9])([A-Za-z][A-Za-z0-9]{1,9}-\d+)(?!\d)/.exec(s)?.[1]?.toUpperCase();
 
-/** A key from a path's folders and name: 80-paper.md → #80, spikes/81-x/RESULT.md → #81, LATD-12-notes.md → LATD-12. @param {string} rel */
-function keyInPath(rel) {
-  const parts = rel.replace(/^~\//, "").split("/");
-  for (const p of parts.slice(-2).reverse()) {
+/**
+ * The task a path names, of those Imprimatur has: its name, then each folder, nearest first;
+ * each as a key (LATD-traceability, #80), a Jira key in it (latd-12-cache), or a number it
+ * starts with (80-paper.md, spikes/81-x/; "01-initpayload" only if #1 is a task).
+ * docs/analysis/LATD-9999/01-initpayload/analysis.md → LATD-9999.
+ * @param {any} db @param {number} repoId @param {string} rel @returns {string | undefined}
+ */
+function keyInPath(db, repoId, rel) {
+  const parts = rel.replace(/^~\//, "").split("/").reverse();
+  for (const [i, part] of parts.entries()) {
+    const p = i === 0 ? part.replace(/\.mdx?$/i, "") : part;
     const num = /^(\d{1,6})[-_.]/.exec(p)?.[1];
-    if (num) return `#${num}`;
-    const jira = jiraIn(p);
-    if (jira) return jira;
+    for (const key of [p, normKey(p), jiraIn(p), num && `#${Number(num)}`]) {
+      if (key && !SPECIAL.has(key) && db.taskByKey(repoId, key)) return key;
+    }
   }
   return undefined;
 }
@@ -174,8 +181,8 @@ function keyInBranch(branch) {
 const titleOf = (text) => /^#\s+(.+?)\s*#*\s*$/m.exec(text)?.[1];
 
 /**
- * The task a file belongs to, of those Imprimatur has, in order: its task folder, a key in
- * its path, the branch, the task the session was writing records of at the time, a key in
+ * The task a file belongs to, of those Imprimatur has, in order: a key in its path (its
+ * task folder, the nearest first), the branch, the task the session was writing records of at the time, a key in
  * the request, a key in the file's title.
  * @param {any} db @param {number} repoId
  * @param {{rel: string, text: string, session?: string, prompt?: string, branch?: string, at?: number}} it
@@ -184,10 +191,8 @@ const titleOf = (text) => /^#\s+(.+?)\s*#*\s*$/m.exec(text)?.[1];
 function taskFor(db, repoId, it) {
   const title = titleOf(it.text);
   const tries = [
-    () => taskOfFile(it.rel),
-    // A task folder named by a key with no number (docs/todos/DOCS-BACKFILL/…).
-    () => /^(?:docs\/)?todos\/([^/]+)\/[^/]+$/.exec(it.rel)?.[1],
-    () => keyInPath(it.rel),
+    // Its task folder or any folder named by a task (docs/todos/85/, docs/analysis/LATD-9999/…).
+    () => keyInPath(db, repoId, it.rel),
     () => keyInBranch(it.branch),
     () => (it.session ? db.sessionTaskAt(repoId, it.session, it.at) : undefined),
     () => taskKeyIn(it.prompt),
