@@ -853,6 +853,8 @@ const TASKS_CSS = `
   .ana .meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .ana .meta .mini { margin-left: auto; }
   .ana + .ana { margin-top: 8px; } .asec { margin-top: 12px; } .asec h3 { margin: 0 0 4px; font-size: var(--fs-body); font-weight: 700; }
   .aorph { margin-top: 10px; } .orow { display: flex; gap: 8px; align-items: center; padding: 4px 0; } .orow .mini { margin-left: auto; }
+  .ana .mini, .orow .mini { opacity: 1; padding: 2px 10px; border-color: var(--acc); color: var(--acc); font-size: var(--fs-sm); font-weight: 700; cursor: pointer; }
+  .ana .mini:hover, .orow .mini:hover { background: var(--acc-soft); }
   .dec summary { cursor: pointer; list-style: none; display: flex; flex-direction: column; gap: 6px; } .dec summary::-webkit-details-marker { display: none; }
   .dec .meta { display: flex; gap: 8px; align-items: center; } .dec .ttl { font-weight: 600; } .dec .body { margin: 8px 0 0; }
   .test { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 6px; } .test .ttl { flex: 1 1 240px; min-width: 0; }
