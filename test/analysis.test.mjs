@@ -387,8 +387,12 @@ test("panel: the task page links its analysis; Analiz → Görev analizleri list
   assert.doesNotMatch(hub, /<details class="card ana"/);
   // No file names on the page: only in the "aç" tooltip (and on the orphans, to choose one).
   assert.doesNotMatch(hub, />docs\/todos\/5\/ANALYSIS\.md</);
-  assert.match(hub, /title="Dosyayı aç: docs\/todos\/5\/ANALYSIS\.md"/);
-  assert.match(hub, new RegExp(`data-act="anaOpen" data-file="docs/todos/5/ANALYSIS.md" data-repo="${repo.id}"`));
+  // The file is not in this repo's tree (only ingested): no "aç".
+  assert.doesNotMatch(hub, /title="Dosyayı aç: docs\/todos\/5\/ANALYSIS\.md"/);
+  fs.mkdirSync(path.join(root, "docs", "todos", "5"), { recursive: true });
+  fs.writeFileSync(path.join(root, "docs", "todos", "5", "ANALYSIS.md"), DOC);
+  // There: "aç" names the task's repo (on "Bütün repolar" the panel's repo is another one).
+  assert.match(tv.paneHtml(db, root, { tab: "analysis" }), new RegExp(`data-act="anaOpen" data-file="docs/todos/5/ANALYSIS.md" data-repo="${repo.id}" title="Dosyayı aç: docs/todos/5/ANALYSIS.md"`));
   assert.match(hub, /data-key="__orphans"/);
   assert.match(hub, /<select data-change="anaAssign" data-file="loose.md"[\s\S]*?<option value="\d+">#80/);
   tv.applyMessage(db, { type: "anaAssign", file: "loose.md", task: t80.id }, { kind: "user" }, root);
