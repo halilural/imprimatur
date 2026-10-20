@@ -16,7 +16,7 @@ import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-const { openDb, KINDS, DOC_KINDS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX } = require("../vscode/db.js");
+const { openDb, KINDS, DOC_KINDS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX } = require("../vscode/db.js");
 const { repoRoot } = require("../vscode/review-state.js");
 const { originOf } = require("../vscode/import.js");
 const { syncDocs, health: docsHealth } = require("../vscode/docs-sync.js");
@@ -56,7 +56,8 @@ const MAX_TITLE = 300;
 const MAX_BODY = 20_000;
 /** A design document section's body (#72): longer than a record's, short enough to sync (db.js). */
 const MAX_SECTION_BODY = SECTION_BODY_MAX;
-const DOC_KIND = { type: "string", enum: Object.keys(DOC_KINDS), description: "architecture (how it is built), product (what the user gets) or glossary (the project's terms, one section each)" };
+const DOC_KIND = { type: "string", enum: [...Object.keys(DOC_KINDS), ANALYSIS], description: "architecture (how it is built), product (what the user gets), glossary (the project's terms, one section each) or analysis (a task's analysis, plan and research files; task needed)" };
+const DOC_TASK = { type: "string", description: "kind analysis: the task's key, e.g. \"#58\"" };
 const SECTION_KEY_ARG = { type: "string", maxLength: 64, description: "The section's slug, e.g. \"storage\" (a-z, 0-9, -); unique in the document" };
 const BODY_CUT = 500;
 
@@ -112,14 +113,14 @@ const output = (properties, required = Object.keys(properties)) => ({ type: "obj
 const RECORD_OUT = output({ record: RECORD });
 const DOCUMENT = {
   type: "object",
-  properties: { id: int, uid: str, repo_id: int, kind: { type: "string", enum: Object.keys(DOC_KINDS) }, title: str, updated_at: int },
+  properties: { id: int, uid: str, repo_id: int, kind: { type: "string", enum: [...Object.keys(DOC_KINDS), ANALYSIS] }, scope: { type: "string", description: "kind analysis: the task's key" }, title: str, updated_at: int },
   required: ["id", "kind", "title", "updated_at"],
 };
 const SECTION = {
   type: "object",
   properties: {
     id: int, uid: str, doc_id: int, key: str, title: str, body: orNull("string"), position: { type: "number" },
-    status: { type: "string", enum: SECTION_STATUSES }, updated_at: int,
+    status: { type: "string", enum: SECTION_STATUSES }, source: orNull("string"), updated_at: int,
     records: { type: "array", items: int, description: "Ids of the records that contribute to the section" },
   },
   required: ["id", "key", "title", "position", "status", "updated_at", "records"],
@@ -232,9 +233,10 @@ const TOOLS = [
   {
     name: "doc_get",
     title: "Read a design document",
-    description: "The repo's architecture or product design document, or its glossary (terms, alphabetical): its table of contents (each section's key, title, status, last update and contributing record ids). section gives that section's body; full:true gives every body.",
+    description: "The repo's architecture or product design document, its glossary (terms, alphabetical), or a task's analysis (kind analysis, task: its key; each section's source is the file it came from): its table of contents (each section's key, title, status, last update and contributing record ids). section gives that section's body; full:true gives every body.",
     inputSchema: input({
       kind: DOC_KIND,
+      task: DOC_TASK,
       repo: repoArg,
       section: { type: "string", description: "A section key: its body too" },
       full: { type: "boolean", default: false, description: "Every section's body" },
@@ -248,9 +250,10 @@ const TOOLS = [
   {
     name: "doc_section_upsert",
     title: "Write a design document section",
-    description: "Creates a section of the architecture or product document, or a glossary term (title = the term, body = its meaning) (title needed) or changes its title, body (Markdown), position or status (superseded: replaced, kept at the end). records: ids of records of this repo (adr, pdr, decision, …) linked as contributors, besides those already linked. Every change is versioned.",
+    description: "Creates a section of the architecture or product document, a glossary term (title = the term, body = its meaning), or a section of a task's analysis (kind analysis, task: its key) (title needed) or changes its title, body (Markdown), position or status (superseded: replaced, kept at the end). records: ids of records of this repo (adr, pdr, decision, …) linked as contributors, besides those already linked. Every change is versioned.",
     inputSchema: input({
       kind: DOC_KIND,
+      task: DOC_TASK,
       key: SECTION_KEY_ARG,
       title: { type: "string", maxLength: MAX_TITLE, description: "The section heading" },
       body: { type: "string", maxLength: MAX_SECTION_BODY, description: "The section's text (Markdown; headings from ### down)" },
@@ -429,9 +432,10 @@ function taskRecords(db, task, a) {
 
 /** doc_get: the document's table of contents, with the asked bodies. @param {any} db @param {{id: number, root: string}} repo @param {any} a */
 function docGet(db, repo, a) {
-  const found = db.docFind(repo.id, a.kind);
+  const task = analysisTask(a);
+  const found = task ? db.taskDocFind(repo.id, task) : db.docFind(repo.id, a.kind);
   // Not made by a read: an empty document until something is written.
-  const document = found ?? { id: 0, repo_id: repo.id, kind: a.kind, title: DOC_KINDS[a.kind], updated_at: 0 };
+  const document = found ?? { id: 0, repo_id: repo.id, kind: a.kind, ...(task && { scope: task }), title: task ? `Analiz · ${task}` : DOC_KINDS[a.kind], updated_at: 0 };
   const all = found ? db.docSections(found.id) : [];
   if (a.section !== undefined && !all.some((s) => s.key === a.section)) {
     throw new ToolError(`no section ${JSON.stringify(a.section)} in the ${a.kind} document. ${all.length ? `Sections: ${all.map((s) => s.key).join(", ")}.` : "It has no sections yet."} doc_section_upsert with this key and a title creates it.`);
@@ -439,9 +443,21 @@ function docGet(db, repo, a) {
   const sections = all.map(({ contributors, ...s }) => (a.full || s.key === a.section ? s : { ...s, body: undefined }));
   /** @type {any} */
   const out = { document, sections: sections.map((s) => Object.fromEntries(Object.entries(s).filter(([, v]) => v !== undefined))) };
-  if (!all.length) out.hint = `empty: write its first section with doc_section_upsert {kind: "${a.kind}", key, title, body, records}`;
+  if (!all.length) out.hint = task ? `no analysis kept for ${task} yet: analysis files written for it come in by themselves; doc_section_upsert {kind: "analysis", task: "${task}", key, title, body} writes one here`
+    : `empty: write its first section with doc_section_upsert {kind: "${a.kind}", key, title, body, records}`;
   else if (!a.full && a.section === undefined) out.hint = "bodies left out: section:<key> gives one, full:true all";
   return out;
+}
+
+/** The task of an analysis call, or undefined for the repo's documents. @param {any} a */
+function analysisTask(a) {
+  if (a.kind !== ANALYSIS) {
+    if (a.task !== undefined) throw new ToolError(`task is for kind analysis; the ${a.kind} document is the repo's`);
+    return undefined;
+  }
+  const key = typeof a.task === "string" ? a.task.trim() : "";
+  if (!key) throw new ToolError('kind analysis needs task: the task\'s key, e.g. "#58"');
+  return key;
 }
 
 /** doc_section_upsert: records must be this repo's. @param {any} db @param {{id: number, root: string}} repo @param {any} a @param {any} actor */
@@ -452,7 +468,8 @@ function docUpsert(db, repo, a, actor) {
       throw new ToolError(`record ${id} belongs to another repo; a section links only records of ${repo.root}`);
     }
   }
-  const doc = db.docOf(repo.id, a.kind);
+  const task = analysisTask(a);
+  const doc = task ? db.taskDocOf(repo.id, task) : db.docOf(repo.id, a.kind);
   const created = !db.docSection(doc.id, a.key);
   if (created && a.title === undefined) {
     throw new ToolError(`no section ${JSON.stringify(a.key)} in the ${a.kind} document yet: give a title to create it (doc_get lists the sections)`);
@@ -461,7 +478,8 @@ function docUpsert(db, repo, a, actor) {
   /** @type {any} */
   const out = { document: db.docById(doc.id), section, created };
   // The repo's file follows (#73); a section also edited in the file is a conflict, told back.
-  if (docsSyncOn(repo.root)) {
+  // A task's analysis has no file of its own: its sources are read, never written.
+  if (!task && docsSyncOn(repo.root)) {
     try {
       const r = syncDocs(db, repo.root).find((x) => x.kind === a.kind);
       if (r) out.file = { path: path.relative(repo.root, r.file), written: r.written, conflicts: r.conflicts };
@@ -596,7 +614,7 @@ export function digest(name, out, a = {}) {
       const live = out.sections.filter((s) => s.status === "current");
       const old = out.sections.filter((s) => s.status !== "current");
       const lines = [`${d.title} (${d.kind}): ${plural(live.length, "section")}${old.length ? `, ${old.length} superseded` : ""}${d.updated_at ? `, updated ${new Date(d.updated_at).toISOString().slice(0, 10)}` : ""}`];
-      const line = (s, i) => `${i} ${s.key} — ${s.title}${s.status !== "current" ? ` [${s.status}]` : ""} (updated ${new Date(s.updated_at).toISOString().slice(0, 10)}${s.records.length ? `; records ${s.records.join(", ")}` : ""})`;
+      const line = (s, i) => `${i} ${s.key} — ${s.title}${s.status !== "current" ? ` [${s.status}]` : ""}${s.source ? ` [${s.source}]` : ""} (updated ${new Date(s.updated_at).toISOString().slice(0, 10)}${s.records.length ? `; records ${s.records.join(", ")}` : ""})`;
       live.forEach((s, i) => {
         lines.push(line(s, `${i + 1}.`));
         if (s.body != null) lines.push(s.body.replace(/^/gm, "    "));
@@ -614,7 +632,7 @@ export function digest(name, out, a = {}) {
       const fileNote = !f ? "" : f.error ? `; file not synced: ${f.error}`
         : f.conflicts.length ? `; ${f.path} NOT written: ${f.conflicts.join(", ")} also changed in the file (npm run docs -- sync --take file|db)`
         : f.written ? `; ${f.path} written` : "";
-      return `${out.created ? "Created" : "Saved"} ${out.document.kind} section ${s.key} — ${s.title} [${s.status}]${s.records.length ? `; records ${s.records.join(", ")}` : "; no records linked"}${fileNote}`;
+      return `${out.created ? "Created" : "Saved"} ${out.document.kind}${out.document.scope ? ` ${out.document.scope}` : ""} section ${s.key} — ${s.title} [${s.status}]${s.records.length ? `; records ${s.records.join(", ")}` : "; no records linked"}${fileNote}`;
     }
     case "setup_audit":
       return [...out.audits.map(describeSummary), a.dry_run ? "Dry run: nothing written." : 'Open findings: task_get key "RECS" (repo for the home: its path).'].join("\n");

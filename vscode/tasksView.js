@@ -233,6 +233,7 @@ function taskPage(db, task, view, opts) {
       return { ...r, date: day(r.created_at), who: c ? (c === "user" ? "sen" : c === "agent" ? "ajan" : c) : "" };
     }),
     tests: recs.filter((/** @type {any} */ r) => r.kind === "test"),
+    analysis: repo ? analysisOf(db, repo.id, task.key) : undefined,
     notes: live
       .filter((/** @type {any} */ r) => (r.kind === "note" && !r.links?.bestSources) || (r.kind === "question" && r.status !== "open"))
       .map((/** @type {any} */ r) => ({ ...r, answers: answers.filter((/** @type {any} */ a) => a.parent_id === r.id) })),
@@ -250,6 +251,29 @@ function taskPage(db, task, view, opts) {
     // Best-practice recommendations (#86): grouped, with the source map they were read from.
     best: RECS_KEYS.includes(task.key) && recs.some((/** @type {any} */ r) => r.links?.best || r.links?.bestSources) ? { groups: require("./best-tree.js").bestGroups(recs), map: recs.find((/** @type {any} */ r) => r.links?.bestSources)?.links.bestSources } : undefined,
   };
+}
+
+/**
+ * A task's analysis (TASK-ANALYSIS) for its page: its current sections by the file they came
+ * from, newest file first; and the repo's analysis files no task was found for, to give one.
+ * @param {any} db @param {number} repoId @param {string} key
+ */
+function analysisOf(db, repoId, key) {
+  const doc = db.taskDocFind(repoId, key);
+  /** @type {Map<string, {source: string, at: number, sections: any[]}>} */
+  const files = new Map();
+  for (const s of doc ? db.docSections(doc.id) : []) {
+    if (s.status !== "current") continue;
+    const src = s.source ?? "";
+    const f = files.get(src) ?? { source: src, at: 0, sections: [] };
+    f.sections.push({ id: s.id, title: s.title, body: s.body });
+    f.at = Math.max(f.at, s.updated_at);
+    files.set(src, f);
+  }
+  const orphans = Object.entries(require("./analysis.js").orphans(db, repoId)).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([source, at]) => ({ source, at }));
+  // Only files read on this machine open from here; one synced from another has its text only.
+  const local = new Set(doc ? db.docSourceFiles(doc.id).map((/** @type {any} */ x) => x.path) : []);
+  return { files: [...files.values()].map((f) => ({ ...f, local: local.has(f.source) })).sort((a, b) => b.at - a.at), orphans };
 }
 
 /**
@@ -499,7 +523,26 @@ function taskBlocks(c) {
     : "";
   const activity = `<section class="blk" data-k="act" aria-label="Etkinlik"><h2>Etkinlik</h2>${c.activity.map((v, i) => `<div class="ev" data-k="e${i}"><span class="when">${esc(when(v.at))}</span><span class="who w-${esc(v.kind)}">${esc(v.who)}</span><span class="what">${esc(v.what)}</span></div>`).join("") || '<p class="empty" data-k="none">Henüz olay yok.</p>'}${c.older || c.showOld ? `<button class="link" data-k="more" data-act="old" data-task="${c.id}">${c.showOld ? "Eski olayları gizle" : `${c.older} eski olayı göster`}</button>` : ""}</section>`;
   const recBlocks = (c.audit ? auditBlock(c.audit) : "") + (c.best ? bestBlock(c.best) : "");
-  return head + asks + (recBlocks || todos) + notes + decisions + tests + activity;
+  return head + asks + (recBlocks || todos) + analysisBlock(c) + notes + decisions + tests + activity;
+}
+
+/**
+ * The task's analysis files (TASK-ANALYSIS), each a card with its sections, the newest open;
+ * then the repo's analyses with no task, each with "Bu göreve bağla".
+ * @param {any} c
+ */
+function analysisBlock(c) {
+  const a = c.analysis;
+  if (!a || (!a.files.length && !a.orphans.length)) return "";
+  const { renderMarkdown } = require("./docsView.js");
+  const name = (/** @type {string} */ src) => (src.startsWith("plan:") ? "Plan (plan modu)" : src || "Analiz");
+  const open = (/** @type {any} */ f) => (f.local && !f.source.startsWith("plan:") ? `<button class="mini" data-act="anaOpen" data-file="${esc(f.source)}" title="Dosyayı aç">${icon("external", 12)} aç</button>` : "");
+  const files = a.files.map((/** @type {any} */ f, /** @type {number} */ i) => `<details class="card ana" data-k="ana-${esc(f.source)}"${i === 0 ? " open" : ""}><summary><span class="meta">${icon("file", 14)}<span class="mono">${esc(name(f.source))}</span><span class="dim">${esc(day(f.at))} · ${f.sections.length} bölüm</span>${open(f)}</span></summary>
+${f.sections.map((/** @type {any} */ s) => `<div class="asec" data-k="s${s.id}"><h3>${esc(s.title)}</h3>${s.body ? `<div class="body md">${renderMarkdown(s.body)}</div>` : ""}</div>`).join("")}</details>`).join("");
+  const orphans = a.orphans.length
+    ? `<div class="aorph" data-k="orph"><p class="dim">Görevi bulunamayan analizler:</p>${a.orphans.map((/** @type {any} */ o) => `<div class="orow" data-k="o-${esc(o.source)}"><span class="mono">${esc(o.source)}</span><span class="dim">${esc(day(o.at))}</span><button class="mini" data-act="anaAssign" data-file="${esc(o.source)}" data-task="${c.id}">Bu göreve bağla</button></div>`).join("")}</div>`
+    : "";
+  return `<section class="blk" data-k="ana" aria-label="Analiz"><h2>Analiz <span class="dim">· ${a.files.length} dosya</span></h2>${files || '<p class="empty" data-k="none">Bu görev için kaydedilmiş analiz yok.</p>'}${orphans}</section>`;
 }
 
 const SEV_TR = { high: "yüksek", medium: "orta", low: "düşük" };
@@ -656,6 +699,15 @@ function applyMessage(db, m, actor, root) {
       if (!fields) throw new Error("Imprimatur: nothing to add");
       return db.addRecord(task.id, fields, actor);
     }
+    case "anaAssign": {
+      // An analysis file with no task given this one: only a file in the repo's orphans list.
+      const task = db.taskById(num(m.task));
+      if (!task) throw new Error(`Imprimatur: no task ${m.task}`);
+      const repo = db.repos().find((/** @type {any} */ r) => r.id === task.repo_id);
+      const a = require("./analysis.js");
+      if (typeof m.file !== "string" || !Object.hasOwn(a.orphans(db, task.repo_id), m.file)) throw new Error(`Imprimatur: ${m.file} is not an analysis waiting for a task`);
+      return a.assign(db, task.repo_id, repo.root, m.file, task.key, actor);
+    }
     case "taskStatus": {
       const task = db.taskById(num(m.task));
       if (!task) throw new Error(`Imprimatur: no task ${m.task}`);
@@ -797,6 +849,10 @@ const TASKS_CSS = `
   .adot { width: 8px; height: 8px; border-radius: 50%; flex: none; align-self: center; } .adot.a-error { background: var(--vscode-problemsErrorIcon-foreground); }
   .adot.a-warning { background: var(--vscode-problemsWarningIcon-foreground); } .adot.a-info { background: var(--vscode-problemsInfoIcon-foreground); }
   .alv { font-size: .85em; font-weight: 500; } .alv.a-error { color: var(--vscode-problemsErrorIcon-foreground); } .alv.a-warning { color: var(--vscode-problemsWarningIcon-foreground); } .alv.a-info { color: var(--vscode-problemsInfoIcon-foreground); }
+  .ana summary { cursor: pointer; list-style: none; } .ana summary::-webkit-details-marker { display: none; }
+  .ana .meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .ana .meta .mini { margin-left: auto; }
+  .ana + .ana { margin-top: 8px; } .asec { margin-top: 12px; } .asec h3 { margin: 0 0 4px; font-size: var(--fs-body); font-weight: 700; }
+  .aorph { margin-top: 10px; } .orow { display: flex; gap: 8px; align-items: center; padding: 4px 0; } .orow .mini { margin-left: auto; }
   .dec summary { cursor: pointer; list-style: none; display: flex; flex-direction: column; gap: 6px; } .dec summary::-webkit-details-marker { display: none; }
   .dec .meta { display: flex; gap: 8px; align-items: center; } .dec .ttl { font-weight: 600; } .dec .body { margin: 8px 0 0; }
   .test { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 6px; } .test .ttl { flex: 1 1 240px; min-width: 0; }

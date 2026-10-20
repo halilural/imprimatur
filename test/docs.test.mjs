@@ -43,7 +43,7 @@ function seeded(root = "/a/proj", origin) {
 // ---- database ----
 
 test("migration 4: a schema 3 database gains the document tables", () => {
-  assert.equal(VERSION, 5);
+  assert.equal(VERSION, 6);
   const file = tmpDb();
   const raw = new DatabaseSync(file);
   for (const m of MIGRATIONS.slice(0, 3)) raw.exec(m);
@@ -73,7 +73,7 @@ test("migration 5: a schema 4 database keeps its documents, sections, links and 
   assert.throws(() => raw.exec("INSERT INTO documents (uid, repo_id, kind, title, updated_at) VALUES ('g', 1, 'glossary', 't', 1)"), /CHECK/);
   raw.close();
   const db = openDb({ path: file });
-  assert.equal(db.version, 5);
+  assert.equal(db.version, VERSION);
   const s = db.docSection(1, "storage");
   assert.deepEqual([s.title, s.body, s.records, db.sectionVersions(1).length], ["Storage", "x", [1], 1]);
   assert.deepEqual(db.sqlite.prepare("PRAGMA foreign_key_check").all(), []);
@@ -243,7 +243,7 @@ test("sync: enabling sync seeds existing sections", () => {
   a.db.upsertSection(doc.id, "tabs", { title: "Tabs", addRecords: [a.pdr.id] }, agent);
   a.db.enableSync();
   const rows = a.db.outbox().filter((r) => r.entity === "section");
-  assert.deepEqual(rows.map((r) => r.field).sort(), ["body", "position", "records", "status", "title"]);
+  assert.deepEqual(rows.map((r) => r.field).sort(), ["body", "position", "records", "source", "status", "title"]);
   assert.equal(rows[0].key, "github.com/u/proj\tproduct\ttabs");
   assert.deepEqual(JSON.parse(rows.find((r) => r.field === "records").value), [a.pdr.uid]);
 });

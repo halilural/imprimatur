@@ -742,6 +742,8 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       case "url": return vscode.postMessage({ type: "openUrl", url: d.url });
       case "newTask": return vscode.postMessage({ type: "newTask" });
       case "recDismiss": return vscode.postMessage({ type: "recDismiss", id: Number(d.id) });
+      case "anaOpen": return vscode.postMessage({ type: "anaOpen", file: d.file });
+      case "anaAssign": el.closest(".orow")?.classList.add("sent"); return vscode.postMessage({ type: "anaAssign", file: d.file, task: Number(d.task) });
       case "bestRun": return vscode.postMessage({ type: "bestRun" });
       case "answer": return sendAnswer(d.id);
       case "docEdit": return setView({ edit: d.kind + ":" + d.id });
@@ -1200,7 +1202,8 @@ function onMessage(m) {
   if (m.type === "newTask") return newTask();
   if (m.type === "bestRun") return vscode.commands.executeCommand("imprimatur.bestPractices.run");
   if (m.type === "recDismiss") return recDismiss(Number(m.id));
-  if (["rec", "recStep", "answer", "add", "taskStatus", "docSave", "docNew", "docStatus"].includes(m.type)) return writeFromPanel(m);
+  if (["rec", "recStep", "answer", "add", "taskStatus", "docSave", "docNew", "docStatus", "anaAssign"].includes(m.type)) return writeFromPanel(m);
+  if (m.type === "anaOpen" && shown) return openAnalysisFile(String(m.file ?? ""));
   if (m.type === "preview" && shown) {
     let html;
     try {
@@ -1212,6 +1215,21 @@ function onMessage(m) {
   }
   if (m.type === "accept") return timed("accept", m, () => actions?.acceptEdit(m.file, m.n));
   if (m.type === "open") return actions?.openDiff(m.file, m.n);
+}
+
+/**
+ * Opens a task's analysis file (TASK-ANALYSIS): only a path some analysis of the panel's repo
+ * was read from, in the repo or under ~/.claude/plans.
+ * @param {string} rel
+ */
+function openAnalysisFile(rel) {
+  const db = records.dbOf();
+  const repo = db && shown ? db.repoByRoot(shown) : undefined;
+  const known = repo && db.sqlite.prepare("SELECT 1 FROM doc_sources x JOIN documents d ON d.id = x.doc_id WHERE d.repo_id = ? AND x.path = ?").get(repo.id, rel);
+  if (!known) return;
+  const file = require("./analysis.js").absPath(/** @type {string} */ (shown), rel);
+  if (!fs.existsSync(file)) return void vscode.window.showInformationMessage(`Imprimatur: ${rel} is no longer there; its text stays in the task's analysis.`);
+  return vscode.window.showTextDocument(vscode.Uri.file(file), { preview: true });
 }
 
 /** Show a task (or record) of the open panel's repo on Görevler. @param {{root: string, task?: string, record?: number}} at */

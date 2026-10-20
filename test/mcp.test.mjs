@@ -373,6 +373,9 @@ test("every tool's structuredContent matches its outputSchema", async () => {
   await ok("doc_section_upsert", { kind: "architecture", key: "storage", title: "Storage", body: "SQLite", records: [q.id] });
   await ok("doc_get", { kind: "architecture", full: true });
   await ok("doc_get", { kind: "architecture", section: "storage" });
+  await ok("doc_section_upsert", { kind: "analysis", task: "#5", key: "plan--steps", title: "Steps", body: "1. a" });
+  await ok("doc_get", { kind: "analysis", task: "#5", full: true });
+  await ok("doc_get", { kind: "analysis", task: "#6" });
   await ok("setup_audit", {});
   assert.equal(seen.size, Object.keys(schemas).length, "every tool was checked");
   await s.close();
