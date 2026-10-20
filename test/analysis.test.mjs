@@ -373,7 +373,11 @@ test("panel: the task page links its analysis; Analiz → Görev analizleri list
   const hub = tv.paneHtml(db, root, { tab: "analysis" });
   assert.match(hub, /data-tab="analysis" aria-current="page">[\s\S]*?Görev analizleri <span class="n">1<\/span>/);
   assert.match(hub, /data-act="asel" data-key="#5"/);
-  assert.match(hub, /<h3>Bulgular<\/h3>/);
+  // In full, like Mimari: each section a document section, the task's contents on the left.
+  assert.match(hub, /<div class="doc ahub"/);
+  assert.match(hub, /<article class="dsec" id="sec-a\d+"[^>]*><div class="dsec-h"><h2>Bulgular<\/h2>/);
+  assert.match(hub, /<ol class="atoc"[^>]*data-ak="#5">[\s\S]*?data-act="docGo" data-key="a\d+"><span>Bulgular<\/span>/);
+  assert.doesNotMatch(hub, /<details class="card ana"/);
   assert.match(hub, new RegExp(`data-act="anaOpen" data-file="docs/todos/5/ANALYSIS.md" data-repo="${repo.id}"`));
   assert.match(hub, /data-key="__orphans"/);
   assert.match(hub, /<select data-change="anaAssign" data-file="loose.md"[\s\S]*?<option value="\d+">#80/);
