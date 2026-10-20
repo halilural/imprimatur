@@ -169,10 +169,9 @@ Bir makinede yazılan kayıt öteki makinede yaklaşık bir saniyede görünür 
 
 | Sekme | Ne için |
 |---|---|
-| **Ana sayfa** | İlerleme, her görevin nerede kaldığı, sende bekleyen ilk 5, bütün görevler |
-| **Görevler** | Görev listesi (bu repo ya da her repo) ve görev sayfası: 👉, bekleyenler ve cevap kutusu, todo'lar, hızlı ekleme, kararlar, ADR, PDR, testler, etkinlik |
-| **Bende bekleyenler** | Kullanıcıyı bekleyen her şey, göreve göre; tur sonu istekleri onay kutulu adımlar; Audit ve Scan history |
-| **Mimari** / **Ürün** | Canlı tasarım dokümanları: içindekiler, katkı veren kayıtlar, düzenle, eskimiş say, geçmiş |
+| **Ana sayfa** | İlerleme, her görevin nerede kaldığı, sende bekleyen ilk 5, göreve bağlanamayan tur sonu istekleri, Audit ve Scan history, bütün görevler; düğmesindeki rozet sende bekleyenleri sayar |
+| **Görevler** | Görev listesi (bu repo ya da her repo) ve görev sayfası: 👉, altında sekmeler: Senden beklenen (kayıtlar ve o görevin tur sonu istekleri, cevap kutusu), Yapılacaklar ve hızlı ekleme, Kararlar, Notlar, Testler, Etkinlik |
+| **Analiz** | Mimari, Ürün, Sözlük ve Görev analizleri: canlı tasarım dokümanları (içindekiler, katkı veren kayıtlar, düzenle, eskimiş say, geçmiş) ve görevlerin analiz dosyaları |
 | **Ajan değişiklikleri** | Agent Change Graph: düzenlemeler ve ajanın diğer işleri, görev şeritleri, açıklama, hover'da işlenmiş fark, Accept |
 
 Klavye: j/k, Enter, x, a, /, Esc. Kenar çubuğunda sekmeleri açan satırlar ve bekleyenleri sayan rozet.

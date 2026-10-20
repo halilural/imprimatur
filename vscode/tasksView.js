@@ -225,7 +225,8 @@ function taskPage(db, task, view, opts) {
     url: repo && opts.linkOf ? opts.linkOf(repo.root, task.key) : undefined,
     epic: epic ? { id: epic.id, key: epic.key, title: epic.title, status: epic.status } : undefined,
     pointer: pointer && { id: pointer.id, title: pointer.title, owner: pointer.owner, kind: pointer.kind, at: pointer.updated_at },
-    asks: live.filter(isAsk).map((/** @type {any} */ r) => ({ ...r, age: age(r.created_at, now) })),
+    // Its records that wait on the user, then the turn-end asks placed on it (there is no Bende bekleyenler tab).
+    asks: [...live.filter(isAsk).map((/** @type {any} */ r) => ({ ...r, age: age(r.created_at, now) })), ...(opts.turns?.get(task.id) ?? [])],
     todos: todoAll.filter((/** @type {any} */ r) => showDone || r.status === "open" || r.pointer),
     openTodos: todoAll.filter((/** @type {any} */ r) => r.status === "open").length,
     hiddenDone: todoAll.filter((/** @type {any} */ r) => r.status !== "open" && !r.pointer).length,
@@ -320,7 +321,7 @@ function tasksPage(db, root, view = {}, opts = {}) {
   return {
     all, filter, counts, groups, sel: task?.id,
     repoName: here?.name ?? root.split(/[\\/]/).pop(),
-    cur: task ? taskPage(db, task, view, opts) : undefined,
+    cur: task ? taskPage(db, task, view, { ...opts, turns: task ? turnAsks(db, root, opts) : undefined }) : undefined,
   };
 }
 
@@ -399,9 +400,26 @@ function inboxCount(db, root, waiting = [], { all = false } = {}) {
  * The Ana sayfa tab: progress of the repo's tasks, where each was left, the top asks, the task table.
  * @param {any} db @param {string} root @param {{now?: number}} [o]
  */
-function homeModel(db, root, { now = Date.now() } = {}) {
+/**
+ * The open turn-end asks (waiting.js steps) by the task placeOf finds for them; 0: no task.
+ * @param {any} db @param {string} root @param {{waiting?: any[], now?: number, placeOf?: (w: any) => any}} o
+ * @returns {Map<number, any[]>}
+ */
+function turnAsks(db, root, o) {
+  /** @type {Map<number, any[]>} */
+  const out = new Map();
+  if (!o.waiting?.length) return out;
+  for (const g of inboxModel(db, root, { all: true, waiting: o.waiting, now: o.now, placeOf: o.placeOf }).groups) {
+    const items = g.items.filter((/** @type {any} */ i) => i.turn && !i.done);
+    if (items.length) out.set(g.task?.id ?? 0, items);
+  }
+  return out;
+}
+
+/** @param {any} db @param {string} root @param {{now?: number, waiting?: any[], placeOf?: (w: any) => any}} [o] */
+function homeModel(db, root, { now = Date.now(), waiting, placeOf } = {}) {
   const repo = repoOfRoot(db, root);
-  if (!repo) return { repoName: root.split(/[\\/]/).pop(), total: 0, done: 0, active: 0, open: 0, pointers: [], asks: [], askCount: 0, rows: [] };
+  if (!repo) return { repoName: root.split(/[\\/]/).pop(), total: 0, done: 0, active: 0, open: 0, pointers: [], asks: [], askCount: 0, rows: [], loose: [] };
   const tasks = taskSummaries(db, repo);
   const done = tasks.filter((t) => t.status === "done").length;
   const live = tasks.filter((t) => t.status !== "dropped");
@@ -420,6 +438,8 @@ function homeModel(db, root, { now = Date.now() } = {}) {
     pointers: left.slice(0, 6).map((/** @type {any} */ t) => ({ id: byId.get(t.key)?.id, key: t.key, task: t.title, next: t.pointer_title, record: t.pointer_id, mine: t.pointer_owner === "K", status: t.status })),
     asks: asks.slice(0, 5).map((r) => ({ id: r.id, task: r.task_id, kind: r.kind, title: r.title, key: r.task_key, status: byId.get(r.task_key)?.status })),
     askCount: asks.length,
+    // Turn-end asks no task was found for: only here, now that there is no Bende bekleyenler tab.
+    loose: turnAsks(db, root, { now, waiting, placeOf }).get(0) ?? [],
     rows: [...tasks].sort((a, b) => box(a) - box(b) || (order[/** @type {keyof typeof order} */ (a.status)] - order[/** @type {keyof typeof order} */ (b.status)]) || b.updated_at - a.updated_at)
       .map((t) => ({ ...t, when: day(t.updated_at), age: age(t.updated_at, now) })),
   };
@@ -708,11 +728,14 @@ function homeHtml(m) {
   const pct = m.total ? Math.round((m.done / m.total) * 100) : 0;
   const top = `<div data-k="top"><h1>${esc(m.repoName)}</h1><p class="lead">${m.done} / ${m.total} görev bitti · ${m.active} sürüyor · ${m.open} açık</p><div class="progress" role="progressbar" aria-label="Görev ilerlemesi" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div style="width: ${pct}%"></div></div></div>`;
   const pointers = `<section class="card left" aria-label="Nerede kaldık"><h2 class="cap">${icon("arrow", 18)}Nerede kaldık</h2>${m.pointers.map((p) => `<a href="#" class="ptr" data-act="open" data-id="${p.id}" data-f="${bucketOf(p.status)}" data-rec="${p.record}"><span class="pm"><span class="mono">${esc(p.key)}</span><span class="dim">${esc(p.task)}</span></span><span class="ptitle">${esc(p.next)}${p.mine ? ' <b class="mine">(sende)</b>' : ""}</span></a>`).join("") || '<p class="empty">Açık görevlerin hiçbirinde nerede kaldığımız işaretli değil.</p>'}</section>`;
-  const asks = `<section class="card" aria-label="Senden beklenen"><h2 class="cap row"><span>Senden beklenen</span><a href="#" data-act="tab" data-tab="inbox">hepsi (${m.askCount}) →</a></h2>${m.asks.map((a) => `<a href="#" class="hask" data-act="open" data-id="${a.task}" data-f="${bucketOf(a.status ?? "active")}" data-rec="${a.id}">${kindChip(a.kind, a.kind === "question" ? "Soru" : a.kind === "test" ? "Test" : "İş")}<span class="ttl">${esc(a.title)}</span><span class="mono dim">${esc(a.key)}</span></a>`).join("") || '<p class="empty">Senden beklenen bir şey yok.</p>'}</section>`;
+  const asks = `<section class="card" aria-label="Senden beklenen"><h2 class="cap row"><span>Senden beklenen</span><span class="dim">${m.askCount}</span></h2>${m.asks.map((a) => `<a href="#" class="hask" data-act="open" data-id="${a.task}" data-f="${bucketOf(a.status ?? "active")}" data-rec="${a.id}">${kindChip(a.kind, a.kind === "question" ? "Soru" : a.kind === "test" ? "Test" : "İş")}<span class="ttl">${esc(a.title)}</span><span class="mono dim">${esc(a.key)}</span></a>`).join("") || '<p class="empty">Senden beklenen bir şey yok.</p>'}</section>`;
   const head = `<tr><th>Görev</th><th>Durum</th><th>Nerede kaldık</th><th>Sende</th><th>Yapılacak</th><th>Son değişiklik</th></tr>`;
   const rows = m.rows.map((t) => `<tr data-k="t${t.id}" id="h-${t.id}" data-nav tabindex="0" data-act="open" data-id="${t.id}" data-f="${bucketOf(t.status)}" data-q="${esc(t.q)}"><td><span class="mono key">${esc(t.key)}</span> <b>${esc(t.title)}</b></td><td>${statusChip(t.status)}</td><td class="dim">${esc(t.pointer ?? "—")}</td><td class="${t.asks ? "mine" : "dim"}">${t.asks || "—"}</td><td>${t.todos ? `${t.openTodos} / ${t.todos}` : "plan yok"}</td><td class="dim">${esc(t.when)}</td></tr>`).join("");
   const table = `<section class="blk" data-k="table" aria-label="Görevler"><h2>Görevler</h2><div class="tablewrap"><table class="htable"><thead>${head}</thead><tbody data-navgroup="home">${rows || '<tr><td colspan="6" class="empty">Bu repoda henüz görev yok.</td></tr>'}</tbody></table></div></section>`;
-  return `<div class="home" data-k="home">${top}<div class="grid2" data-k="cards">${pointers}${asks}</div>${table}</div>`;
+  const loose = m.loose.length
+    ? `<section class="blk" data-k="loose" data-navgroup="loose" aria-label="Görevsiz bekleyenler"><h2><span class="odot" aria-hidden="true"></span>Görevsiz bekleyenler <span class="dim">· ${m.loose.length} · ajanın tur sonunda sorup göreve bağlamadıkları</span></h2>${m.loose.map((r) => askCard(r)).join("")}</section>`
+    : "";
+  return `<div class="home" data-k="home">${top}<div class="grid2" data-k="cards">${pointers}${asks}</div>${loose}${table}</div>`;
 }
 
 /**
@@ -812,7 +835,9 @@ function cleanView(v) {
   const ids = (/** @type {any} */ a) => (Array.isArray(a) ? a.map(Number).filter((n) => Number.isInteger(n) && n > 0).slice(0, 100) : undefined);
   /** @type {Record<string, any>} */
   const out = {};
-  if (TABS.includes(v.tab)) out.tab = v.tab;
+  // Bende bekleyenler is gone: a view saved on it opens Ana sayfa.
+  if (v.tab === "inbox") out.tab = "home";
+  else if (TABS.includes(v.tab)) out.tab = v.tab;
   if (v.sel === null || (Number.isInteger(Number(v.sel)) && Number(v.sel) > 0)) out.sel = v.sel === null ? null : Number(v.sel);
   if (FILTERS.includes(v.filter)) out.filter = v.filter;
   if (typeof v.all === "boolean") out.all = v.all;
