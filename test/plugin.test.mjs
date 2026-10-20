@@ -41,7 +41,7 @@ test("plugin: hooks.json has every settings hook, no args, scripts that exist, b
     assert.ok(fs.existsSync(path.join(repo, "hooks", m[1])));
   }
   assert.ok(flat.some(([e, m]) => e === "PreToolUse" && m === "mcp__imprimatur__.*|mcp__plugin_imprimatur_imprimatur__.*"));
-  assert.ok(flat.some(([e, m]) => e === "PostToolUse" && m === "Edit|Write|MultiEdit|Bash|mcp__imprimatur__task_upsert|mcp__plugin_imprimatur_imprimatur__task_upsert|mcp__imprimatur__record_add|mcp__plugin_imprimatur_imprimatur__record_add|mcp__imprimatur__record_update|mcp__plugin_imprimatur_imprimatur__record_update"));
+  assert.ok(flat.some(([e, m]) => e === "PostToolUse" && m === "Edit|Write|MultiEdit|ExitPlanMode|Bash|mcp__imprimatur__task_upsert|mcp__plugin_imprimatur_imprimatur__task_upsert|mcp__imprimatur__record_add|mcp__plugin_imprimatur_imprimatur__record_add|mcp__imprimatur__record_update|mcp__plugin_imprimatur_imprimatur__record_update"));
   const regex = new RegExp(hooks.PreToolUse.find((g) => g.matcher.includes("mcp__")).matcher);
   assert.ok(regex.test("mcp__plugin_imprimatur_imprimatur__record_add") && regex.test("mcp__imprimatur__task_get") && !regex.test("mcp__other__x"));
 });

@@ -64,7 +64,7 @@
         ]
       },
       {
-        "matcher": "Edit|Write|MultiEdit|Bash|mcp__imprimatur__task_upsert|mcp__plugin_imprimatur_imprimatur__task_upsert|mcp__imprimatur__record_add|mcp__plugin_imprimatur_imprimatur__record_add|mcp__imprimatur__record_update|mcp__plugin_imprimatur_imprimatur__record_update",
+        "matcher": "Edit|Write|MultiEdit|ExitPlanMode|Bash|mcp__imprimatur__task_upsert|mcp__plugin_imprimatur_imprimatur__task_upsert|mcp__imprimatur__record_add|mcp__plugin_imprimatur_imprimatur__record_add|mcp__imprimatur__record_update|mcp__plugin_imprimatur_imprimatur__record_update",
         "hooks": [
           {
             "type": "command",

@@ -352,6 +352,29 @@ function check(event, input, deps = {}) {
       const records = deps.records ?? require("./records.js");
       const id = records.repoId(root);
       if (id !== undefined) require("./docs-backfill.js").maybeStart(records.dbOf(), id, root, deps.backfill);
+      // Past sessions' analyses, once per repo (analysis-backfill.js).
+      if (id !== undefined) require("./analysis-backfill.js").maybeStart(records.dbOf(), id, root, deps.analysisBackfill);
+    } catch {}
+  }
+  // A task's analysis (analysis.js): the Markdown file just written, or the plan the agent
+  // leaves plan mode with; every known repo, with or without .claude/imprimatur.json.
+  if (event === "PostToolUse" && (/^(Edit|Write|MultiEdit)$/.test(input.tool_name ?? "") || input.tool_name === "ExitPlanMode")) {
+    try {
+      const records = deps.records ?? require("./records.js");
+      const id = records.repoId(root);
+      const a = require("./analysis.js");
+      const ti = input.tool_input ?? {};
+      const plan = input.tool_name === "ExitPlanMode";
+      const file = plan ? undefined : ti.file_path && path.resolve(input.cwd ?? root, ti.file_path);
+      const rel = plan ? `plan:${String(input.session_id ?? "").slice(0, 8) || "x"}` : file && a.relPath(root, file);
+      // A file over 1 MB is left to the backfill: the hook stays quick.
+      const small = (/** @type {string} */ f) => fs.statSync(f).size <= 1_000_000;
+      const text = plan ? (typeof ti.plan === "string" ? ti.plan : undefined) : rel && /\.mdx?$/i.test(rel) && small(file) ? fs.readFileSync(file, "utf8") : undefined;
+      if (id !== undefined && rel && text !== undefined) {
+        const session = input.session_id || undefined;
+        const branch = (deps.git ?? git)(["symbolic-ref", "--short", "HEAD"], root);
+        a.onEdit(records.dbOf(), id, root, { rel, text, session, branch, at: Date.now(), actor: { kind: "hook", id: session } }, deps.analysis);
+      }
     } catch {}
   }
   const s = settingsOf(root);

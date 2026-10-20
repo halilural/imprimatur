@@ -37,6 +37,20 @@ edits right in your editor and keeps a list of what it asked you.
 - Set up after work began? **Scan history** reads your past Claude sessions and
   `TODO.md` files for asks you may have missed.
 
+## Keep each task's analysis
+
+- Every analysis, plan, spike result or research note the agent writes for a
+  task, wherever it puts it, is kept in the task's **Analiz** section on its
+  page: one part per `##` heading, every change a version, synced to your other
+  machine. The plan it leaves plan mode with too.
+- The task comes from the file's folder (`docs/todos/<key>/`), a key in its
+  path (`spikes/81-x/`) or branch, or the task the session was working on;
+  Haiku decides only when the path and headings cannot tell.
+- Past sessions are read once per repo in the background, or on demand:
+  **Imprimatur: Take Task Analyses from Past Sessions**, `npm run analysis`.
+  `"analysis": false` in `.claude/imprimatur.json` turns it off,
+  `{"sync": false}` keeps it on this machine.
+
 ## Quick start
 
 1. Clone this repo; you need Node 22+, git, VS Code 1.100+ and the `claude` CLI.

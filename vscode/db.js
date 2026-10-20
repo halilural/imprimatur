@@ -224,22 +224,95 @@ const MIGRATIONS = [
   CREATE INDEX doc_section_records_record ON doc_section_records(record_id);
   CREATE INDEX doc_versions_section ON doc_versions(section_id, at);
   `,
+  // A task's analysis (TASK-ANALYSIS): a fourth document kind, one per task. scope is the
+  // task's key ('' for the repo's documents), so the key is (repo, kind, scope); a section's
+  // source is the file it came from. doc_sources: each file's text as last read, so the
+  // same text is not ingested twice. Rebuilt the same way as the glossary migration.
+  `
+  CREATE TABLE documents_new (
+    id INTEGER PRIMARY KEY,
+    uid TEXT NOT NULL UNIQUE,
+    repo_id INTEGER NOT NULL REFERENCES repos(id),
+    kind TEXT NOT NULL CHECK (kind IN ('architecture', 'product', 'glossary', 'analysis')),
+    scope TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE (repo_id, kind, scope),
+    CHECK ((kind = 'analysis') = (scope <> ''))
+  );
+  CREATE TABLE doc_sections_new (
+    id INTEGER PRIMARY KEY,
+    uid TEXT NOT NULL UNIQUE,
+    doc_id INTEGER NOT NULL REFERENCES documents_new(id),
+    key TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    position REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'current' CHECK (status IN ('current', 'superseded')),
+    source TEXT,
+    updated_at INTEGER NOT NULL,
+    UNIQUE (doc_id, key)
+  );
+  CREATE TABLE doc_section_records_new (
+    section_id INTEGER NOT NULL REFERENCES doc_sections_new(id),
+    record_id INTEGER NOT NULL REFERENCES records(id),
+    PRIMARY KEY (section_id, record_id)
+  ) WITHOUT ROWID;
+  CREATE TABLE doc_versions_new (
+    id INTEGER PRIMARY KEY,
+    section_id INTEGER NOT NULL REFERENCES doc_sections_new(id),
+    at INTEGER NOT NULL,
+    actor_kind TEXT NOT NULL CHECK (actor_kind IN (${ACTORS.map((k) => `'${k}'`).join(", ")})),
+    actor TEXT,
+    before TEXT,
+    after TEXT
+  );
+  INSERT INTO documents_new SELECT id, uid, repo_id, kind, '', title, updated_at FROM documents;
+  INSERT INTO doc_sections_new SELECT id, uid, doc_id, key, title, body, position, status, NULL, updated_at FROM doc_sections;
+  INSERT INTO doc_section_records_new SELECT section_id, record_id FROM doc_section_records;
+  INSERT INTO doc_versions_new SELECT id, section_id, at, actor_kind, actor, before, after FROM doc_versions;
+  DROP TABLE doc_versions;
+  DROP TABLE doc_section_records;
+  DROP TABLE doc_sections;
+  DROP TABLE documents;
+  ALTER TABLE documents_new RENAME TO documents;
+  ALTER TABLE doc_sections_new RENAME TO doc_sections;
+  ALTER TABLE doc_section_records_new RENAME TO doc_section_records;
+  ALTER TABLE doc_versions_new RENAME TO doc_versions;
+  CREATE INDEX doc_section_records_record ON doc_section_records(record_id);
+  CREATE INDEX doc_versions_section ON doc_versions(section_id, at);
+  CREATE TABLE doc_sources (
+    doc_id INTEGER NOT NULL REFERENCES documents(id),
+    path TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    PRIMARY KEY (doc_id, path)
+  ) WITHOUT ROWID;
+  `,
 ];
 const VERSION = MIGRATIONS.length;
 
 /**
  * Synced fields per entity (#61). Keys: repo = its origin, task = origin + "\t" + task key,
  * record = its uid, section = origin + "\t" + document kind + "\t" + section key (#72;
- * records: the contributing records' uids). "task" comes first: a record seen for the first time needs it.
+ * records: the contributing records' uids; a task's analysis: kind "analysis:<task key>"). "task" comes first: a record seen for the first time needs it.
  */
 const SYNC_FIELDS = {
   repo: ["name"],
   task: ["title", "status", "summary", "epic", "pointer"],
   record: ["task", "kind", "owner", "status", "title", "body", "position", "parent", "links", "created_at"],
-  section: ["title", "body", "position", "status", "records"],
+  section: ["title", "body", "position", "status", "records", "source"],
 };
 /** Design documents (#72) and the project glossary: kind → the title a new one gets. */
 const DOC_KINDS = { architecture: "Mimari Tasarım Dokümanı", product: "Ürün Tasarım Dokümanı", glossary: "Proje Sözlüğü" };
+/** A task's analysis document (TASK-ANALYSIS): one per task, its scope the task's key. */
+const ANALYSIS = "analysis";
+/** The title a new analysis document gets. @param {string} taskKey */
+const analysisTitle = (taskKey) => `Analiz · ${taskKey}`;
+/** The kind part of a section's sync key: "analysis:<task key>" for a task's analysis. @param {{kind: string, scope?: string}} doc */
+const syncKind = (doc) => (doc.scope ? `${ANALYSIS}:${doc.scope}` : doc.kind);
+/** A section source's path, at most. */
+const SOURCE_MAX = 1000;
 const SECTION_STATUSES = ["current", "superseded"];
 /**
  * A section's body and title, at most (#72): the body JSON-encoded stays under the sync
@@ -504,7 +577,7 @@ class Db {
     // Design documents (#72): a kind only the placeholder has moves over; a kind both have
     // becomes one document, its sections merged by key the same way (the synced value wins).
     for (const d of this.q("SELECT * FROM documents WHERE repo_id = ?").all(ph.id)) {
-      const mine = this.q("SELECT * FROM documents WHERE repo_id = ? AND kind = ?").get(repo.id, d.kind);
+      const mine = this.q("SELECT * FROM documents WHERE repo_id = ? AND kind = ? AND scope = ?").get(repo.id, d.kind, d.scope);
       if (!mine) {
         this.q("UPDATE documents SET repo_id = ? WHERE id = ?").run(repo.id, d.id);
         continue;
@@ -515,8 +588,8 @@ class Db {
           this.q("UPDATE doc_sections SET doc_id = ? WHERE id = ?").run(mine.id, s.id);
           continue;
         }
-        const key = `${origin}\t${d.kind}\t${s.key}`;
-        for (const f of ["title", "body", "position", "status"]) {
+        const key = `${origin}\t${syncKind(d)}\t${s.key}`;
+        for (const f of ["title", "body", "position", "status", "source"]) {
           const clock = this.q("SELECT at FROM clock WHERE entity = 'section' AND key = ? AND field = ?").get(key, f);
           if (clock && clock.at > own.updated_at) this.q(`UPDATE doc_sections SET ${f} = ? WHERE id = ?`).run(s[f], own.id);
         }
@@ -903,6 +976,23 @@ class Db {
   }
 
   /**
+   * The task one agent session was on at a time: the last it wrote a record of by then,
+   * else the first it wrote one of after (TASK-ANALYSIS). Special tasks (ADR, PDR, …) do not count.
+   * @param {number} repoId @param {string} session @param {number} [at] default now
+   * @returns {string | undefined}
+   */
+  sessionTaskAt(repoId, session, at = Date.now()) {
+    if (!session) return undefined;
+    const sql = (/** @type {string} */ cmp, /** @type {string} */ dir) => `SELECT t.key FROM record_versions v
+                 JOIN records r ON r.id = v.record_id JOIN tasks t ON t.id = r.task_id
+                 WHERE t.repo_id = ? AND v.actor_kind = 'agent' AND v.actor LIKE ? AND v.at ${cmp} ?
+                   AND t.key NOT IN ('ADR', 'PDR', 'TEST', 'AUDIT', 'BEST', 'RECS')
+                 ORDER BY v.at ${dir} LIMIT 1`;
+    const like = `%:${session.replace(/[%_]/g, "")}`;
+    return this.q(sql("<=", "DESC")).get(repoId, like, at)?.key ?? this.q(sql(">", "ASC")).get(repoId, like, at)?.key;
+  }
+
+  /**
    * Agents' record changes in a repo, newest first: each version with its record and task (#60).
    * @param {number} repoId @param {{limit?: number}} [o]
    */
@@ -1077,7 +1167,46 @@ class Db {
 
   /** A repo's document of this kind, without creating it. @param {number} repoId @param {string} kind */
   docFind(repoId, kind) {
-    return this.q("SELECT * FROM documents WHERE repo_id = ? AND kind = ?").get(repoId, kind);
+    return this.q("SELECT * FROM documents WHERE repo_id = ? AND kind = ? AND scope = ''").get(repoId, kind);
+  }
+
+  /** A task's analysis document, without creating it. @param {number} repoId @param {string} taskKey */
+  taskDocFind(repoId, taskKey) {
+    return this.q("SELECT * FROM documents WHERE repo_id = ? AND kind = 'analysis' AND scope = ?").get(repoId, taskKey);
+  }
+
+  /** A task's analysis document, created on first use. @param {number} repoId @param {string} taskKey */
+  taskDocOf(repoId, taskKey) {
+    if (typeof taskKey !== "string" || !taskKey.trim() || taskKey.includes("\t")) throw new Error("Imprimatur: an analysis needs a task key");
+    const found = this.taskDocFind(repoId, taskKey);
+    if (found) return found;
+    return this.tx(() => {
+      this.q("INSERT OR IGNORE INTO documents (uid, repo_id, kind, scope, title, updated_at) VALUES (?, ?, 'analysis', ?, ?, ?)")
+        .run(uid(), repoId, taskKey, analysisTitle(taskKey), Date.now());
+      return this.taskDocFind(repoId, taskKey);
+    });
+  }
+
+  /** A repo's analysis documents with their current section count, newest first. @param {number} repoId */
+  taskDocs(repoId) {
+    return this.q(`SELECT d.*, (SELECT count(*) FROM doc_sections s WHERE s.doc_id = d.id AND s.status = 'current') AS sections
+                   FROM documents d WHERE d.repo_id = ? AND d.kind = 'analysis' ORDER BY d.updated_at DESC`).all(repoId);
+  }
+
+  /** The hash of a file's text as last ingested into a document. @param {number} docId @param {string} file */
+  docSourceHash(docId, file) {
+    return this.q("SELECT hash FROM doc_sources WHERE doc_id = ? AND path = ?").get(docId, file)?.hash;
+  }
+
+  /** The files a document was read from, newest first. @param {number} docId */
+  docSourceFiles(docId) {
+    return this.q("SELECT path, hash, at FROM doc_sources WHERE doc_id = ? ORDER BY at DESC").all(docId);
+  }
+
+  /** @param {number} docId @param {string} file @param {string} hash @param {number} at */
+  setDocSource(docId, file, hash, at) {
+    this.q(`INSERT INTO doc_sources (doc_id, path, hash, at) VALUES (?, ?, ?, ?)
+            ON CONFLICT (doc_id, path) DO UPDATE SET hash = excluded.hash, at = max(doc_sources.at, excluded.at)`).run(docId, file, hash, at);
   }
 
   /** @param {number} id */
@@ -1145,10 +1274,12 @@ class Db {
    * (no row, no write when nothing did). records: the contributing record ids, replacing
    * those linked; addRecords: ids linked besides them. A record must be of the document's repo.
    * @param {number} docId @param {string} key a slug, unique in the document
-   * @param {{title?: string, body?: string | null, position?: number, status?: string, records?: number[], addRecords?: number[]}} fields
-   * @param {Actor} actor
+   * source: the file the section was read from (a task's analysis). at: when the change was
+   * made, for one replayed from the past (default now).
+   * @param {{title?: string, body?: string | null, position?: number, status?: string, records?: number[], addRecords?: number[], source?: string | null}} fields
+   * @param {Actor} actor @param {{at?: number}} [o]
    */
-  upsertSection(docId, key, fields, actor) {
+  upsertSection(docId, key, fields, actor, { at } = {}) {
     if (!ACTORS.includes(actor?.kind)) throw new Error(`Imprimatur: actor kind must be one of ${ACTORS.join(", ")}`);
     if (typeof key !== "string" || !SECTION_KEY.test(key)) throw new Error(`Imprimatur: section key "${key}" must be a slug: a-z, 0-9 and -, at most 64 characters`);
     if (fields.status !== undefined && !SECTION_STATUSES.includes(fields.status)) throw new Error(`Imprimatur: section status must be one of ${SECTION_STATUSES.join(", ")}`);
@@ -1158,6 +1289,8 @@ class Db {
     if (fields.body != null && (typeof fields.body !== "string" || fields.body.length > SECTION_BODY_MAX)) {
       throw new Error(`Imprimatur: section body is ${String(fields.body).length} chars; the limit is ${SECTION_BODY_MAX}. Split it into sections.`);
     }
+    if (fields.source != null && (typeof fields.source !== "string" || fields.source.length > SOURCE_MAX)) throw new Error(`Imprimatur: section source must be a path of at most ${SOURCE_MAX} chars`);
+    if (at !== undefined && !Number.isSafeInteger(at)) throw new Error("Imprimatur: at must be a time in ms");
     return this.tx(() => {
       const doc = this.docById(docId);
       if (!doc) throw new Error(`Imprimatur: no document ${docId}`);
@@ -1166,7 +1299,7 @@ class Db {
         if (!rec) throw new Error(`Imprimatur: no record ${id}`);
         if (rec.repo_id !== doc.repo_id) throw new Error(`Imprimatur: record ${id} is in another repo than this document`);
       }
-      const now = Date.now();
+      const now = at ?? Date.now();
       let old = this.docSection(docId, key);
       /** @type {Record<string, any>} */ const before = {};
       /** @type {Record<string, any>} */ const after = {};
@@ -1174,12 +1307,13 @@ class Db {
         if (fields.title === undefined) throw new Error(`Imprimatur: a new section needs a title (key ${key})`);
         const position = fields.position
           ?? /** @type {any} */ (this.q("SELECT coalesce(max(position), 0) + 1 AS p FROM doc_sections WHERE doc_id = ?").get(docId)).p;
-        this.q(`INSERT INTO doc_sections (uid, doc_id, key, title, body, position, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-          .run(uid(), docId, key, fields.title.trim(), fields.body ?? null, position, fields.status ?? "current", now);
+        this.q(`INSERT INTO doc_sections (uid, doc_id, key, title, body, position, status, source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(uid(), docId, key, fields.title.trim(), fields.body ?? null, position, fields.status ?? "current", fields.source ?? null, now);
         old = /** @type {any} */ (this.docSection(docId, key));
         Object.assign(after, { key, title: old.title, body: old.body, position: old.position, status: old.status });
+        if (old.source != null) after.source = old.source;
       } else {
-        for (const f of /** @type {const} */ (["title", "body", "position", "status"])) {
+        for (const f of /** @type {const} */ (["title", "body", "position", "status", "source"])) {
           if (fields[f] === undefined) continue;
           const v = f === "title" ? /** @type {string} */ (fields.title).trim() : fields[f] ?? null;
           if (old[f] === v) continue;
@@ -1198,8 +1332,8 @@ class Db {
       }
       const changed = Object.keys(after).filter((f) => f !== "key");
       if (!changed.length) return this.sectionById(old.id);
-      this.q("UPDATE doc_sections SET updated_at = ? WHERE id = ?").run(now, old.id);
-      this.q("UPDATE documents SET updated_at = ? WHERE id = ?").run(now, docId);
+      this.q("UPDATE doc_sections SET updated_at = max(updated_at, ?) WHERE id = ?").run(now, old.id);
+      this.q("UPDATE documents SET updated_at = max(updated_at, ?) WHERE id = ?").run(now, docId);
       this.q("INSERT INTO doc_versions (section_id, at, actor_kind, actor, before, after) VALUES (?, ?, ?, ?, ?, ?)")
         .run(old.id, now, actor.kind, actor.id ?? null, Object.keys(before).length ? JSON.stringify(before) : null, JSON.stringify(after));
       this.trackSection_(old.id, changed, now);
@@ -1322,9 +1456,11 @@ class Db {
   /** A section's sync key (#72): origin, document kind and section key; undefined when its repo does not sync. @param {any} section */
   sectionKey_(section) {
     const doc = section && this.docById(section.doc_id);
+    // A repo whose analyses stay on this machine ("analysis": {"sync": false}, analysis.js).
+    if (doc?.scope && this.meta(`analysis:nosync:${doc.repo_id}`)) return undefined;
     const repo = doc && this.q("SELECT id, origin FROM repos WHERE id = ?").get(doc.repo_id);
     const origin = this.originKey_(repo);
-    return origin && this.syncRepo_(origin)?.id === repo.id ? `${origin}\t${doc.kind}\t${section.key}` : undefined;
+    return origin && this.syncRepo_(origin)?.id === repo.id ? `${origin}\t${syncKind(doc)}\t${section.key}` : undefined;
   }
 
   /** A synced field's value as this database holds it. @param {"repo" | "task" | "record" | "section"} entity @param {any} row @param {string} f */
@@ -1429,8 +1565,11 @@ class Db {
       }
       const recs = this.q("SELECT r.* FROM records r JOIN tasks t ON t.id = r.task_id WHERE t.repo_id = ? ORDER BY r.id").all(repo.id);
       for (const rec of recs) put("record", rec.uid, recordOf(rec), rec.updated_at);
-      const secs = this.q("SELECT s.*, d.kind AS doc_kind FROM doc_sections s JOIN documents d ON d.id = s.doc_id WHERE d.repo_id = ? ORDER BY s.id").all(repo.id);
-      for (const s of secs) put("section", `${origin}\t${s.doc_kind}\t${s.key}`, s, s.updated_at);
+      const secs = this.q("SELECT s.*, d.kind AS doc_kind, d.scope AS doc_scope FROM doc_sections s JOIN documents d ON d.id = s.doc_id WHERE d.repo_id = ? ORDER BY s.id").all(repo.id);
+      const local = this.meta(`analysis:nosync:${repo.id}`);
+      for (const s of secs) {
+        if (!(s.doc_scope && local)) put("section", `${origin}\t${syncKind({ kind: s.doc_kind, scope: s.doc_scope })}\t${s.key}`, s, s.updated_at);
+      }
     }
     return n;
   }
@@ -1606,9 +1745,12 @@ class Db {
     const parts = key.split("\t");
     if (parts.length < 3) return false;
     const skey = /** @type {string} */ (parts.pop());
-    const kind = /** @type {string} */ (parts.pop());
+    const kindPart = /** @type {string} */ (parts.pop());
     const origin = parts.join("\t");
-    if (!origin || !Object.hasOwn(DOC_KINDS, kind) || !SECTION_KEY.test(skey)) return false;
+    // A task's analysis: "analysis:<task key>".
+    const scope = kindPart.startsWith(`${ANALYSIS}:`) ? kindPart.slice(ANALYSIS.length + 1) : "";
+    const kind = scope ? ANALYSIS : kindPart;
+    if (!origin || (scope ? !scope.trim() : !Object.hasOwn(DOC_KINDS, kind)) || !SECTION_KEY.test(skey)) return false;
     const ok = {
       // The same limits as a local write: another machine's code may be older or wrong.
       title: () => typeof value === "string" && value.trim() !== "" && value.length <= SECTION_TITLE_MAX,
@@ -1616,6 +1758,7 @@ class Db {
       position: () => Number.isFinite(value),
       status: () => SECTION_STATUSES.includes(value),
       records: () => Array.isArray(value) && value.every((u) => typeof u === "string"),
+      source: () => value === null || (typeof value === "string" && value.length <= SOURCE_MAX),
     }[/** @type {"title"} */ (field)];
     if (!ok()) return false;
     const clock = this.q("SELECT at, device FROM clock WHERE entity = 'section' AND key = ? AND field = ?").get(key, field);
@@ -1628,10 +1771,12 @@ class Db {
       if (found.some((r) => !r)) return "later";
     }
     const repo = this.repoForOrigin_(origin);
-    if (!this.docFind(repo.id, kind)) {
-      this.q("INSERT INTO documents (uid, repo_id, kind, title, updated_at) VALUES (?, ?, ?, ?, ?)").run(uid(), repo.id, kind, /** @type {any} */ (DOC_KINDS)[kind], at);
+    const find = () => (scope ? this.taskDocFind(repo.id, scope) : this.docFind(repo.id, kind));
+    if (!find()) {
+      this.q("INSERT INTO documents (uid, repo_id, kind, scope, title, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(uid(), repo.id, kind, scope, scope ? analysisTitle(scope) : /** @type {any} */ (DOC_KINDS)[kind], at);
     }
-    const doc = this.docFind(repo.id, kind);
+    const doc = find();
     let s = this.q("SELECT * FROM doc_sections WHERE doc_id = ? AND key = ?").get(doc.id, skey);
     if (!s) {
       const p = /** @type {any} */ (this.q("SELECT coalesce(max(position), 0) + 1 AS p FROM doc_sections WHERE doc_id = ?").get(doc.id)).p;
@@ -1769,4 +1914,4 @@ function openDb({ path: file = dbPath(), busyMs = 5000 } = {}) {
   return db;
 }
 
-module.exports = { openDb, dbPath, onWindowsDrive, normOrigin, refersTo, KINDS, ACTORS, VERSION, MIGRATIONS, SYNC_FIELDS, PLACEHOLDER, TRACKER_KEY, DOC_KINDS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, SECTION_TITLE_MAX };
+module.exports = { openDb, dbPath, onWindowsDrive, normOrigin, refersTo, KINDS, ACTORS, VERSION, MIGRATIONS, SYNC_FIELDS, PLACEHOLDER, TRACKER_KEY, DOC_KINDS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, SECTION_TITLE_MAX };

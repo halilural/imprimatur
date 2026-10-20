@@ -676,6 +676,30 @@ function activate(ctx) {
         vscode.window.showErrorMessage(`Imprimatur import failed: ${e instanceof Error ? e.message : e}`);
       }
     }),
+    vscode.commands.registerCommand("imprimatur.analysisBackfill", () =>
+      vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur: task analyses from past sessions" }, async () => {
+        // The same run as the one-time background one (analysis-backfill.js): only newer states are added.
+        const { openDb } = require("./db.js");
+        const { backfill, summary } = require("./analysis-backfill.js");
+        const lines = [];
+        try {
+          const db = openDb();
+          try {
+            for (const root of roots) {
+              const top = repoRoot(root) ?? root;
+              const r = await backfill(db, db.repoOf(top, { origin: require("./import.js").originOf(top) }).id, top);
+              log.info(`analysis backfill ${top}: ${summary(r)}${r.tasks.length ? `; tasks ${r.tasks.join(", ")}` : ""}`);
+              lines.push(`${path.basename(top)}: ${summary(r)}`);
+            }
+          } finally {
+            db.close();
+          }
+          vscode.window.showInformationMessage(`Imprimatur: ${lines.join("; ") || "no repo open"}. Details in Output → Imprimatur.`);
+        } catch (e) {
+          log.error(`analysis backfill: ${e instanceof Error ? e.message : e}`);
+          vscode.window.showErrorMessage(`Imprimatur analysis backfill failed: ${e instanceof Error ? e.message : e}`);
+        }
+      })),
     vscode.commands.registerCommand("imprimatur.archiveNow", () => {
       const done = archiveAll(true);
       const days = vscode.workspace.getConfiguration("imprimatur").get("archive.afterDays", 7);
