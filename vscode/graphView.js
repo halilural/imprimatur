@@ -602,9 +602,12 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     const q = (state.qs[state.tab] || "").toLowerCase();
     const strip = document.querySelector("#pane .ttabs");
     if (!strip) return;
-    if (strip.dataset.flash && strip.dataset.flashed !== "1") { state.ttab = strip.dataset.flash; strip.dataset.flashed = "1"; }
+    // Per task: a task opens on what waits on the user unless another tab was chosen for it.
+    const task = strip.dataset.task;
+    state.ttabs = state.ttabs || {};
+    if (strip.dataset.flash && strip.dataset.flashed !== "1") { state.ttabs[task] = strip.dataset.flash; strip.dataset.flashed = "1"; }
     const has = (k) => !!k && !!strip.querySelector('[data-tp="' + k + '"]');
-    const cur = has(state.ttab) ? state.ttab : strip.dataset.def;
+    const cur = has(state.ttabs[task]) ? state.ttabs[task] : strip.dataset.def;
     strip.querySelectorAll(".ttab").forEach((b) => { b.classList.toggle("on", !q && b.dataset.tp === cur); b.setAttribute("aria-selected", String(b.dataset.tp === cur)); });
     document.querySelectorAll("#pane .tpane").forEach((p) => { p.hidden = !q && p.dataset.tp !== cur; });
   };
@@ -770,7 +773,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       case "open": return go({ tab: "tasks", sel: Number(d.id), filter: d.f || state.filter });
       case "tab": return go({ tab: d.tab });
       case "showDone": return setView({ showDone: toggleIn(state.showDone, Number(d.task)) });
-      case "ttab": state.ttab = d.tp; return apply();
+      case "ttab": { const task = el.closest(".ttabs")?.dataset.task; state.ttabs = { ...(state.ttabs || {}), [task]: d.tp }; return apply(); }
       case "asel": state.asel = d.key; return apply();
       case "anaGo": state.asel = d.key; return go({ tab: "analysis" });
       case "old": return setView({ old: toggleIn(state.old, Number(d.task)) });
