@@ -427,3 +427,12 @@ test("taskFor: every folder of the path, nearest first; a number prefix only whe
   assert.equal(t("docs/analysis/LATD-9999/01-initpayload/analysis.md"), "#1");
   assert.equal(t("docs/analysis/unknown/x.md"), undefined);
 });
+
+test("panel: titles read as text — a Markdown link keeps its text, a key the page shows already goes", () => {
+  const { plainTitle } = req("../vscode/tasksView.js");
+  assert.equal(plainTitle("[#620](https://github.com/u/r/issues/620) — T6: Çökme kurtarma", "#620"), "T6: Çökme kurtarma");
+  assert.equal(plainTitle("[LATD-14041](https://jira/x) Fix it", "LATD-14041"), "Fix it");
+  assert.equal(plainTitle("[#620](https://x) — Çökme: [deneme](https://y)"), "#620 — Çökme: deneme");
+  assert.equal(plainTitle("#5", "#5"), "#5");
+  assert.equal(plainTitle(undefined), "");
+});
