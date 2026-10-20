@@ -325,7 +325,8 @@ test("panel model and HTML: numbered TOC, Markdown without raw HTML, contributor
   assert.match(html, /class="dsec flash" id="sec-sync"/);
   assert.match(html, /Son güncelleme · .* · Sen/);
   // Every pane block has a key (the page swaps only the changed ones).
-  assert.match(tv.paneHtml(db, root, { tab: "product" }), /^<div class="doc" data-k="doc-product">/);
+  // Under the Analiz tab: its sub-pages over the document (TASK-ANALYSIS).
+  assert.match(tv.paneHtml(db, root, { tab: "product" }), /^<nav class="hubnav"[\s\S]*?data-tab="product" aria-current="page"[\s\S]*?<\/nav><div class="doc" data-k="doc-product">/);
   assert.match(tv.paneHtml(db, root, { tab: "product" }), /bir PDR ya da karar/);
 });
 

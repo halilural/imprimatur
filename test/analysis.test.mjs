@@ -350,7 +350,7 @@ test("MCP: doc_get and doc_section_upsert read and write a task's analysis; task
   assert.throws(() => callTool(db, "doc_get", { kind: "architecture", task: "#5", repo: root }), /task is for kind analysis/);
 });
 
-test("panel: the task page shows its analysis files and the repo's orphans; Bu göreve bağla gives one its task", () => {
+test("panel: the task page links its analysis; Analiz → Görev analizleri lists the tasks' files and the orphans, each to be given a task", () => {
   const tv = req("../vscode/tasksView.js");
   const root = gitRepo();
   const { db, repo } = seeded(root);
@@ -360,21 +360,27 @@ test("panel: the task page shows its analysis files and the repo's orphans; Bu g
   const t5 = db.taskByKey(repo.id, "#5");
   const page = tv.tasksPage(db, root, { sel: t5.id });
   assert.deepEqual(page.cur.analysis.files.map((f) => [f.source, f.sections.length]), [["docs/todos/5/ANALYSIS.md", 3]]);
+  // The task page is todo-first: a link to its analysis, no cards; tabs below what waits.
   const html = tv.tasksHtml(page);
-  assert.match(html, /data-k="ana"/);
-  assert.match(html, /docs\/todos\/5\/ANALYSIS\.md/);
-  assert.match(html, /<h3>Bulgular<\/h3>/);
-  // "aç" names the task's repo: on "Bütün repolar" the panel's repo is another one.
-  assert.match(html, new RegExp(`data-act="anaOpen" data-file="docs/todos/5/ANALYSIS.md" data-repo="${repo.id}"`));
-  assert.match(html, /data-act="anaAssign" data-file="loose.md"/);
-  // A task with neither: no block.
+  assert.match(html, /data-act="anaGo" data-key="#5"[^>]*>[\s\S]*?Analiz · 1 dosya/);
+  assert.doesNotMatch(html, /class="card ana"/);
+  assert.match(html, /class="ttabs"[^>]*data-def="todos"/);
+  assert.match(html, /data-tp="act"/);
+  // No analysis: no link.
   const t80 = db.taskByKey(repo.id, "#80");
-  a.setOrphan(db, repo.id, "loose.md", null);
-  assert.doesNotMatch(tv.tasksHtml(tv.tasksPage(db, root, { sel: t80.id })), /data-k="ana"/);
-  a.setOrphan(db, repo.id, "loose.md", Date.now());
+  assert.doesNotMatch(tv.tasksHtml(tv.tasksPage(db, root, { sel: t80.id })), /data-act="anaGo"/);
+  // The hub: its sub-pages, the task with its cards, the orphans with a task picker.
+  const hub = tv.paneHtml(db, root, { tab: "analysis" });
+  assert.match(hub, /data-tab="analysis" aria-current="page">[\s\S]*?Görev analizleri <span class="n">1<\/span>/);
+  assert.match(hub, /data-act="asel" data-key="#5"/);
+  assert.match(hub, /<h3>Bulgular<\/h3>/);
+  assert.match(hub, new RegExp(`data-act="anaOpen" data-file="docs/todos/5/ANALYSIS.md" data-repo="${repo.id}"`));
+  assert.match(hub, /data-key="__orphans"/);
+  assert.match(hub, /<select data-change="anaAssign" data-file="loose.md"[\s\S]*?<option value="\d+">#80/);
   tv.applyMessage(db, { type: "anaAssign", file: "loose.md", task: t80.id }, { kind: "user" }, root);
   assert.equal(db.docSections(db.taskDocFind(repo.id, "#80").id)[0].source, "loose.md");
   assert.throws(() => tv.applyMessage(db, { type: "anaAssign", file: "../etc/passwd", task: t80.id }, { kind: "user" }, root), /not an analysis waiting/);
+  assert.match(tv.paneHtml(openDb({ path: tmpDb() }), gitRepo(), { tab: "analysis" }), /henüz görev analizi yok/);
 });
 
 test("review fixes: long headings alike stay two sections; an older replayed state sets nothing back; one model call per file at a time", () => {

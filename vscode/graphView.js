@@ -86,7 +86,9 @@ const LOADING = (cols) => `<tr class="loading"><td colspan="${cols}" class="empt
 const { THEME_CSS } = require("./theme.js");
 const { mascot } = require("./mascot.js");
 /** The panel's tabs: key (also its icon) and label. */
-const TAB_BUTTONS = [["home", "Ana sayfa"], ["tasks", "Görevler"], ["inbox", "Bende bekleyenler"], ["architecture", "Mimari"], ["product", "Ürün"], ["glossary", "Sözlük"], ["edits", "Ajan değişiklikleri"]];
+const TAB_BUTTONS = [["home", "Ana sayfa"], ["tasks", "Görevler"], ["inbox", "Bende bekleyenler"], ["analysis", "Analiz"], ["edits", "Ajan değişiklikleri"]];
+/** The pages under the Analiz tab (TASK-ANALYSIS): its button is on for each. */
+const HUB_TABS = ["architecture", "product", "glossary", "analysis"];
 
 /** Row kinds of the graph's filter (#55): badge and label. */
 const ACTIVITY = {
@@ -385,7 +387,8 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   const barHeight = () => document.body.style.setProperty("--appbar-h", (appbar && getComputedStyle(appbar).position === "sticky" ? appbar.offsetHeight : 0) + "px");
   barHeight();
   if (appbar) new ResizeObserver(barHeight).observe(appbar);
-  const HINTS = { home: "Görevlerde ara… (/)", tasks: "Görev, karar, soru ara… (/)", inbox: "Bekleyenlerde ara… (/)", architecture: "Bölümlerde ara… (/)", product: "Bölümlerde ara… (/)", glossary: "Terimlerde ara… (/)", edits: "Dosya, istek ya da cevap süz… (/)" };
+  const HUB_TABS = ${JSON.stringify(HUB_TABS)};
+  const HINTS = { analysis: "Analizlerde ara… (/)", home: "Görevlerde ara… (/)", tasks: "Görev, karar, soru ara… (/)", inbox: "Bekleyenlerde ara… (/)", architecture: "Bölümlerde ara… (/)", product: "Bölümlerde ara… (/)", glossary: "Terimlerde ara… (/)", edits: "Dosya, istek ya da cevap süz… (/)" };
   // The document tabs' mermaid blocks (#72): drawn with the extension's mermaid, loaded
   // once on the first block, into a shadow root of their div. The block patching compares
   // outerHTML, which leaves a shadow root out: a refresh neither redraws nor flickers, and a
@@ -580,6 +583,30 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     if (blocks().some((d) => diagramOf.get(d) !== themeOf().key)) drawDiagrams();
   }
   new MutationObserver(() => { if (themeOf().key !== diagramTheme) drawDiagrams(); }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  /**
+   * A task page's tabs: the chosen one (kept across tasks), else its first; a record to flash
+   * opens its own; while the search box filters, every pane shows. Again after each redraw.
+   */
+  /** Görev analizleri: the chosen task's analysis (kept), else the first; every one while the search filters. */
+  const anaHub = () => {
+    const list = document.querySelector("#pane .alist");
+    if (!list) return;
+    const q = (state.qs[state.tab] || "").toLowerCase();
+    const has = (k) => !!k && !!list.querySelector('[data-key="' + CSS.escape(k) + '"]');
+    const cur = has(state.asel) ? state.asel : list.querySelector("[data-key]")?.dataset.key;
+    list.querySelectorAll(".aitem").forEach((b) => b.classList.toggle("on", b.dataset.key === cur));
+    document.querySelectorAll("#pane .apane").forEach((p) => { p.hidden = q ? !p.textContent.toLowerCase().includes(q) : p.dataset.ak !== cur; });
+  };
+  const taskTabs = () => {
+    const q = (state.qs[state.tab] || "").toLowerCase();
+    const strip = document.querySelector("#pane .ttabs");
+    if (!strip) return;
+    if (strip.dataset.flash && strip.dataset.flashed !== "1") { state.ttab = strip.dataset.flash; strip.dataset.flashed = "1"; }
+    const has = (k) => !!k && !!strip.querySelector('[data-tp="' + k + '"]');
+    const cur = has(state.ttab) ? state.ttab : strip.dataset.def;
+    strip.querySelectorAll(".ttab").forEach((b) => { b.classList.toggle("on", !q && b.dataset.tp === cur); b.setAttribute("aria-selected", String(b.dataset.tp === cur)); });
+    document.querySelectorAll("#pane .tpane").forEach((p) => { p.hidden = !q && p.dataset.tp !== cur; });
+  };
   const apply = () => {
     vscode.setState(state);
     const tab = state.tab;
@@ -590,7 +617,10 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     if (tab !== "edits" && paneEl.dataset.tab !== tab) paneEl.className = "stale";
     else paneEl.removeAttribute("class");
     document.getElementById("count-edits").hidden = tab !== "edits";
-    document.querySelectorAll("nav [data-tab]").forEach((b) => { b.classList.toggle("on", b.dataset.tab === tab); b.setAttribute("aria-current", b.dataset.tab === tab ? "page" : "false"); });
+    // Mimari, Ürün, Sözlük and Görev analizleri are one tab, Analiz: it opens the last one seen.
+    const top = HUB_TABS.includes(tab) ? "analysis" : tab;
+    if (HUB_TABS.includes(tab)) state.atab = tab;
+    document.querySelectorAll("nav.tabs [data-tab]").forEach((b) => { b.classList.toggle("on", b.dataset.tab === top); b.setAttribute("aria-current", b.dataset.tab === top ? "page" : "false"); });
     for (const id of ["audit", "scan"]) document.getElementById(id).hidden = tab !== "inbox";
     filter.placeholder = HINTS[tab] || "";
     if (document.activeElement !== filter) filter.value = state.qs[tab] || "";
@@ -611,6 +641,8 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     });
     // The task tabs: the search hides tasks, records and asks that do not say it.
     document.querySelectorAll("#pane [data-q]").forEach((el) => { el.hidden = !!q && !el.dataset.q.toLowerCase().includes(q); });
+    taskTabs();
+    anaHub();
     // Each card shows when it says the search, is of the bucket and of the chip's task; a task with none left goes.
     const says = (el) => !q || el.dataset.q.toLowerCase().includes(q);
     const cards = [...document.querySelectorAll("#pane .igrp[data-task] [data-b]")].map((el) => ({ el, task: el.closest(".igrp").dataset.task, b: el.dataset.b, says: says(el) }));
@@ -737,6 +769,9 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       case "open": return go({ tab: "tasks", sel: Number(d.id), filter: d.f || state.filter });
       case "tab": return go({ tab: d.tab });
       case "showDone": return setView({ showDone: toggleIn(state.showDone, Number(d.task)) });
+      case "ttab": state.ttab = d.tp; return apply();
+      case "asel": state.asel = d.key; return apply();
+      case "anaGo": state.asel = d.key; return go({ tab: "analysis" });
       case "old": return setView({ old: toggleIn(state.old, Number(d.task)) });
       case "edits": state.qs.edits = d.key; return go({ tab: "edits" });
       case "url": return vscode.postMessage({ type: "openUrl", url: d.url });
@@ -775,6 +810,10 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   document.addEventListener("change", (e) => {
     const t = e.target;
     if (t.matches?.('#pane select[data-change="taskStatus"]')) vscode.postMessage({ type: "taskStatus", task: Number(t.dataset.task), status: t.value });
+    if (t.matches?.('#pane select[data-change="anaAssign"]') && t.value) {
+      t.closest(".orow")?.classList.add("sent");
+      vscode.postMessage({ type: "anaAssign", file: t.dataset.file, task: Number(t.value) });
+    }
     if (t.matches?.("#pane input.mdstep")) {
       // Shown at once; kept over redraws until the host's page has it (keepSteps).
       const id = Number(t.closest("[data-body]")?.dataset.body);
@@ -789,7 +828,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   document.addEventListener("click", (e) => {
     const t = e.target;
     const tab = t.closest("nav button");
-    if (tab) return go({ tab: tab.dataset.tab });
+    if (tab) return go({ tab: tab.closest("nav.tabs") && tab.dataset.tab === "analysis" ? state.atab || "architecture" : tab.dataset.tab });
     const control = t.closest("#pane [data-act]");
     if (control) {
       // VS Code's own click handler on the window scrolls an <a href="#"> to the top.
@@ -835,7 +874,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     }
   });
   // Keyboard (#69): j/k move in the list, Enter opens, x ticks, a answers, / searches, Esc goes back.
-  const NAV = { tasks: "#pane .rows", inbox: '#pane [data-navgroup="inbox"]', home: '#pane [data-navgroup="home"]', architecture: '#pane [data-navgroup="doc"]', product: '#pane [data-navgroup="doc"]', glossary: '#pane [data-navgroup="doc"]' };
+  const NAV = { tasks: "#pane .rows", inbox: '#pane [data-navgroup="inbox"]', home: '#pane [data-navgroup="home"]', architecture: '#pane [data-navgroup="doc"]', product: '#pane [data-navgroup="doc"]', glossary: '#pane [data-navgroup="doc"]', analysis: '#pane [data-navgroup="analysis"]' };
   const visible = (el) => !el.hidden && el.offsetParent !== null;
   const move = (step) => {
     const at = document.activeElement?.closest?.("[data-nav]");
@@ -933,6 +972,8 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     patchRows("edits", doc);
     const freshPane = doc.getElementById("pane");
     if (freshPane) morph(document.getElementById("pane"), freshPane);
+    taskTabs();
+    anaHub();
     keepSteps();
     showFlash();
     const data = doc.getElementById("rows")?.textContent;
