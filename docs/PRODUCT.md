@@ -15,6 +15,7 @@
 9. [Kapsam dışı](#non-goals)
 10. [Agent setup denetimi (planlandı)](#agent-setup-audit)
 11. [Proje sözlüğü](#glossary)
+12. [Görevin analizi](#task-analysis)
 
 <a id="summary"></a>
 
@@ -298,3 +299,14 @@ Her repo, Mimari ve Ürün'ün yanında üçüncü bir yaşayan doküman tutar: 
 - Panelde **Sözlük** sekmesi ve başlatıcıda bir düğme: "Yeni terim" ile eklenir, "Düzenle" ile güncellenir; geçmişi bölüm gibi sürümlenir. Kullanılmayan terim silinmez, "Eskimiş say" ile sona iner.
 - Ajan sözlüğü MCP'den okur ve yazar (`doc_get` / `doc_section_upsert`, `kind: "glossary"`). Talimatı: yeni ya da anlamı değişen bir terim sözlüğe yazılır.
 - Repoya `docs/GLOSSARY.md` olarak yazılır; dosyadaki düzenlemeler Mimari/Ürün'deki gibi geri alınır.
+
+<a id="task-analysis"></a>
+
+## 12. Görevin analizi
+
+STORY: Bir görevi açtığımda ajanın o görev için yazdığı analizleri, planları, spike sonuçlarını ve araştırma notlarını (dosyayı nereye yazmış olursa olsun, plan modundan çıktığı plan dahil) görev sayfasının **Analiz** bölümünde okurum; diğer makinemde de aynısı görünür.
+
+- Dosya başına bir kart; en yenisi açık; bölümler dosyanın `##` başlıkları. Bu makinede okunmuş dosya "aç" ile editörde açılır.
+- Görevi bulunamayan analizler görev sayfasının altında listelenir; **Bu göreve bağla** o dosyayı o göreve alır.
+- Geçmiş oturumlarda yazılanlar repo başına bir kez arka planda gelir; elle: **Imprimatur: Take Task Analyses from Past Sessions** ya da `npm run analysis` (`--dry-run`, `--no-model`).
+- Kapatmak: `.claude/imprimatur.json` içinde `"analysis": false`; yalnız bu makinede tutmak: `{"sync": false}`; yol hariç tutmak: `{"exclude": ["drafts/"]}`.

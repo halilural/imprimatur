@@ -27,6 +27,7 @@
 21. [Tasarım dokümanlarının tek seferlik doldurulması (backfill)](#docs-backfill)
 22. [Geçmiş taraması ve TODO.md görev takibi](#history-scan-todo)
 23. [Panel tasarım katmanı: tema değişkenleri, ikonlar, maskot](#ui-design)
+24. [Görev analizleri](#task-analysis)
 
 <a id="overview"></a>
 
@@ -702,3 +703,26 @@ Panelin görünümü üç küçük modülden gelir. Hepsi düz CommonJS; build a
 - Mermaid diyagramları `theme: base` ile çizilir; renkleri sayfanın `--vscode-editor-background`, `--vscode-foreground` ve `--acc` değerlerinden hesaplanır.
 
 vscode-elements bilerek kullanılmadı; gerekçe bağlı ADR'de.
+
+<a id="task-analysis"></a>
+
+## 24. Görev analizleri
+
+Her görevin bir analiz belgesi var: `documents` içinde `kind = 'analysis'`, `scope` = görev anahtarı (repo belgelerinde `''`); bölümün `source` alanı geldiği dosya, `doc_sources` her dosyanın son okunan metninin hash'i (aynı metin iki kez yazılmaz). Migration 6 tabloları sözlük migration'ı gibi yeniden kurar.
+
+```mermaid
+flowchart LR
+  E[Edit / Write / ExitPlanMode] --> P[process.js PostToolUse]
+  P --> Q{analysis.js onEdit}
+  Q -->|yol, ad, başlık ya da saklı karar| I[ingest: ## başına bölüm]
+  Q -->|karar yok| H[hooks/analysis.mjs: Haiku, arka planda] --> I
+  T[~/.claude/projects transcript'leri] --> B[analysis-backfill.js: Write/Edit sırayla] --> I
+  I --> D[(documents analysis:görev)]
+  D --> S[eşitleme: origin\tanalysis:görev\tbölüm]
+```
+
+- **Aday:** `.md`/`.mdx`; README, CHANGELOG, TODO.md, tasarım belgeleri, `docs/testing`, `todos/sprints`, `.claude/` araç klasörleri, Imprimatur'un ürettikleri hariç; repo dışında yalnız `~/.claude/plans`.
+- **Görev:** görev klasörü → yoldaki anahtar (`spikes/81-x`, `80-paper.md`) → dal → oturumun o anda kayıt yazdığı görev (`db.sessionTaskAt`) → istem → dosya başlığı. Yalnız DB'de olan görevler; bulunamayan dosya `analysis:orphans:<repo>` meta listesinde bekler. Bir kez bir göreve giren dosya o görevde kalır.
+- **Geçmiş:** transcript'teki her durum, yazıldığı zamanla bir sürüm; belgede o dosyanın daha yeni bölümü varsa (hook, başka makine, MCP) eski durum atlanır. SessionStart'ta repo başına bir kez (`analysis-backfill:<repo>` claim), elle `npm run analysis` ya da komut.
+- **Eşitleme:** Worker değişmedi; eski sürümler `analysis:` türünü ve `source` alanını reddeder. `"analysis": {"sync": false}` → `analysis:nosync:<repo>` meta, `sectionKey_` bölümü kuyruğa koymaz.
+- **MCP:** `doc_get` / `doc_section_upsert` `kind: "analysis"` + `task`. Analiz belgesinin kendi dosyası yok: kaynaklar okunur, yazılmaz.

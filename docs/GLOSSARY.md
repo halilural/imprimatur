@@ -7,6 +7,7 @@
 - [ADR](#adr)
 - [Agent Change Graph](#agent-change-graph)
 - [Agent Setup](#agent-setup)
+- [Analiz belgesi](#analiz-belgesi)
 - [Bende bekleyenler](#bende-bekleyenler)
 - [Bölüm](#bolum)
 - [Denetim (Audit)](#denetim)
@@ -45,6 +46,12 @@ Architecture Decision Record: mimari bir karar kaydı (`adr` türü). Eklendiği
 ## Agent Setup
 
 Ajan kurulumunun (CLAUDE.md, skill'ler, hook'lar, MCP) dokümana dayalı denetimi: best practice önerileri ve her önerinin durumu.
+
+<a id="analiz-belgesi"></a>
+
+## Analiz belgesi
+
+Bir görevin analiz, plan, spike sonucu ve araştırma notu dosyalarından oluşan, görev başına bir tane tutulan yaşayan belge (`kind = analysis`, `scope` = görev anahtarı). Hook dosya yazıldıkça alır, geçmiş oturumlar bir kez oynatılır. Görevi bulunamayan dosyaya **görevsiz analiz** denir.
 
 <a id="bende-bekleyenler"></a>
 
