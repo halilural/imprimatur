@@ -13,7 +13,7 @@ const NAMES = {
   arrow: "arrow-right", check: "check", plus: "plus", search: "search", stamp: "stamp", external: "external-link",
   question: "message-circle-question", terminal: "square-terminal", eye: "eye", hand: "hand", file: "file-text",
   // tabs
-  home: "house", tasks: "list-checks", inbox: "inbox", architecture: "network", product: "package", glossary: "book-a", edits: "history",
+  home: "house", tasks: "list-checks", inbox: "inbox", architecture: "network", product: "package", glossary: "book-a", edits: "history", analysis: "library-big",
   // edit kinds (Ajan değişiklikleri)
   edit: "pencil", record: "list", agent: "bot", skill: "sparkles", mcp: "plug", web: "globe", read: "file-search", other: "dot",
   // actions and states

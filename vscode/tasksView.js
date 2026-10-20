@@ -11,7 +11,9 @@ const os = require("node:os");
 /** The user, as record versions name them. */
 const userActor = () => ({ kind: /** @type {"user"} */ ("user"), id: os.userInfo().username });
 
-const TABS = ["home", "tasks", "inbox", "architecture", "product", "glossary", "edits"];
+const TABS = ["home", "tasks", "inbox", "architecture", "product", "glossary", "analysis", "edits"];
+/** The Analiz tab's pages (TASK-ANALYSIS): the design documents, the glossary and the tasks' analyses. */
+const ANALYSIS_TABS = [["architecture", "Mimari"], ["product", "Ürün"], ["glossary", "Sözlük"], ["analysis", "Görev analizleri"]];
 const FILTERS = ["active", "open", "done"];
 const TASK_STATUSES = ["open", "active", "done", "dropped"];
 /** The tasks that hold recommendations (#87: RECS; AUDIT and BEST before it). */
@@ -494,7 +496,7 @@ function tasksHtml(m) {
 /** The task page's blocks. @param {NonNullable<ReturnType<typeof tasksPage>["cur"]>} c */
 function taskBlocks(c) {
   const fl = (/** @type {number} */ id) => (c.flash === id ? " flash" : "");
-  const head = `<section class="thead" data-k="head-${c.id}"><div class="meta"><span class="mono key">${esc(c.key)}</span>${statusChip(c.status)}${c.epic ? `<span class="dim">Epic ${openTask(c.epic.id, c.epic.status, c.epic.key, "mono")}</span>` : ""}${c.url ? `<a href="#" class="ext" data-act="url" data-url="${esc(c.url)}">GitHub'da aç ${icon("external", 13)}</a>` : ""}</div>
+  const head = `<section class="thead" data-k="head-${c.id}"><div class="meta"><span class="mono key">${esc(c.key)}</span>${statusChip(c.status)}${c.epic ? `<span class="dim">Epic ${openTask(c.epic.id, c.epic.status, c.epic.key, "mono")}</span>` : ""}${c.url ? `<a href="#" class="ext" data-act="url" data-url="${esc(c.url)}">GitHub'da aç ${icon("external", 13)}</a>` : ""}${c.analysis?.files.length ? `<button class="mini analink" data-act="anaGo" data-key="${esc(c.key)}" title="Bu görevin analizleri Analiz sekmesinde">${icon("analysis", 12)} Analiz · ${c.analysis.files.length} dosya ${icon("arrow", 12)}</button>` : ""}</div>
 <h1>${esc(c.title || c.key)}</h1>${c.summary ? `<p class="sum">${esc(c.summary)}</p>` : ""}${c.pointer ? `<div class="callout${fl(c.pointer.id)}" id="ptr-${c.pointer.id}">${icon("arrow", 20)}<div><span class="lbl">Nerede kaldık</span><span class="ptitle">${esc(c.pointer.title)}</span><span class="dim">${c.pointer.owner === "K" ? "Senin işin" : c.pointer.owner === "C" ? "Ajanın işi" : esc(KIND_TR[/** @type {keyof typeof KIND_TR} */ (c.pointer.kind)] ?? c.pointer.kind)} · ${esc(day(c.pointer.at))}</span></div></div>` : ""}</section>`;
   const asks = c.asks.length
     ? `<section class="blk" data-k="asks" data-navgroup="asks" aria-label="Senden beklenen"><h2><span class="odot" aria-hidden="true"></span>Senden beklenen <span class="dim">· ${c.asks.length}</span></h2>${c.asks.map((r) => askCard(r, { prefix: "ask", flash: TODO_KINDS.includes(r.kind) ? undefined : c.flash })).join("")}</section>`
@@ -523,26 +525,82 @@ function taskBlocks(c) {
     : "";
   const activity = `<section class="blk" data-k="act" aria-label="Etkinlik"><h2>Etkinlik</h2>${c.activity.map((v, i) => `<div class="ev" data-k="e${i}"><span class="when">${esc(when(v.at))}</span><span class="who w-${esc(v.kind)}">${esc(v.who)}</span><span class="what">${esc(v.what)}</span></div>`).join("") || '<p class="empty" data-k="none">Henüz olay yok.</p>'}${c.older || c.showOld ? `<button class="link" data-k="more" data-act="old" data-task="${c.id}">${c.showOld ? "Eski olayları gizle" : `${c.older} eski olayı göster`}</button>` : ""}</section>`;
   const recBlocks = (c.audit ? auditBlock(c.audit) : "") + (c.best ? bestBlock(c.best) : "");
-  return head + asks + (recBlocks || todos) + analysisBlock(c) + notes + decisions + tests + activity;
+  return head + asks + taskTabs(c, [
+    { k: "todos", label: recBlocks ? "Öneriler" : "Yapılacaklar", n: c.openTodos, html: recBlocks || todos },
+    { k: "dec", label: "Kararlar", n: c.decisions.length, html: decisions },
+    { k: "notes", label: "Notlar", n: c.notes.length, html: notes },
+    { k: "tests", label: "Testler", n: c.tests.length, html: tests },
+    { k: "act", label: "Etkinlik", n: 0, html: activity },
+  ]);
 }
 
 /**
- * The task's analysis files (TASK-ANALYSIS), each a card with its sections, the newest open;
- * then the repo's analyses with no task, each with "Bu göreve bağla".
- * @param {any} c
+ * The task page's lower part as tabs: the head and what waits on the user stay above them.
+ * Every pane is drawn; the page shows the chosen one (state.ttab), all of them while the
+ * search box filters. A tab with nothing in it is left out; the one holding a record to
+ * flash opens.
+ * @param {any} c @param {{k: string, label: string, n: number, html: string}[]} tabs
  */
-function analysisBlock(c) {
-  const a = c.analysis;
-  if (!a || (!a.files.length && !a.orphans.length)) return "";
+function taskTabs(c, tabs) {
+  const shown = tabs.filter((t) => t.html);
+  const flash = c.flash ? shown.find((t) => t.html.includes(`id="rec-${c.flash}"`))?.k : undefined;
+  const strip = shown.map((t) => `<button class="ttab" role="tab" data-act="ttab" data-tp="${t.k}">${esc(t.label)}${t.n ? ` <span class="n">${t.n}</span>` : ""}</button>`).join("");
+  return `<div class="ttabs" role="tablist" data-k="ttabs" data-def="${shown[0]?.k ?? ""}"${flash ? ` data-flash="${flash}"` : ""}>${strip}</div>${shown.map((t) => `<div class="tpane" role="tabpanel" data-k="tp-${t.k}" data-tp="${t.k}">${t.html}</div>`).join("")}`;
+}
+
+/**
+ * A task's analysis files (TASK-ANALYSIS) as cards, each with its sections, the newest open.
+ * @param {any[]} files analysisOf's files @param {number | undefined} repoId the "aç" button's repo
+ */
+function fileCards(files, repoId) {
   const { renderMarkdown } = require("./docsView.js");
   const name = (/** @type {string} */ src) => (src.startsWith("plan:") ? "Plan (plan modu)" : src || "Analiz");
-  const open = (/** @type {any} */ f) => (f.local && !f.source.startsWith("plan:") ? `<button class="mini" data-act="anaOpen" data-file="${esc(f.source)}" data-repo="${c.repo?.id ?? ""}" title="Dosyayı aç">${icon("external", 12)} aç</button>` : "");
-  const files = a.files.map((/** @type {any} */ f, /** @type {number} */ i) => `<details class="card ana" data-k="ana-${esc(f.source)}"${i === 0 ? " open" : ""}><summary><span class="meta">${icon("file", 14)}<span class="mono">${esc(name(f.source))}</span><span class="dim">${esc(day(f.at))} · ${f.sections.length} bölüm</span>${open(f)}</span></summary>
+  const open = (/** @type {any} */ f) => (f.local && !f.source.startsWith("plan:") ? `<button class="mini" data-act="anaOpen" data-file="${esc(f.source)}" data-repo="${repoId ?? ""}" title="Dosyayı aç">${icon("external", 12)} aç</button>` : "");
+  return files.map((/** @type {any} */ f, /** @type {number} */ i) => `<details class="card ana" data-k="ana-${esc(f.source)}"${i === 0 ? " open" : ""}><summary><span class="meta">${icon("file", 14)}<span class="mono">${esc(name(f.source))}</span><span class="dim">${esc(day(f.at))} · ${f.sections.length} bölüm</span>${open(f)}</span></summary>
 ${f.sections.map((/** @type {any} */ s) => `<div class="asec" data-k="s${s.id}"><h3>${esc(s.title)}</h3>${s.body ? `<div class="body md">${renderMarkdown(s.body)}</div>` : ""}</div>`).join("")}</details>`).join("");
-  const orphans = a.orphans.length
-    ? `<div class="aorph" data-k="orph"><p class="dim">Görevi bulunamayan analizler:</p>${a.orphans.map((/** @type {any} */ o) => `<div class="orow" data-k="o-${esc(o.source)}"><span class="mono">${esc(o.source)}</span><span class="dim">${esc(day(o.at))}</span><button class="mini" data-act="anaAssign" data-file="${esc(o.source)}" data-task="${c.id}">Bu göreve bağla</button></div>`).join("")}</div>`
+}
+
+/**
+ * The Analiz tab's sub-pages, over each of them: Mimari, Ürün, Sözlük, Görev analizleri (how many tasks have one).
+ * @param {any} db @param {string} root @param {string} cur
+ */
+function hubNav(db, root, cur) {
+  const repo = repoOfRoot(db, root);
+  const n = repo ? db.taskDocs(repo.id).filter((/** @type {any} */ d) => d.sections > 0).length : 0;
+  return `<nav class="hubnav" data-k="hubnav" aria-label="Analiz">${ANALYSIS_TABS.map(([t, label]) => `<button class="ttab${t === cur ? " on" : ""}" data-act="tab" data-tab="${t}"${t === cur ? ' aria-current="page"' : ""}>${icon(/** @type {any} */ (t), 14)} ${esc(label)}${t === "analysis" && n ? ` <span class="n">${n}</span>` : ""}</button>`).join("")}</nav>`;
+}
+
+/**
+ * Görev analizleri (TASK-ANALYSIS): the repo's tasks that have an analysis, newest first, each
+ * with its files; and the analysis files no task was found for, each to be given one.
+ * @param {any} db @param {string} root
+ */
+function analysisHub(db, root) {
+  const repo = repoOfRoot(db, root);
+  if (!repo) return { repo: undefined, docs: [], orphans: [], tasks: [] };
+  const docs = db.taskDocs(repo.id).filter((/** @type {any} */ d) => d.sections > 0).map((/** @type {any} */ d) => {
+    const task = db.taskByKey(repo.id, d.scope);
+    return { key: d.scope, at: d.updated_at, task: task ? { id: task.id, title: task.title, status: task.status } : undefined, files: analysisOf(db, repo.id, d.scope).files };
+  });
+  const orphans = Object.entries(require("./analysis.js").orphans(db, repo.id)).sort((a, b) => b[1] - a[1]).map(([source, at]) => ({ source, at }));
+  const tasks = db.tasksOf(repo.id).filter((/** @type {any} */ t) => !CONTAINERS.includes(t.key) && (t.status === "open" || t.status === "active"))
+    .map((/** @type {any} */ t) => ({ id: t.id, key: t.key, title: t.title }));
+  return { repo: { id: repo.id, name: repo.name }, docs, orphans, tasks };
+}
+
+/** @param {ReturnType<typeof analysisHub>} m */
+function analysisHubHtml(m) {
+  if (!m.docs.length && !m.orphans.length) {
+    return `<div class="emptyhero" data-k="none">${require("./mascot.js").mascot(56)}<p>Bu repoda henüz görev analizi yok. Ajan bir görev için analiz, plan ya da araştırma notu yazdığında burada görünür; geçmiş oturumlar için "Imprimatur: Take Task Analyses from Past Sessions".</p></div>`;
+  }
+  const item = (/** @type {any} */ d) => `<button class="aitem" data-act="asel" data-key="${esc(d.key)}" data-nav data-q="${esc(`${d.key} ${d.task?.title ?? ""} ${d.files.map((/** @type {any} */ f) => f.source).join(" ")}`)}"><span class="mono key">${esc(d.key)}</span><span class="ttl">${esc(d.task?.title || d.key)}</span><span class="dim">${d.files.length} dosya · ${esc(day(d.at))}</span></button>`;
+  const list = `<aside class="alist" data-k="alist" data-navgroup="analysis">${m.docs.map(item).join("")}${m.orphans.length ? `<button class="aitem orph" data-act="asel" data-key="__orphans" data-nav><span class="ttl">Görevsiz analizler</span><span class="dim">${m.orphans.length} dosya</span></button>` : ""}</aside>`;
+  const pane = (/** @type {any} */ d) => `<div class="apane" data-k="ap-${esc(d.key)}" data-ak="${esc(d.key)}"><div class="h2row"><h2><span class="mono key">${esc(d.key)}</span> ${esc(d.task?.title || "")}</h2>${d.task ? `<button class="mini" data-act="open" data-id="${d.task.id}" data-f="${bucketOf(d.task.status)}">Göreve git ${icon("arrow", 12)}</button>` : ""}</div>${fileCards(d.files, m.repo?.id)}</div>`;
+  const options = m.tasks.map((/** @type {any} */ t) => `<option value="${t.id}">${esc(t.key)} · ${esc((t.title || "").slice(0, 60))}</option>`).join("");
+  const orphans = m.orphans.length
+    ? `<div class="apane" data-k="ap-orphans" data-ak="__orphans"><h2>Görevsiz analizler <span class="dim">· ${m.orphans.length}</span></h2><p class="dim">Görevi bulunamayan analiz dosyaları: bir göreve bağla, o görevin analizine geçer.</p>${m.orphans.map((o) => `<div class="orow" data-k="o-${esc(o.source)}" data-q="${esc(o.source)}"><span class="mono">${esc(o.source)}</span><span class="dim">${esc(day(o.at))}</span><select data-change="anaAssign" data-file="${esc(o.source)}" aria-label="Göreve bağla"><option value="">Göreve bağla…</option>${options}</select></div>`).join("")}</div>`
     : "";
-  return `<section class="blk" data-k="ana" aria-label="Analiz"><h2>Analiz <span class="dim">· ${a.files.length} dosya</span></h2>${files || '<p class="empty" data-k="none">Bu görev için kaydedilmiş analiz yok.</p>'}${orphans}</section>`;
+  return `<div class="ahub" data-k="ahub">${list}<main class="adoc" data-k="adoc">${m.docs.map(pane).join("")}${orphans}</main></div>`;
 }
 
 const SEV_TR = { high: "yüksek", medium: "orta", low: "düşük" };
@@ -644,8 +702,9 @@ function paneHtml(db, root, view, o = {}) {
   if (view.tab === "inbox") return inboxHtml(inboxModel(db, root, { all: view.all, waiting: o.waiting, now: o.now, placeOf: o.placeOf }));
   if (view.tab === "architecture" || view.tab === "product" || view.tab === "glossary") {
     const docs = require("./docsView.js");
-    return docs.docHtml(docs.docModel(db, root, view.tab, view));
+    return hubNav(db, root, view.tab) + docs.docHtml(docs.docModel(db, root, view.tab, view));
   }
+  if (view.tab === "analysis") return hubNav(db, root, "analysis") + analysisHubHtml(analysisHub(db, root));
   return "";
 }
 
@@ -849,6 +908,20 @@ const TASKS_CSS = `
   .adot { width: 8px; height: 8px; border-radius: 50%; flex: none; align-self: center; } .adot.a-error { background: var(--vscode-problemsErrorIcon-foreground); }
   .adot.a-warning { background: var(--vscode-problemsWarningIcon-foreground); } .adot.a-info { background: var(--vscode-problemsInfoIcon-foreground); }
   .alv { font-size: .85em; font-weight: 500; } .alv.a-error { color: var(--vscode-problemsErrorIcon-foreground); } .alv.a-warning { color: var(--vscode-problemsWarningIcon-foreground); } .alv.a-info { color: var(--vscode-problemsInfoIcon-foreground); }
+  .ttabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 18px 0 4px; border-bottom: 1px solid var(--line); }
+  .ttab { padding: 7px 12px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: inherit; font: inherit; font-size: var(--fs-body); font-weight: 700; cursor: pointer; margin-bottom: -1px; }
+  .ttab:hover { color: var(--acc); } .ttab.on { border-bottom-color: var(--acc); color: var(--acc); }
+  .ttab .n { display: inline-block; min-width: 18px; padding: 0 6px; border-radius: var(--r-pill); background: var(--acc-soft); color: var(--acc); font-size: var(--fs-xs); text-align: center; }
+  .hubnav { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 14px; border-bottom: 1px solid var(--line); }
+  .ahub { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 18px; align-items: start; }
+  .alist { display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; max-height: calc(100vh - 140px); overflow: auto; }
+  .aitem { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border: 1px solid transparent; border-radius: var(--r-md, 8px); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .aitem:hover { background: var(--acc-soft); } .aitem.on { border-color: var(--acc); background: var(--acc-soft); }
+  .aitem .ttl { font-weight: 700; } .aitem.orph { margin-top: 8px; border-top: 1px dashed var(--line); }
+  .adoc h2 { margin-bottom: 10px; } .adoc .h2row { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .analink { opacity: 1; border-color: var(--acc); color: var(--acc); font-size: var(--fs-sm); font-weight: 700; cursor: pointer; padding: 2px 10px; }
+  .orow select { margin-left: auto; max-width: 280px; }
+  @media (max-width: 720px) { .ahub { grid-template-columns: 1fr; } .alist { position: static; max-height: none; } }
   .ana summary { cursor: pointer; list-style: none; } .ana summary::-webkit-details-marker { display: none; }
   .ana .meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .ana .meta .mini { margin-left: auto; }
   .ana + .ana { margin-top: 8px; } .asec { margin-top: 12px; } .asec h3 { margin: 0 0 4px; font-size: var(--fs-body); font-weight: 700; }
@@ -900,6 +973,6 @@ const TASKS_CSS = `
 `;
 
 module.exports = {
-  TABS, FILTERS, TASKS_CSS, ICON, icon, KIND_LABEL, kindChip, bucketOf, userActor, parseQuickAdd, isAsk, repoOfRoot, scopeRepos, describeVersion,
+  TABS, ANALYSIS_TABS, FILTERS, TASKS_CSS, analysisHub, analysisHubHtml, ICON, icon, KIND_LABEL, kindChip, bucketOf, userActor, parseQuickAdd, isAsk, repoOfRoot, scopeRepos, describeVersion,
   tasksPage, inboxModel, inboxCount, openTurn, splitText, TITLE_MAX, BODY_MAX, homeModel, tasksHtml, inboxHtml, homeHtml, paneHtml, applyMessage, cleanView, esc,
 };
