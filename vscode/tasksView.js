@@ -274,8 +274,18 @@ function analysisOf(db, repoId, key) {
   }
   const orphans = Object.entries(require("./analysis.js").orphans(db, repoId)).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([source, at]) => ({ source, at }));
   // Only files read on this machine open from here; one synced from another has its text only.
+  // "aç" only for a file read on this machine and still there; one synced or deleted has its text only.
   const local = new Set(doc ? db.docSourceFiles(doc.id).map((/** @type {any} */ x) => x.path) : []);
-  return { files: [...files.values()].map((f) => ({ ...f, local: local.has(f.source) })).sort((a, b) => b.at - a.at), orphans };
+  const root = db.repos().find((/** @type {any} */ r) => r.id === repoId)?.root;
+  const there = (/** @type {string} */ src) => {
+    if (!root || !local.has(src) || src.startsWith("plan:")) return false;
+    try {
+      return fs.statSync(require("./analysis.js").absPath(root, src)).isFile();
+    } catch {
+      return false;
+    }
+  };
+  return { files: [...files.values()].map((f) => ({ ...f, local: there(f.source) })).sort((a, b) => b.at - a.at), orphans };
 }
 
 /**
