@@ -378,6 +378,9 @@ test("panel: the task page links its analysis; Analiz → Görev analizleri list
   assert.match(hub, /<article class="dsec" id="sec-a\d+"[^>]*><div class="dsec-h"><h2>Bulgular<\/h2>/);
   assert.match(hub, /<ol class="atoc"[^>]*data-ak="#5">[\s\S]*?data-act="docGo" data-key="a\d+"><span>Bulgular<\/span>/);
   assert.doesNotMatch(hub, /<details class="card ana"/);
+  // No file names on the page: only in the "aç" tooltip (and on the orphans, to choose one).
+  assert.doesNotMatch(hub, />docs\/todos\/5\/ANALYSIS\.md</);
+  assert.match(hub, /title="Dosyayı aç: docs\/todos\/5\/ANALYSIS\.md"/);
   assert.match(hub, new RegExp(`data-act="anaOpen" data-file="docs/todos/5/ANALYSIS.md" data-repo="${repo.id}"`));
   assert.match(hub, /data-key="__orphans"/);
   assert.match(hub, /<select data-change="anaAssign" data-file="loose.md"[\s\S]*?<option value="\d+">#80/);
