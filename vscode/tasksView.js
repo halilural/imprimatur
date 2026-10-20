@@ -525,7 +525,9 @@ function taskBlocks(c) {
     : "";
   const activity = `<section class="blk" data-k="act" aria-label="Etkinlik"><h2>Etkinlik</h2>${c.activity.map((v, i) => `<div class="ev" data-k="e${i}"><span class="when">${esc(when(v.at))}</span><span class="who w-${esc(v.kind)}">${esc(v.who)}</span><span class="what">${esc(v.what)}</span></div>`).join("") || '<p class="empty" data-k="none">Henüz olay yok.</p>'}${c.older || c.showOld ? `<button class="link" data-k="more" data-act="old" data-task="${c.id}">${c.showOld ? "Eski olayları gizle" : `${c.older} eski olayı göster`}</button>` : ""}</section>`;
   const recBlocks = (c.audit ? auditBlock(c.audit) : "") + (c.best ? bestBlock(c.best) : "");
-  return head + asks + taskTabs(c, [
+  // The tabs right under the head (and Nerede kaldık): what waits on the user is the first, open by default.
+  return head + taskTabs(c, [
+    { k: "asks", label: "Senden beklenen", n: c.asks.length, html: asks },
     { k: "todos", label: recBlocks ? "Öneriler" : "Yapılacaklar", n: c.openTodos, html: recBlocks || todos },
     { k: "dec", label: "Kararlar", n: c.decisions.length, html: decisions },
     { k: "notes", label: "Notlar", n: c.notes.length, html: notes },
@@ -535,8 +537,8 @@ function taskBlocks(c) {
 }
 
 /**
- * The task page's lower part as tabs: the head and what waits on the user stay above them.
- * Every pane is drawn; the page shows the chosen one (state.ttab), all of them while the
+ * The task page under its head as tabs, Senden beklenen first. Every pane is drawn; the page
+ * shows the one chosen for this task (state.ttabs), else the first; all of them while the
  * search box filters. A tab with nothing in it is left out; the one holding a record to
  * flash opens.
  * @param {any} c @param {{k: string, label: string, n: number, html: string}[]} tabs
@@ -545,7 +547,7 @@ function taskTabs(c, tabs) {
   const shown = tabs.filter((t) => t.html);
   const flash = c.flash ? shown.find((t) => t.html.includes(`id="rec-${c.flash}"`))?.k : undefined;
   const strip = shown.map((t) => `<button class="ttab" role="tab" data-act="ttab" data-tp="${t.k}">${esc(t.label)}${t.n ? ` <span class="n">${t.n}</span>` : ""}</button>`).join("");
-  return `<div class="ttabs" role="tablist" data-k="ttabs" data-def="${shown[0]?.k ?? ""}"${flash ? ` data-flash="${flash}"` : ""}>${strip}</div>${shown.map((t) => `<div class="tpane" role="tabpanel" data-k="tp-${t.k}" data-tp="${t.k}">${t.html}</div>`).join("")}`;
+  return `<div class="ttabs" role="tablist" data-k="ttabs" data-task="${c.id}" data-def="${shown[0]?.k ?? ""}"${flash ? ` data-flash="${flash}"` : ""}>${strip}</div>${shown.map((t) => `<div class="tpane" role="tabpanel" data-k="tp-${t.k}" data-tp="${t.k}">${t.html}</div>`).join("")}`;
 }
 
 /**
@@ -921,7 +923,7 @@ const TASKS_CSS = `
   .adot { width: 8px; height: 8px; border-radius: 50%; flex: none; align-self: center; } .adot.a-error { background: var(--vscode-problemsErrorIcon-foreground); }
   .adot.a-warning { background: var(--vscode-problemsWarningIcon-foreground); } .adot.a-info { background: var(--vscode-problemsInfoIcon-foreground); }
   .alv { font-size: .85em; font-weight: 500; } .alv.a-error { color: var(--vscode-problemsErrorIcon-foreground); } .alv.a-warning { color: var(--vscode-problemsWarningIcon-foreground); } .alv.a-info { color: var(--vscode-problemsInfoIcon-foreground); }
-  .ttabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 18px 0 4px; border-bottom: 1px solid var(--line); }
+  .ttabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 14px 0 4px; border-bottom: 1px solid var(--line); }
   .ttab { padding: 7px 12px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: inherit; font: inherit; font-size: var(--fs-body); font-weight: 700; cursor: pointer; margin-bottom: -1px; }
   .ttab:hover { color: var(--acc); } .ttab.on { border-bottom-color: var(--acc); color: var(--acc); }
   .ttab .n { display: inline-block; min-width: 18px; padding: 0 6px; border-radius: var(--r-pill); background: var(--acc-soft); color: var(--acc); font-size: var(--fs-xs); text-align: center; }

@@ -364,7 +364,14 @@ test("panel: the task page links its analysis; Analiz → Görev analizleri list
   const html = tv.tasksHtml(page);
   assert.match(html, /data-act="anaGo" data-key="#5"[^>]*>[\s\S]*?Analiz · 1 dosya/);
   assert.doesNotMatch(html, /class="card ana"/);
-  assert.match(html, /class="ttabs"[^>]*data-def="todos"/);
+  // The tabs right under the head; with nothing waiting on the user, Yapılacaklar opens first.
+  assert.match(html, new RegExp(`class="ttabs"[^>]*data-task="${t5.id}" data-def="todos"`));
+  assert.ok(html.indexOf('class="ttabs"') < html.indexOf('data-tp="todos"'));
+  // Something waiting on the user: Senden beklenen is the first tab, open by default.
+  db.addRecord(t5.id, { kind: "question", owner: "K", title: "Merge?" }, agent());
+  const asked = tv.tasksHtml(tv.tasksPage(db, root, { sel: t5.id }));
+  assert.match(asked, /data-def="asks"/);
+  assert.ok(asked.indexOf('class="ttabs"') < asked.indexOf('data-k="asks"'), "the asks are in a tab, under the strip");
   assert.match(html, /data-tp="act"/);
   // No analysis: no link.
   const t80 = db.taskByKey(repo.id, "#80");
