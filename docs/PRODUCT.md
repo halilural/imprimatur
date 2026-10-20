@@ -304,9 +304,11 @@ Her repo, Mimari ve Ürün'ün yanında üçüncü bir yaşayan doküman tutar: 
 
 ## 12. Görevin analizi
 
-STORY: Bir görevi açtığımda ajanın o görev için yazdığı analizleri, planları, spike sonuçlarını ve araştırma notlarını (dosyayı nereye yazmış olursa olsun, plan modundan çıktığı plan dahil) görev sayfasının **Analiz** bölümünde okurum; diğer makinemde de aynısı görünür.
+STORY: Bir görevin analizlerini, planlarını, spike sonuçlarını ve araştırma notlarını (ajan dosyayı nereye yazmış olursa olsun, plan modundan çıktığı plan dahil) tek bir yerde, **Analiz** sekmesinde okurum; görev sayfası yapılacaklara odaklı kalır. Diğer makinemde de aynısı görünür.
 
-- Dosya başına bir kart; en yenisi açık; bölümler dosyanın `##` başlıkları. Bu makinede okunmuş dosya "aç" ile editörde açılır.
-- Görevi bulunamayan analizler görev sayfasının altında listelenir; **Bu göreve bağla** o dosyayı o göreve alır.
+- Üst menüde tek **Analiz** sekmesi: altında **Mimari**, **Ürün**, **Sözlük** ve **Görev analizleri**; sekme en son açılan alt sayfaya döner.
+- **Görev analizleri:** solda analizi olan görevler (en yeni üstte), sağda seçilen görevin dosyaları; dosya başına bir kart, bölümler dosyanın `##` başlıkları. Bu makinede okunmuş dosya "aç" ile editörde açılır, "Göreve git" görev sayfasına götürür.
+- **Görevsiz analizler:** listenin altında; her dosyanın yanında görev seçici, seçilen göreve geçer.
+- **Görev sayfası:** başlıkta "Analiz · N dosya →" bağlantısı; üstte Nerede kaldık ve Senden beklenen, altında sekmeler: Yapılacaklar, Kararlar, Notlar, Testler, Etkinlik (seçilen sekme hatırlanır, arama yaparken hepsi görünür).
 - Geçmiş oturumlarda yazılanlar repo başına bir kez arka planda gelir; elle: **Imprimatur: Take Task Analyses from Past Sessions** ya da `npm run analysis` (`--dry-run`, `--no-model`).
 - Kapatmak: `.claude/imprimatur.json` içinde `"analysis": false`; yalnız bu makinede tutmak: `{"sync": false}`; yol hariç tutmak: `{"exclude": ["drafts/"]}`.
