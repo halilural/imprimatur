@@ -75,16 +75,31 @@ test("promptFor lists the unlinked ADRs with their ids; runBackfill keeps the ou
   let call;
   const exec = async (cmd, args, opts) => {
     call = { cmd, args, opts };
+    // Every target written: glossary and product filled, the unlinked ADR linked.
     db.upsertSection(db.docOf(repo.id, "glossary").id, "term", { title: "Term", body: "x" }, agent);
+    db.upsertSection(db.docOf(repo.id, "architecture").id, "storage", { title: "Storage", body: "x", records: [recs[0].id] }, agent);
+    db.upsertSection(db.docOf(repo.id, "product").id, "tabs", { title: "Tabs", body: "x" }, agent);
     return { code: 0, stdout: JSON.stringify({ result: "glossary: 1", total_cost_usd: 0.5 }), stderr: "" };
   };
   await bf.runBackfill(db, repo.id, root, { exec, lang: "Turkish" });
   assert.equal(call.cmd, "claude");
   assert.ok(call.args.includes("mcp__imprimatur__doc_section_upsert"));
   assert.ok(!call.args.includes("Edit") && !call.args.includes("Bash"));
+  assert.equal(call.opts.env.ENABLE_TOOL_SEARCH, "false");
   const m = JSON.parse(db.meta(bf.metaKey(repo.id)));
   assert.equal(m.status, "done");
+  assert.deepEqual(m.left, []);
   assert.equal(m.started, 1);
   assert.equal(m.cost, 0.5);
   assert.equal(m.sections.glossary, 1);
+});
+
+test("runBackfill: a clean exit that wrote nothing is incomplete, not done", async () => {
+  const { root, db, repo } = setup();
+  db.claimMeta(bf.metaKey(repo.id), JSON.stringify({ status: "running", started: 1 }));
+  const exec = async () => ({ code: 0, stdout: JSON.stringify({ result: "I don't have access to any imprimatur MCP tools", total_cost_usd: 0.1 }), stderr: "" });
+  await bf.runBackfill(db, repo.id, root, { exec, lang: "Turkish" });
+  const m = JSON.parse(db.meta(bf.metaKey(repo.id)));
+  assert.equal(m.status, "incomplete");
+  assert.deepEqual(m.left, ["architecture", "product", "glossary"]);
 });

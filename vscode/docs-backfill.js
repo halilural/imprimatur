@@ -99,14 +99,19 @@ async function runBackfill(db, repoId, root, o = {}) {
   const save = (/** @type {any} */ v) => db.setMeta(metaKey(repoId), JSON.stringify({ ...started, kinds, ...v }));
   if (!kinds.length) return save({ status: "nothing", at: Date.now() });
   const prompt = promptFor(db, repoId, root, kinds, o.lang ?? bp.proseLang());
-  const r = await exec("claude", claudeArgs(path.join(__dirname, "..", "mcp", "server.mjs")), { cwd: root, timeout: TIMEOUT_MS, env: bp.childEnv(), input: prompt });
+  // Tool search off: with it the MCP tools are deferred behind ToolSearch, which --tools
+  // leaves out, so the child saw only Read/Glob/Grep and wrote nothing.
+  const env = { ...bp.childEnv(), ENABLE_TOOL_SEARCH: "false" };
+  const r = await exec("claude", claudeArgs(path.join(__dirname, "..", "mcp", "server.mjs")), { cwd: root, timeout: TIMEOUT_MS, env, input: prompt });
   let res = {};
   try {
     res = JSON.parse(r.stdout);
   } catch {}
   const after = db.docHealth(repoId);
+  // Done only when nothing is left to write: a clean exit that wrote nothing is not done.
+  const left = targets(db, repoId);
   save({
-    status: r.code === 0 && !res.is_error ? "done" : "failed", at: Date.now(), cost: Number(res.total_cost_usd ?? 0),
+    status: r.code !== 0 || res.is_error ? "failed" : left.length ? "incomplete" : "done", left, at: Date.now(), cost: Number(res.total_cost_usd ?? 0),
     result: String(res.result ?? r.stderr ?? "").trim().slice(0, 300),
     sections: Object.fromEntries(KINDS.map((k) => [k, after[k].sections])),
   });
