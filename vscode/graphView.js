@@ -742,7 +742,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       case "url": return vscode.postMessage({ type: "openUrl", url: d.url });
       case "newTask": return vscode.postMessage({ type: "newTask" });
       case "recDismiss": return vscode.postMessage({ type: "recDismiss", id: Number(d.id) });
-      case "anaOpen": return vscode.postMessage({ type: "anaOpen", file: d.file });
+      case "anaOpen": return vscode.postMessage({ type: "anaOpen", file: d.file, repo: Number(d.repo) });
       case "anaAssign": el.closest(".orow")?.classList.add("sent"); return vscode.postMessage({ type: "anaAssign", file: d.file, task: Number(d.task) });
       case "bestRun": return vscode.postMessage({ type: "bestRun" });
       case "answer": return sendAnswer(d.id);
@@ -1203,7 +1203,7 @@ function onMessage(m) {
   if (m.type === "bestRun") return vscode.commands.executeCommand("imprimatur.bestPractices.run");
   if (m.type === "recDismiss") return recDismiss(Number(m.id));
   if (["rec", "recStep", "answer", "add", "taskStatus", "docSave", "docNew", "docStatus", "anaAssign"].includes(m.type)) return writeFromPanel(m);
-  if (m.type === "anaOpen" && shown) return openAnalysisFile(String(m.file ?? ""));
+  if (m.type === "anaOpen") return openAnalysisFile(String(m.file ?? ""), Number(m.repo));
   if (m.type === "preview" && shown) {
     let html;
     try {
@@ -1218,16 +1218,17 @@ function onMessage(m) {
 }
 
 /**
- * Opens a task's analysis file (TASK-ANALYSIS): only a path some analysis of the panel's repo
- * was read from, in the repo or under ~/.claude/plans.
- * @param {string} rel
+ * Opens a task's analysis file (TASK-ANALYSIS): only a path some analysis of the task's repo
+ * (any repo on "Bütün repolar") was read from, in that repo or under ~/.claude/plans.
+ * @param {string} rel @param {number} repoId
  */
-function openAnalysisFile(rel) {
+function openAnalysisFile(rel, repoId) {
   const db = records.dbOf();
-  const repo = db && shown ? db.repoByRoot(shown) : undefined;
+  const repo = db ? db.repos().find((/** @type {any} */ r) => r.id === repoId) ?? (shown ? db.repoByRoot(shown) : undefined) : undefined;
   const known = repo && db.sqlite.prepare("SELECT 1 FROM doc_sources x JOIN documents d ON d.id = x.doc_id WHERE d.repo_id = ? AND x.path = ?").get(repo.id, rel);
   if (!known) return;
-  const file = require("./analysis.js").absPath(/** @type {string} */ (shown), rel);
+  if (repo.root.startsWith("origin:")) return void vscode.window.showInformationMessage(`Imprimatur: ${repo.name} is not on this machine; its text stays in the task's analysis.`);
+  const file = require("./analysis.js").absPath(repo.root, rel);
   if (!fs.existsSync(file)) return void vscode.window.showInformationMessage(`Imprimatur: ${rel} is no longer there; its text stays in the task's analysis.`);
   return vscode.window.showTextDocument(vscode.Uri.file(file), { preview: true });
 }

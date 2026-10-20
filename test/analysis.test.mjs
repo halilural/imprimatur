@@ -364,6 +364,8 @@ test("panel: the task page shows its analysis files and the repo's orphans; Bu g
   assert.match(html, /data-k="ana"/);
   assert.match(html, /docs\/todos\/5\/ANALYSIS\.md/);
   assert.match(html, /<h3>Bulgular<\/h3>/);
+  // "aç" names the task's repo: on "Bütün repolar" the panel's repo is another one.
+  assert.match(html, new RegExp(`data-act="anaOpen" data-file="docs/todos/5/ANALYSIS.md" data-repo="${repo.id}"`));
   assert.match(html, /data-act="anaAssign" data-file="loose.md"/);
   // A task with neither: no block.
   const t80 = db.taskByKey(repo.id, "#80");

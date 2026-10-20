@@ -536,7 +536,7 @@ function analysisBlock(c) {
   if (!a || (!a.files.length && !a.orphans.length)) return "";
   const { renderMarkdown } = require("./docsView.js");
   const name = (/** @type {string} */ src) => (src.startsWith("plan:") ? "Plan (plan modu)" : src || "Analiz");
-  const open = (/** @type {any} */ f) => (f.local && !f.source.startsWith("plan:") ? `<button class="mini" data-act="anaOpen" data-file="${esc(f.source)}" title="Dosyayı aç">${icon("external", 12)} aç</button>` : "");
+  const open = (/** @type {any} */ f) => (f.local && !f.source.startsWith("plan:") ? `<button class="mini" data-act="anaOpen" data-file="${esc(f.source)}" data-repo="${c.repo?.id ?? ""}" title="Dosyayı aç">${icon("external", 12)} aç</button>` : "");
   const files = a.files.map((/** @type {any} */ f, /** @type {number} */ i) => `<details class="card ana" data-k="ana-${esc(f.source)}"${i === 0 ? " open" : ""}><summary><span class="meta">${icon("file", 14)}<span class="mono">${esc(name(f.source))}</span><span class="dim">${esc(day(f.at))} · ${f.sections.length} bölüm</span>${open(f)}</span></summary>
 ${f.sections.map((/** @type {any} */ s) => `<div class="asec" data-k="s${s.id}"><h3>${esc(s.title)}</h3>${s.body ? `<div class="body md">${renderMarkdown(s.body)}</div>` : ""}</div>`).join("")}</details>`).join("");
   const orphans = a.orphans.length
