@@ -435,6 +435,62 @@ function registerMcp(root, { dry, claude = "add" }) {
   } else console.log("MCP server in Codex: not installed (~/.codex missing), skipped");
 }
 
+/**
+ * The repo's skills (#95: /study) in ~/.claude/skills as links to this checkout, so a pull
+ * updates them. A folder of the same name that is not our link is left alone; with the plugin,
+ * the plugin brings them and our links go.
+ * @param {string} root @param {{dry: boolean, remove?: boolean, home?: string}} opts
+ * @returns {string[]} what was done, one line each
+ */
+export function linkSkills(root, { dry, remove = false, home = os.homedir() }) {
+  const src = path.join(root, "skills");
+  const dir = path.join(home, ".claude", "skills");
+  const out = [];
+  for (const name of fs.existsSync(src) ? fs.readdirSync(src) : []) {
+    const want = path.join(src, name);
+    const at = path.join(dir, name);
+    let have;
+    try {
+      have = fs.readlinkSync(at);
+    } catch {
+      have = fs.existsSync(at) ? null : undefined;
+    }
+    if (have === null) {
+      out.push(`${name}: ${at} is not Imprimatur's link, left alone`);
+      continue;
+    }
+    const ours = have !== undefined && path.resolve(dir, have) === want;
+    // Someone else's link: theirs. A dangling one into an Imprimatur checkout (moved) is ours to fix.
+    if (have !== undefined && !ours && (fs.existsSync(at) || path.basename(path.resolve(dir, have)) !== name || path.basename(path.dirname(path.resolve(dir, have))) !== "skills")) {
+      out.push(`${name}: ${at} links elsewhere (${have}), left alone`);
+      continue;
+    }
+    if (remove) {
+      if (ours) {
+        if (!dry) fs.unlinkSync(at);
+        out.push(`${name}: removed (the plugin brings it)`);
+      }
+      continue;
+    }
+    if (ours) {
+      out.push(`${name}: in place`);
+      continue;
+    }
+    try {
+      if (!dry) {
+        fs.mkdirSync(dir, { recursive: true });
+        if (have !== undefined) fs.unlinkSync(at);
+        // A junction needs no admin rights on Windows.
+        fs.symlinkSync(want, at, process.platform === "win32" ? "junction" : "dir");
+      }
+      out.push(`${name}: ${have !== undefined ? "updated" : "added"} → ${want}`);
+    } catch (e) {
+      out.push(`${name}: skipped (${/** @type {Error} */ (e).message}); link ${want} into ${dir} by hand`);
+    }
+  }
+  return out;
+}
+
 /** @param {string[]} argv */
 function options(argv) {
   const get = (name) => {
@@ -531,6 +587,7 @@ function main() {
   if (changes.length && !opts.dry) writeWithBackup(file, settings);
 
   registerMcp(root, { dry: opts.dry, claude: opts.plugin ? "remove" : fromPlugin ? "skip" : "add" });
+  for (const line of linkSkills(root, { dry: opts.dry, remove: opts.plugin || fromPlugin })) console.log(`Skill ${line}`);
 
   // Language and extensions for hooks started without args (the plugin's): vscode/config.js.
   if (opts.lang || opts.exts?.length) {
