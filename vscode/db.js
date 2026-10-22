@@ -302,6 +302,18 @@ const MIGRATIONS = [
   INSERT INTO section_reads (section_id, version_id, at)
     SELECT s.id, coalesce((SELECT max(v.id) FROM doc_versions v WHERE v.section_id = s.id), 0), CAST(strftime('%s', 'now') AS INTEGER) * 1000 FROM doc_sections s;
   `,
+  // An early draft of migration 7 reached a live database without version_id: section_reads is
+  // made again, every section read as of now (they are only marks; nothing else refers to them).
+  `
+  DROP TABLE section_reads;
+  CREATE TABLE section_reads (
+    section_id INTEGER PRIMARY KEY REFERENCES doc_sections(id),
+    version_id INTEGER NOT NULL,
+    at INTEGER NOT NULL
+  );
+  INSERT INTO section_reads (section_id, version_id, at)
+    SELECT s.id, coalesce((SELECT max(v.id) FROM doc_versions v WHERE v.section_id = s.id), 0), CAST(strftime('%s', 'now') AS INTEGER) * 1000 FROM doc_sections s;
+  `,
 ];
 const VERSION = MIGRATIONS.length;
 
