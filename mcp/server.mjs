@@ -22,6 +22,7 @@ const { originOf } = require("../vscode/import.js");
 const { syncDocs, health: docsHealth } = require("../vscode/docs-sync.js");
 const { syncOn: docsSyncOn } = require("../vscode/docs-export.js");
 const { locateAgnix, auditRoot, describeSummary } = require("../vscode/setup-audit.js");
+const { studyMaterial, NOTE_KEY: STUDY_NOTE } = require("../vscode/study.js");
 
 const MODERN = "2026-07-28";
 const LEGACY = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
@@ -271,6 +272,18 @@ const TOOLS = [
       },
     }, ["document", "section", "created"]),
     idempotent: true,
+  },
+  {
+    name: "study_material",
+    title: "Material to study a task",
+    description: `Everything to learn one task end to end (the /study skill, #95): the task (an epic's tasks too), its decisions with full bodies, notes, todos, the architecture/product sections its records feed, its analysis, the glossary terms the material uses, the commits that name its key with the files they changed (most changed first), the study note kept in its analysis (section "${STUDY_NOTE}", stale when a commit or decision came after it) and the last study's mastery (weak questions first, what changed since). Read-only: write the note with doc_section_upsert {kind: "analysis", task, key: "${STUDY_NOTE}"} and the mastery as a note record with links.study {topic, questions: [{q, type, result: full|partial|miss, gap, refs}]}.`,
+    inputSchema: input({ key: { type: "string", description: "The task's key, e.g. \"#58\"; an epic gives its tasks too" }, repo: repoArg }, ["key"]),
+    outputSchema: output({
+      task: { type: "object" }, tasks: { type: "array" }, decisions: { type: "array" }, notes: { type: "array" }, todos: { type: "array" },
+      sections: { type: "array" }, analysis: { type: "array" }, terms: { type: "array" }, commits: { type: "array" }, files: { type: "array" },
+      epic: { type: "object" }, note: { type: "object" }, mastery: { type: "object" },
+    }, ["task", "tasks", "decisions", "notes", "todos", "sections", "analysis", "terms", "commits", "files"]),
+    readOnly: true,
   },
   {
     name: "setup_audit",
@@ -558,6 +571,10 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
         throw new ToolError(`audit failed: ${e instanceof Error ? e.message : e}`);
       }
     }
+    case "study_material": {
+      const repo = repoOf(db, a.repo);
+      return studyMaterial(db, repo, taskOf(db, repo, a.key));
+    }
     case "search":
       return { records: db.search(a.text, { repoId: a.repo === "*" ? undefined : repoOf(db, a.repo).id, kind: a.kind, limit: a.limit }) };
     default:
@@ -636,6 +653,8 @@ export function digest(name, out, a = {}) {
     }
     case "setup_audit":
       return [...out.audits.map(describeSummary), a.dry_run ? "Dry run: nothing written." : 'Open findings: task_get key "RECS" (repo for the home: its path).'].join("\n");
+    case "study_material":
+      return studyDigest(out);
     case "search":
       if (!out.records.length) return `No records match ${JSON.stringify(a.text ?? "")}.`;
       return [`${plural(out.records.length, "record")}:`, ...out.records.map((r) =>
@@ -643,6 +662,35 @@ export function digest(name, out, a = {}) {
     default:
       return JSON.stringify(out);
   }
+}
+
+/** A section-sized text, cut so one study read stays readable. @param {string} s */
+const block = (s, n = 4000) => (s.length > n ? `${s.slice(0, n)}…(cut at ${n} chars)` : s).replace(/^/gm, "    ");
+
+/** study_material as text the agent studies from (#95). @param {any} out */
+function studyDigest(out) {
+  const L = [`# ${taskLine(out.task)}`];
+  if (out.epic) L.push(`Epic: ${out.epic.key} ${out.epic.title}`);
+  if (out.tasks.length) L.push("", "## Tasks of this epic", ...out.tasks.map((t) => `- ${taskLine(t)}`));
+  if (out.mastery) {
+    const m = out.mastery;
+    L.push("", `## Last study (record [${m.record}], ${new Date(m.at).toISOString().slice(0, 10)}): ${m.score.full}/${m.score.total} full, ${m.score.partial} partial, ${m.score.miss} missed`);
+    if (m.weak.length) L.push("Ask these again first:", ...m.weak.map((q) => `- [${q.type}/${q.result}] ${q.q}${q.gap ? ` — gap: ${q.gap}` : ""}`));
+    if (m.changed.length) L.push("Changed since (answers may be out of date):", ...m.changed.map((c) => `- ${c}`));
+  }
+  if (out.note) L.push("", `## Study note (${out.note.stale ? "STALE: commits or decisions came after it, update it" : "current"})`, block(out.note.body, 8000));
+  else L.push("", `## Study note: none yet (write it to the analysis, section "${STUDY_NOTE}")`);
+  const of = (/** @type {any} */ r) => (r.task ? ` (${r.task})` : "");
+  if (out.decisions.length) L.push("", "## Decisions", ...out.decisions.flatMap((d) => [`- [${d.id}] ${d.kind}/${d.status}${of(d)} ${oneLine(d.title, 300)}`, ...(d.body ? [block(d.body)] : [])]));
+  if (out.sections.length) L.push("", "## Design-document sections its records feed", ...out.sections.flatMap((x) => [`- ${x.kind}/${x.key}: ${x.title}`, block(x.body)]));
+  if (out.analysis.length) L.push("", "## Its analysis", ...out.analysis.flatMap((x) => [`- ${x.key}: ${x.title}${x.source ? ` (${x.source})` : ""}`, block(x.body)]));
+  if (out.terms.length) L.push("", "## Terms", ...out.terms.map((t) => `- ${t.term}: ${oneLine(t.meaning, 300)}`));
+  if (out.notes.length) L.push("", "## Notes and questions", ...out.notes.map((n) => `- [${n.id}] ${n.kind}/${n.status}${of(n)} ${oneLine(n.title, 300)}${n.body ? `\n    ${oneLine(n.body, 300)}` : ""}`));
+  if (out.todos.length) L.push("", "## Todos and tests", ...out.todos.map((t) => `- [${t.id}] ${t.kind}/${t.status}${of(t)} ${t.owner ?? "-"} ${oneLine(t.title, 300)}`));
+  const keys = [out.task.key, ...out.tasks.map((t) => t.key)].join(", ");
+  L.push("", out.commits.length ? `## Commits naming ${keys} (${out.commits.length})` : `## No commits name ${keys}`, ...out.commits.map((c) => `- ${c.hash} ${new Date(c.at).toISOString().slice(0, 10)} ${c.subject} (${plural(c.files, "file")})`));
+  if (out.files.length) L.push("", "## Files they changed, most first (read these for the code tour)", ...out.files.map((f) => `- ${f.path} +${f.added} -${f.removed} (${plural(f.commits, "commit")})`));
+  return L.join("\n");
 }
 
 const toolList = () =>

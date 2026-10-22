@@ -80,7 +80,7 @@ test("legacy handshake: initialize, initialized, tools/list", async () => {
   assert.equal(list.result.resultType, undefined);
   assert.equal(list.result.ttlMs, undefined, "legacy results stay as they were");
   const names = list.result.tools.map((t) => t.name);
-  assert.deepEqual(names.sort(), ["doc_get", "doc_section_upsert", "pointer_set", "record_add", "record_update", "search", "setup_audit", "task_get", "task_list", "task_upsert", "where_we_left_off"]);
+  assert.deepEqual(names.sort(), ["doc_get", "doc_section_upsert", "pointer_set", "record_add", "record_update", "search", "setup_audit", "study_material", "task_get", "task_list", "task_upsert", "where_we_left_off"]);
   for (const t of list.result.tools) {
     assert.equal(t.inputSchema.type, "object");
     assert.equal(typeof t.annotations.readOnlyHint, "boolean");
@@ -320,7 +320,7 @@ test("tools: title, annotations, closed input schemas that still take _session, 
   const ro = Object.fromEntries(tools.map((t) => [t.name, t.annotations.readOnlyHint]));
   assert.deepEqual(ro, {
     where_we_left_off: true, task_list: true, task_get: true, search: true,
-    task_upsert: false, record_add: false, record_update: false, pointer_set: false, doc_get: true, doc_section_upsert: false, setup_audit: false,
+    task_upsert: false, record_add: false, record_update: false, pointer_set: false, doc_get: true, doc_section_upsert: false, setup_audit: false, study_material: true,
   });
   // The hook's _session passes the closed schema.
   assert.equal((await call(s, "task_list", { _session: "S1" })).isError, undefined);
@@ -377,6 +377,8 @@ test("every tool's structuredContent matches its outputSchema", async () => {
   await ok("doc_get", { kind: "analysis", task: "#5", full: true });
   await ok("doc_get", { kind: "analysis", task: "#6" });
   await ok("setup_audit", {});
+  await ok("study_material", { key: "#1" });
+  await ok("study_material", { key: "#0" });
   assert.equal(seen.size, Object.keys(schemas).length, "every tool was checked");
   await s.close();
 });

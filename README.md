@@ -131,6 +131,15 @@ While the plugin is enabled, a plain `npm run setup` writes no hooks.
   the edits not accepted and the design-document sections the agent changed since
   you last read them, each with **Okudum**. A changed section is marked in Mimari,
   Ürün and Sözlük. Sections you write count as read. Read marks stay on this machine.
+- **`/study` (#95)**: study one topic end to end, as if studying its documentation.
+  The topic can be a decision, a feature, a document or an epic: `/study #92`. The
+  agent writes a study note into the task's analysis (what and why, how it works,
+  a code tour with `file:line`, the alternatives, the limits, the terms). Then it
+  quizzes you one question at a time. You answer first, it grades the answer against
+  the records and the code and points to what was missing. A mastery note keeps the
+  score, and the next study asks the weak questions first. The skill reads
+  everything with the `study_material` MCP tool; setup links it into
+  `~/.claude/skills` (the plugin brings it by itself).
 - **Imprimatur side bar** (its own icon in the activity bar): rows that open
   the panel on a tab (the badge counts what waits on you), then **Agent setup**: every file in the repo, and in your home folder, that
   shapes a coding agent, whatever the tool: Claude Code (CLAUDE.md, settings
