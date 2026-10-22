@@ -715,8 +715,19 @@ function activate(ctx) {
     vscode.window.registerUriHandler({
       handleUri(uri) {
         log.info(`uri ${uri.toString(true)}`);
-        if (uri.path !== "/accept") return;
         const q = new URLSearchParams(uri.query);
+        // The preview's "Accept all" (#105): as the editor's command, no copy left to review.
+        if (uri.path === "/acceptAll") {
+          const file = q.get("file");
+          const copy = file ? copyPath(file) : undefined;
+          if (!copy) return;
+          log.info(`accept all ${file}`);
+          if (fs.existsSync(copy)) fs.rmSync(copy);
+          const editor = vscode.window.visibleTextEditors.find((e) => e.document.uri.fsPath === file);
+          if (editor) render(editor);
+          return;
+        }
+        if (uri.path !== "/accept") return;
         const file = q.get("file");
         if (file) {
           if (q.get("ui") === "1") skipPreviewUntil = Date.now() + 3000;
@@ -1001,6 +1012,12 @@ function activate(ctx) {
           if (!config.get("mermaidDiff", false)) return undefined;
           const copy = copyPath(uri.fsPath);
           return copy && fs.existsSync(copy) ? fs.readFileSync(copy, "utf8") : undefined;
+        },
+        (env) => {
+          /** @type {vscode.Uri | undefined} */
+          const uri = env?.currentDocument;
+          if (uri?.scheme !== "file") return undefined;
+          return `${vscode.env.uriScheme}://${ctx.extension.id}/acceptAll?${new URLSearchParams({ file: uri.fsPath })}`;
         },
       );
     },
