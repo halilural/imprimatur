@@ -734,7 +734,7 @@ flowchart LR
 
 ### Veri
 
-- Migration 7: `section_reads(section_id PK → doc_sections, version_id, at)`. Cihaza özeldir, eşitlenmez. Migration o an var olan her bölümü son sürümüyle okunmuş sayar.
+- Migration 7 (ve 8): `section_reads(section_id PK → doc_sections, version_id, at)`. Cihaza özeldir, eşitlenmez. Migration o an var olan her bölümü son sürümüyle okunmuş sayar. Migration 8 tabloyu yeniden kurar: 7'nin `version_id`'siz bir taslağı canlı veritabanına ulaşmıştı (dal, canlı checkout'ta çalışıyordu).
 - Bir bölüm **okunmadı**: güncel (`current`) ve `version_id`'sinden sonra `agent` ya da `hook` bir sürüm yazmış, o sürüm başlığı ya da metni değiştirmiş (yalnız bağlantı/konum değişikliği sayılmaz). Karşılaştırma sürüm id'siyle yapılır, zamanla değil: analiz yeniden okunurken sürümler geçmiş zamanla yazılabilir.
 - `user` yazınca `upsertSection` bölümü okundu işaretler. `import` (eşitleme) sayılmaz: okuma bu cihazındır, ilk eşitleme her şeyi okunmadı göstermesin.
 - `db.unreadSections(repoId)`: okunmamış bölümler ve görevleri: görev analizinde `scope`, repo dokümanlarında okunmamış sürümlerin yeni bağladığı kayıtların görevleri. `db.markSectionsRead(ids)`.
