@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Claude Code status line (#66): one short line for the session's repo, e.g.
-//   Imprimatur · 3 waiting on you · #64 👉 discover cache
+//   Imprimatur · 3 waiting on you · 12 unread · #64 👉 discover cache
 // - "waiting on you": the user's open records in the repo (owner K, todo or
 //   question) plus the open steps of the repo's waiting logs;
+// - "unread" (#92): the agent's edits not accepted (as the extension last counted them)
+//   plus the sections someone else changed since the user read them;
 // - the task this session last wrote records of, with its 👉 (else its title).
 // Nothing to say: "Imprimatur". Outside a git repo: nothing.
 //
@@ -46,12 +48,14 @@ function repoOf(dir) {
  */
 function lineFor(root, session) {
   let asks = 0;
+  let unread = require("../vscode/review-state.js").readUnread(root);
   /** @type {string | undefined} */ let current;
   // Only an existing database: opening one creates it.
   const { dbPath } = require("../vscode/db.js");
   if (fs.existsSync(dbPath())) {
     const records = require("../vscode/records.js");
     asks = records.userAsks(root).length;
+    unread += records.unreadSections(root);
     const key = session ? records.sessionTasks(root).get(session)?.at(-1) : undefined;
     if (key) {
       const pointer = records.recordsOf(root, key).find((/** @type {any} */ r) => r.pointer);
@@ -63,6 +67,7 @@ function lineFor(root, session) {
   const sep = dim(" · ");
   const parts = [dim("Imprimatur")];
   if (asks + steps) parts.push(warm(`${asks + steps} waiting on you`));
+  if (unread) parts.push(`${unread} unread`);
   if (current) parts.push(current);
   return parts.join(sep);
 }

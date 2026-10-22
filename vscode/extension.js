@@ -948,7 +948,10 @@ function activate(ctx) {
   launcher = registerLauncher(ctx, () => {
     const root = graphRoot();
     if (!root) return { edits: 0, inbox: 0 };
-    return { edits: graphRows(root, currentText).rows.filter((r) => !r.accepted && !r.gone).length, inbox: inboxNow() };
+    const edits = graphRows(root, currentText).rows.filter((r) => !r.accepted && !r.gone).length;
+    // The status line counts them as unread (#92); it draws no graph.
+    require("./review-state.js").writeUnread(root, edits);
+    return { edits, inbox: inboxNow() };
   });
   // Its graph row moved to the launcher (#69): no counts to keep.
   setupView = registerSetupView(ctx, () => [...roots], () => ({ edits: 0, waiting: 0 }));

@@ -28,6 +28,7 @@
 22. [Geçmiş taraması ve TODO.md görev takibi](#history-scan-todo)
 23. [Panel tasarım katmanı: tema değişkenleri, ikonlar, maskot](#ui-design)
 24. [Görev analizleri](#task-analysis)
+25. [Anlama borcu: okuma işaretleri ve okunmadı sayısı (#92)](#unread)
 
 <a id="overview"></a>
 
@@ -726,3 +727,23 @@ flowchart LR
 - **Geçmiş:** transcript'teki her durum, yazıldığı zamanla bir sürüm; belgede o dosyanın daha yeni bölümü varsa (hook, başka makine, MCP) eski durum atlanır. SessionStart'ta repo başına bir kez (`analysis-backfill:<repo>` claim), elle `npm run analysis` ya da komut.
 - **Eşitleme:** Worker değişmedi; eski sürümler `analysis:` türünü ve `source` alanını reddeder. `"analysis": {"sync": false}` → `analysis:nosync:<repo>` meta, `sectionKey_` bölümü kuyruğa koymaz.
 - **MCP:** `doc_get` / `doc_section_upsert` `kind: "analysis"` + `task`. Analiz belgesinin kendi dosyası yok: kaynaklar okunur, yazılmaz.
+
+<a id="unread"></a>
+
+## 25. Anlama borcu: okuma işaretleri ve okunmadı sayısı (#92)
+
+### Veri
+
+- Migration 7: `section_reads(section_id PK → doc_sections, version_id, at)`. Cihaza özeldir, eşitlenmez. Migration o an var olan her bölümü son sürümüyle okunmuş sayar.
+- Bir bölüm **okunmadı**: güncel (`current`) ve `version_id`'sinden sonra `agent` ya da `hook` bir sürüm yazmış, o sürüm başlığı ya da metni değiştirmiş (yalnız bağlantı/konum değişikliği sayılmaz). Karşılaştırma sürüm id'siyle yapılır, zamanla değil: analiz yeniden okunurken sürümler geçmiş zamanla yazılabilir.
+- `user` yazınca `upsertSection` bölümü okundu işaretler. `import` (eşitleme) sayılmaz: okuma bu cihazındır, ilk eşitleme her şeyi okunmadı göstermesin.
+- `db.unreadSections(repoId)`: okunmamış bölümler ve görevleri: görev analizinde `scope`, repo dokümanlarında okunmamış sürümlerin yeni bağladığı kayıtların görevleri. `db.markSectionsRead(ids)`.
+- Placeholder repo birleşmesi, silinen bölümün okuma satırını da siler (yabancı anahtar).
+
+### Düzenlemeler
+
+Kabul edilmemiş düzenlemeler veritabanında değildir: graf satırlarından (`!accepted && !gone`, etkinlik ve kayıt satırları hariç) görev şeridine göre sayılır (`graphView.openEditsOf`) ve `paneHtml`'e `openEdits` olarak geçer. Durum satırı grafı çizmez: eklenti sayıyı kenar çubuğu rozetini hesaplarken `.claude/imprimatur/unread.json`'a yazar (değişince ya da 5 dakikada bir); durum satırı 15 dakikadan eskisini yok sayar.
+
+### Yüzeyler
+
+`tasksView.unreadOf` görev başına `{edits, sections}`; görev listesi, görev sayfası başı ve Ana sayfa `unreadHtml`; `docsView` bölüm işareti ve Okudum. Sayfa mesajları: `read` (ids, `writeFromPanel` → `applyMessage`), `showSection` (doküman sekmesi + bölüm).

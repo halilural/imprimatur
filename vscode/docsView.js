@@ -204,6 +204,8 @@ function docModel(db, root, kind, view = {}) {
   const doc = repo ? db.docFind(repo.id, kind) : undefined;
   const sections = doc ? db.docSections(doc.id) : [];
   const last = doc ? db.docLastChange(doc.id) : undefined;
+  // Changed by someone else since the user last read it (#92).
+  const unread = new Set(doc ? db.unreadSections(repo.id).filter((/** @type {any} */ s) => s.doc_id === doc.id).map((/** @type {any} */ s) => s.id) : []);
   const edit = editOf(view.edit, kind);
   let n = 0;
   const shape = (/** @type {any} */ s) => {
@@ -219,6 +221,7 @@ function docModel(db, root, kind, view = {}) {
       versions: db.sectionVersions(s.id).map(describeSectionVersion),
       editing: edit === s.id,
       flash: !!view.docFlash && view.docFlash === s.key,
+      unread: unread.has(s.id),
     };
   };
   const current = sections.filter((/** @type {any} */ s) => s.status === "current").map(shape);
@@ -227,7 +230,7 @@ function docModel(db, root, kind, view = {}) {
     kind, label: /** @type {any} */ (TAB_LABEL)[kind], title: doc?.title ?? /** @type {any} */ (DOC_KINDS)[kind],
     repoName: repo?.name ?? root.split(/[\\/]/).pop(),
     last: last ? { at: last.at, who: /** @type {any} */ (WHO_TR)[last.actor_kind] ?? last.actor_kind, actor: last.actor } : undefined,
-    current, superseded, adding: edit === "new", empty: !sections.length,
+    current, superseded, adding: edit === "new", empty: !sections.length, unread: [...unread],
     // The repo's docs/ file someone wrote by hand: the export leaves it alone (#72).
     manual: require("./docs-export.js").fileState(root, kind) === "manual"
       ? `docs/${/** @type {any} */ (require("./docs-export.js").FILES)[kind]}` : undefined,
@@ -249,7 +252,7 @@ function editorHtml(m, s) {
 function sectionHtml(m, s) {
   const { kindChip, icon } = require("./tasksView.js");
   const q = esc([s.title, s.body, ...s.contributors.map((/** @type {any} */ r) => `${r.title} ${r.task}`)].join(" "));
-  const acts = s.editing ? "" : `<div class="dacts"><button class="ghost" data-act="docEdit" data-kind="${m.kind}" data-id="${s.id}">Düzenle</button><button class="link" data-act="docStatus" data-id="${s.id}" data-status="${s.status === "current" ? "superseded" : "current"}">${s.status === "current" ? "Eskimiş say" : "Güncel yap"}</button></div>`;
+  const acts = s.editing ? "" : `<div class="dacts">${s.unread ? `<button class="primary" data-act="read" data-ids="${s.id}">Okudum</button>` : ""}<button class="ghost" data-act="docEdit" data-kind="${m.kind}" data-id="${s.id}">Düzenle</button><button class="link" data-act="docStatus" data-id="${s.id}" data-status="${s.status === "current" ? "superseded" : "current"}">${s.status === "current" ? "Eskimiş say" : "Güncel yap"}</button></div>`;
   const body = s.editing ? editorHtml(m, s) : s.html ? `<div class="md">${s.html}</div>` : `<p class="empty">${m.kind === "glossary" ? "Tanımı henüz yazılmadı." : "Bu bölüm henüz boş."}</p>`;
   // Folded by default: the section text is the point, the records are its trail.
   const contrib = s.contributors.length
@@ -258,16 +261,16 @@ function sectionHtml(m, s) {
   const hist = s.versions.length
     ? `<details class="hist"><summary>Geçmiş · ${s.versions.length}</summary>${s.versions.map((/** @type {any} */ v) => `<div class="ev"><span class="when">${esc(when(v.at))}</span><span class="who w-${esc(v.kind)}">${esc(v.who)}</span><span class="what">${esc(v.what)}</span></div>`).join("")}</details>`
     : "";
-  return `<article class="dsec${s.status !== "current" ? " old" : ""}${s.flash ? " flash" : ""}" id="sec-${esc(s.key)}" data-k="s${s.id}" data-nav tabindex="0" data-q="${q}">
-<div class="dsec-h"><h2>${s.n ? `<span class="num">${s.n}.</span>` : s.status === "current" ? "" : `${icon("file", 14)}`}${esc(s.title)}</h2>${acts}</div>${body}${contrib}${hist}</article>`;
+  return `<article class="dsec${s.status !== "current" ? " old" : ""}${s.flash ? " flash" : ""}${s.unread ? " unread" : ""}" id="sec-${esc(s.key)}" data-k="s${s.id}" data-nav tabindex="0" data-q="${q}">
+<div class="dsec-h"><h2>${s.n ? `<span class="num">${s.n}.</span>` : s.status === "current" ? "" : `${icon("file", 14)}`}${esc(s.title)}${s.unread ? ' <span class="upill">Okunmadı</span>' : ""}</h2>${acts}</div>${body}${contrib}${hist}</article>`;
 }
 
 /** @param {ReturnType<typeof docModel>} m */
 function docHtml(m) {
   const { icon } = require("./tasksView.js");
   const g = m.kind === "glossary";
-  const toc = `<aside class="dtoc" data-k="toc" data-scroll="dtoc" aria-label="${g ? "Terimler" : "İçindekiler"}"><div class="lbl" data-k="h">${g ? `Terimler · ${m.current.length}` : "İçindekiler"}</div><ol data-k="list">${m.current.map((s) => `<li data-k="t${s.id}" data-q="${esc(`${s.title} ${s.body}`)}"><a href="#sec-${esc(s.key)}" data-act="docGo" data-key="${esc(s.key)}">${s.n ? `<span class="num">${s.n}</span>` : ""}<span>${esc(s.title)}</span></a></li>`).join("") || `<li data-k="none" class="dim">${g ? "Terim yok" : "Bölüm yok"}</li>`}</ol>${m.superseded.length ? `<a href="#sec-__old" class="dold" data-k="old" data-act="docGo" data-key="__old">${g ? "Eskimiş terimler" : "Eskimiş bölümler"} · ${m.superseded.length}</a>` : ""}<button class="dashed" data-k="new" data-act="docEdit" data-kind="${m.kind}" data-id="new">${icon("plus")} ${g ? "Yeni terim" : "Yeni bölüm"}</button></aside>`;
-  const head = `<section class="dhead" data-k="head"><span class="lbl">${esc(m.label)} · ${esc(m.repoName)}</span><h1>${esc(m.title)}</h1><p class="lead">${m.last ? `Son güncelleme · ${esc(when(m.last.at))} · ${esc(m.last.who)}` : "Henüz güncellenmedi"}</p>${m.manual ? `<p class="dnote">${esc(m.manual)} elle yazılmış, üzerine yazılmadı</p>` : ""}</section>`;
+  const toc = `<aside class="dtoc" data-k="toc" data-scroll="dtoc" aria-label="${g ? "Terimler" : "İçindekiler"}"><div class="lbl" data-k="h">${g ? `Terimler · ${m.current.length}` : "İçindekiler"}</div><ol data-k="list">${m.current.map((s) => `<li data-k="t${s.id}" data-q="${esc(`${s.title} ${s.body}`)}"><a href="#sec-${esc(s.key)}" data-act="docGo" data-key="${esc(s.key)}">${s.n ? `<span class="num">${s.n}</span>` : ""}<span>${esc(s.title)}</span>${s.unread ? '<span class="udot" title="Okunmadı" aria-label="Okunmadı"></span>' : ""}</a></li>`).join("") || `<li data-k="none" class="dim">${g ? "Terim yok" : "Bölüm yok"}</li>`}</ol>${m.superseded.length ? `<a href="#sec-__old" class="dold" data-k="old" data-act="docGo" data-key="__old">${g ? "Eskimiş terimler" : "Eskimiş bölümler"} · ${m.superseded.length}</a>` : ""}<button class="dashed" data-k="new" data-act="docEdit" data-kind="${m.kind}" data-id="new">${icon("plus")} ${g ? "Yeni terim" : "Yeni bölüm"}</button></aside>`;
+  const head = `<section class="dhead" data-k="head"><span class="lbl">${esc(m.label)} · ${esc(m.repoName)}</span><h1>${esc(m.title)}</h1><p class="lead">${m.last ? `Son güncelleme · ${esc(when(m.last.at))} · ${esc(m.last.who)}` : "Henüz güncellenmedi"}</p>${m.manual ? `<p class="dnote">${esc(m.manual)} elle yazılmış, üzerine yazılmadı</p>` : ""}${m.unread?.length ? `<p class="dunread"><span class="upill">${m.unread.length} okunmadı</span><button class="link" data-act="read" data-ids="${m.unread.join(",")}">Hepsini okudum</button></p>` : ""}</section>`;
   const empty = m.empty && !m.adding && g
     ? `<div class="card dempty emptyhero" data-k="empty">${require("./mascot.js").mascot(56)}<div><p>Sözlük henüz boş. Ajan, projede yeni bir terim ortaya çıktığında ya da bir terimin anlamı değiştiğinde onu <span class="mono">doc_section_upsert</span> ile burada yazar.</p><p class="dim">Sen de soldan "Yeni terim" ile ekleyebilirsin. Sözlük repoya docs/GLOSSARY.md olarak da yazılır.</p></div></div>`
     : m.empty && !m.adding
@@ -342,6 +345,10 @@ const DOCS_CSS = `
   .dsec { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 18px 22px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--card); box-shadow: var(--shadow); scroll-margin-top: calc(var(--appbar-h, 52px) + 12px); }
   body.vscode-high-contrast .dsec, body.vscode-high-contrast-light .dsec { border-color: var(--vscode-contrastBorder); }
   .dsec.old { opacity: .85; } .dsec.adding { border-color: var(--acc); }
+  .dsec.unread { border-left: 4px solid var(--vscode-editorInfo-foreground, var(--acc)); }
+  .upill { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; vertical-align: 2px; color: var(--vscode-editorInfo-foreground, var(--acc)); border: 1px solid currentColor; }
+  .udot { flex: none; width: 8px; height: 8px; margin: 6px 0 0 auto; border-radius: 50%; background: var(--vscode-editorInfo-foreground, var(--acc)); }
+  .dunread { display: flex; align-items: center; gap: 10px; margin: 4px 0 0; } .dunread .upill { margin-left: 0; }
   .dsec-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .dsec-h h2 { font-size: 17px !important; } .dsec-h .num { color: var(--acc); }
   .dacts { display: flex; gap: 6px; align-items: center; }

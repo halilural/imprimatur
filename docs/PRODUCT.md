@@ -16,6 +16,7 @@
 10. [Agent setup denetimi (planlandı)](#agent-setup-audit)
 11. [Proje sözlüğü](#glossary)
 12. [Görevin analizi](#task-analysis)
+13. [Okumadıkların: anlama borcu (#91, #92)](#unread)
 
 <a id="summary"></a>
 
@@ -311,3 +312,18 @@ STORY: Bir görevin analizlerini, planlarını, spike sonuçlarını ve araştı
 - **Görev sayfası:** başlıkta "Analiz · N dosya →" bağlantısı; üstte Nerede kaldık ve Senden beklenen, altında sekmeler: Yapılacaklar, Kararlar, Notlar, Testler, Etkinlik (seçilen sekme hatırlanır, arama yaparken hepsi görünür).
 - Geçmiş oturumlarda yazılanlar repo başına bir kez arka planda gelir; elle: **Imprimatur: Take Task Analyses from Past Sessions** ya da `npm run analysis` (`--dry-run`, `--no-model`).
 - Kapatmak: `.claude/imprimatur.json` içinde `"analysis": false`; yalnız bu makinede tutmak: `{"sync": false}`; yol hariç tutmak: `{"exclude": ["drafts/"]}`.
+
+<a id="unread"></a>
+
+## 13. Okumadıkların: anlama borcu (#91, #92)
+
+Ajan kodu ve dokümanları insanın okuyabileceğinden hızlı yazar; Imprimatur ne kadarını henüz görmediğini gösterir.
+
+- **Görev listesi:** görev başına "N okunmadı".
+- **Görev sayfası ve Ana sayfa:** "Okumadıkların" kartı: kabul edilmemiş düzenlemeler (tıklayınca Ajan değişiklikleri o görevle süzülür) ve son okumandan sonra ajanın değiştirdiği doküman bölümleri; her biri açılır, "Okudum" ya da "Hepsini okudum".
+- **Mimari / Ürün / Sözlük:** değişen bölümde "Okunmadı" işareti ve sol kenar çizgisi, içindekilerde nokta, başlıkta "N okunmadı · Hepsini okudum".
+- **Durum satırı:** `Imprimatur · 3 waiting on you · 12 unread · …`.
+
+Senin yazdığın bölüm okunmuş sayılır. Okuma işaretleri cihaza özeldir. İlk kurulumda mevcut her şey okunmuş sayılır.
+
+Sırada: "son okumandan beri" farkı (#93), tur sonu brifingi (#94).

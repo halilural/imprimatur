@@ -43,7 +43,6 @@ function seeded(root = "/a/proj", origin) {
 // ---- database ----
 
 test("migration 4: a schema 3 database gains the document tables", () => {
-  assert.equal(VERSION, 6);
   const file = tmpDb();
   const raw = new DatabaseSync(file);
   for (const m of MIGRATIONS.slice(0, 3)) raw.exec(m);

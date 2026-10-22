@@ -792,6 +792,11 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       case "docCancel": for (const k of docKeys(d.kind, d.id)) delete state.drafts[k]; return setView({ edit: null });
       case "docSave": return saveDoc(d.kind, d.id);
       case "docStatus": return vscode.postMessage({ type: "docStatus", id: Number(d.id), status: d.status });
+      case "read": el.closest(".urow")?.classList.add("sent"); return vscode.postMessage({ type: "read", ids: String(d.ids).split(",").map(Number) });
+      case "readGo":
+        if (d.tab === "analysis") { state.asel = d.key; return go({ tab: "analysis" }); }
+        state.back = [...state.back, { tab: state.tab, sel: state.sel ?? null, filter: state.filter }].slice(-20);
+        return vscode.postMessage({ type: "showSection", tab: d.tab, key: d.key });
       case "docGo": {
         const sec = document.getElementById("sec-" + d.key);
         if (!sec) return;
@@ -1241,6 +1246,11 @@ function onMessage(m) {
   if (m.type === "openUrl" && /^https?:\/\//.test(m.url)) return vscode.env.openExternal(vscode.Uri.parse(m.url));
   if (m.type === "showRecord" && shown) return showIn({ root: shown, record: Number(m.id) });
   if (m.type === "showTask" && shown) return showIn({ root: shown, task: String(m.task) });
+  if (m.type === "showSection" && ["architecture", "product", "glossary"].includes(m.tab)) {
+    moveView({ tab: m.tab, section: String(m.key ?? "") });
+    panel?.webview.postMessage({ type: "view", view: pageView() });
+    return refresh?.(true);
+  }
   if (m.type === "scan") return scanAll();
   if (m.type === "view") {
     const toEdits = m.view?.tab === "edits" && view.tab !== "edits";
@@ -1250,7 +1260,7 @@ function onMessage(m) {
   if (m.type === "newTask") return newTask();
   if (m.type === "bestRun") return vscode.commands.executeCommand("imprimatur.bestPractices.run");
   if (m.type === "recDismiss") return recDismiss(Number(m.id));
-  if (["rec", "recStep", "answer", "add", "taskStatus", "docSave", "docNew", "docStatus", "anaAssign"].includes(m.type)) return writeFromPanel(m);
+  if (["rec", "recStep", "answer", "add", "taskStatus", "docSave", "docNew", "docStatus", "anaAssign", "read"].includes(m.type)) return writeFromPanel(m);
   if (m.type === "anaOpen") return openAnalysisFile(String(m.file ?? ""), Number(m.repo));
   if (m.type === "preview" && shown) {
     let html;
@@ -1286,6 +1296,16 @@ function showIn(at) {
   if (!moveView(at)) return void vscode.window.showInformationMessage(`Imprimatur: ${at.task ?? "this record"} has no records yet.`);
   panel?.webview.postMessage({ type: "view", view: pageView() });
   refresh?.(true);
+}
+
+/**
+ * The agent's edits not accepted, by task key ("" the no-task lane) (#92).
+ * @param {ReturnType<typeof graphRows>["rows"]} rows @returns {Map<string, number>}
+ */
+function openEditsOf(rows) {
+  const out = new Map();
+  for (const r of rows) if (!r.accepted && !r.gone && !r.activity && !r.record) out.set(r.task ?? "", (out.get(r.task ?? "") ?? 0) + 1);
+  return out;
 }
 
 /** A record or task written from the page, as the user; then the page redraws (the database watcher does it again, unchanged). @param {any} m */
@@ -1436,7 +1456,7 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
       const sessions = records.sessionTasks(root);
       const cache = new Map();
       const placeOfStep = (w) => placeOf(root, w, sessions, cache);
-      if (view.tab !== "edits") pane = withDocImages(tasksView.paneHtml(db, root, view, { waiting, linkOf, placeOf: placeOfStep, error: records.lastError }), p.webview, root);
+      if (view.tab !== "edits") pane = withDocImages(tasksView.paneHtml(db, root, view, { waiting, linkOf, placeOf: placeOfStep, error: records.lastError, openEdits: openEditsOf(edits.rows) }), p.webview, root);
     } catch (e) {
       pane = `<p class="empty" data-k="error">Imprimatur: ${esc(e instanceof Error ? e.message : String(e))}</p>`;
     }

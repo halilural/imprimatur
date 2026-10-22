@@ -8,6 +8,7 @@
 - [Agent Change Graph](#agent-change-graph)
 - [Agent Setup](#agent-setup)
 - [Analiz belgesi](#analiz-belgesi)
+- [Anlama borcu](#anlama-borcu)
 - [Bende bekleyenler](#bende-bekleyenler)
 - [Bölüm](#bolum)
 - [Denetim (Audit)](#denetim)
@@ -52,6 +53,12 @@ Ajan kurulumunun (CLAUDE.md, skill'ler, hook'lar, MCP) dokümana dayalı denetim
 ## Analiz belgesi
 
 Bir görevin analiz, plan, spike sonucu ve araştırma notu dosyalarından oluşan, görev başına bir tane tutulan yaşayan belge (`kind = analysis`, `scope` = görev anahtarı). Hook dosya yazıldıkça alır, geçmiş oturumlar bir kez oynatılır. Görevi bulunamayan dosyaya **görevsiz analiz** denir.
+
+<a id="anlama-borcu"></a>
+
+## Anlama borcu
+
+Comprehension debt: sistemdeki kod ve doküman miktarı ile insanın gerçekten anladığı kısmı arasındaki fark. Imprimatur'da "Okumadıkların" olarak görünür: kabul edilmemiş düzenlemeler + son okumadan sonra ajanın değiştirdiği bölümler (#92). Teknik borçla karışmasın: kod temiz olabilir, borç insandadır.
 
 <a id="bende-bekleyenler"></a>
 
