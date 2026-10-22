@@ -381,8 +381,8 @@ test("panel: the task page links its analysis; Analiz → Görev analizleri list
   assert.match(hub, /data-act="asel" data-key="#5"/);
   // In full, like Mimari: each section a document section, the task's contents on the left.
   assert.match(hub, /<div class="doc ahub"/);
-  assert.match(hub, /<article class="dsec" id="sec-a\d+"[^>]*><div class="dsec-h"><h2>Bulgular<\/h2>/);
-  assert.match(hub, /<ol class="atoc"[^>]*data-ak="#5">[\s\S]*?data-act="docGo" data-key="a\d+"><span>Bulgular<\/span>/);
+  assert.match(hub, /<article class="dsec[^"]*" id="sec-a\d+"[^>]*><div class="dsec-h"><h2>Bulgular<\/h2>/);
+  assert.match(hub, /<ol class="atoc"[^>]*data-ak="#5">[\s\S]*?data-act="docGo" data-key="a\d+">Bulgular<\/a>/);
   assert.doesNotMatch(hub, /<details class="card ana"/);
   // No file names on the page: only in the "aç" tooltip (and on the orphans, to choose one).
   assert.doesNotMatch(hub, />docs\/todos\/5\/ANALYSIS\.md</);
