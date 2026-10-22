@@ -66,7 +66,22 @@ makes the reading stick better).
 ## 4. Quiz
 
 Ask **one question at a time**, six to eight in a session, and wait for each answer. Ask the
-last study's weak questions first, then mix the types:
+last study's weak questions first, then mix the types below.
+
+**Ask multiple choice**, with the AskUserQuestion tool: one question per call, a header of
+`Soru n/total`, four options labelled A to D, each with its text in the description, and no
+"(Recommended)" mark. Telling an answer apart from others is weaker practice than recalling
+it, so make the choice hard:
+- Write three wrong options that are real mistakes, the ones a reader who skimmed would make:
+  half-right, right for another part of the system, or the alternative the records rejected.
+  Never write an option that is absurd.
+- Make all four options alike in length and form, and put the right one at a different letter
+  each time.
+- An answer the user writes in "Other" is graded like a free answer.
+- Without AskUserQuestion (another client), write the same A to D options in the message.
+
+Ask one or two questions open, with no options: a "kodda-nerede" or a debug question, where
+naming the place is the point.
 
 | type | example |
 |---|---|
@@ -82,7 +97,8 @@ At least one debug question and one alternatif or itiraz question. Debugging is 
 understanding gap is widest.
 
 After each answer:
-- Grade it **full**, **partial** or **miss**, and say what was right in one line.
+- Grade it **full**, **partial** or **miss**, and say what was right in one line. A chosen
+  option is full or miss. When it is wrong, say why that option is wrong, not only which one is right.
 - Say what was missing, with its source (`file:line`, record `[id]`, section).
 - "Bilmiyorum" gets a hint first (where to look). The answer comes only if they still do not know.
 - Do not lecture. Three or four lines at most, then the next question.
@@ -98,7 +114,7 @@ At the end, add one note record to the task:
 record_add {task: key, kind: "note", owner: "K",
   title: "Çalışma: <topic> — <full>/<total> tam",
   body: the weak points with their sources, two or three lines,
-  links: {study: {topic, questions: [{q, type, result: "full"|"partial"|"miss", gap, refs: [...]}]}}}
+  links: {study: {topic, questions: [{q, type, choice: true|false, result: "full"|"partial"|"miss", gap, refs: [...]}]}}}
 ```
 
 The next `/study` of this task reads it: weak questions come first, and anything that changed
