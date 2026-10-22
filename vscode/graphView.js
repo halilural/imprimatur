@@ -599,7 +599,13 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     const cur = has(state.asel) ? state.asel : list.querySelector("[data-key]")?.dataset.key;
     list.querySelectorAll(".aitem").forEach((b) => b.classList.toggle("on", b.dataset.key === cur));
     // The chosen task's contents (left) and files (right); searching shows every task's files that say it.
-    document.querySelectorAll("#pane [data-ak]").forEach((p) => { p.hidden = q ? p.classList.contains("atoc") || !p.textContent.toLowerCase().includes(q) : p.dataset.ak !== cur; });
+    // A task clicked again folds its tree (#99); its files stay on the right.
+    const folded = state.afold || [];
+    document.querySelectorAll("#pane [data-ak]").forEach((p) => { p.hidden = q ? p.classList.contains("atoc") || !p.textContent.toLowerCase().includes(q) : p.dataset.ak !== cur || (p.classList.contains("atoc") && folded.includes(cur)); });
+    list.querySelectorAll(".aitem").forEach((b) => b.classList.toggle("folded", folded.includes(b.dataset.key)));
+    // A node clicked again folds its children.
+    const shut = state.ashut || [];
+    list.querySelectorAll(".atoc li[data-k]").forEach((li) => li.classList.toggle("shut", shut.includes(li.dataset.k)));
   };
   const taskTabs = () => {
     const q = (state.qs[state.tab] || "").toLowerCase();
@@ -777,7 +783,13 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       case "tab": return go({ tab: d.tab });
       case "showDone": return setView({ showDone: toggleIn(state.showDone, Number(d.task)) });
       case "ttab": { const task = el.closest(".ttabs")?.dataset.task; state.ttabs = { ...(state.ttabs || {}), [task]: d.tp }; return apply(); }
-      case "asel": state.asel = d.key; return apply();
+      case "asel": {
+        // The chosen task again: its tree folds, or opens (#99).
+        const on = el.classList.contains("on");
+        state.afold = on ? toggleIn(state.afold || [], d.key) : (state.afold || []).filter((k) => k !== d.key);
+        state.asel = d.key;
+        return apply();
+      }
       case "anaGo": state.asel = d.key; return go({ tab: "analysis" });
       case "old": return setView({ old: toggleIn(state.old, Number(d.task)) });
       case "edits": state.qs.edits = d.key; return go({ tab: "edits" });
@@ -799,6 +811,16 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
         state.back = [...state.back, { tab: state.tab, sel: state.sel ?? null, filter: state.filter }].slice(-20);
         return vscode.postMessage({ type: "showSection", tab: d.tab, key: d.key });
       case "docGo": {
+        // A tree node with children (#99): clicked again it folds them; once more, it opens and goes there.
+        const li = el.closest(".atoc li[data-k]");
+        if (li && li.querySelector(":scope > .asub")) {
+          const k = li.dataset.k;
+          const shut = state.ashut || [];
+          if (state.anode === k && !shut.includes(k)) { state.ashut = [...shut, k]; return apply(); }
+          state.ashut = shut.filter((x) => x !== k);
+          state.anode = k;
+          apply();
+        }
         const sec = document.getElementById("sec-" + d.key);
         if (!sec) return;
         if (sec.tagName === "DETAILS") sec.open = true;
