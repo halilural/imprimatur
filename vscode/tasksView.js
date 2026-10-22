@@ -1091,6 +1091,9 @@ const TASKS_CSS = `
   .atoc a { display: block; padding: 3px 6px; border-radius: 6px; color: inherit !important; } .atoc a:hover { background: var(--acc-soft); text-decoration: none !important; }
   .atoc .asep { height: 0; margin: 6px 0; border-top: 1px dashed var(--line); }
   .atoc .afile > a { font-weight: 700; } .atoc .afile + .afile { margin-top: 6px; }
+  .atoc li:has(> .asub) > a { position: relative; padding-left: 18px; } .atoc li:has(> .asub) > a::before { content: "▾"; position: absolute; left: 4px; color: var(--vscode-descriptionForeground); }
+  .atoc li.shut > a::before { content: "▸"; } .atoc li.shut > .asub { display: none; }
+  .alist .aitem .key::after { content: " ▾"; color: var(--vscode-descriptionForeground); } .alist .aitem.folded .key::after { content: " ▸"; }
   .atoc .asub { list-style: none; margin: 2px 0 2px 8px; padding: 0 0 0 8px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 1px; }
   .atoc .asub a { font-weight: 600; } .atoc .asub .asub a { font-weight: 400; font-size: 12px; color: var(--vscode-descriptionForeground) !important; }
   .talt { font-weight: 400; color: var(--vscode-descriptionForeground); }
