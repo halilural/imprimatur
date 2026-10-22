@@ -23,6 +23,8 @@ const STATUS_TR = { active: "Sürüyor", open: "Açık", done: "Bitti", dropped:
 const CONTAINERS = ["ADR", "PDR", "TEST", "AUDIT", "BEST", "RECS"];
 const KIND_TR = { todo: "yapılacak", question: "soru", answer: "cevap", decision: "karar", note: "not", fixme: "hata", adr: "ADR", pdr: "PDR", test: "test" };
 const WHO_TR = { user: "Sen", agent: "Ajan", hook: "Hook", import: "İçe aktarma" };
+/** The analysis section /study keeps its note in (study.js NOTE_KEY). */
+const STUDY_KEY = "study";
 const DOC_LABEL_TR = { architecture: "Mimari", product: "Ürün", glossary: "Sözlük" };
 const TODO_KINDS = ["todo", "fixme"];
 const DESIGN_KINDS = ["decision", "adr", "pdr"];
@@ -299,8 +301,15 @@ function analysisOf(db, repoId, key) {
   const doc = db.taskDocFind(repoId, key);
   /** @type {Map<string, {source: string, at: number, sections: any[]}>} */
   const files = new Map();
+  /** @type {any} */
+  let study;
   for (const s of doc ? db.docSections(doc.id) : []) {
     if (s.status !== "current") continue;
+    // The /study note (#95) is no file of the analysis: it goes under them (#100).
+    if (s.key === STUDY_KEY && !s.source) {
+      study = { id: s.id, key: s.key, title: s.title, body: s.body, at: s.updated_at };
+      continue;
+    }
     const src = s.source ?? "";
     const f = files.get(src) ?? { source: src, at: 0, sections: [] };
     f.sections.push({ id: s.id, key: s.key, title: s.title, body: s.body });
@@ -320,7 +329,12 @@ function analysisOf(db, repoId, key) {
       return false;
     }
   };
-  return { files: [...files.values()].map((f) => ({ ...f, local: there(f.source) })).sort((a, b) => b.at - a.at), orphans };
+  if (study) {
+    const task = db.taskByKey(repoId, key);
+    const m = task ? require("./study.js").masteryOf(db.recordsOf(task.id)) : undefined;
+    if (m) study.mastery = { at: m.at, full: m.score.full, total: m.score.total, weak: m.weak.slice(0, 3).map((/** @type {any} */ q) => q.q) };
+  }
+  return { files: [...files.values()].map((f) => ({ ...f, local: there(f.source) })).sort((a, b) => b.at - a.at), orphans, study };
 }
 
 /**
@@ -579,7 +593,7 @@ function tasksHtml(m) {
 /** The task page's blocks. @param {NonNullable<ReturnType<typeof tasksPage>["cur"]>} c */
 function taskBlocks(c) {
   const fl = (/** @type {number} */ id) => (c.flash === id ? " flash" : "");
-  const head = `<section class="thead" data-k="head-${c.id}"><div class="meta"><span class="mono key">${esc(c.key)}</span>${statusChip(c.status)}${c.epic ? `<span class="dim">Epic ${openTask(c.epic.id, c.epic.status, c.epic.key, "mono")}</span>` : ""}${c.url ? `<a href="#" class="ext" data-act="url" data-url="${esc(c.url)}">GitHub'da aç ${icon("external", 13)}</a>` : ""}${c.analysis?.files.length ? `<button class="mini analink" data-act="anaGo" data-key="${esc(c.key)}" title="Bu görevin analizleri Analiz sekmesinde">${icon("analysis", 12)} Analiz · ${c.analysis.files.length} dosya ${icon("arrow", 12)}</button>` : ""}</div>
+  const head = `<section class="thead" data-k="head-${c.id}"><div class="meta"><span class="mono key">${esc(c.key)}</span>${statusChip(c.status)}${c.epic ? `<span class="dim">Epic ${openTask(c.epic.id, c.epic.status, c.epic.key, "mono")}</span>` : ""}${c.url ? `<a href="#" class="ext" data-act="url" data-url="${esc(c.url)}">GitHub'da aç ${icon("external", 13)}</a>` : ""}${c.analysis?.files.length || c.analysis?.study ? `<button class="mini analink" data-act="anaGo" data-key="${esc(c.key)}" title="Bu görevin analizleri Analiz sekmesinde">${icon("analysis", 12)} Analiz · ${[c.analysis.files.length ? `${c.analysis.files.length} dosya` : "", c.analysis.study ? "çalışma notu" : ""].filter(Boolean).join(" · ")} ${icon("arrow", 12)}</button>` : ""}</div>
 <h1>${esc(c.title || c.key)}</h1>${c.summary ? `<p class="sum">${esc(c.summary)}</p>` : ""}${c.pointer ? `<div class="callout${fl(c.pointer.id)}" id="ptr-${c.pointer.id}">${icon("arrow", 20)}<div><span class="lbl">Nerede kaldık</span><span class="ptitle">${esc(c.pointer.title)}</span><span class="dim">${c.pointer.owner === "K" ? "Senin işin" : c.pointer.owner === "C" ? "Ajanın işi" : esc(KIND_TR[/** @type {keyof typeof KIND_TR} */ (c.pointer.kind)] ?? c.pointer.kind)} · ${esc(day(c.pointer.at))}</span></div></div>` : ""}${unreadHtml(c.unread, c.key)}</section>`;
   const asks = c.asks.length
     ? `<section class="blk" data-k="asks" data-navgroup="asks" aria-label="Senden beklenen"><h2><span class="odot" aria-hidden="true"></span>Senden beklenen <span class="dim">· ${c.asks.length}</span></h2>${c.asks.map((r) => askCard(r, { prefix: "ask", flash: TODO_KINDS.includes(r.kind) ? undefined : c.flash })).join("")}</section>`
@@ -653,7 +667,8 @@ function analysisHub(db, root) {
   if (!repo) return { repo: undefined, docs: [], orphans: [], tasks: [] };
   const docs = db.taskDocs(repo.id).filter((/** @type {any} */ d) => d.sections > 0).map((/** @type {any} */ d) => {
     const task = db.taskByKey(repo.id, d.scope);
-    return { key: d.scope, at: d.updated_at, task: task ? { id: task.id, title: task.title, status: task.status } : undefined, files: analysisOf(db, repo.id, d.scope).files };
+    const { files, study } = analysisOf(db, repo.id, d.scope);
+    return { key: d.scope, at: d.updated_at, task: task ? { id: task.id, title: task.title, status: task.status } : undefined, files, study };
   });
   const orphans = Object.entries(require("./analysis.js").orphans(db, repo.id)).sort((a, b) => b[1] - a[1]).map(([source, at]) => ({ source, at }));
   const tasks = db.tasksOf(repo.id).filter((/** @type {any} */ t) => !CONTAINERS.includes(t.key) && (t.status === "open" || t.status === "active"))
@@ -739,8 +754,9 @@ function analysisHubHtml(m) {
     const kids = [...(head ? [subs(head)] : []), rest.length ? `<ol class="asub">${rest.map((/** @type {any} */ s) => `<li data-k="t${s.id}">${goTo(`a${s.id}`, titleHtml(s.title))}${subs(s)}</li>`).join("")}</ol>` : ""].join("");
     return `<li class="afile" data-k="tf-${esc(f.source)}">${goTo(`a${f.sections[0].id}`, label)}${kids}</li>`;
   };
-  const toc = (/** @type {any} */ d) => `<ol class="atoc" data-k="toc-${esc(d.key)}" data-ak="${esc(d.key)}">${d.files.map(fileToc).join("")}</ol>`;
-  const item = (/** @type {any} */ d) => `<button class="aitem" data-act="asel" data-key="${esc(d.key)}" data-nav data-q="${esc(`${d.key} ${d.task?.title ?? ""} ${d.files.map((/** @type {any} */ f) => f.source).join(" ")}`)}"><span class="mono key">${esc(d.key)}</span><span class="ttl">${titleHtml(d.task?.title, d.key) || esc(d.key)}</span><span class="dim">${d.files.length} dosya · ${esc(day(d.at))}</span></button>${toc(d)}`;
+  const studyToc = (/** @type {any} */ d) => (d.study ? `<li class="afile astudy" data-k="tstudy-${esc(d.key)}">${goTo(`a${d.study.id}`, `${icon("analysis", 12)} ${titleHtml(d.study.title)}`)}${subs(d.study)}</li>` : "");
+  const toc = (/** @type {any} */ d) => `<ol class="atoc" data-k="toc-${esc(d.key)}" data-ak="${esc(d.key)}">${d.files.map(fileToc).join("")}${studyToc(d)}</ol>`;
+  const item = (/** @type {any} */ d) => `<button class="aitem" data-act="asel" data-key="${esc(d.key)}" data-nav data-q="${esc(`${d.key} ${d.task?.title ?? ""} ${d.files.map((/** @type {any} */ f) => f.source).join(" ")}`)}"><span class="mono key">${esc(d.key)}</span><span class="ttl">${titleHtml(d.task?.title, d.key) || esc(d.key)}</span><span class="dim">${d.files.length} dosya${d.study ? " · çalışma notu" : ""} · ${esc(day(d.at))}</span></button>${toc(d)}`;
   const aside = `<aside class="dtoc alist" data-k="alist" data-scroll="dtoc" data-navgroup="analysis"><div class="lbl" data-k="h">Görevler · ${m.docs.length}</div>${m.docs.map(item).join("")}${m.orphans.length ? `<button class="aitem orph" data-act="asel" data-key="__orphans" data-nav><span class="ttl">Görevsiz analizler</span><span class="dim">${m.orphans.length} dosya</span></button>` : ""}</aside>`;
   // No file names here: the text is the point. A file's first section opens it (its path in the tooltip).
   const open = (/** @type {any} */ f) => (f.local && !f.source.startsWith("plan:") ? `<div class="dacts"><button class="mini aopen" data-act="anaOpen" data-file="${esc(f.source)}" data-repo="${m.repo?.id ?? ""}" title="Dosyayı aç: ${esc(name(f.source))}">${icon("external", 12)} aç</button></div>` : "");
@@ -752,8 +768,17 @@ function analysisHubHtml(m) {
   const article = (/** @type {any} */ f, /** @type {any} */ s, /** @type {number} */ j) => isContents(s.title)
     ? `<details class="dsec acontents" id="sec-a${s.id}" data-k="s${s.id}"><summary>${titleHtml(s.title)}</summary>${s.body ? `<div class="md">${bodyHtml(s)}</div>` : ""}</details>`
     : `<article class="dsec${j === 0 && /(^|--)overview$/.test(s.key ?? "") ? " afirst" : ""}" id="sec-a${s.id}" data-k="s${s.id}" data-nav tabindex="0"><div class="dsec-h"><h2>${titleHtml(s.title)}</h2>${j === 0 ? open(f) : ""}</div>${s.body ? `<div class="md">${bodyHtml(s)}</div>` : '<p class="empty">Bu bölüm boş.</p>'}</article>`;
+  // The /study note under the analysis (#100), with how the last study went.
+  const studyHtml = (/** @type {any} */ d) => {
+    if (!d.study) return "";
+    const m = d.study.mastery;
+    const how = m
+      ? `<p class="amastery"><b>Son çalışma · ${esc(day(m.at))} · ${m.full}/${m.total} tam</b>${m.weak.length ? `<br><span class="dim">Zayıf: ${m.weak.map((/** @type {string} */ q) => esc(q)).join(" · ")}</span>` : ""}</p>`
+      : `<p class="amastery dim">Henüz kendini sınamadın: Claude Code'da <span class="mono">/study ${esc(d.key)}</span></p>`;
+    return `${d.files.length ? `<hr class="afsep" data-k="fs-study">` : ""}<article class="dsec astudy" id="sec-a${d.study.id}" data-k="s${d.study.id}" data-nav tabindex="0"><div class="dsec-h"><h2>${icon("analysis", 16)} ${titleHtml(d.study.title)}</h2></div>${how}${d.study.body ? `<div class="md">${bodyHtml(d.study)}</div>` : ""}</article>`;
+  };
   const file = (/** @type {any} */ f, /** @type {number} */ i) => `${i ? `<hr class="afsep" data-k="fs-${esc(f.source)}">` : ""}${f.sections.map((/** @type {any} */ s, /** @type {number} */ j) => article(f, s, j)).join("")}`;
-  const pane = (/** @type {any} */ d) => `<div class="apane" data-k="ap-${esc(d.key)}" data-ak="${esc(d.key)}"><section class="dhead" data-k="head"><span class="lbl">Görev analizi · <span class="mono">${esc(d.key)}</span> · ${esc(m.repo?.name ?? "")}</span><h1>${titleHtml(d.task?.title, d.key) || esc(d.key)}</h1><p class="lead">Son güncelleme · ${esc(when(d.at))} · ${d.files.length} dosya${d.task ? ` · <button class="link" data-act="open" data-id="${d.task.id}" data-f="${bucketOf(d.task.status)}">Göreve git ${icon("arrow", 12)}</button>` : ""}</p></section>${d.files.map(file).join("")}</div>`;
+  const pane = (/** @type {any} */ d) => `<div class="apane" data-k="ap-${esc(d.key)}" data-ak="${esc(d.key)}"><section class="dhead" data-k="head"><span class="lbl">Görev analizi · <span class="mono">${esc(d.key)}</span> · ${esc(m.repo?.name ?? "")}</span><h1>${titleHtml(d.task?.title, d.key) || esc(d.key)}</h1><p class="lead">Son güncelleme · ${esc(when(d.at))} · ${d.files.length} dosya${d.task ? ` · <button class="link" data-act="open" data-id="${d.task.id}" data-f="${bucketOf(d.task.status)}">Göreve git ${icon("arrow", 12)}</button>` : ""}</p></section>${d.files.map(file).join("")}${studyHtml(d)}</div>`;
   const options = m.tasks.map((/** @type {any} */ t) => `<option value="${t.id}">${esc(t.key)} · ${esc((t.title || "").slice(0, 60))}</option>`).join("");
   const orphans = m.orphans.length
     ? `<div class="apane" data-k="ap-orphans" data-ak="__orphans"><section class="dhead" data-k="head"><span class="lbl">Görev analizi · ${esc(m.repo?.name ?? "")}</span><h1>Görevsiz analizler</h1><p class="lead">Görevi bulunamayan analiz dosyaları: bir göreve bağla, o görevin analizine geçer.</p></section>${m.orphans.map((o) => `<div class="orow dsec" data-k="o-${esc(o.source)}" data-q="${esc(o.source)}"><span class="mono">${esc(o.source)}</span><span class="dim">${esc(day(o.at))}</span><select data-change="anaAssign" data-file="${esc(o.source)}" aria-label="Göreve bağla"><option value="">Göreve bağla…</option>${options}</select></div>`).join("")}</div>`
@@ -1097,6 +1122,7 @@ const TASKS_CSS = `
   .atoc .asub { list-style: none; margin: 2px 0 2px 8px; padding: 0 0 0 8px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 1px; }
   .atoc .asub a { font-weight: 600; } .atoc .asub .asub a { font-weight: 400; font-size: 12px; color: var(--vscode-descriptionForeground) !important; }
   .talt { font-weight: 400; color: var(--vscode-descriptionForeground); }
+  .dsec.astudy { border-color: var(--acc-line); } .amastery { margin: 0; padding: 8px 12px; border-radius: 8px; background: var(--acc-soft); }
   .dsec.afirst h2 { font-size: 19px !important; } .acontents summary { cursor: pointer; font-weight: 600; color: var(--vscode-descriptionForeground); }
   .adoc .apane { display: flex; flex-direction: column; gap: 18px; }
   .afsep { width: 100%; margin: 6px 0; border: 0; border-top: 1px dashed var(--line); }

@@ -101,3 +101,21 @@ setTimeout(next, 500);
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("#100 the /study note sits under the task's analysis files, with how the last study went", () => {
+  const base = { repo: { id: 1, name: "r" }, orphans: [], tasks: [] };
+  const files = [{ source: "docs/a.md", local: false, sections: [{ id: 1, key: "a--overview", title: "Map", body: "intro" }, { id: 3, key: "a--bg", title: "Background", body: "x" }] }];
+  const study = { id: 7, key: "study", title: "Çalışma notu: harita", body: "### Ne ve neden\nx\n### Kodda nerede\ny", mastery: { at: Date.parse("2026-10-22T10:00:00Z"), full: 6, total: 8, weak: ["Neden sürüm id?", "Eski sayı nereden?"] } };
+  const html = analysisHubHtml({ ...base, docs: [{ key: "LATD-1", at: 1, task: { id: 9, title: "T", status: "active" }, files, study }] });
+  const toc = /<ol class="atoc"[\s\S]*?<\/aside>/.exec(html)[0];
+  assert.ok(toc.indexOf('data-key="a3"') < toc.indexOf('data-key="a7"'), "after the files in the tree");
+  assert.match(toc, /<li class="afile astudy"[^>]*>[\s\S]*?Çalışma notu: harita[\s\S]*?data-key="a7-h0"[^>]*>Ne ve neden[\s\S]*?data-key="a7-h1"/);
+  const page = html.slice(html.indexOf('<main class="dpage adoc"'));
+  assert.ok(page.indexOf('id="sec-a3"') < page.indexOf('id="sec-a7"'), "after the files on the page");
+  assert.match(page, /<article class="dsec astudy" id="sec-a7"[\s\S]*?6\/8 tam[\s\S]*?Zayıf: Neden sürüm id\? · Eski sayı nereden\?/);
+  assert.match(html, /1 dosya · çalışma notu/);
+  // Not studied yet: how to.
+  const fresh = analysisHubHtml({ ...base, docs: [{ key: "LATD-1", at: 1, task: undefined, files: [], study: { ...study, mastery: undefined } }] });
+  assert.match(fresh, /Henüz kendini sınamadın: Claude Code'da <span class="mono">\/study LATD-1<\/span>/);
+  assert.match(fresh, /0 dosya · çalışma notu/);
+});
