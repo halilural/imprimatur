@@ -7,6 +7,34 @@ const path = require("node:path");
 
 const BASELINE_DIR = path.join(".claude", "imprimatur", "baseline");
 const HISTORY_DIR = path.join(".claude", "imprimatur", "history");
+/** The extension's last count of edits not accepted, for the status line (#92): it draws no graph. */
+const UNREAD_FILE = path.join(".claude", "imprimatur", "unread.json");
+
+/** Older than this, the extension is not running: the count is not trusted. */
+const UNREAD_STALE_MS = 15 * 60 * 1000;
+
+/** Writes the count when it changed, or every 5 minutes to show it is fresh. @param {string} root @param {number} edits */
+function writeUnread(root, edits) {
+  const file = path.join(root, UNREAD_FILE);
+  try {
+    const old = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (old.edits === edits && Date.now() - old.at < 5 * 60 * 1000) return;
+  } catch {}
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ at: Date.now(), edits }));
+  } catch {}
+}
+
+/** The last count written, 0 when none or stale. @param {string} root @param {number} [now] */
+function readUnread(root, now = Date.now()) {
+  try {
+    const { edits: n, at } = JSON.parse(fs.readFileSync(path.join(root, UNREAD_FILE), "utf8"));
+    return Number.isInteger(n) && n > 0 && now - at < UNREAD_STALE_MS ? n : 0;
+  } catch {
+    return 0;
+  }
+}
 
 /** Git top level for a path (walks up to an existing directory), resolved like fsPath. @param {string} p */
 function repoRoot(p) {
@@ -159,4 +187,4 @@ function historyEdits(log, current, opts = {}) {
   return out.reverse();
 }
 
-module.exports = { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, historyEdits, editBranch };
+module.exports = { BASELINE_DIR, HISTORY_DIR, UNREAD_FILE, writeUnread, readUnread, repoRoot, latestBefore, historyEdits, editBranch };

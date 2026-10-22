@@ -23,6 +23,7 @@ const STATUS_TR = { active: "Sürüyor", open: "Açık", done: "Bitti", dropped:
 const CONTAINERS = ["ADR", "PDR", "TEST", "AUDIT", "BEST", "RECS"];
 const KIND_TR = { todo: "yapılacak", question: "soru", answer: "cevap", decision: "karar", note: "not", fixme: "hata", adr: "ADR", pdr: "PDR", test: "test" };
 const WHO_TR = { user: "Sen", agent: "Ajan", hook: "Hook", import: "İçe aktarma" };
+const DOC_LABEL_TR = { architecture: "Mimari", product: "Ürün", glossary: "Sözlük" };
 const TODO_KINDS = ["todo", "fixme"];
 const DESIGN_KINDS = ["decision", "adr", "pdr"];
 /** The task list's filter a status falls under. @param {string} s */
@@ -171,6 +172,37 @@ function readSummaries(db, repo) {
 const todoLine = (t) => (!t.todos ? "plan yok" : t.openTodos ? `${t.openTodos} açık yapılacak` : "hepsi bitti");
 
 /**
+ * What the user has not read yet (#92), by task key: the agent's edits not accepted
+ * (openEdits, from the graph's lanes; "" is the no-task lane) and the sections someone
+ * else changed since the user last read them.
+ * @param {any} db @param {any} repo @param {Map<string, number>} [openEdits]
+ */
+function unreadOf(db, repo, openEdits = new Map()) {
+  /** @type {any[]} */
+  const sections = repo ? cached(db, `unread:${repo.id}`, () => db.unreadSections(repo.id)) : [];
+  /** @type {Map<string, {edits: number, sections: any[]}>} */
+  const byTask = new Map();
+  const of = (/** @type {string} */ k) => {
+    let u = byTask.get(k);
+    if (!u) byTask.set(k, (u = { edits: 0, sections: [] }));
+    return u;
+  };
+  let edits = 0;
+  for (const [k, n] of openEdits) {
+    edits += n;
+    if (k) of(k).edits = n;
+  }
+  for (const s of sections) for (const k of s.tasks) of(k).sections.push(s);
+  return { byTask, sections, edits };
+}
+
+/** How many things a task has unread. @param {{edits: number, sections: any[]} | undefined} u */
+const unreadCount = (u) => (u ? u.edits + u.sections.length : 0);
+
+/** A section where the panel shows it: its document tab ("analysis": the task's, by its key). @param {any} s */
+const sectionPlace = (s) => ({ id: s.id, key: s.key, title: s.title, tab: s.kind, scope: s.scope, label: s.kind === "analysis" ? "Analiz" : DOC_LABEL_TR[s.kind] ?? s.kind });
+
+/**
  * What one version of a record did, in words.
  * @param {any} v a version with the record's kind and title
  * @returns {string | undefined} undefined: not worth a line (the 👉 leaving a record)
@@ -192,7 +224,7 @@ function describeVersion(v) {
 /**
  * One task's page.
  * @param {any} db @param {any} task @param {{showDone?: number[], old?: number[], flash?: number | null}} view
- * @param {{linkOf?: (root: string, key: string) => string | undefined, now?: number}} opts
+ * @param {{linkOf?: (root: string, key: string) => string | undefined, now?: number, turns?: Map<number, any[]>, unread?: {edits: number, sections: any[]}}} opts
  */
 function taskPage(db, task, view, opts) {
   const now = opts.now ?? Date.now();
@@ -247,6 +279,8 @@ function taskPage(db, task, view, opts) {
     openCount: live.filter((/** @type {any} */ r) => r.status === "open").length,
     recordCount: live.length,
     flash: flash?.id,
+    // Not read yet (#92): its edits not accepted, the sections changed since the user read them.
+    unread: { edits: opts.unread?.edits ?? 0, sections: (opts.unread?.sections ?? []).map(sectionPlace) },
     // The audit's findings (#77): grouped like Agent setup's Recommendations, not a flat todo list.
     // Recommendations (#87): the agent setup audit's findings and the project's best
     // practices, grouped as in the Recommendations tree, not as a flat todo list.
@@ -293,12 +327,16 @@ function analysisOf(db, repoId, key) {
  * The Görevler tab: the filtered task list (this repo, or every repo) and the selected task's page.
  * @param {any} db @param {string} root
  * @param {{sel?: number | null, filter?: string, all?: boolean, showDone?: number[], old?: number[], flash?: number | null}} [view]
- * @param {{linkOf?: (root: string, key: string) => string | undefined, now?: number}} [opts]
+ * @param {{linkOf?: (root: string, key: string) => string | undefined, now?: number, home?: string, openEdits?: Map<string, number>, waiting?: any[], placeOf?: (w: any) => any}} [opts]
  */
 function tasksPage(db, root, view = {}, opts = {}) {
   const all = !!view.all;
   const repos = scopeRepos(db, root, all);
-  const tasks = [...repos.flatMap((repo) => taskSummaries(db, repo)), ...(all ? [] : globalAudit(db, root, opts.home))];
+  const here = repoOfRoot(db, root);
+  // The edits are this repo's (the open panel's graph); other repos show their sections only.
+  const unread = new Map(repos.map((repo) => [repo.id, unreadOf(db, repo, repo.id === here?.id ? opts.openEdits : undefined)]));
+  const tasks = [...repos.flatMap((repo) => taskSummaries(db, repo).map((t) => ({ ...t, unread: unreadCount(unread.get(repo.id)?.byTask.get(t.key)) }))),
+    ...(all ? [] : globalAudit(db, root, opts.home))];
   const filter = FILTERS.includes(view.filter ?? "") ? /** @type {string} */ (view.filter) : "active";
   const counts = { active: 0, open: 0, done: 0 };
   for (const t of tasks) counts[/** @type {keyof typeof counts} */ (bucketOf(t.status))]++;
@@ -317,11 +355,10 @@ function tasksPage(db, root, view = {}, opts = {}) {
     if (g) g.tasks.push(t);
     else groups.push({ repo: t.repo, tasks: [t], ...(t.global && { global: true }) });
   }
-  const here = repoOfRoot(db, root);
   return {
     all, filter, counts, groups, sel: task?.id,
     repoName: here?.name ?? root.split(/[\\/]/).pop(),
-    cur: task ? taskPage(db, task, view, { ...opts, turns: task ? turnAsks(db, root, opts) : undefined }) : undefined,
+    cur: task ? taskPage(db, task, view, { ...opts, turns: turnAsks(db, root, opts), unread: unread.get(task.repo_id)?.byTask.get(task.key) }) : undefined,
   };
 }
 
@@ -416,10 +453,11 @@ function turnAsks(db, root, o) {
   return out;
 }
 
-/** @param {any} db @param {string} root @param {{now?: number, waiting?: any[], placeOf?: (w: any) => any}} [o] */
-function homeModel(db, root, { now = Date.now(), waiting, placeOf } = {}) {
+/** @param {any} db @param {string} root @param {{now?: number, waiting?: any[], placeOf?: (w: any) => any, openEdits?: Map<string, number>}} [o] */
+function homeModel(db, root, { now = Date.now(), waiting, placeOf, openEdits } = {}) {
   const repo = repoOfRoot(db, root);
-  if (!repo) return { repoName: root.split(/[\\/]/).pop(), total: 0, done: 0, active: 0, open: 0, pointers: [], asks: [], askCount: 0, rows: [], loose: [] };
+  if (!repo) return { repoName: root.split(/[\\/]/).pop(), total: 0, done: 0, active: 0, open: 0, pointers: [], asks: [], askCount: 0, rows: [], loose: [], unread: { edits: 0, sections: [] } };
+  const unread = unreadOf(db, repo, openEdits);
   const tasks = taskSummaries(db, repo);
   const done = tasks.filter((t) => t.status === "done").length;
   const live = tasks.filter((t) => t.status !== "dropped");
@@ -440,6 +478,8 @@ function homeModel(db, root, { now = Date.now(), waiting, placeOf } = {}) {
     askCount: asks.length,
     // Turn-end asks no task was found for: only here, now that there is no Bende bekleyenler tab.
     loose: turnAsks(db, root, { now, waiting, placeOf }).get(0) ?? [],
+    // Not read yet (#92): the repo's edits not accepted and its changed sections.
+    unread: { edits: unread.edits, sections: unread.sections.map(sectionPlace) },
     rows: [...tasks].sort((a, b) => box(a) - box(b) || (order[/** @type {keyof typeof order} */ (a.status)] - order[/** @type {keyof typeof order} */ (b.status)]) || b.updated_at - a.updated_at)
       .map((t) => ({ ...t, when: day(t.updated_at), age: age(t.updated_at, now) })),
   };
@@ -508,12 +548,25 @@ function turnCard(r) {
   return `<article ${card}>${head}${more}<div class="acts"><button class="primary" data-act="turn" data-on="1" ${at}>${label}</button></div></article>`;
 }
 
+/**
+ * What the user has not read yet (#92): the edits to accept (on Ajan değişiklikleri) and each
+ * section changed since they read it, to open or mark read.
+ * @param {{edits: number, sections: any[]}} u @param {string} [key] the task's: its edits alone
+ */
+function unreadHtml(u, key) {
+  if (!u.edits && !u.sections.length) return "";
+  const edits = u.edits ? `<button class="mini" data-act="edits" data-key="${esc(key ?? "")}">${u.edits} düzenleme kabul edilmedi ${icon("arrow", 12)}</button>` : "";
+  const all = u.sections.length > 1 ? `<button class="link" data-act="read" data-ids="${u.sections.map((s) => s.id).join(",")}">Hepsini okudum</button>` : "";
+  const rows = u.sections.map((s) => `<div class="urow" data-k="u${s.id}"><a href="#" data-act="readGo" data-tab="${esc(s.tab)}" data-key="${esc(s.tab === "analysis" ? s.scope : s.key)}"><span class="dim">${esc(s.label)}</span> ${esc(s.title)}</a><button class="mini" data-act="read" data-ids="${s.id}">Okudum</button></div>`).join("");
+  return `<div class="unread" data-k="unread"><div class="uhead"><span class="lbl">Okumadıkların · ${u.edits + u.sections.length}</span>${edits}${all}</div>${rows}</div>`;
+}
+
 /** @param {ReturnType<typeof tasksPage>} m */
 function tasksHtml(m) {
   const f = (/** @type {string} */ id, /** @type {string} */ label) =>
     `<button class="fpill${m.filter === id ? " on" : ""}" data-act="filter" data-f="${id}" aria-pressed="${m.filter === id}">${label} · ${m.counts[/** @type {keyof typeof m.counts} */ (id)]}</button>`;
   const row = (/** @type {any} */ t) => `<button class="trow${t.id === m.sel ? " on" : ""}" id="t-${t.id}" data-k="t${t.id}" data-act="sel" data-id="${t.id}" data-nav data-q="${esc(t.q)}"${t.id === m.sel ? ' aria-current="true"' : ""}>
-<span class="sdot s-${esc(t.status)}" aria-hidden="true"></span><span class="tcol"><span class="tmeta"><span class="mono">${esc(t.key)}</span><span>${esc(STATUS_TR[/** @type {keyof typeof STATUS_TR} */ (t.status)] ?? t.status)}</span></span><span class="tttl">${esc(t.title || t.key)}</span><span class="tmeta">${t.asks ? `<b class="mine">${t.asks} sende</b>` : ""}<span>${esc(todoLine(t))}</span></span></span></button>`;
+<span class="sdot s-${esc(t.status)}" aria-hidden="true"></span><span class="tcol"><span class="tmeta"><span class="mono">${esc(t.key)}</span><span>${esc(STATUS_TR[/** @type {keyof typeof STATUS_TR} */ (t.status)] ?? t.status)}</span></span><span class="tttl">${esc(t.title || t.key)}</span><span class="tmeta">${t.asks ? `<b class="mine">${t.asks} sende</b>` : ""}${t.unread ? `<b class="unr">${t.unread} okunmadı</b>` : ""}<span>${esc(todoLine(t))}</span></span></span></button>`;
   const rows = m.groups.length
     ? m.groups.map((g) => `<div class="grp" data-k="g${g.repo.id}">${m.all || g.global ? `<div class="grp-h">${esc(g.global && !m.all ? "Global (~)" : g.repo.name)}</div>` : ""}${g.tasks.map(row).join("")}</div>`).join("")
     : `<p class="empty" data-k="empty">Bu filtrede görev yok.</p>`;
@@ -527,7 +580,7 @@ function tasksHtml(m) {
 function taskBlocks(c) {
   const fl = (/** @type {number} */ id) => (c.flash === id ? " flash" : "");
   const head = `<section class="thead" data-k="head-${c.id}"><div class="meta"><span class="mono key">${esc(c.key)}</span>${statusChip(c.status)}${c.epic ? `<span class="dim">Epic ${openTask(c.epic.id, c.epic.status, c.epic.key, "mono")}</span>` : ""}${c.url ? `<a href="#" class="ext" data-act="url" data-url="${esc(c.url)}">GitHub'da aç ${icon("external", 13)}</a>` : ""}${c.analysis?.files.length ? `<button class="mini analink" data-act="anaGo" data-key="${esc(c.key)}" title="Bu görevin analizleri Analiz sekmesinde">${icon("analysis", 12)} Analiz · ${c.analysis.files.length} dosya ${icon("arrow", 12)}</button>` : ""}</div>
-<h1>${esc(c.title || c.key)}</h1>${c.summary ? `<p class="sum">${esc(c.summary)}</p>` : ""}${c.pointer ? `<div class="callout${fl(c.pointer.id)}" id="ptr-${c.pointer.id}">${icon("arrow", 20)}<div><span class="lbl">Nerede kaldık</span><span class="ptitle">${esc(c.pointer.title)}</span><span class="dim">${c.pointer.owner === "K" ? "Senin işin" : c.pointer.owner === "C" ? "Ajanın işi" : esc(KIND_TR[/** @type {keyof typeof KIND_TR} */ (c.pointer.kind)] ?? c.pointer.kind)} · ${esc(day(c.pointer.at))}</span></div></div>` : ""}</section>`;
+<h1>${esc(c.title || c.key)}</h1>${c.summary ? `<p class="sum">${esc(c.summary)}</p>` : ""}${c.pointer ? `<div class="callout${fl(c.pointer.id)}" id="ptr-${c.pointer.id}">${icon("arrow", 20)}<div><span class="lbl">Nerede kaldık</span><span class="ptitle">${esc(c.pointer.title)}</span><span class="dim">${c.pointer.owner === "K" ? "Senin işin" : c.pointer.owner === "C" ? "Ajanın işi" : esc(KIND_TR[/** @type {keyof typeof KIND_TR} */ (c.pointer.kind)] ?? c.pointer.kind)} · ${esc(day(c.pointer.at))}</span></div></div>` : ""}${unreadHtml(c.unread, c.key)}</section>`;
   const asks = c.asks.length
     ? `<section class="blk" data-k="asks" data-navgroup="asks" aria-label="Senden beklenen"><h2><span class="odot" aria-hidden="true"></span>Senden beklenen <span class="dim">· ${c.asks.length}</span></h2>${c.asks.map((r) => askCard(r, { prefix: "ask", flash: TODO_KINDS.includes(r.kind) ? undefined : c.flash })).join("")}</section>`
     : "";
@@ -735,7 +788,7 @@ function homeHtml(m) {
   const loose = m.loose.length
     ? `<section class="blk" data-k="loose" data-navgroup="loose" aria-label="Görevsiz bekleyenler"><h2><span class="odot" aria-hidden="true"></span>Görevsiz bekleyenler <span class="dim">· ${m.loose.length} · ajanın tur sonunda sorup göreve bağlamadıkları</span></h2>${m.loose.map((r) => askCard(r)).join("")}</section>`
     : "";
-  return `<div class="home" data-k="home">${top}<div class="grid2" data-k="cards">${pointers}${asks}</div>${loose}${table}</div>`;
+  return `<div class="home" data-k="home">${top}${unreadHtml(m.unread)}<div class="grid2" data-k="cards">${pointers}${asks}</div>${loose}${table}</div>`;
 }
 
 /**
@@ -777,6 +830,10 @@ function applyMessage(db, m, actor, root) {
     case "docNew":
     case "docStatus":
       return require("./docsView.js").applyDocMessage(db, m, actor, root);
+    case "read":
+      // Sections the user read (#92).
+      if (!Array.isArray(m.ids) || !m.ids.length || m.ids.length > 500) throw new Error("Imprimatur: bad section ids");
+      return db.markSectionsRead(m.ids.map(num));
     case "rec": {
       const id = num(m.id);
       if (m.op === "pointer") return db.setPointer(id, actor);
@@ -855,6 +912,10 @@ const TASKS_CSS = `
   .mono { font-family: var(--vscode-editor-font-family); font-size: 12px; font-weight: 600; }
   .dim { color: var(--vscode-descriptionForeground); }
   .mine { color: var(--acc); font-weight: 700; }
+  .unr { color: var(--vscode-editorInfo-foreground, var(--acc)); font-weight: 700; }
+  .unread { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); }
+  .unread .uhead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; } .unread .lbl { font-weight: 700; }
+  .unread .urow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 0; } .unread .urow a { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
   #pane { --card: var(--surface); line-height: 1.5; padding-bottom: 32px; }
   #pane h1 { margin: 0; font-size: var(--fs-h1); line-height: 1.25; font-weight: 800; letter-spacing: -.01em; }
   #pane h2 { margin: 0; font-size: var(--fs-h3); font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -1024,5 +1085,5 @@ const TASKS_CSS = `
 
 module.exports = {
   TABS, ANALYSIS_TABS, FILTERS, plainTitle, TASKS_CSS, analysisHub, analysisHubHtml, ICON, icon, KIND_LABEL, kindChip, bucketOf, userActor, parseQuickAdd, isAsk, repoOfRoot, scopeRepos, describeVersion,
-  tasksPage, inboxModel, inboxCount, openTurn, splitText, TITLE_MAX, BODY_MAX, homeModel, tasksHtml, inboxHtml, homeHtml, paneHtml, applyMessage, cleanView, esc,
+  tasksPage, inboxModel, inboxCount, openTurn, splitText, TITLE_MAX, BODY_MAX, homeModel, unreadOf, tasksHtml, inboxHtml, homeHtml, paneHtml, applyMessage, cleanView, esc,
 };

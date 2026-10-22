@@ -311,7 +311,6 @@ test("sync: an analysis section reaches the other machine under its task; old ki
 });
 
 test("migration 6: a schema 5 database keeps its documents and takes analyses", () => {
-  assert.equal(VERSION, 6);
   const file = tmpDb();
   const raw = new DatabaseSync(file);
   for (const m of MIGRATIONS.slice(0, 5)) raw.exec(m);
@@ -322,7 +321,7 @@ test("migration 6: a schema 5 database keeps its documents and takes analyses", 
     INSERT INTO doc_versions (section_id, at, actor_kind, after) VALUES (1, 1, 'agent', '{}');`);
   raw.close();
   const db = openDb({ path: file });
-  assert.equal(db.version, 6);
+  assert.equal(db.version, VERSION);
   assert.equal(db.docFind(1, "glossary").scope, "");
   assert.deepEqual([db.docSection(1, "wal").body, db.docSection(1, "wal").source, db.sectionVersions(1).length], ["x", null, 1]);
   assert.equal(db.taskDocOf(1, "#1").kind, "analysis");

@@ -126,6 +126,11 @@ While the plugin is enabled, a plain `npm run setup` writes no hooks.
   decision, `#` note, `@ben` your todo), decisions, notes, manual tests,
   activity) and **Analiz** (Mimari, Ürün, Sözlük and each task's analyses).
   Keyboard: j/k, Enter, x, a, /, Esc. Writes go to Imprimatur's database as you.
+- **Unread (comprehension debt, #92)**: what the agent wrote that you have not
+  seen yet. Each task in the list shows "N okunmadı". Its page and Ana sayfa list
+  the edits not accepted and the design-document sections the agent changed since
+  you last read them, each with **Okudum**. A changed section is marked in Mimari,
+  Ürün and Sözlük. Sections you write count as read. Read marks stay on this machine.
 - **Imprimatur side bar** (its own icon in the activity bar): rows that open
   the panel on a tab (the badge counts what waits on you), then **Agent setup**: every file in the repo, and in your home folder, that
   shapes a coding agent, whatever the tool: Claude Code (CLAUDE.md, settings
@@ -370,7 +375,7 @@ read and write tasks and their records (todos, questions, decisions, notes,
 ADRs, PDRs) through its tools; the records live in one database per machine
 (`~/.local/share/imprimatur/imprimatur.db`, `IMPRIMATUR_DB` to move it).
 **Status line**: setup adds Claude Code's status line (only if you have none):
-`Imprimatur · 3 waiting on you · #64 👉 …` for the session's repo and task.
+`Imprimatur · 3 waiting on you · 12 unread · #64 👉 …` for the session's repo and task.
 In an untrusted VS Code folder Imprimatur shows changes and records but starts
 no model calls or repo scripts (Workspace Trust).
 

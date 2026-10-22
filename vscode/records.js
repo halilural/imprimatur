@@ -110,6 +110,12 @@ function userAsks(root) {
   return id === undefined ? [] : db.openAsks({ repoId: id, limit: 500 });
 }
 
+/** How many of the repo's sections changed since the user read them (#92). @param {string} root */
+function unreadSections(root) {
+  const id = repoId(root);
+  return id === undefined ? 0 : db.unreadSections(id).length;
+}
+
 /** A task's records in order. @param {string} root @param {string} key */
 function recordsOf(root, key) {
   const t = task(root, key);
@@ -147,7 +153,7 @@ function agentChanges(root) {
 }
 
 module.exports = {
-  agentChanges, checkFile, configure, dbOf, reset, repoId, task, taskTitle, sessionTasks, doneTasks, userAsks, recordsOf, jiraLink,
+  agentChanges, checkFile, configure, dbOf, reset, repoId, task, taskTitle, sessionTasks, doneTasks, userAsks, unreadSections, recordsOf, jiraLink,
   get lastError() {
     return lastError;
   },

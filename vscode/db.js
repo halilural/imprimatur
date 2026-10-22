@@ -289,6 +289,19 @@ const MIGRATIONS = [
     PRIMARY KEY (doc_id, path)
   ) WITHOUT ROWID;
   `,
+  // What the user last read of each section (#92): its newest version then (version_id, not a
+  // time: a change can be replayed with a past time). A later version by the agent or a hook is
+  // unread. Device-local, not synced. Every section there now counts as read, or the first open
+  // would show the whole history as unread.
+  `
+  CREATE TABLE section_reads (
+    section_id INTEGER PRIMARY KEY REFERENCES doc_sections(id),
+    version_id INTEGER NOT NULL,
+    at INTEGER NOT NULL
+  );
+  INSERT INTO section_reads (section_id, version_id, at)
+    SELECT s.id, coalesce((SELECT max(v.id) FROM doc_versions v WHERE v.section_id = s.id), 0), CAST(strftime('%s', 'now') AS INTEGER) * 1000 FROM doc_sections s;
+  `,
 ];
 const VERSION = MIGRATIONS.length;
 
@@ -597,6 +610,7 @@ class Db {
         this.q("DELETE FROM doc_section_records WHERE section_id = ?").run(s.id);
         this.q("UPDATE doc_versions SET section_id = ? WHERE section_id = ?").run(own.id, s.id);
         this.q("UPDATE doc_sections SET updated_at = max(updated_at, ?) WHERE id = ?").run(s.updated_at, own.id);
+        this.q("DELETE FROM section_reads WHERE section_id = ?").run(s.id);
         this.q("DELETE FROM doc_sections WHERE id = ?").run(s.id);
       }
       this.q("UPDATE documents SET updated_at = max(updated_at, ?) WHERE id = ?").run(d.updated_at, mine.id);
@@ -1337,6 +1351,8 @@ class Db {
       this.q("INSERT INTO doc_versions (section_id, at, actor_kind, actor, before, after) VALUES (?, ?, ?, ?, ?, ?)")
         .run(old.id, now, actor.kind, actor.id ?? null, Object.keys(before).length ? JSON.stringify(before) : null, JSON.stringify(after));
       this.trackSection_(old.id, changed, now);
+      // What the user wrote they have read.
+      if (actor.kind === "user") this.markSectionsRead([old.id], now);
       return this.sectionById(old.id);
     });
   }
@@ -1346,6 +1362,54 @@ class Db {
     return this.q("SELECT * FROM doc_versions WHERE section_id = ? ORDER BY id DESC").all(sectionId).map((/** @type {any} */ v) => ({
       ...v, before: v.before ? JSON.parse(v.before) : null, after: v.after ? JSON.parse(v.after) : null,
     }));
+  }
+
+  /** The user read these sections now (#92). @param {number[]} ids @param {number} [at] */
+  markSectionsRead(ids, at = Date.now()) {
+    if (!ids.every((id) => Number.isSafeInteger(id) && id > 0)) throw new Error("Imprimatur: section ids must be positive integers");
+    this.tx(() => {
+      for (const id of ids) {
+        if (!this.q("SELECT 1 FROM doc_sections WHERE id = ?").get(id)) throw new Error(`Imprimatur: no section ${id}`);
+        const v = this.q("SELECT coalesce(max(id), 0) AS v FROM doc_versions WHERE section_id = ?").get(id).v;
+        this.q(`INSERT INTO section_reads (section_id, version_id, at) VALUES (?, ?, ?)
+                ON CONFLICT (section_id) DO UPDATE SET version_id = max(version_id, excluded.version_id), at = max(at, excluded.at)`).run(id, v, at);
+      }
+    });
+  }
+
+  /**
+   * The repo's current sections the agent or a hook changed (title or text) since the user last
+   * read them (#92), newest first. A change synced from another device (import) is not counted:
+   * reads are this device's. tasks: the task a task's analysis is of, and the tasks of the
+   * records those changes linked.
+   * @param {number} repoId
+   * @returns {Array<{id: number, doc_id: number, key: string, title: string, kind: string, scope: string, changed_at: number, tasks: string[]}>}
+   */
+  unreadSections(repoId) {
+    const rows = this.q(`SELECT s.id, s.doc_id, s.key, s.title, d.kind, d.scope, v.at, v.before, v.after
+      FROM doc_sections s JOIN documents d ON d.id = s.doc_id JOIN doc_versions v ON v.section_id = s.id
+      LEFT JOIN section_reads r ON r.section_id = s.id
+      WHERE d.repo_id = ? AND s.status = 'current' AND v.actor_kind IN ('agent', 'hook') AND v.id > coalesce(r.version_id, 0)
+        AND (json_type(v.after, '$.body') IS NOT NULL OR json_type(v.after, '$.title') IS NOT NULL)
+      ORDER BY v.id DESC`).all(repoId);
+    /** @type {Map<number, any>} */
+    const out = new Map();
+    /** @type {Map<number, string | undefined>} */
+    const keyOf = new Map();
+    const taskOfRecord = (/** @type {number} */ id) => {
+      if (!keyOf.has(id)) keyOf.set(id, this.q("SELECT t.key FROM records r JOIN tasks t ON t.id = r.task_id WHERE r.id = ?").get(id)?.key);
+      return keyOf.get(id);
+    };
+    for (const v of /** @type {any[]} */ (rows)) {
+      const s = out.get(v.id) ?? { id: v.id, doc_id: v.doc_id, key: v.key, title: v.title, kind: v.kind, scope: v.scope, changed_at: v.at, tasks: v.scope ? [v.scope] : [] };
+      out.set(v.id, s);
+      const was = new Set(JSON.parse(v.before ?? "{}").records ?? []);
+      for (const id of JSON.parse(v.after).records ?? []) {
+        const key = was.has(id) ? undefined : taskOfRecord(id);
+        if (key && !s.tasks.includes(key)) s.tasks.push(key);
+      }
+    }
+    return [...out.values()];
   }
 
   /** The document's last change: when and by whom. @param {number} docId */
