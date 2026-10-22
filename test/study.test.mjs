@@ -111,7 +111,7 @@ test("the skill: frontmatter Claude Code reads, and the rules that make it work"
   const front = /^---\nname: study\ndescription: (.+)\n---\n/.exec(md);
   assert.ok(front, "name and description in the frontmatter");
   assert.ok(front[1].length < 1024);
-  for (const must of ["study_material", "doc_section_upsert", "links: {study:", "one question at a time", "never give an answer before they try", "AskUserQuestion", "real mistakes", "different letter", "sequenceDiagram", "autonumber", "item 3 explains arrow 3"]) assert.ok(md.includes(must), must);
+  for (const must of ["study_material", "doc_section_upsert", "links: {study:", "one question at a time", "never give an answer before they try", "AskUserQuestion", "real mistakes", "different letter", "sequenceDiagram", "autonumber", "item 3 explains arrow 3", "Never as a\nMarkdown link"]) assert.ok(md.includes(must), must);
 });
 
 test("review fixes: real git with short keys, bounds on the left, an epic's tasks, mastery text as data, a foreign link", () => {

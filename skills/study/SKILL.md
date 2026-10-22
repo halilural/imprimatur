@@ -62,6 +62,10 @@ The project terms it uses, one line each.
 Record ids, sections (kind/key), commits.
 ```
 
+Write every file reference as inline code with the path from the repo root, `vscode/db.js:1404`
+(or `:338` for the file named just before it): the panel opens those at the line. Never as a
+Markdown link, which the panel does not open.
+
 Keep it to what a person can read in about 10 minutes. Then tell the user in one line that the
 note is under Analiz → the task, and give a three- or four-line summary in the chat. Offer two
 ways to go on: read the note first and then take the quiz, or take the quiz first (a pre-test
