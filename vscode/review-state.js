@@ -187,4 +187,19 @@ function historyEdits(log, current, opts = {}) {
   return out.reverse();
 }
 
-module.exports = { BASELINE_DIR, HISTORY_DIR, UNREAD_FILE, writeUnread, readUnread, repoRoot, latestBefore, historyEdits, editBranch };
+/** The repo file a reference names, if one: its path from the root, else the only tracked file ending in it. @param {string} root @param {string} rel */
+function repoFileOf(root, rel) {
+  if (!rel || path.isAbsolute(rel) || rel.split(/[\\/]/).includes("..")) return undefined;
+  const direct = path.resolve(root, rel);
+  if (direct.startsWith(root + path.sep) && fs.existsSync(direct) && fs.statSync(direct).isFile()) return direct;
+  let files = [];
+  try {
+    files = execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).split("\n");
+  } catch {
+    return undefined;
+  }
+  const hits = files.filter((f) => f === rel || f.endsWith(`/${rel}`));
+  return hits.length === 1 ? path.join(root, hits[0]) : undefined;
+}
+
+module.exports = { repoFileOf, BASELINE_DIR, HISTORY_DIR, UNREAD_FILE, writeUnread, readUnread, repoRoot, latestBefore, historyEdits, editBranch };

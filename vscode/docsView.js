@@ -42,6 +42,23 @@ function renderMarkdown(text, { steps = false } = {}) {
   return out;
 }
 
+/**
+ * A file reference in inline code (#96): `dir/file.ext`, `file.ext:12`, `file.ext:12-20`, or
+ * `:12` for the file named last in the same text (env.lastFile). A bare name with no line
+ * (`imprimatur.db`) is no reference: it reads as a word more often than as a file.
+ * @param {string} text @param {any} env
+ * @returns {{file: string, line?: number} | undefined}
+ */
+function fileRef(text, env = {}) {
+  const m = /^((?:[\w@.-]+\/)*[\w@-][\w@.-]*\.[A-Za-z][A-Za-z0-9]{0,7})(?::(\d+)(?:-\d+)?)?$/.exec(text.trim());
+  if (m && !m[1].split("/").includes("..") && (m[2] || m[1].includes("/"))) {
+    env.lastFile = m[1];
+    return { file: m[1], ...(m[2] && { line: Number(m[2]) }) };
+  }
+  const n = /^:(\d+)(?:-\d+)?$/.exec(text.trim());
+  return n && env.lastFile ? { file: env.lastFile, line: Number(n[1]) } : undefined;
+}
+
 /** A path with no scheme, not absolute: a file beside the documents. */
 const RELATIVE = /^(?![a-z][a-z0-9+.-]*:)(?![\\/])\S/i;
 /** The prefix of a relative image's src, which the panel replaces with the documents folder's webview URI. */
@@ -55,6 +72,13 @@ function markdown() {
     const valid = md.validateLink.bind(md);
     md.validateLink = (/** @type {string} */ url) => valid(url) && (/^(https?:|mailto:|#)/i.test(url.trim()) || RELATIVE.test(url.trim()));
     md.renderer.rules.fence = mermaidFence(md.renderer.rules.fence);
+    // `path/file.js:120` opens the file at that line (#96); `:338` the file named last before it.
+    const code = md.renderer.rules.code_inline;
+    md.renderer.rules.code_inline = (tokens, idx, options, env, self) => {
+      const html = /** @type {any} */ (code)(tokens, idx, options, env, self);
+      const ref = fileRef(tokens[idx].content, env);
+      return ref ? `<a href="#" class="fref" data-act="openFile" data-file="${esc(ref.file)}" data-line="${ref.line ?? ""}" title="Editörde aç">${html}</a>` : html;
+    };
     // A relative path: an image is a file next to the design documents (the panel turns
     // DOC_IMG into its webview URI); a link to one goes nowhere in the panel, its text stays.
     const image = md.renderer.rules.image;
@@ -355,6 +379,7 @@ const DOCS_CSS = `
   .md { font-family: var(--vscode-markdown-font-family, var(--vscode-font-family)); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
   .md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
   .md h1, .md h2, .md h3, .md h4 { font-size: 15px; margin: 14px 0 6px; font-weight: 700; }
+  .md a.fref, .md a.fref:hover { text-decoration: none !important; } .md a.fref code { color: var(--vscode-textLink-foreground); cursor: pointer; } .md a.fref:hover code { text-decoration: underline; }
   .md code { font-family: var(--vscode-editor-font-family); font-size: 12.5px; padding: 1px 4px; border-radius: 4px; background: var(--vscode-textCodeBlock-background); }
   .mermaid-src > pre { white-space: pre-wrap; }
   .md pre { padding: 10px 12px; border-radius: 6px; background: var(--vscode-textCodeBlock-background); overflow-x: auto; } .md pre code { padding: 0; background: none; }
@@ -379,4 +404,4 @@ const DOCS_CSS = `
   .deditor .acts { align-items: center; flex-wrap: wrap; }
 `;
 
-module.exports = { DOC_IMG, DOC_TABS, TAB_LABEL, DOCS_CSS, SECTION_BODY_MAX, docModel, docHtml, applyDocMessage, renderMarkdown, stepsOf, toggleStep, mermaidKey, slugify, editOf, describeSectionVersion };
+module.exports = { fileRef, DOC_IMG, DOC_TABS, TAB_LABEL, DOCS_CSS, SECTION_BODY_MAX, docModel, docHtml, applyDocMessage, renderMarkdown, stepsOf, toggleStep, mermaidKey, slugify, editOf, describeSectionVersion };

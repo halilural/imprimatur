@@ -785,6 +785,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       case "newTask": return vscode.postMessage({ type: "newTask" });
       case "recDismiss": return vscode.postMessage({ type: "recDismiss", id: Number(d.id) });
       case "anaOpen": return vscode.postMessage({ type: "anaOpen", file: d.file, repo: Number(d.repo) });
+      case "openFile": return vscode.postMessage({ type: "openFile", file: d.file, line: Number(d.line) || 0 });
       case "anaAssign": el.closest(".orow")?.classList.add("sent"); return vscode.postMessage({ type: "anaAssign", file: d.file, task: Number(d.task) });
       case "bestRun": return vscode.postMessage({ type: "bestRun" });
       case "answer": return sendAnswer(d.id);
@@ -1262,6 +1263,7 @@ function onMessage(m) {
   if (m.type === "recDismiss") return recDismiss(Number(m.id));
   if (["rec", "recStep", "answer", "add", "taskStatus", "docSave", "docNew", "docStatus", "anaAssign", "read"].includes(m.type)) return writeFromPanel(m);
   if (m.type === "anaOpen") return openAnalysisFile(String(m.file ?? ""), Number(m.repo));
+  if (m.type === "openFile" && shown) return openRepoFile(shown, String(m.file ?? ""), Number(m.line) || 0);
   if (m.type === "preview" && shown) {
     let html;
     try {
@@ -1274,6 +1276,19 @@ function onMessage(m) {
   if (m.type === "accept") return timed("accept", m, () => actions?.acceptEdit(m.file, m.n));
   if (m.type === "open") return actions?.openDiff(m.file, m.n);
 }
+
+/**
+ * A `file:line` in the panel's Markdown (#96), opened beside the panel at that line. Only a file
+ * inside the repo; a bare name (`db.js`) is the one tracked file of that name.
+ * @param {string} root @param {string} rel @param {number} line 1-based, 0: the top
+ */
+async function openRepoFile(root, rel, line) {
+  const target = require("./review-state.js").repoFileOf(root, rel);
+  if (!target) return void vscode.window.showInformationMessage(`Imprimatur: ${rel} is not a file of this repo.`);
+  const at = new vscode.Position(Math.max(0, line - 1), 0);
+  return vscode.window.showTextDocument(vscode.Uri.file(target), { preview: true, viewColumn: vscode.ViewColumn.Beside, selection: new vscode.Range(at, at) });
+}
+
 
 /**
  * Opens a task's analysis file (TASK-ANALYSIS): only a path some analysis of the task's repo
