@@ -43,7 +43,11 @@ decision ids]}`. Otherwise keep it and only fix what changed. Sections, in this 
 ### Ne ve neden
 The problem in two or three sentences, then the decision or feature in one.
 ### Nasıl çalışıyor
-The flow step by step; a ```mermaid sequence or flowchart when there is a flow.
+The flow as a ```mermaid sequenceDiagram with `autonumber` on its first line, so every arrow
+carries its step number. Right under the diagram, a numbered list with one item per arrow, in
+the same order and with the same numbers: item 3 explains arrow 3 (who calls whom, with what,
+and why), so the reader follows the picture step by step. No flow (a data shape, a rule):
+a short numbered list alone. The same holds for every sequenceDiagram anywhere in the note.
 ### Kodda nerede
 A numbered tour in reading order, across the system and not file by file:
 1. `path/file.js:120` functionName: what happens here and why it is done this way.

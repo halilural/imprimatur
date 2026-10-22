@@ -111,7 +111,7 @@ test("the skill: frontmatter Claude Code reads, and the rules that make it work"
   const front = /^---\nname: study\ndescription: (.+)\n---\n/.exec(md);
   assert.ok(front, "name and description in the frontmatter");
   assert.ok(front[1].length < 1024);
-  for (const must of ["study_material", "doc_section_upsert", "links: {study:", "one question at a time", "never give an answer before they try", "AskUserQuestion", "real mistakes", "different letter"]) assert.ok(md.includes(must), must);
+  for (const must of ["study_material", "doc_section_upsert", "links: {study:", "one question at a time", "never give an answer before they try", "AskUserQuestion", "real mistakes", "different letter", "sequenceDiagram", "autonumber", "item 3 explains arrow 3"]) assert.ok(md.includes(must), must);
 });
 
 test("review fixes: real git with short keys, bounds on the left, an epic's tasks, mastery text as data, a foreign link", () => {
@@ -153,4 +153,9 @@ test("review fixes: real git with short keys, bounds on the left, an epic's task
   fs.symlinkSync(theirs, path.join(home, ".claude", "skills", "study"));
   assert.match(linkSkills(src, { dry: false, home })[0], /links elsewhere.*left alone/);
   assert.equal(fs.readlinkSync(path.join(home, ".claude", "skills", "study")), theirs);
+});
+
+test("#103 the server tells every agent: a flow is a sequence diagram with autonumber and a numbered list under it", async () => {
+  const { INSTRUCTIONS } = await import("../mcp/server.mjs");
+  assert.match(INSTRUCTIONS, /Every Mermaid sequenceDiagram you write \(section, analysis, record\): autonumber, and right under it a numbered list, item n explaining arrow n/);
 });
