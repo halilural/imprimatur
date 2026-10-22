@@ -116,7 +116,7 @@ function studyMaterial(db, repo, task, o = {}) {
   const linked = ids.length
     ? db.sqlite.prepare(`SELECT DISTINCT s.id, s.key, s.title, s.body, s.updated_at, d.kind FROM doc_section_records x
         JOIN doc_sections s ON s.id = x.section_id JOIN documents d ON d.id = s.doc_id
-        WHERE x.record_id IN (${ids.map(() => "?").join(",")}) AND s.status = 'current' AND d.kind <> 'glossary' ORDER BY d.kind, s.position`).all(...ids)
+        WHERE x.record_id IN (${ids.map(() => "?").join(",")}) AND s.status = 'current' AND d.kind IN ('architecture', 'product') ORDER BY d.kind, s.position`).all(...ids)
     : [];
   const anaDoc = db.taskDocFind(repo.id, task.key);
   const analysis = anaDoc ? db.docSections(anaDoc.id).filter((/** @type {any} */ s) => s.status === "current") : [];
