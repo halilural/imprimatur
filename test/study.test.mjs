@@ -46,7 +46,8 @@ test("a task's material: decisions, the sections they feed, analysis, terms, the
   db.upsertSection(db.docOf(repo.id, "glossary").id, "section-reads", { title: "section_reads", body: "Okuma işaretleri tablosu" }, agent);
   const ana = db.taskDocOf(repo.id, "#92");
   db.upsertSection(ana.id, "plan", { title: "Plan", body: "önce db" }, agent);
-  db.upsertSection(ana.id, "study", { title: "Çalışma notu", body: "### Ne ve neden" }, agent, { at: 1000 });
+  // Linked to the decision like the skill writes it: still the note, not a section the records feed.
+  db.upsertSection(ana.id, "study", { title: "Çalışma notu", body: "### Ne ve neden", records: [adr.id] }, agent, { at: 1000 });
   db.addRecord(task.id, { kind: "note", owner: "K", title: "Çalışma: okuma — 1/3 tam", links: { study: { topic: "okuma", questions: [
     { q: "Ne zaman okunmadı?", type: "anlama", result: "full" },
     { q: "Neden sürüm id?", type: "neden", result: "partial", gap: "geçmiş zamanlı yazım" },
