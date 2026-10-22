@@ -43,6 +43,25 @@ test("migration 7: sections already there count as read", () => {
   db.close();
 });
 
+test("migration 8: a database with migration 7's draft table (no version_id) gets the real one", () => {
+  const file = tmpDb();
+  const raw = new DatabaseSync(file);
+  for (const m of MIGRATIONS.slice(0, 6)) raw.exec(m);
+  raw.exec(`CREATE TABLE section_reads (section_id INTEGER PRIMARY KEY REFERENCES doc_sections(id), at INTEGER NOT NULL);
+    INSERT INTO repos (id, uid, root, created_at) VALUES (1, 'r', '/a/p', 1);
+    INSERT INTO documents (id, uid, repo_id, kind, title, updated_at) VALUES (1, 'd', 1, 'architecture', 'Mimari', 1);
+    INSERT INTO doc_sections (id, uid, doc_id, key, title, body, position, updated_at) VALUES (1, 's', 1, 'storage', 'Storage', 'x', 1, 1);
+    INSERT INTO doc_versions (section_id, at, actor_kind, after) VALUES (1, 1, 'agent', '{"body":"x"}');
+    INSERT INTO section_reads (section_id, at) VALUES (1, 5);
+    PRAGMA user_version = 7;`);
+  raw.close();
+  const db = openDb({ path: file });
+  assert.deepEqual(db.unreadSections(1), []);
+  db.upsertSection(1, "storage", { body: "y" }, agent);
+  assert.equal(db.unreadSections(1).length, 1);
+  db.close();
+});
+
 test("an agent's change is unread until the user reads it; the user's own is read", () => {
   const { db, repo, adr, doc } = seeded();
   db.upsertSection(doc.id, "reads", { title: "Reads", body: "one", records: [adr.id] }, agent, { at: 1000 });
