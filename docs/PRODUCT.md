@@ -17,6 +17,7 @@
 11. [Proje sözlüğü](#glossary)
 12. [Görevin analizi](#task-analysis)
 13. [Okumadıkların: anlama borcu (#91, #92)](#unread)
+14. [/study: bir konuyu çalışmak (#95)](#study)
 
 <a id="summary"></a>
 
@@ -327,3 +328,15 @@ Ajan kodu ve dokümanları insanın okuyabileceğinden hızlı yazar; Imprimatur
 Senin yazdığın bölüm okunmuş sayılır. Okuma işaretleri cihaza özeldir. İlk kurulumda mevcut her şey okunmuş sayılır.
 
 Sırada: "son okumandan beri" farkı (#93), tur sonu brifingi (#94).
+
+<a id="study"></a>
+
+## 14. /study: bir konuyu çalışmak (#95)
+
+Ajanın yaptığı bir tasarım kararını, feature'ı ya da dokümanı açıklayabilecek, savunabilecek ve kodda gösterebilecek kadar öğrenmek için: `/study #92` (ya da "section_reads tasarımını çalışmak istiyorum").
+
+1. **Çalışma notu** görevin Analiz sayfasına yazılır: ne ve neden, nasıl çalışıyor, kodda nerede (sırasıyla `dosya:satır` turu), alternatifler ve neden seçilmedikleri, sınırlar ve riskler, terimler, kaynaklar. Kayıtlarda gerekçesi olmayan şey uydurulmaz, "kayıtlarda gerekçe yok" yazılır.
+2. **Kendini sına**: sorular tek tek gelir (anlama, neden, alternatif, kodda nerede, debug, ya şöyle olsaydı, itiraz). Önce sen cevaplarsın; ajan tam / kısmi / eksik der, eksiği kaynağıyla gösterir; "bilmiyorum" önce ipucu alır.
+3. **Hakimiyet**: puan ve zayıf noktalar göreve not olarak kalır. Bir sonraki `/study` zayıf soruları önce sorar ve o günden beri değişenleri söyler. Belgede eksik çıkan gerekçe ajan için yapılacak olur.
+
+Neden böyle: Anthropic'in 2026 çalışmasında açıklama isteyen ve soru soranlar konunun %65–86'sını korudu, yalnız devredenler %39'unu.

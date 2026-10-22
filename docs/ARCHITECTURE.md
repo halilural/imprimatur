@@ -29,6 +29,7 @@
 23. [Panel tasarım katmanı: tema değişkenleri, ikonlar, maskot](#ui-design)
 24. [Görev analizleri](#task-analysis)
 25. [Anlama borcu: okuma işaretleri ve okunmadı sayısı (#92)](#unread)
+26. [/study: çalışma modu (#95)](#study)
 
 <a id="overview"></a>
 
@@ -747,3 +748,21 @@ Kabul edilmemiş düzenlemeler veritabanında değildir: graf satırlarından (`
 ### Yüzeyler
 
 `tasksView.unreadOf` görev başına `{edits, sections}`; görev listesi, görev sayfası başı ve Ana sayfa `unreadHtml`; `docsView` bölüm işareti ve Okudum. Sayfa mesajları: `read` (ids, `writeFromPanel` → `applyMessage`), `showSection` (doküman sekmesi + bölüm).
+
+<a id="study"></a>
+
+## 26. /study: çalışma modu (#95)
+
+### Parçalar
+
+- **Skill** `skills/study/SKILL.md`: akış (konuyu bul, malzemeyi oku, kodu oku, not yaz, tek tek sor, hakimiyeti kaydet). Plugin `skills/`'i kendisi bulur; `npm run setup` `~/.claude/skills/study`'yi checkout'a bağlar (`linkSkills`; Windows'ta junction; başkasının klasörüne ya da bağlantısına dokunmaz; plugin varken kendi bağlantısını kaldırır).
+- **MCP aracı** `study_material {key}` (salt okur), `vscode/study.js`: görev (epic ise görevleri ve onların kayıtları da), kararlar tam gövdeyle, notlar, yapılacaklar, görevin kayıtlarının beslediği mimari/ürün bölümleri (`doc_section_records`), görevin analizi, malzemede adı geçen sözlük terimleri, anahtarı anan commit'ler ve değiştirdikleri dosyalar (en çok değişen önce), çalışma notu ve son hakimiyet. Model metni `studyDigest`.
+
+### Saklama (migration yok)
+
+- Çalışma notu: görevin analizinde `study` bölümü (`doc_section_upsert kind analysis`). Kendisinden sonra commit ya da karar geldiyse `stale`.
+- Hakimiyet: `links.study {topic, questions: [{q, type, result, gap, refs}]}` taşıyan not kaydı (owner K). Son kayıt okunur: zayıf sorular önce; sonra gelen commit/karar/bölüm `changed`. Bu metin tek satıra ve 300 karaktere indirilir, tür ve sonuç sabit listeye zorlanır: veri olarak kalır, talimat ya da başlık gibi görünmez.
+
+### Commit bulma
+
+`git log --no-merges -E --grep=(^|[^A-Za-z0-9_#-])KEY([^0-9]|$) --numstat`: sınır git'in aramasında, böylece `-n` yanlış eşleşmelerle (`#1` → `#10`…) dolmaz; `keyPattern` mesajın bütününde (başlık + gövde, "Closes #n") yeniden bakar. Repo bu makinede değilse (placeholder) ya da git yoksa commit yok.
