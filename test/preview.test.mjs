@@ -124,3 +124,19 @@ test("a button, its old box and its block share one data-ar id", () => {
   const ids = [...html.matchAll(/data-ar="([^"]*)"/g)].map((m) => m[1]);
   assert.deepEqual(ids, ["2-3", "2-3", "2-3"]);
 });
+
+test("#105 an Accept all button over the page, with how many changes; none when nothing is under review", () => {
+  const all = () => "vscode://x.y/acceptAll?file=%2Fr%2Fa.md";
+  const md = markdownItPlugin(
+    new MarkdownIt({ html: true }),
+    () => review("a\n\nold one\n\nb\n\nold two\n", undefined, "a\n\nnew one\n\nb\n\nnew two\n"),
+    (_env, start, end) => `vscode://x.y/accept?start=${start}&end=${end}`,
+    undefined,
+    all,
+  );
+  const html = md.renderer.render(md.parse("a\n\nnew one\n\nb\n\nnew two\n", {}), md.options, {});
+  assert.ok(html.startsWith('<div class="imprimatur-acceptall"><a class="imprimatur-accept imprimatur-accept-all" href="vscode://x.y/acceptAll?file=%2Fr%2Fa.md"'), html.slice(0, 200));
+  assert.match(html, /✓ Accept all · 2<\/a><\/div>/);
+  const clean = markdownItPlugin(new MarkdownIt({ html: true }), () => [], undefined, undefined, all);
+  assert.doesNotMatch(clean.render("hi\n", {}), /acceptall/);
+});

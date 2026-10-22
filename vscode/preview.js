@@ -69,8 +69,9 @@ const LEAF = new Set(["paragraph_open", "heading_open", "tr_open", "fence", "cod
  * @param {any} md @param {(env: any) => ReturnType<typeof import("./diff.js").review>} getHunks
  * @param {(env: any, start: number, end: number) => string | undefined} [link]
  * @param {(env: any) => string | undefined} [getBase] the copy's text, for Mermaid diagram diffs
+ * @param {(env: any) => string | undefined} [allLink] the href of the "Accept all" button over the page (#105)
  */
-function markdownItPlugin(md, getHunks, link, getBase) {
+function markdownItPlugin(md, getHunks, link, getBase, allLink) {
   const render = md.renderer.render.bind(md.renderer);
   const INLINE = { imprimaturInline: true }; // our own renderInline calls: no marks there
   md.renderer.render = (tokens, options, env) => {
@@ -92,7 +93,10 @@ function markdownItPlugin(md, getHunks, link, getBase) {
       // A bug in the marks must never blank the preview: show it unmarked.
       console.error("imprimatur preview:", e);
     }
-    return render(marked, options, env);
+    // One button over the page for every change in it (#105), kept in view while scrolling.
+    const all = hunks.length ? allLink?.(env) : undefined;
+    const bar = all ? `<div class="imprimatur-acceptall"><a class="imprimatur-accept imprimatur-accept-all" href="${md.utils.escapeHtml(all)}" title="Accept every agent change in this file">✓ Accept all · ${hunks.length}</a></div>` : "";
+    return bar + render(marked, options, env);
   };
   return md;
 }
