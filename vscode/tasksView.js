@@ -303,7 +303,7 @@ function analysisOf(db, repoId, key) {
     if (s.status !== "current") continue;
     const src = s.source ?? "";
     const f = files.get(src) ?? { source: src, at: 0, sections: [] };
-    f.sections.push({ id: s.id, title: s.title, body: s.body });
+    f.sections.push({ id: s.id, key: s.key, title: s.title, body: s.body });
     f.at = Math.max(f.at, s.updated_at);
     files.set(src, f);
   }
@@ -667,12 +667,50 @@ function analysisHub(db, root) {
  * @param {string | undefined} title @param {string} [key]
  */
 function plainTitle(title, key) {
-  let t = String(title ?? "").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\s+/g, " ").trim();
+  // Links, then emphasis and code marks (not "_": snake_case names keep theirs).
+  let t = String(title ?? "").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/(\*\*|\*|`)(?=\S)(.*?\S)\1/g, "$2").replace(/\s+/g, " ").trim();
   if (key && t.toLowerCase().startsWith(key.toLowerCase())) {
-    const rest = t.slice(key.length).replace(/^[\s:·–—-]+/, "");
+    const rest = t.slice(key.length).replace(/^[\s:;,·–—|/-]+/, "");
     if (rest) t = rest;
   }
   return t;
+}
+
+/**
+ * A heading in two languages ("Background / *Arka plan*", #97): the first half, and the other
+ * as a quiet second; a heading with no " / " is one.
+ * @param {string} title @param {string} [key] @returns {{main: string, alt?: string}}
+ */
+function titleParts(title, key) {
+  const m = /^(.+?)\s+\/\s+(.+)$/.exec(String(title ?? ""));
+  if (!m) return { main: plainTitle(title, key) };
+  const main = plainTitle(m[1], key);
+  const alt = plainTitle(m[2]);
+  return main ? { main, ...(alt && { alt }) } : { main: alt };
+}
+
+/** @param {string} title @param {string} [key] */
+const titleHtml = (title, key) => {
+  const t = titleParts(title, key);
+  return `${esc(t.main)}${t.alt ? ` <span class="talt">· ${esc(t.alt)}</span>` : ""}`;
+};
+
+/** A file's own table of contents: the panel's tree does its work. @param {string} title */
+const isContents = (title) => {
+  const t = titleParts(title);
+  return [t.main, t.alt].some((x) => /^(table of contents|contents|içindekiler|toc)$/i.test(x ?? ""));
+};
+
+/** The "###" headings of a section's text, outside code fences, in order. @param {string} body */
+function subHeads(body) {
+  const out = [];
+  let fence = false;
+  for (const l of String(body ?? "").split("\n")) {
+    if (/^\s*(```|~~~)/.test(l)) fence = !fence;
+    const m = !fence && /^###\s+(.+?)\s*#*\s*$/.exec(l);
+    if (m) out.push(m[1]);
+  }
+  return out;
 }
 
 /**
@@ -687,13 +725,35 @@ function analysisHubHtml(m) {
   }
   const { renderMarkdown } = require("./docsView.js");
   const name = (/** @type {string} */ src) => (src.startsWith("plan:") ? "Plan (plan modu)" : src || "Analiz");
-  const toc = (/** @type {any} */ d) => `<ol class="atoc" data-k="toc-${esc(d.key)}" data-ak="${esc(d.key)}">${d.files.map((/** @type {any} */ f, /** @type {number} */ i) => `${i ? `<li class="asep" data-k="tf-${esc(f.source)}" aria-hidden="true"></li>` : ""}${f.sections.map((/** @type {any} */ s) => `<li data-k="t${s.id}"><a href="#sec-a${s.id}" data-act="docGo" data-key="a${s.id}"><span>${esc(plainTitle(s.title))}</span></a></li>`).join("")}`).join("")}</ol>`;
-  const item = (/** @type {any} */ d) => `<button class="aitem" data-act="asel" data-key="${esc(d.key)}" data-nav data-q="${esc(`${d.key} ${d.task?.title ?? ""} ${d.files.map((/** @type {any} */ f) => f.source).join(" ")}`)}"><span class="mono key">${esc(d.key)}</span><span class="ttl">${esc(plainTitle(d.task?.title, d.key) || d.key)}</span><span class="dim">${d.files.length} dosya · ${esc(day(d.at))}</span></button>${toc(d)}`;
+  // The tree (#97): each file (its own title), its "##" sections, their "###" headings.
+  const isOverview = (/** @type {any} */ s) => /(^|--)overview$/.test(s.key ?? "");
+  const goTo = (/** @type {string} */ key, /** @type {string} */ label) => `<a href="#sec-${key}" data-act="docGo" data-key="${key}">${label}</a>`;
+  const subs = (/** @type {any} */ s) => {
+    const hs = subHeads(s.body);
+    return hs.length ? `<ol class="asub">${hs.map((h, n) => `<li data-k="t${s.id}h${n}">${goTo(`a${s.id}-h${n}`, titleHtml(h))}</li>`).join("")}</ol>` : "";
+  };
+  const fileToc = (/** @type {any} */ f) => {
+    const head = isOverview(f.sections[0]) ? f.sections[0] : undefined;
+    const rest = f.sections.filter((/** @type {any} */ s) => s !== head && !isContents(s.title));
+    const label = head ? titleHtml(head.title) : esc(name(f.source));
+    const kids = [...(head ? [subs(head)] : []), rest.length ? `<ol class="asub">${rest.map((/** @type {any} */ s) => `<li data-k="t${s.id}">${goTo(`a${s.id}`, titleHtml(s.title))}${subs(s)}</li>`).join("")}</ol>` : ""].join("");
+    return `<li class="afile" data-k="tf-${esc(f.source)}">${goTo(`a${f.sections[0].id}`, label)}${kids}</li>`;
+  };
+  const toc = (/** @type {any} */ d) => `<ol class="atoc" data-k="toc-${esc(d.key)}" data-ak="${esc(d.key)}">${d.files.map(fileToc).join("")}</ol>`;
+  const item = (/** @type {any} */ d) => `<button class="aitem" data-act="asel" data-key="${esc(d.key)}" data-nav data-q="${esc(`${d.key} ${d.task?.title ?? ""} ${d.files.map((/** @type {any} */ f) => f.source).join(" ")}`)}"><span class="mono key">${esc(d.key)}</span><span class="ttl">${titleHtml(d.task?.title, d.key) || esc(d.key)}</span><span class="dim">${d.files.length} dosya · ${esc(day(d.at))}</span></button>${toc(d)}`;
   const aside = `<aside class="dtoc alist" data-k="alist" data-scroll="dtoc" data-navgroup="analysis"><div class="lbl" data-k="h">Görevler · ${m.docs.length}</div>${m.docs.map(item).join("")}${m.orphans.length ? `<button class="aitem orph" data-act="asel" data-key="__orphans" data-nav><span class="ttl">Görevsiz analizler</span><span class="dim">${m.orphans.length} dosya</span></button>` : ""}</aside>`;
   // No file names here: the text is the point. A file's first section opens it (its path in the tooltip).
   const open = (/** @type {any} */ f) => (f.local && !f.source.startsWith("plan:") ? `<div class="dacts"><button class="mini aopen" data-act="anaOpen" data-file="${esc(f.source)}" data-repo="${m.repo?.id ?? ""}" title="Dosyayı aç: ${esc(name(f.source))}">${icon("external", 12)} aç</button></div>` : "");
-  const file = (/** @type {any} */ f, /** @type {number} */ i) => `${i ? `<hr class="afsep" data-k="fs-${esc(f.source)}">` : ""}${f.sections.map((/** @type {any} */ s, /** @type {number} */ j) => `<article class="dsec" id="sec-a${s.id}" data-k="s${s.id}" data-nav tabindex="0"><div class="dsec-h"><h2>${esc(plainTitle(s.title))}</h2>${j === 0 ? open(f) : ""}</div>${s.body ? `<div class="md">${renderMarkdown(s.body)}</div>` : '<p class="empty">Bu bölüm boş.</p>'}</article>`).join("")}`;
-  const pane = (/** @type {any} */ d) => `<div class="apane" data-k="ap-${esc(d.key)}" data-ak="${esc(d.key)}"><section class="dhead" data-k="head"><span class="lbl">Görev analizi · <span class="mono">${esc(d.key)}</span> · ${esc(m.repo?.name ?? "")}</span><h1>${esc(plainTitle(d.task?.title, d.key) || d.key)}</h1><p class="lead">Son güncelleme · ${esc(when(d.at))} · ${d.files.length} dosya${d.task ? ` · <button class="link" data-act="open" data-id="${d.task.id}" data-f="${bucketOf(d.task.status)}">Göreve git ${icon("arrow", 12)}</button>` : ""}</p></section>${d.files.map(file).join("")}</div>`;
+  // "###" headings get ids, for the tree's links.
+  const bodyHtml = (/** @type {any} */ s) => {
+    let n = 0;
+    return renderMarkdown(s.body).replace(/<h3>/g, () => `<h3 id="sec-a${s.id}-h${n++}">`);
+  };
+  const article = (/** @type {any} */ f, /** @type {any} */ s, /** @type {number} */ j) => isContents(s.title)
+    ? `<details class="dsec acontents" id="sec-a${s.id}" data-k="s${s.id}"><summary>${titleHtml(s.title)}</summary>${s.body ? `<div class="md">${bodyHtml(s)}</div>` : ""}</details>`
+    : `<article class="dsec${j === 0 && /(^|--)overview$/.test(s.key ?? "") ? " afirst" : ""}" id="sec-a${s.id}" data-k="s${s.id}" data-nav tabindex="0"><div class="dsec-h"><h2>${titleHtml(s.title)}</h2>${j === 0 ? open(f) : ""}</div>${s.body ? `<div class="md">${bodyHtml(s)}</div>` : '<p class="empty">Bu bölüm boş.</p>'}</article>`;
+  const file = (/** @type {any} */ f, /** @type {number} */ i) => `${i ? `<hr class="afsep" data-k="fs-${esc(f.source)}">` : ""}${f.sections.map((/** @type {any} */ s, /** @type {number} */ j) => article(f, s, j)).join("")}`;
+  const pane = (/** @type {any} */ d) => `<div class="apane" data-k="ap-${esc(d.key)}" data-ak="${esc(d.key)}"><section class="dhead" data-k="head"><span class="lbl">Görev analizi · <span class="mono">${esc(d.key)}</span> · ${esc(m.repo?.name ?? "")}</span><h1>${titleHtml(d.task?.title, d.key) || esc(d.key)}</h1><p class="lead">Son güncelleme · ${esc(when(d.at))} · ${d.files.length} dosya${d.task ? ` · <button class="link" data-act="open" data-id="${d.task.id}" data-f="${bucketOf(d.task.status)}">Göreve git ${icon("arrow", 12)}</button>` : ""}</p></section>${d.files.map(file).join("")}</div>`;
   const options = m.tasks.map((/** @type {any} */ t) => `<option value="${t.id}">${esc(t.key)} · ${esc((t.title || "").slice(0, 60))}</option>`).join("");
   const orphans = m.orphans.length
     ? `<div class="apane" data-k="ap-orphans" data-ak="__orphans"><section class="dhead" data-k="head"><span class="lbl">Görev analizi · ${esc(m.repo?.name ?? "")}</span><h1>Görevsiz analizler</h1><p class="lead">Görevi bulunamayan analiz dosyaları: bir göreve bağla, o görevin analizine geçer.</p></section>${m.orphans.map((o) => `<div class="orow dsec" data-k="o-${esc(o.source)}" data-q="${esc(o.source)}"><span class="mono">${esc(o.source)}</span><span class="dim">${esc(day(o.at))}</span><select data-change="anaAssign" data-file="${esc(o.source)}" aria-label="Göreve bağla"><option value="">Göreve bağla…</option>${options}</select></div>`).join("")}</div>`
@@ -1030,6 +1090,11 @@ const TASKS_CSS = `
   .atoc { list-style: none; margin: 4px 0 10px 10px; padding: 0 0 0 10px; border-left: 2px solid var(--acc-line); display: flex; flex-direction: column; gap: 2px; }
   .atoc a { display: block; padding: 3px 6px; border-radius: 6px; color: inherit !important; } .atoc a:hover { background: var(--acc-soft); text-decoration: none !important; }
   .atoc .asep { height: 0; margin: 6px 0; border-top: 1px dashed var(--line); }
+  .atoc .afile > a { font-weight: 700; } .atoc .afile + .afile { margin-top: 6px; }
+  .atoc .asub { list-style: none; margin: 2px 0 2px 8px; padding: 0 0 0 8px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 1px; }
+  .atoc .asub a { font-weight: 600; } .atoc .asub .asub a { font-weight: 400; font-size: 12px; color: var(--vscode-descriptionForeground) !important; }
+  .talt { font-weight: 400; color: var(--vscode-descriptionForeground); }
+  .dsec.afirst h2 { font-size: 19px !important; } .acontents summary { cursor: pointer; font-weight: 600; color: var(--vscode-descriptionForeground); }
   .adoc .apane { display: flex; flex-direction: column; gap: 18px; }
   .afsep { width: 100%; margin: 6px 0; border: 0; border-top: 1px dashed var(--line); }
   .aopen { opacity: 1; padding: 2px 10px; border-color: var(--acc); color: var(--acc); font-size: var(--fs-sm); font-weight: 700; cursor: pointer; }
@@ -1084,6 +1149,6 @@ const TASKS_CSS = `
 `;
 
 module.exports = {
-  TABS, ANALYSIS_TABS, FILTERS, plainTitle, TASKS_CSS, analysisHub, analysisHubHtml, ICON, icon, KIND_LABEL, kindChip, bucketOf, userActor, parseQuickAdd, isAsk, repoOfRoot, scopeRepos, describeVersion,
+  TABS, ANALYSIS_TABS, FILTERS, plainTitle, titleParts, subHeads, TASKS_CSS, analysisHub, analysisHubHtml, ICON, icon, KIND_LABEL, kindChip, bucketOf, userActor, parseQuickAdd, isAsk, repoOfRoot, scopeRepos, describeVersion,
   tasksPage, inboxModel, inboxCount, openTurn, splitText, TITLE_MAX, BODY_MAX, homeModel, unreadOf, tasksHtml, inboxHtml, homeHtml, paneHtml, applyMessage, cleanView, esc,
 };
