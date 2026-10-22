@@ -270,6 +270,62 @@ test("backfill: past sessions' analyses, each state a version at its time; run a
   assert.equal(db.sectionVersions(s.id).length, 3);
 });
 
+test("backfill: a file git moved is one source, under its live path; what an earlier run kept under the old path is superseded", async () => {
+  const root = gitRepo();
+  const home = tmpDir();
+  const git = (...args) => execFileSync("git", args, { cwd: root, stdio: "ignore" });
+  git("config", "user.email", "t@t");
+  git("config", "user.name", "t");
+  const { db, repo } = seeded(root);
+  const old = "todos/LATD-12/a.md";
+  const mid = "docs/todos/LATD-12/a.md";
+  const live = "docs/analysis/LATD-12/a.md";
+  const t0 = Date.parse("2026-09-01T10:00:00Z");
+  // An earlier run (or the hook) kept the file under its first path.
+  a.ingest(db, repo.id, "LATD-12", old, "# A\n\n## Bulgular\n\nbir\n", { actor: hook, at: t0 - 5000 });
+  fs.mkdirSync(path.join(root, "todos", "LATD-12"), { recursive: true });
+  fs.writeFileSync(path.join(root, old), "# A\n\n## Bulgular\n\nbir\n");
+  git("add", "-A");
+  git("commit", "-q", "-m", "a");
+  // Moved twice: a chain todos/ → docs/todos/ → docs/analysis/.
+  fs.mkdirSync(path.join(root, "docs", "todos", "LATD-12"), { recursive: true });
+  git("mv", old, mid);
+  git("commit", "-q", "-m", "move");
+  fs.mkdirSync(path.join(root, "docs", "analysis", "LATD-12"), { recursive: true });
+  git("mv", mid, live);
+  git("commit", "-q", "-m", "move again");
+  fs.writeFileSync(path.join(root, live), "# A\n\n## Bulgular\n\niki\n");
+  assert.deepEqual([...bf.renamesOf(root)].sort(), [[mid, live], [old, live]]);
+  // A past session edited it at the old path.
+  const dir = path.join(home, ".claude", "projects", slugOf(root));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "P1.jsonl"), [
+    line({ cwd: root, at: t0, rec: { toolUseResult: { type: "create", filePath: path.join(root, old), content: "# A\n\n## Bulgular\n\nbir buçuk\n" } } }),
+  ].join("\n"));
+  await bf.backfill(db, repo.id, root, { home, transcriptsHome: path.join(home, ".claude", "projects"), model: false });
+  const doc = db.taskDocFind(repo.id, "LATD-12");
+  const current = db.docSections(doc.id).filter((x) => x.status === "current");
+  assert.deepEqual([...new Set(current.map((x) => x.source))], [live], "one current source");
+  const bulgular = current.find((x) => x.title === "Bulgular");
+  assert.equal(bulgular.body, "iki");
+  // The old path's replayed state went in under the live path.
+  assert.deepEqual(db.sectionVersions(bulgular.id).reverse().map((v) => v.after.body), ["bir buçuk", "iki"]);
+  assert.ok(db.docSections(doc.id).filter((x) => x.source === old).every((x) => x.status === "superseded"));
+});
+
+test("backfill: a gone file git did not move (a deleted draft) stays history under its own path", async () => {
+  const root = gitRepo();
+  const home = tmpDir();
+  const { db, repo } = seeded(root);
+  const dir = path.join(home, ".claude", "projects", slugOf(root));
+  fs.mkdirSync(dir, { recursive: true });
+  const draft = path.join(root, "todos", "LATD-12", "draft.md");
+  fs.writeFileSync(path.join(dir, "P1.jsonl"), line({ cwd: root, at: Date.parse("2026-09-01T10:00:00Z"), rec: { toolUseResult: { type: "create", filePath: draft, content: "# D\n\n## Not\n\nx\n" } } }));
+  await bf.backfill(db, repo.id, root, { home, transcriptsHome: path.join(home, ".claude", "projects"), model: false });
+  const secs = db.docSections(db.taskDocFind(repo.id, "LATD-12").id);
+  assert.deepEqual(secs.map((x) => [x.source, x.status]), [["todos/LATD-12/draft.md", "current"]]);
+});
+
 test("maybeStart: once per repo with transcripts, in the background", () => {
   const root = gitRepo();
   const home = tmpDir();

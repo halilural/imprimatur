@@ -122,6 +122,35 @@ function repoFiles(root) {
 }
 
 /**
+ * Where git moved files (git mv, a rename in a commit): each old path to its live one, chains
+ * followed (a → b → c gives a → c). Read once per run. Empty when git cannot tell.
+ * @param {string} root @returns {Map<string, string>}
+ */
+function renamesOf(root) {
+  /** @type {Map<string, string>} */
+  const step = new Map();
+  try {
+    const out = execFileSync("git", ["log", "-M", "--diff-filter=R", "--name-status", "--format=", "--reverse"], { cwd: root, encoding: "utf8", maxBuffer: 64 << 20, stdio: ["ignore", "pipe", "ignore"] });
+    // Oldest first: a name used again later moves with its later rename.
+    for (const line of out.split("\n")) {
+      const [st, from, to] = line.split("\t");
+      if (st?.startsWith("R") && from && to) step.set(from, to);
+    }
+  } catch {
+    return step;
+  }
+  /** @type {Map<string, string>} */
+  const live = new Map();
+  for (const from of step.keys()) {
+    let at = from;
+    const seen = new Set([at]);
+    while (step.has(at) && !seen.has(/** @type {string} */ (step.get(at)))) seen.add((at = /** @type {string} */ (step.get(at))));
+    if (at !== from) live.set(from, at);
+  }
+  return live;
+}
+
+/**
  * Replays the repo's past analyses into its tasks' documents.
  * @param {any} db @param {number} repoId @param {string} root
  * @param {{home?: string, transcriptsHome?: string, ask?: (p: string) => Promise<string>, model?: boolean, dryRun?: boolean, repoFiles?: boolean}} [o]
@@ -142,6 +171,26 @@ async function backfill(db, repoId, root, o = {}) {
     const { states, lost } = replay(events);
     report.lost += lost;
     byRel.set(rel, [...(byRel.get(rel) ?? []), ...states]);
+  }
+  // A file git moved since (todos/<key>/x.md → docs/analysis/<key>/x.md): its past states are the
+  // live file's, or the document would hold it twice, once per path. A file gone with no
+  // rename (a deleted draft) stays history under its own path.
+  const exists = (/** @type {string} */ rel) => {
+    try {
+      return fs.statSync(a.absPath(root, rel, home)).isFile();
+    } catch {
+      return false;
+    }
+  };
+  const moves = renamesOf(root);
+  /** @type {Map<string, string[]>} live path → the old paths it was moved from */
+  const movedFrom = new Map();
+  for (const [from, to] of moves) if (exists(to)) movedFrom.set(to, [...(movedFrom.get(to) ?? []), from]);
+  for (const [rel, states] of [...byRel]) {
+    const live = moves.get(rel);
+    if (!live || exists(rel) || !exists(live)) continue;
+    byRel.delete(rel);
+    byRel.set(live, [...(byRel.get(live) ?? []), ...states].sort((x, y) => x.at - y.at));
   }
   // Files in the repo now: their text is the newest state.
   const now = new Set(o.repoFiles === false ? [] : repoFiles(root));
@@ -202,6 +251,13 @@ async function backfill(db, repoId, root, o = {}) {
       const r = a.ingest(db, repoId, task, rel, st.text, { actor: ACTOR, at: st.at });
       if (!r.unchanged) report.versions++;
     }
+    // What an earlier run kept under a path the file was moved from: replaced by this one.
+    for (const old of movedFrom.get(rel) ?? []) {
+      if (exists(old)) continue;
+      for (const sec of db.sqlite.prepare("SELECT key FROM doc_sections WHERE doc_id = ? AND source = ? AND status = 'current'").all(doc.id, old)) {
+        db.upsertSection(doc.id, sec.key, { status: "superseded" }, ACTOR);
+      }
+    }
   }
   report.tasks = [...tasks].sort();
   return report;
@@ -248,4 +304,4 @@ function startDetached(root) {
   }).unref();
 }
 
-module.exports = { backfill, replay, eventsOf, transcripts, summary, runBackfill, maybeStart, metaKey, startDetached };
+module.exports = { backfill, renamesOf, replay, eventsOf, transcripts, summary, runBackfill, maybeStart, metaKey, startDetached };
