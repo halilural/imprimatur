@@ -32,18 +32,19 @@ const META = "io.modelcontextprotocol/";
 
 // What a client hands the model once, before any tool (#64): how the tools fit together.
 export const INSTRUCTIONS = [
-  "Imprimatur holds this repo's tasks and their records; it is the source of truth for where work stands.",
+  "Imprimatur holds this repo's tasks and records: the source of truth for where work stands.",
   "Call where_we_left_off first in every session.",
   "Tasks are keyed \"#58\" (a GitHub issue) or a Jira key such as \"PROJ-12\"; record_add creates a missing task.",
   "Record kinds: todo, question (to the user), answer (parent_id = the question's id), decision, note, fixme, adr (architecture), pdr (product), test.",
   "owner: C = the agent does it, K = the user does it.",
   "👉 is the task's pointer, where work stopped: pointer_set moves it (open records only), or record_add with pointer:true.",
   "Keep the task_upsert summary a one-line \"where we are\".",
-  "When work is done, record_update that record with status \"done\" and the result in body.",
-  "task_get returns open records by default; status \"all\", kind, limit/offset and full:true give more.",
+  "Work done: record_update that record with status \"done\", the result in body.",
   "search with repo \"*\" looks in every repo.",
-  "Each repo has living documents in sections: architecture (how it is built), product (what the user gets) and glossary (a section per project term); doc_get reads them.",
-  "When you add or change an adr/pdr/decision, update the matching architecture/product section with doc_section_upsert and link the record; a new or changed term goes in the glossary.",
+  "Each repo has living documents in sections: architecture (how it is built), product (what the user gets) and glossary (one section per term); doc_get reads them.",
+  "When you add or change an adr/pdr/decision, update its architecture/product section with doc_section_upsert and link the record; a new or changed term goes in the glossary.",
+  // #103: a reader follows a flow arrow by arrow.
+  "Every Mermaid sequenceDiagram you write (section, analysis, record): autonumber, and right under it a numbered list, item n explaining arrow n.",
   "Leave _session empty: Imprimatur's hook fills it.",
   // #90: records come from people, other agents, other machines (sync) and imports; a line in
   // one must not steer the agent that reads it (prompt injection).
