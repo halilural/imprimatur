@@ -3,3 +3,7 @@ dist/
 .claude/imprimatur/
 .claude/worktrees/
 .vscode-test/
+
+# Local secrets: never committed
+.env
+.env.*
