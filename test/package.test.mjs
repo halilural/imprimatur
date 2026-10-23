@@ -27,7 +27,12 @@ test("package: main and every file the manifest points at are packaged", () => {
   assert.deepEqual(wanted.filter((p) => !packaged.has(p)), []);
   // The bundle reads preview.css from the folder above it (graphView.js cssPaths).
   assert.ok(packaged.has("preview.css"));
-  for (const p of packaged) if (!p.startsWith("dist/")) assert.ok(fs.existsSync(path.join(dir, p)), `${p} exists`);
+  // README.md and LICENSE are the repo's, copied in while packaging (scripts/package.mjs).
+  const copied = new Set(["README.md", "LICENSE"]);
+  for (const p of packaged) {
+    if (p.startsWith("dist/")) continue;
+    assert.ok(fs.existsSync(path.join(copied.has(p) ? path.dirname(dir) : dir, p)), `${p} exists`);
+  }
 });
 
 test("package: the manifest declares workspace trust, kind and the graph's restore", () => {

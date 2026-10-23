@@ -1,17 +1,21 @@
-# CI (#88): the unit and integration tests and an audit of the dependencies, on every
-# push and pull request, and by hand. Actions are pinned to a commit (NIST SSDF PS).
+# CI (#88, #1): unit and integration tests, a dependency audit, and the packaged .vsix checked
+# (its file list and size) and kept as an artifact. On pull requests and pushes to any branch but
+# main, by hand, and called by release.yml (main runs it there, before any release).
+# Actions are pinned to a commit (NIST SSDF PS); jobs get read-only contents.
 name: CI
 
 on:
   push:
+    branches-ignore: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -26,6 +30,8 @@ jobs:
         node: ["22", "24"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node }}
@@ -39,11 +45,18 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: npm
       - run: npm ci
+      # The VS Code build the tests download (.vscode-test.mjs), kept between runs.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .vscode-test
+          key: vscode-test-${{ runner.os }}-${{ hashFiles('.vscode-test.mjs', 'package-lock.json') }}
       # test/integration/run.mjs runs VS Code under xvfb-run when it is installed.
       - run: sudo apt-get update && sudo apt-get install -y xvfb
       - run: npm run test:integration
@@ -54,7 +67,32 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
       - run: npm audit --audit-level=high
+
+  package:
+    name: Package (.vsix)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run package
+      # Only what the extension needs ships, and the package stays small.
+      - run: node scripts/check-vsix.mjs dist/*.vsix
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vsix
+          path: dist/*.vsix
+          if-no-files-found: error
+          retention-days: 14

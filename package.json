@@ -11,7 +11,7 @@
   "scripts": {
     "test": "node test/run-unit.mjs",
     "test:integration": "node test/integration/run.mjs",
-    "package": "node scripts/build.mjs && mkdir -p dist && cd vscode && npx --yes @vscode/vsce@4.0.0 package --skip-license --allow-missing-repository -o ../dist/",
+    "package": "node scripts/package.mjs",
     "setup": "node scripts/setup.mjs",
     "import": "node scripts/import.mjs",
     "analysis": "node scripts/analysis.mjs",
@@ -26,10 +26,12 @@
   "devDependencies": {
     "@vscode/test-cli": "0.0.15",
     "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "4.0.0",
     "esbuild": "0.28.2",
     "lucide-static": "1.59.0",
     "markdown-it": "^15.0.3",
-    "mermaid": "12.2.0"
+    "mermaid": "12.2.0",
+    "ovsx": "1.3.0"
   },
   "overrides": {
     "serialize-javascript": "^7.0.5",

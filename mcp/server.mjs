@@ -16,7 +16,7 @@ import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-const { openDb, KINDS, DOC_KINDS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX } = require("../vscode/db.js");
+const { openDb, KINDS, DOC_KINDS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, analysisTitle } = require("../vscode/db.js");
 const { repoRoot } = require("../vscode/review-state.js");
 const { originOf } = require("../vscode/import.js");
 const { syncDocs, health: docsHealth } = require("../vscode/docs-sync.js");
@@ -449,7 +449,7 @@ function docGet(db, repo, a) {
   const task = analysisTask(a);
   const found = task ? db.taskDocFind(repo.id, task) : db.docFind(repo.id, a.kind);
   // Not made by a read: an empty document until something is written.
-  const document = found ?? { id: 0, repo_id: repo.id, kind: a.kind, ...(task && { scope: task }), title: task ? `Analiz · ${task}` : DOC_KINDS[a.kind], updated_at: 0 };
+  const document = found ?? { id: 0, repo_id: repo.id, kind: a.kind, ...(task && { scope: task }), title: task ? analysisTitle(task) : DOC_KINDS[a.kind], updated_at: 0 };
   const all = found ? db.docSections(found.id) : [];
   if (a.section !== undefined && !all.some((s) => s.key === a.section)) {
     throw new ToolError(`no section ${JSON.stringify(a.section)} in the ${a.kind} document. ${all.length ? `Sections: ${all.map((s) => s.key).join(", ")}.` : "It has no sections yet."} doc_section_upsert with this key and a title creates it.`);

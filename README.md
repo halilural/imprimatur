@@ -40,9 +40,9 @@ edits right in your editor and keeps a list of what it asked you.
 ## Keep each task's analysis
 
 - Every analysis, plan, spike result or research note the agent writes for a
-  task, wherever it puts it, is kept in the task's **Analiz** section on its
-  page: one part per `##` heading, every change a version, synced to your other
-  machine. The plan it leaves plan mode with too.
+  task, wherever it puts it, is kept in the task's **Analysis** section on its
+  page: one part per `##` heading, every change a version. The plan it leaves
+  plan mode with too.
 - The task comes from the file's folder (`docs/todos/<key>/`), a key in its
   path (`spikes/81-x/`) or branch, or the task the session was working on;
   Haiku decides only when the path and headings cannot tell.
@@ -279,7 +279,7 @@ While the plugin is enabled, a plain `npm run setup` writes no hooks.
   decisions it touches. Each is a record of the BEST task: open, applied, or
   dismissed with why (a decision settles it, not applicable, accepted risk,
   postponed). It costs Claude usage (about $1 a call, capped) and asks first.
-- **Waiting on you** (now the turn-end part of Bende bekleyenler): everything the agent asked of
+- **Waiting on you** (the turn-end part of Home): everything the agent asked of
   you (questions, commands waiting for permission, "verify / test this" at the
   end of a turn), open ones first. Questions close once you reply; things to go
   and do ("test this", "Reload Window") stay open until you Mark as done or
@@ -349,8 +349,8 @@ and so do waiting logs with nothing open. Open asks stay until you do them.
    steps it reports done or asks again. A message that names a task
    (`LATD-13977`, or `13977` alone) also settles that task's steps asked in
    other sessions. An item closes when all its steps are ticked. When a task's
-   `docs/todos/<task>/TODO.md` (or the older `todos/<task>/TODO.md`) says done (its `## Durum` / `## Status` starts with
-   Bitti or Done), the next turn end ticks the task's steps in every session,
+   `docs/todos/<task>/TODO.md` (or the older `todos/<task>/TODO.md`) says done (its `## Status` starts with
+   Done), the next turn end ticks the task's steps in every session,
    except ones asked after the TODO.md last changed. After each agent turn, Haiku audits the list with the agent's final
    message ([vscode/audit.js](vscode/audit.js)): it closes steps that are done,
    answered or only reports, and writes what the message really asks as short
@@ -478,7 +478,7 @@ record or document section, and can add actions to **Imprimatur: Plugin Actions�
 A task set done or dropped closes its line in its epic in the same write: the
 epic's open records whose `links.issue` is the task, or whose title starts with
 its key (`#56 …`, `[#56 …](url)`, `PROJ-12 …`), become done with a note
-("#56 bitti (date)"); the epic's 👉 on such a line moves to its next open record.
+("#56 done (date)"); the epic's 👉 on such a line moves to its next open record.
 Reopening a task leaves those lines closed.
 
 VS Code also keeps task status in step with the issue tracker (on start, every

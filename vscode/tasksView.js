@@ -692,7 +692,7 @@ function plainTitle(title, key) {
 }
 
 /**
- * A heading in two languages ("Background / *Arka plan*", #97: older documents were written in two languages): the first half, and the other
+ * A heading in two languages ("Background / *Context*", #97: some older documents have headings in two languages): the first half, and the other
  * as a quiet second; a heading with no " / " is one.
  * @param {string} title @param {string} [key] @returns {{main: string, alt?: string}}
  */

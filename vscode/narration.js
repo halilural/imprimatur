@@ -15,7 +15,7 @@ const cache = new Map();
 
 /**
  * First sentence of the first line, at most 120 characters; a short opener
- * ("Deneyelim.", "Done.") takes the next sentence along. @param {string} text
+ * ("Let's try.", "Done.") takes the next sentence along. @param {string} text
  */
 function sentence(text) {
   const parts = text.trim().split("\n")[0].split(/(?<=[.!?…:])\s/);
