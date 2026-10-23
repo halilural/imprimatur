@@ -38,23 +38,23 @@ suite("Imprimatur in the extension host", () => {
     assert.deepEqual(contributed.filter((c) => !have.has(c)), []);
   });
 
-  test("the launcher opens the panel's tabs; the seeded ask waits on Bende bekleyenler", async () => {
+  test("the launcher opens the panel's tabs; the seeded ask waits on Home", async () => {
     const { launcher, panelState } = await api();
     assert.ok(launcher, "activate hands out the launcher");
-    assert.deepEqual(launcher.getChildren().map((r) => r.command), ["imprimatur.openHome", "imprimatur.openTasks", "imprimatur.openInbox", "imprimatur.openArchitecture", "imprimatur.openProduct", "imprimatur.openGraph"]);
-    // Bende bekleyenler last: the seeded ask is looked for on it.
-    for (const [command, tab] of [["imprimatur.openHome", "home"], ["imprimatur.openTasks", "tasks"], ["imprimatur.openArchitecture", "architecture"], ["imprimatur.openProduct", "product"], ["imprimatur.openInbox", "inbox"]]) {
+    assert.deepEqual(launcher.getChildren().map((r) => r.command), ["imprimatur.openHome", "imprimatur.openTasks", "imprimatur.openArchitecture", "imprimatur.openProduct", "imprimatur.openGlossary", "imprimatur.openGraph"]);
+    // Home last: the seeded ask is looked for on it (what waits on the user is on Home).
+    for (const [command, tab] of [["imprimatur.openHome", "home"], ["imprimatur.openTasks", "tasks"], ["imprimatur.openArchitecture", "architecture"], ["imprimatur.openProduct", "product"], ["imprimatur.openGlossary", "glossary"], ["imprimatur.openHome", "home"]]) {
       await vscode.commands.executeCommand(command);
       assert.equal(panelState().view.tab, tab, command);
     }
     // Other suites add asks of their own: find the seeded one.
     const deadline = Date.now() + 5000;
     while (!panelState().html.includes("Integration ask for the user") && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
-    assert.ok(panelState().html.includes("Integration ask for the user"), "the seeded ask on Bende bekleyenler");
+    assert.ok(panelState().html.includes("Integration ask for the user"), "the seeded ask on Home");
     assert.equal(panelState().root, process.env.IMPRIMATUR_IT_ROOT);
   });
 
-  test("records.reveal opens the seeded task on Görevler", async () => {
+  test("records.reveal opens the seeded task on Tasks", async () => {
     const { panelState } = await api();
     await vscode.commands.executeCommand("imprimatur.records.reveal", { root: process.env.IMPRIMATUR_IT_ROOT, task: "IT-1" });
     const s = panelState();

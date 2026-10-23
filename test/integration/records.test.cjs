@@ -66,7 +66,7 @@ suite("Records on the Imprimatur panel (#60, #69, MT-AR-060…064)", () => {
     await vscode.commands.executeCommand("imprimatur.records.thisWindow");
   });
 
-  test("MT-AR-060 Bende bekleyenler: this window's repo, count and badge, all repos, the record page", async () => {
+  test("MT-AR-060 Waiting on you (Home): this window's repo, count and badge, all repos, the record page", async () => {
     const { launcher } = await api();
     const other = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-it-other-")), "other");
     const otherTitle = `Ask in another repo ${Date.now()}`;
@@ -97,7 +97,7 @@ suite("Records on the Imprimatur panel (#60, #69, MT-AR-060…064)", () => {
     launcher.refresh();
     const count = withDb((db) => tv.inboxCount(db, ROOT, waitingSteps(ROOT)));
     assert.equal(launcher.view.badge?.value, count, "the launcher's badge = what waits on you");
-    assert.equal(launcher.getTreeItem(launcher.getChildren().find((r) => r.id === "inbox")).label, `Bende bekleyenler (${count})`);
+    assert.equal(launcher.getTreeItem(launcher.getChildren().find((r) => r.id === "home")).label, `Home (${count})`);
 
     const g = model(true).groups.find((x) => x.items.some((r) => r.title === otherTitle));
     assert.ok(g, "another repo's ask with every repo");
@@ -105,13 +105,14 @@ suite("Records on the Imprimatur panel (#60, #69, MT-AR-060…064)", () => {
     assert.equal(g.task.key, "OT-1");
 
     // The panel's switch is kept like the record views' was.
-    await vscode.commands.executeCommand("imprimatur.openInbox");
+    await vscode.commands.executeCommand("imprimatur.openHome");
     await until(panelOpen, "the panel open", 10_000);
     const { panelState } = await api();
     try {
       await vscode.commands.executeCommand("imprimatur.records.allRepos");
       assert.equal(panelState().view.all, true);
-      await until(() => panelState().html.includes(otherTitle), "the other repo's ask drawn on Bende bekleyenler");
+      // Home draws this repo only (the all-repos Waiting on you page is gone, #69), so the other repo's ask is checked on the model above, not on the page.
+      assert.equal(panelState().view.tab, "home");
     } finally {
       await vscode.commands.executeCommand("imprimatur.records.thisWindow");
     }
@@ -130,7 +131,7 @@ suite("Records on the Imprimatur panel (#60, #69, MT-AR-060…064)", () => {
     await assert.rejects(Promise.resolve(vscode.workspace.fs.writeFile(doc.uri, Buffer.from("x"))), "the page is read-only");
   });
 
-  test("MT-AR-061 Görevler: the list by status, the task page with its 👉 callout, Bitenleri göster (n), the summary", async () => {
+  test("MT-AR-061 Tasks: the list by status, the task page with its 👉 callout, Show done (n), the summary", async () => {
     await api();
     const { task, records: [, , last] } = seedTask("IT-61", { title: "Tasks view", status: "active", summary: "Status: halfway\nmore lines" }, [
       { kind: "todo", owner: "C", title: "First record" },
@@ -142,8 +143,8 @@ suite("Records on the Imprimatur panel (#60, #69, MT-AR-060…064)", () => {
 
     const m = withDb((db) => tv.tasksPage(db, ROOT, { sel: task.id }));
     const keys = m.groups.flatMap((g) => g.tasks.map((t) => t.key));
-    assert.ok(keys.includes("IT-61"), "a live task under Aktif");
-    assert.ok(!keys.includes("IT-61-DONE"), "done tasks only under Biten");
+    assert.ok(keys.includes("IT-61"), "a live task under Active");
+    assert.ok(!keys.includes("IT-61-DONE"), "done tasks only under Done");
     const doneCount = withDb((db) => db.tasksOf(db.repoByRoot(ROOT).id, { limit: 1000 }).filter((t) => t.status === "done" || t.status === "dropped").length);
     assert.equal(m.counts.done, doneCount);
     assert.ok(withDb((db) => tv.tasksPage(db, ROOT, { filter: "done" })).groups.some((g) => g.tasks.some((t) => t.key === "IT-61-DONE")));
@@ -151,13 +152,13 @@ suite("Records on the Imprimatur panel (#60, #69, MT-AR-060…064)", () => {
     const c = m.cur;
     assert.equal(c.key, "IT-61");
     assert.equal(c.summary, "Status: halfway\nmore lines");
-    assert.equal(c.pointer.id, last.id, "Nerede kaldık: the 👉 record");
+    assert.equal(c.pointer.id, last.id, "Where we left off: the 👉 record");
     assert.deepEqual(c.todos.map((r) => r.title), ["First record", "Where we left off"]);
     assert.equal(c.hiddenDone, 1);
     assert.deepEqual(c.asks.map((r) => r.title), ["Second record"]);
     const html = withDb((db) => tv.tasksHtml(tv.tasksPage(db, ROOT, { sel: task.id })));
-    assert.ok(html.includes("Bitenleri göster (1)"));
-    assert.ok(html.includes("Nerede kaldık"));
+    assert.ok(html.includes("Show done (1)"));
+    assert.ok(html.includes("Where we left off"));
   });
 
   test("MT-AR-062 the panel writes as the user: done, reopen, pointer, answer, quick-add, task status; the commands too", async () => {
@@ -296,15 +297,15 @@ suite("Records on the Imprimatur panel (#60, #69, MT-AR-060…064)", () => {
     for (const ms of took) assert.ok(ms < 500, `under 500 ms, took ${ms} ms`);
   });
 
-  test("MT-AR-064 an outside owner-K todo shows in Bende bekleyenler, and its mirror for the hooks ticks when done", async () => {
+  test("MT-AR-064 an outside owner-K todo shows on Home, and its mirror for the hooks ticks when done", async () => {
     const { panelState } = await api();
-    await vscode.commands.executeCommand("imprimatur.openInbox");
+    await vscode.commands.executeCommand("imprimatur.openHome");
     await until(panelOpen, "the panel open", 10_000);
     const { task } = seedTask("IT-64", { title: "Waiting on you", status: "active" });
     const title = `Owner-K todo from the MCP server ${Date.now()}`;
     const rec = withDb((db) => db.addRecord(task.id, { kind: "todo", owner: "K", title }, AGENT));
 
-    await until(() => panelState().html.includes(title), "the todo on Bende bekleyenler");
+    await until(() => panelState().html.includes(title), "the todo on Home");
     const step = () => waitingSteps(ROOT).find((s) => s.text === title);
     const open = await until(() => step()?.state === "open" && step(), "the todo mirrored in the waiting log");
     assert.equal(open.task, "IT-64");
@@ -328,10 +329,10 @@ suite("Records on the Imprimatur panel (#60, #69, MT-AR-060…064)", () => {
     assert.equal(withDb((db) => db.recordsOf(db.record(todo.id).task_id).filter((r) => r.kind === "answer").length), 0);
     // One count: the launcher's badge is the panel's tab badge.
     launcher.refresh();
-    await until(() => panelState().html.includes(`Bende bekleyenler <span class="badge">${launcher.now.inbox}</span>`), "the same count on the tab badge");
+    await until(() => panelState().html.includes(`Home <span class="badge" title="${launcher.now.inbox} waiting on you">${launcher.now.inbox}</span>`), "the same count on the tab badge");
   });
 
-  test("deep links: reveal by record opens Görevler on its task and lights the record", async () => {
+  test("deep links: reveal by record opens Tasks on its task and lights the record", async () => {
     const { panelState } = await api();
     const { task, records: [, rec] } = seedTask("IT-65", { title: "Deep link", status: "open" }, [
       { kind: "todo", owner: "C", title: "One" },
