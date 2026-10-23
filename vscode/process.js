@@ -289,7 +289,7 @@ function unlinked(records, notes) {
       const rec = db.record(Number(id));
       if (!rec || rec.status === "dropped" || !DESIGN_KINDS.includes(rec.kind)) continue;
       const secs = db.sectionsOfRecord(rec.id).filter((/** @type {any} */ s) => s.status === "current");
-      const base = { id: rec.id, kind: rec.kind, verb: verb || "eklendi", note };
+      const base = { id: rec.id, kind: rec.kind, verb: verb || "added", note };
       if (!secs.length) {
         if (rec.kind !== "decision") out.push({ ...base, why: /** @type {const} */ ("unlinked"), sections: [] });
       } else if (Math.max(...secs.map((/** @type {any} */ s) => s.updated_at)) < rec.updated_at) {
@@ -304,12 +304,12 @@ function unlinked(records, notes) {
 
 /** @param {{id: number, kind: string, verb: string, why: string, sections: string[]}} l */
 const docLine = (l) => {
-  const label = l.kind === "adr" ? "ADR" : l.kind === "pdr" ? "PDR" : "Karar";
+  const label = l.kind === "adr" ? "ADR" : l.kind === "pdr" ? "PDR" : "Decision";
   if (l.why === "stale") {
-    return `${label} #${l.id} ${l.verb} ama bağlı olduğu bölüm (${l.sections.join(", ")}) ondan sonra değişmedi: doc_section_upsert ile bölümün metnini kayda göre güncelle.`;
+    return `${label} #${l.id} ${l.verb}, but the section it is linked to (${l.sections.join(", ")}) has not changed since: update the section text from the record with doc_section_upsert.`;
   }
   const arch = l.kind === "adr";
-  return `${label} #${l.id} ${l.verb} ama ${arch ? "mimari" : "ürün"} dokümanı güncellenmedi: doc_section_upsert {kind: "${arch ? "architecture" : "product"}", key, title, body, records: [${l.id}]} ile ilgili bölümü yaz ve kaydı bağla.`;
+  return `${label} #${l.id} ${l.verb}, but the ${arch ? "architecture" : "product"} document was not updated: write the relevant section and link the record with doc_section_upsert {kind: "${arch ? "architecture" : "product"}", key, title, body, records: [${l.id}]}.`;
 };
 
 /**
@@ -523,7 +523,7 @@ function check(event, input, deps = {}) {
     const name = require("./config.js").imprimaturTool(tool);
     if (event === "PostToolUse" && (name === "record_add" || name === "record_update")) {
       const rec = designRecordOf(name, input, records, root);
-      if (rec) remember(root, input.session_id, "design", `${rec.id}:${name === "record_add" ? "eklendi" : "güncellendi"}`);
+      if (rec) remember(root, input.session_id, "design", `${rec.id}:${name === "record_add" ? "added" : "updated"}`);
     }
     if (event === "Stop" && !input.stop_hook_active) {
       const left = unlinked(records, take(root, input.session_id, "design"));

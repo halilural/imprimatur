@@ -117,20 +117,20 @@ While the plugin is enabled, a plain `npm run setup` writes no hooks.
   it, and scrolls). A Markdown edit shows rendered, as the preview's review: its added
   and changed blocks marked, old text in red boxes, one block of context around each. The status bar's **Agent Graph** button opens it and shows
   how many asks wait on you.
-- **Imprimatur panel tabs** (#69): next to the edits (**Ajan değişiklikleri**),
-  **Ana sayfa** (progress, where each task was left, the top asks, the turn-end
+- **Imprimatur panel tabs** (#69): next to the edits (**Agent changes**),
+  **Home** (progress, where each task was left, the top asks, the turn-end
   asks with no task, Audit and Scan history; its badge counts what waits on you),
-  **Görevler** (the task list by status, this repo or every repo; a task's page:
+  **Tasks** (the task list by status, this repo or every repo; a task's page:
   where we left off, then tabs: what waits on you, with the turn-end asks for it
   and an answer box, todos to tick and a quick-add box (`?` question, `!`
-  decision, `#` note, `@ben` your todo), decisions, notes, manual tests,
-  activity) and **Analiz** (Mimari, Ürün, Sözlük and each task's analyses).
+  decision, `#` note, `@me` your todo), decisions, notes, manual tests,
+  activity) and **Analysis** (Architecture, Product, Glossary and each task's analyses).
   Keyboard: j/k, Enter, x, a, /, Esc. Writes go to Imprimatur's database as you.
 - **Unread (comprehension debt, #92)**: what the agent wrote that you have not
-  seen yet. Each task in the list shows "N okunmadı". Its page and Ana sayfa list
+  seen yet. Each task in the list shows "N unread". Its page and Home list
   the edits not accepted and the design-document sections the agent changed since
-  you last read them, each with **Okudum**. A changed section is marked in Mimari,
-  Ürün and Sözlük. Sections you write count as read. Read marks stay on this machine.
+  you last read them, each with **Read it**. A changed section is marked in Architecture,
+  Product and Glossary. Sections you write count as read. Read marks stay on this machine.
 - **`/study` (#95)**: study one topic end to end, as if studying its documentation.
   The topic can be a decision, a feature, a document or an epic: `/study #92`. The
   agent writes a study note into the task's analysis (what and why, how it works,
@@ -244,14 +244,14 @@ While the plugin is enabled, a plain `npm run setup` writes no hooks.
   it, and scrolls). A Markdown edit shows rendered, as the preview's review: its added
   and changed blocks marked, old text in red boxes, one block of context around each. The status bar's **Agent Graph** button opens it and shows
   how many asks wait on you.
-- **Imprimatur panel tabs** (#69): next to the edits (**Ajan değişiklikleri**),
-  **Ana sayfa** (progress, where each task was left, the top asks, the turn-end
+- **Imprimatur panel tabs** (#69): next to the edits (**Agent changes**),
+  **Home** (progress, where each task was left, the top asks, the turn-end
   asks with no task, Audit and Scan history; its badge counts what waits on you),
-  **Görevler** (the task list by status, this repo or every repo; a task's page:
+  **Tasks** (the task list by status, this repo or every repo; a task's page:
   where we left off, then tabs: what waits on you, with the turn-end asks for it
   and an answer box, todos to tick and a quick-add box (`?` question, `!`
-  decision, `#` note, `@ben` your todo), decisions, notes, manual tests,
-  activity) and **Analiz** (Mimari, Ürün, Sözlük and each task's analyses).
+  decision, `#` note, `@me` your todo), decisions, notes, manual tests,
+  activity) and **Analysis** (Architecture, Product, Glossary and each task's analyses).
   Keyboard: j/k, Enter, x, a, /, Esc. Writes go to Imprimatur's database as you.
 - **Imprimatur side bar** (its own icon in the activity bar): rows that open
   the panel on a tab (the badge counts what waits on you), then **Agent setup**: every file in the repo, and in your home folder, that
@@ -339,12 +339,12 @@ and so do waiting logs with nothing open. Open asks stay until you do them.
 4. A second hook ([hooks/waiting.mjs](hooks/waiting.mjs)) appends what the
    agent waits on you for to `.claude/imprimatur/waiting/<session>.jsonl`:
    AskUserQuestion, PermissionRequest, input notifications, and the lines of
-   the final message that ask something (a `?`, phrases like "test et",
+   the final message that ask something (a `?`, phrases like "please test",
    "please verify", "shall I", or any line starting with 👉). A later event in
    the session closes earlier questions, your next prompt kept as the answer;
    things to go and do stay open until you mark them done. After each of your
    messages, [hooks/resolve.mjs](hooks/resolve.mjs) asks a small model which
-   open steps the message settled ("tamam birleştir" settles "shall I merge?")
+   open steps the message settled ("ok, merge it" settles "shall I merge?")
    and ticks them, tagged "chat"; the agent's next message does the same for
    steps it reports done or asks again. A message that names a task
    (`LATD-13977`, or `13977` alone) also settles that task's steps asked in
@@ -403,7 +403,7 @@ Records a repo still keeps in Markdown (`docs/todos/*/TODO.md`, `docs/design`,
 `npm run import -- <repo> [--dry-run]` or **Imprimatur: Import Markdown Records**;
 it can run again (nothing is added twice) and checks each file's count.
 
-**Design documents** (the panel's **Mimari** and **Ürün** tabs) stay in step with
+**Design documents** (the panel's **Architecture** and **Product** tabs) stay in step with
 `ARCHITECTURE.md` and `PRODUCT.md` in `docs/`, or the folder
 `.claude/imprimatur.json` names: `{"docs": {"dir": "docs/design"}}`. Whenever
 Imprimatur comes to a repo, the sync gets both sides to the same text: with no
@@ -484,7 +484,7 @@ Tracker** to force it; not in an untrusted folder):
 
 - **GitHub** (`#N` tasks in a repo whose origin is github.com, with `gh` logged in):
   a task done closes its issue as completed, dropped closes it as not planned,
-  reopened reopens it, each with a fixed comment ("Imprimatur: tamamlandı" …;
+  reopened reopens it, each with a fixed comment ("Imprimatur: completed" …;
   nothing of the task's text). An issue closed or reopened on GitHub sets the
   task's status (the first sync of a repo only notes where issues stand); an open
   issue without a task gets one (`imprimatur.tracker.createTasks`, at most 50 a run).

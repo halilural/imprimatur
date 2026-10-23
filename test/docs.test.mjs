@@ -305,7 +305,7 @@ test("docUpdate: an ADR added and not linked is told to the agent at its next to
   run("PostToolUse", { tool_name: "mcp__plugin_imprimatur_imprimatur__record_add", tool_input: { task: "#72", kind: "adr", title: adr.title }, tool_response: [{ type: "text", text: `Added [${adr.id}] adr/open - Docs live in the DB` }] });
   assert.deepEqual(run("Stop"), {}, "Stop says nothing to the user");
   const told = run("PostToolUse", { tool_name: "Bash", tool_input: { command: "ls" } });
-  assert.deepEqual(told.context, [`Imprimatur (docUpdate): ADR #${adr.id} eklendi ama mimari dokümanı güncellenmedi: doc_section_upsert {kind: "architecture", key, title, body, records: [${adr.id}]} ile ilgili bölümü yaz ve kaydı bağla.`]);
+  assert.deepEqual(told.context, [`Imprimatur (docUpdate): ADR #${adr.id} added, but the architecture document was not updated: write the relevant section and link the record with doc_section_upsert {kind: "architecture", key, title, body, records: [${adr.id}]}.`]);
   assert.deepEqual(run("PostToolUse", { tool_name: "Bash", tool_input: { command: "ls" } }), {}, "told once");
   // A PDR changed (title) without a link: next session start hears it; a status change alone is no design change.
   const pdr = db.addRecord(task.id, { kind: "pdr", title: "Two tabs" }, agent);
@@ -313,7 +313,7 @@ test("docUpdate: an ADR added and not linked is told to the agent at its next to
   assert.deepEqual(run("Stop"), {});
   run("PostToolUse", { tool_name: "mcp__imprimatur__record_update", tool_input: { id: pdr.id, title: "Two tabs, Mimari and Ürün" } });
   run("Stop");
-  assert.match(run("SessionStart", {}, "S2").context.join("\n"), new RegExp(`PDR #${pdr.id} güncellendi ama ürün dokümanı güncellenmedi`));
+  assert.match(run("SessionStart", {}, "S2").context.join("\n"), new RegExp(`PDR #${pdr.id} updated, but the product document was not updated`));
   // Linked to a section before Stop: nothing.
   const adr2 = db.addRecord(task.id, { kind: "adr", title: "Second" }, agent);
   run("PostToolUse", { tool_name: "mcp__imprimatur__record_add", tool_input: { task: "#72", kind: "adr", title: "Second" }, tool_response: { content: [] } });
@@ -324,7 +324,7 @@ test("docUpdate: an ADR added and not linked is told to the agent at its next to
   fs.writeFileSync(path.join(root, ".claude", "imprimatur.json"), JSON.stringify({ process: { status: false, whereWeLeftOff: false, branchFinish: false, docUpdate: "block" } }));
   const adr3 = db.addRecord(task.id, { kind: "adr", title: "Third" }, agent);
   run("PostToolUse", { tool_name: "mcp__imprimatur__record_add", tool_input: { task: "#72", kind: "adr", title: "Third" }, tool_response: JSON.stringify({ structuredContent: { record: { id: adr3.id, kind: "adr" } } }) });
-  assert.match(run("Stop").block, new RegExp(`ADR #${adr3.id} eklendi`));
+  assert.match(run("Stop").block, new RegExp(`ADR #${adr3.id} added`));
   // A note is not a design record.
   const note = db.addRecord(task.id, { kind: "note", title: "n" }, agent);
   run("PostToolUse", { tool_name: "mcp__imprimatur__record_add", tool_input: { task: "#72", kind: "note", title: "n" }, tool_response: `Added [${note.id}] note/open` });

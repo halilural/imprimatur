@@ -42,7 +42,7 @@ test("docUpdate: a linked ADR changed after its section is told (stale); the sec
   run("PostToolUse", { tool_name: "mcp__imprimatur__record_update", tool_input: { id: adr.id, body: "SQLite in WAL mode" } });
   run("Stop");
   const told = run("PostToolUse", { tool_name: "Bash", tool_input: { command: "ls" } });
-  assert.deepEqual(told.context, [`Imprimatur (docUpdate): ADR #${adr.id} güncellendi ama bağlı olduğu bölüm (architecture/storage) ondan sonra değişmedi: doc_section_upsert ile bölümün metnini kayda göre güncelle.`]);
+  assert.deepEqual(told.context, [`Imprimatur (docUpdate): ADR #${adr.id} updated, but the section it is linked to (architecture/storage) has not changed since: update the section text from the record with doc_section_upsert.`]);
   // Updated after the record: nothing.
   db.updateRecord(adr.id, { body: "SQLite, one file" }, agent);
   run("PostToolUse", { tool_name: "mcp__imprimatur__record_update", tool_input: { id: adr.id, body: "SQLite, one file" } });
@@ -62,7 +62,7 @@ test("docUpdate: a decision is followed once a section links it; an unlinked one
   sleep(5);
   db.updateRecord(dec.id, { title: "Debounce 3 s" }, agent);
   run("PostToolUse", { tool_name: "mcp__imprimatur__record_update", tool_input: { id: dec.id, title: "Debounce 3 s" } });
-  assert.match(run("Stop").block, new RegExp(`Karar #${dec.id} güncellendi ama bağlı olduğu bölüm \\(architecture/export\\)`));
+  assert.match(run("Stop").block, new RegExp(`Decision #${dec.id} updated, but the section it is linked to \\(architecture/export\\)`));
 });
 
 test("where_we_left_off and session start tell how the design documents stand", () => {
