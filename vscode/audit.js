@@ -38,7 +38,7 @@ function pointedAsks(message) {
   return message
     .split(/\r?\n/)
     .map((raw) => raw.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, ""))
-    .filter((l) => /^👉\s/u.test(l)) // "👉 ask", not "👉'lı" (the emoji as a word)
+    .filter((l) => /^👉\s/u.test(l)) // "👉 ask", not "👉's" (the emoji used as a word)
     .map((l) => l.replace(/^👉\s*/, "").replace(/\*\*|__|`/g, "").trim())
     .filter(Boolean);
 }

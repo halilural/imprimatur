@@ -6,7 +6,7 @@
 // - isCandidate: a Markdown file that is not one Imprimatur already keeps (TODO.md, the
 //   design documents, docs/testing, …) nor a repo's own docs (README, CHANGELOG, …).
 // - verdictOf: the path and headings decide when they can (todos/<key>/…, docs/research,
-//   spikes, ~/.claude/plans, ANALYSIS.md, "## Bulgular", …); else Haiku (askModel), whose
+//   spikes, ~/.claude/plans, ANALYSIS.md, "## Findings", …); else Haiku (askModel), whose
 //   answer is kept per file.
 // - taskFor: the task folder, a key in the path, the branch, the task the session was
 //   writing records of, a key in the request or the file's title. Only tasks Imprimatur

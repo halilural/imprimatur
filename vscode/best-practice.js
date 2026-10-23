@@ -688,10 +688,10 @@ async function review(db, root, { categories = CORE, refreshSources = false, bud
   };
 }
 
-/** The prose language: imprimatur.language / IMPRIMATUR_LANG, else English. */
-function proseLang() {
+/** The prose language: the repo's "lang" (.claude/imprimatur.json), IMPRIMATUR_LANG, config.json, else English. @param {string} [root] */
+function proseLang(root) {
   try {
-    return require("./config.js").hookLang() || "English";
+    return require("./config.js").repoLang(root) || "English";
   } catch {
     return "English";
   }

@@ -98,7 +98,7 @@ async function runBackfill(db, repoId, root, o = {}) {
   const started = JSON.parse(db.meta(metaKey(repoId)) ?? "{}");
   const save = (/** @type {any} */ v) => db.setMeta(metaKey(repoId), JSON.stringify({ ...started, kinds, ...v }));
   if (!kinds.length) return save({ status: "nothing", at: Date.now() });
-  const prompt = promptFor(db, repoId, root, kinds, o.lang ?? bp.proseLang());
+  const prompt = promptFor(db, repoId, root, kinds, o.lang ?? bp.proseLang(root));
   // Tool search off: with it the MCP tools are deferred behind ToolSearch, which --tools
   // leaves out, so the child saw only Read/Glob/Grep and wrote nothing.
   const env = { ...bp.childEnv(), ENABLE_TOOL_SEARCH: "false" };

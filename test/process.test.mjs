@@ -109,7 +109,7 @@ test("docsToc runs the repo's script after a docs edit; unopenedSources warns", 
   fs.mkdirSync(path.join(root, "docs", "market-research"), { recursive: true });
   fs.writeFileSync(path.join(root, "docs", "market-research", "x.md"), "- kaynak (açılmadı)\n");
   const post = (file) => check("PostToolUse", { cwd: root, tool_name: "Write", tool_input: { file_path: path.join(root, file) } });
-  assert.deepEqual(post("docs/market-research/x.md").context, ["Imprimatur (docsToc): toc: docs/a.md updated", 'Imprimatur (unopenedSources): x.md has sources marked "açılmadı". Open them now (WebFetch); only an HTTP error is written, as "açılamadı: 403".']);
+  assert.deepEqual(post("docs/market-research/x.md").context, ["Imprimatur (docsToc): toc: docs/a.md updated", 'Imprimatur (unopenedSources): x.md has sources marked "not opened" ("açılmadı"). Open them now (WebFetch); only an HTTP error is written, as "açılamadı: 403".']);
   assert.deepEqual(post("src/a.js"), {});
 });
 
@@ -204,4 +204,22 @@ test("starter settings: every check, with the repo's own main allow list", () =>
   assert.deepEqual(s.mainGuard, { mode: "block", branch: "main", allow: ["^(todos|docs)/"] });
   assert.equal(s.hookBypass, "block");
   assert.equal(s.whereWeLeftOff, true);
+});
+
+test("repo language (#80): \"lang\" alone says it at SessionStart and turns no check on", () => {
+  const root = repo({ lang: "English" });
+  assert.equal(settingsOf(root), undefined);
+  const r = check("SessionStart", { cwd: root, source: "startup" }, { records: noRecords });
+  assert.equal(r.context?.length, 1);
+  assert.match(r.context[0], /repoLang.*in English/);
+  assert.deepEqual(check("PreToolUse", { cwd: root, tool_name: "Bash", tool_input: { command: "git commit --no-verify" } }), {});
+});
+
+test("repo language (#80): with process settings, the line comes first; none without \"lang\"", () => {
+  const withLang = repo({ lang: "English", process: {} });
+  assert.ok(settingsOf(withLang));
+  const r = check("SessionStart", { cwd: withLang, source: "startup" }, { records: noRecords });
+  assert.match(r.context?.[0] ?? "", /repoLang/);
+  const plain = check("SessionStart", { cwd: repo(), source: "startup" }, { records: noRecords });
+  assert.ok(!(plain.context ?? []).some((l) => /repoLang/.test(l)));
 });

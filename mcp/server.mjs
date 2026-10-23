@@ -322,7 +322,7 @@ function repoOf(db, repo) {
   return { id: db.repoOf(root, { origin: originCached(root) }).id, root };
 }
 
-/** root → its origin remote (sync keys a repo by it, #61); git asked once per root. @type {Map<string, string | undefined>} */
+/** root → its origin remote (a repo is known by it across clones and plugins); git asked once per root. @type {Map<string, string | undefined>} */
 const origins = new Map();
 /** @param {string} root */
 function originCached(root) {

@@ -128,10 +128,10 @@ test("review 8: the hidden tab's table says it loads, not empty; a stale pane is
     const { html } = req("../vscode/graphView.js");
     const data = { rows: [{ file: "a.md", n: 1, t: Date.now(), added: 1, removed: 0, lane: 0 }], lanes: [{ first: 0, last: 0 }], sessions: [] };
     const onTasks = html(data, "/tmp/x", "N", [], { view: { tab: "tasks" }, pane: "<div data-k='x'></div>" });
-    assert.match(onTasks.split('<section id="edits"')[1].split("</tbody>")[0], /Yükleniyor…/);
+    assert.match(onTasks.split('<section id="edits"')[1].split("</tbody>")[0], /Loading…/);
     assert.ok(!onTasks.includes('<section id="waiting"'), "turn-end asks are cards in Bende bekleyenler, no table");
     const onEdits = html(data, "/tmp/x", "N", [], { view: { tab: "edits" } });
-    assert.match(onEdits.split('<section id="pane"')[1].split("</section>")[0], /Yükleniyor…/);
+    assert.match(onEdits.split('<section id="pane"')[1].split("</section>")[0], /Loading…/);
     assert.match(onEdits, /#pane\.stale::before/);
     assert.match(onEdits, /paneEl\.className = "stale"/);
   } finally {
@@ -158,7 +158,7 @@ test("review 10: the list and decision authors are read once per database change
   const versionsOf = s.db.versionsOf.bind(s.db);
   s.db.versionsOf = (id) => (versions++, versionsOf(id));
   const page = () => tv.tasksPage(s.db, s.root, { sel: s.task.id });
-  assert.equal(page().cur.decisions[0].who, "sen");
+  assert.equal(page().cur.decisions[0].who, "you");
   page();
   assert.equal(reads, 1, "the second draw reads nothing again");
   assert.equal(versions, 0, "authors in one query, not one per decision");

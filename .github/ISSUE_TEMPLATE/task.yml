@@ -1,19 +1,19 @@
-name: Görev
-description: Yapılacak bir iş (özellik, araştırma, altyapı)
+name: Task
+description: A piece of work to do (feature, research, infrastructure)
 body:
   - type: textarea
     id: what
-    attributes: { label: Ne, description: Ne yapılacak, tek paragraf. }
+    attributes: { label: What, description: What is to be done, in one paragraph. }
     validations: { required: true }
   - type: textarea
     id: why
-    attributes: { label: Neden, description: Kullanıcıya ya da projeye ne kazandırır. }
+    attributes: { label: Why, description: What it gives the user or the project. }
     validations: { required: true }
   - type: textarea
     id: done
-    attributes: { label: Bitti ölçütü, description: Neyi görünce bitmiş sayılır (ölçülebilir). }
+    attributes: { label: Done when, description: What you see when it is finished (measurable). }
     validations: { required: true }
   - type: input
     id: epic
-    attributes: { label: Epic, description: Her issue bir epic'in altındadır, placeholder: "Part of #2" }
+    attributes: { label: Epic, description: Every issue belongs to an epic, placeholder: "Part of #2" }
     validations: { required: true }

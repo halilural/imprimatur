@@ -159,7 +159,7 @@ function registerRecordCommands(ctx, log, onChange, reveal, setAllRepos) {
       );
       if (pick) vscode.commands.executeCommand("imprimatur.records.reveal", { root: pick.root, record: pick.record.id });
     }),
-    // From the graph, Bende bekleyenler and Search: the task (and record) on the panel's Görevler tab.
+    // From the graph, Waiting on you and Search: the task (and record) on the panel's Tasks tab.
     vscode.commands.registerCommand("imprimatur.records.reveal", (/** @type {{root?: string, task?: string, record?: number}} */ at) => {
       if (!at || !records.dbOf()) return;
       return reveal(at);

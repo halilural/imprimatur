@@ -36,12 +36,12 @@ test("export: a hand-written docs file is never overwritten; the tab says so", (
   fs.writeFileSync(file, "# Our architecture\n\nWritten by hand.\n");
   assert.deepEqual(exportDocs(db, root).map((r) => [r.kind, r.written, r.skipped]), [["architecture", false, "manual"]]);
   assert.equal(fs.readFileSync(file, "utf8"), "# Our architecture\n\nWritten by hand.\n");
-  assert.match(docs.docHtml(docs.docModel(db, root, "architecture")), /docs\/ARCHITECTURE\.md elle yazılmış, üzerine yazılmadı/);
-  assert.ok(!docs.docHtml(docs.docModel(db, root, "product")).includes("elle yazılmış"));
+  assert.match(docs.docHtml(docs.docModel(db, root, "architecture")), /docs\/ARCHITECTURE\.md was written by hand and was not overwritten/);
+  assert.ok(!docs.docHtml(docs.docModel(db, root, "product")).includes("was written by hand"));
   // Ours (the header first): rewritten, and no note.
   fs.writeFileSync(file, `${HEADER}\n\nold\n`);
   assert.equal(exportDocs(db, root)[0].written, true);
-  assert.ok(!docs.docHtml(docs.docModel(db, root, "architecture")).includes("elle yazılmış"));
+  assert.ok(!docs.docHtml(docs.docModel(db, root, "architecture")).includes("was written by hand"));
 });
 
 test("export: a docs/ symlinked out of the repo, or a symlinked file, is refused", () => {

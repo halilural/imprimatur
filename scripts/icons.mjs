@@ -14,7 +14,7 @@ const NAMES = {
   question: "message-circle-question", terminal: "square-terminal", eye: "eye", hand: "hand", file: "file-text",
   // tabs
   home: "house", tasks: "list-checks", inbox: "inbox", architecture: "network", product: "package", glossary: "book-a", edits: "history", analysis: "library-big",
-  // edit kinds (Ajan değişiklikleri)
+  // edit kinds (Agent changes)
   edit: "pencil", record: "list", agent: "bot", skill: "sparkles", mcp: "plug", web: "globe", read: "file-search", other: "dot",
   // actions and states
   audit: "wand-sparkles", scan: "search-check", zoomIn: "zoom-in", zoomOut: "zoom-out", fit: "scan", maximize: "maximize-2", close: "x",

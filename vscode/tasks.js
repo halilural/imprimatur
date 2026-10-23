@@ -28,7 +28,7 @@ function normKey(key) {
 
 /**
  * The key a step's text starts with ("#88: check the board" is about #88). A
- * Jira-style key only before a colon: "UTF-8 dosyası…" names no task. @param {string} [text]
+ * Jira-style key only before a colon: "UTF-8 file…" names no task. @param {string} [text]
  */
 function leadKey(text) {
   const m = /^\s*(?:(#\d+)(?![\w-])|([A-Z][A-Z0-9]{1,9}-\d+)\s*:)/.exec(text ?? "");
@@ -49,7 +49,7 @@ const stepTask = (it, text) => leadKey(text) ?? taskOf(it);
 
 /**
  * Does a message name the task: the key itself, or a Jira key's number alone
- * ("13977 kapatıldı" names LATD-13977)? @param {string} text @param {string} key
+ * ("13977 closed" names LATD-13977)? @param {string} text @param {string} key
  */
 function namesTask(text, key) {
   const esc = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

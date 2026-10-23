@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.67.1",
+  "version": "0.68.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -66,37 +66,37 @@
       },
       {
         "command": "imprimatur.openHome",
-        "title": "Open Home (Ana sayfa)",
+        "title": "Open Home",
         "category": "Imprimatur",
         "icon": "$(home)"
       },
       {
         "command": "imprimatur.openTasks",
-        "title": "Open Tasks (Görevler)",
+        "title": "Open Tasks",
         "category": "Imprimatur",
         "icon": "$(checklist)"
       },
       {
         "command": "imprimatur.openInbox",
-        "title": "Open Waiting on Me (Bende bekleyenler)",
+        "title": "Open Waiting on You",
         "category": "Imprimatur",
         "icon": "$(bell)"
       },
       {
         "command": "imprimatur.openArchitecture",
-        "title": "Open Architecture Document (Mimari)",
+        "title": "Open Architecture Document",
         "category": "Imprimatur",
         "icon": "$(symbol-structure)"
       },
       {
         "command": "imprimatur.openProduct",
-        "title": "Open Product Document (Ürün)",
+        "title": "Open Product Document",
         "category": "Imprimatur",
         "icon": "$(package)"
       },
       {
         "command": "imprimatur.openGlossary",
-        "title": "Open Project Glossary (Sözlük)",
+        "title": "Open Project Glossary",
         "category": "Imprimatur",
         "icon": "$(book)"
       },
@@ -619,14 +619,14 @@
         "imprimatur.docs.export": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Keep the repo's design documents (the panel's **Mimari** and **Ürün** tabs) and their files `ARCHITECTURE.md` and `PRODUCT.md` in step: in `docs/`, or the folder `.claude/imprimatur.json` names (`{\"docs\": {\"dir\": \"docs/design\"}}`). 2 s after a change, the file is written; an edit saved in the file is taken in; a hand-written file is adopted. A section changed on both sides is a conflict: `npm run docs -- sync --take file|db`."
+          "markdownDescription": "Keep the repo's design documents (the panel's **Architecture** and **Product** tabs) and their files `ARCHITECTURE.md` and `PRODUCT.md` in step: in `docs/`, or the folder `.claude/imprimatur.json` names (`{\"docs\": {\"dir\": \"docs/design\"}}`). 2 s after a change, the file is written; an edit saved in the file is taken in; a hand-written file is adopted. A section changed on both sides is a conflict: `npm run docs -- sync --take file|db`."
         },
         "imprimatur.diagramZoomStep": {
           "type": "number",
           "default": 40,
           "minimum": 5,
           "maximum": 200,
-          "markdownDescription": "How much a diagram in the Mimari/Ürün/Sözlük tabs zooms per mouse-wheel notch (Ctrl+wheel, or the wheel in full screen), in percent; the − and + buttons use the same step. Higher: faster. Default 40 (×1.4 per notch)."
+          "markdownDescription": "How much a diagram in the Architecture/Product/Glossary tabs zooms per mouse-wheel notch (Ctrl+wheel, or the wheel in full screen), in percent; the − and + buttons use the same step. Higher: faster. Default 40 (×1.4 per notch)."
         }
       }
     },

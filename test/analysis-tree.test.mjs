@@ -112,10 +112,10 @@ test("#100 the /study note sits under the task's analysis files, with how the la
   assert.match(toc, /<li class="afile astudy"[^>]*>[\s\S]*?Çalışma notu: harita[\s\S]*?data-key="a7-h0"[^>]*>Ne ve neden[\s\S]*?data-key="a7-h1"/);
   const page = html.slice(html.indexOf('<main class="dpage adoc"'));
   assert.ok(page.indexOf('id="sec-a3"') < page.indexOf('id="sec-a7"'), "after the files on the page");
-  assert.match(page, /<article class="dsec astudy" id="sec-a7"[\s\S]*?6\/8 tam[\s\S]*?Zayıf: Neden sürüm id\? · Eski sayı nereden\?/);
-  assert.match(html, /1 dosya · çalışma notu/);
+  assert.match(page, /<article class="dsec astudy" id="sec-a7"[\s\S]*?6\/8 full[\s\S]*?Weak: Neden sürüm id\? · Eski sayı nereden\?/);
+  assert.match(html, /1 file · study note/);
   // Not studied yet: how to.
   const fresh = analysisHubHtml({ ...base, docs: [{ key: "LATD-1", at: 1, task: undefined, files: [], study: { ...study, mastery: undefined } }] });
-  assert.match(fresh, /Henüz kendini sınamadın: Claude Code'da <span class="mono">\/study LATD-1<\/span>/);
-  assert.match(fresh, /0 dosya · çalışma notu/);
+  assert.match(fresh, /You have not quizzed yourself yet: in Claude Code, run <span class="mono">\/study LATD-1<\/span>/);
+  assert.match(fresh, /0 files · study note/);
 });

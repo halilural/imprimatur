@@ -125,7 +125,7 @@ test("ingest: a section per ## under the file's title; same text writes nothing;
   const r1 = a.ingest(db, repo.id, "#5", "docs/todos/5/ANALYSIS.md", DOC, { actor: hook });
   assert.equal(r1.changed, 3);
   const doc = db.taskDocFind(repo.id, "#5");
-  assert.equal(doc.title, "Analiz · #5");
+  assert.equal(doc.title, "Analysis · #5");
   assert.equal(db.docFind(repo.id, "analysis"), undefined);
   let secs = db.docSections(doc.id);
   assert.deepEqual(secs.map((s) => [s.key, s.title, s.source]), [
@@ -391,7 +391,7 @@ test("panel: the task page links its analysis; Analiz → Görev analizleri list
   assert.deepEqual(page.cur.analysis.files.map((f) => [f.source, f.sections.length]), [["docs/todos/5/ANALYSIS.md", 3]]);
   // The task page is todo-first: a link to its analysis, no cards; tabs below what waits.
   const html = tv.tasksHtml(page);
-  assert.match(html, /data-act="anaGo" data-key="#5"[^>]*>[\s\S]*?Analiz · 1 dosya/);
+  assert.match(html, /data-act="anaGo" data-key="#5"[^>]*>[\s\S]*?Analysis · 1 file/);
   assert.doesNotMatch(html, /class="card ana"/);
   // The tabs right under the head; with nothing waiting on the user, Yapılacaklar opens first.
   assert.match(html, new RegExp(`class="ttabs"[^>]*data-task="${t5.id}" data-def="todos"`));
@@ -407,7 +407,7 @@ test("panel: the task page links its analysis; Analiz → Görev analizleri list
   assert.doesNotMatch(tv.tasksHtml(tv.tasksPage(db, root, { sel: t80.id })), /data-act="anaGo"/);
   // The hub: its sub-pages, the task with its cards, the orphans with a task picker.
   const hub = tv.paneHtml(db, root, { tab: "analysis" });
-  assert.match(hub, /data-tab="analysis" aria-current="page">[\s\S]*?Görev analizleri <span class="n">1<\/span>/);
+  assert.match(hub, /data-tab="analysis" aria-current="page">[\s\S]*?Task analyses <span class="n">1<\/span>/);
   assert.match(hub, /data-act="asel" data-key="#5"/);
   // In full, like Mimari: each section a document section, the task's contents on the left.
   assert.match(hub, /<div class="doc ahub"/);
@@ -417,17 +417,17 @@ test("panel: the task page links its analysis; Analiz → Görev analizleri list
   // No file names on the page: only in the "aç" tooltip (and on the orphans, to choose one).
   assert.doesNotMatch(hub, />docs\/todos\/5\/ANALYSIS\.md</);
   // The file is not in this repo's tree (only ingested): no "aç".
-  assert.doesNotMatch(hub, /title="Dosyayı aç: docs\/todos\/5\/ANALYSIS\.md"/);
+  assert.doesNotMatch(hub, /title="Open the file: docs\/todos\/5\/ANALYSIS\.md"/);
   fs.mkdirSync(path.join(root, "docs", "todos", "5"), { recursive: true });
   fs.writeFileSync(path.join(root, "docs", "todos", "5", "ANALYSIS.md"), DOC);
   // There: "aç" names the task's repo (on "Bütün repolar" the panel's repo is another one).
-  assert.match(tv.paneHtml(db, root, { tab: "analysis" }), new RegExp(`data-act="anaOpen" data-file="docs/todos/5/ANALYSIS.md" data-repo="${repo.id}" title="Dosyayı aç: docs/todos/5/ANALYSIS.md"`));
+  assert.match(tv.paneHtml(db, root, { tab: "analysis" }), new RegExp(`data-act="anaOpen" data-file="docs/todos/5/ANALYSIS.md" data-repo="${repo.id}" title="Open the file: docs/todos/5/ANALYSIS.md"`));
   assert.match(hub, /data-key="__orphans"/);
   assert.match(hub, /<select data-change="anaAssign" data-file="loose.md"[\s\S]*?<option value="\d+">#80/);
   tv.applyMessage(db, { type: "anaAssign", file: "loose.md", task: t80.id }, { kind: "user" }, root);
   assert.equal(db.docSections(db.taskDocFind(repo.id, "#80").id)[0].source, "loose.md");
   assert.throws(() => tv.applyMessage(db, { type: "anaAssign", file: "../etc/passwd", task: t80.id }, { kind: "user" }, root), /not an analysis waiting/);
-  assert.match(tv.paneHtml(openDb({ path: tmpDb() }), gitRepo(), { tab: "analysis" }), /henüz görev analizi yok/);
+  assert.match(tv.paneHtml(openDb({ path: tmpDb() }), gitRepo(), { tab: "analysis" }), /No task analyses in this repo yet/);
 });
 
 test("review fixes: long headings alike stay two sections; an older replayed state sets nothing back; one model call per file at a time", () => {

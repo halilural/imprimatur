@@ -8,11 +8,11 @@
 const { CATEGORIES } = require("./best-practice.js");
 const { REASONS } = require("./recs.js");
 
-const STATUSES = [["open", "Open", "Açık", "lightbulb"], ["done", "Applied", "Uygulandı", "pass"], ["dropped", "Dismissed", "Reddedildi", "circle-slash"]];
+const STATUSES = [["open", "Open", "Open", "lightbulb"], ["done", "Applied", "Applied", "pass"], ["dropped", "Dismissed", "Dismissed", "circle-slash"]];
 const SEVERITY = ["high", "medium", "low"];
 const CAT_TR = {
-  security: "Güvenlik", reliability: "Güvenilirlik", maintainability: "Bakım kolaylığı", compatibility: "Uyumluluk", "performance-efficiency": "Performans verimliliği",
-  ssdf: "Geliştirme süreci (SSDF)", flexibility: "Esneklik", "interaction-capability": "Etkileşim yeteneği", "functional-suitability": "İşlevsel uygunluk", safety: "Emniyet",
+  security: "Security", reliability: "Reliability", maintainability: "Maintainability", compatibility: "Compatibility", "performance-efficiency": "Performance efficiency",
+  ssdf: "Development process (SSDF)", flexibility: "Flexibility", "interaction-capability": "Interaction capability", "functional-suitability": "Functional suitability", safety: "Safety",
 };
 
 /**
