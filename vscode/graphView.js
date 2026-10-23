@@ -1658,7 +1658,7 @@ async function auditAll() {
 }
 
 /** The language model-written steps use: the setting, else the hooks' variable (vscode/history.js, audit.js). */
-const modelLang = () => vscode.workspace.getConfiguration("imprimatur").get("language") || require("./config.js").hookLang();
+const modelLang = () => require("./config.js").ownLang(shown) || vscode.workspace.getConfiguration("imprimatur").get("language") || require("./config.js").repoLang(shown);
 
 /** Projects being scanned now (a second click or panel open waits for the first). */
 const scanning = new Set();

@@ -10,7 +10,7 @@
 //   PreToolUse edits    mainGuard       on main, only the allowed paths are edited
 //                       designFirst     on a <type>/<n>-… branch, code before the task has an ADR or PDR
 //   PostToolUse edits   docsToc         docs/**/*.md changed: run the repo's TOC script
-//                       unopenedSources a docs/market-research file with sources marked "açılmadı"
+//                       unopenedSources a docs/market-research file with sources marked "not opened" / "açılmadı"
 //   PostToolUse Bash    issueCreate     after gh issue create: epic, board, milestone, Imprimatur task
 //                       issueFields     …and checks the new issue's milestone and board item
 //   PostToolUse MCP     sweep           a task set done: its GitHub issue still open (not while tracker sync, #70, runs)
@@ -71,6 +71,8 @@ function settingsOf(root) {
   } catch {
     return undefined;
   }
+  // Only the repo's language (#80, config.js repoLang): the checks stay off.
+  if (raw && typeof raw === "object" && Object.keys(raw).length && Object.keys(raw).every((k) => k === "lang")) return undefined;
   const given = raw?.process ?? {};
   /** @type {Record<string, any>} */
   const out = {};
@@ -377,9 +379,13 @@ function check(event, input, deps = {}) {
       }
     } catch {}
   }
+  // The repo's language (#80, .claude/imprimatur.json "lang"): what the agent writes here. Said
+  // with or without process settings: "lang" alone does not turn the checks on.
+  const ownLang = event === "SessionStart" ? require("./config.js").ownLang(root) : undefined;
+  const langLine = ownLang && say("repoLang", `write this repo's records, design documents, code comments and commit messages in ${ownLang}; replies to the user stay in the user's language.`);
   const s = settingsOf(root);
-  if (!s) return {};
-  /** @type {string[]} */ const context = [];
+  if (!s) return langLine ? { context: [langLine] } : {};
+  /** @type {string[]} */ const context = langLine ? [langLine] : [];
   /** @type {string[]} */ const notice = [];
   /** @type {string | undefined} */ let block;
   /** A finding: block, or tell. @param {{mode: any}} c @param {string} name @param {string} text @param {string[]} [to] */
@@ -390,6 +396,7 @@ function check(event, input, deps = {}) {
   const tool = input.tool_name ?? "";
   const ti = input.tool_input ?? {};
   const branch = () => run(["symbolic-ref", "--short", "HEAD"], root);
+
 
   if (event === "SessionStart" && s.whereWeLeftOff.mode) {
     const records = deps.records ?? require("./records.js");
@@ -483,8 +490,8 @@ function check(event, input, deps = {}) {
     }
     if (s.unopenedSources.mode && /^docs\/market-research\//.test(rel)) {
       try {
-        if (/açılmadı/.test(fs.readFileSync(path.join(root, rel), "utf8"))) {
-          found(s.unopenedSources, "unopenedSources", `${path.basename(rel)} has sources marked "açılmadı". Open them now (WebFetch); only an HTTP error is written, as "açılamadı: 403".`);
+        if (/açılmadı|not opened/i.test(fs.readFileSync(path.join(root, rel), "utf8"))) {
+          found(s.unopenedSources, "unopenedSources", `${path.basename(rel)} has sources marked "not opened" ("açılmadı"). Open them now (WebFetch); only an HTTP error is written, as "açılamadı: 403".`);
         }
       } catch {}
     }

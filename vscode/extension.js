@@ -307,7 +307,7 @@ async function runBestPractices() {
   try {
     const categories = pick === all ? Object.keys(best.CATEGORIES) : best.CORE;
     const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur project review" }, (progress) =>
-      best.review(db, rroot, { categories, refreshSources: pick === rebuild, lang: vscode.workspace.getConfiguration("imprimatur").get("language") || best.proseLang(), progress: (message) => progress.report({ message }) }));
+      best.review(db, rroot, { categories, refreshSources: pick === rebuild, lang: require("./config.js").ownLang(rroot) || vscode.workspace.getConfiguration("imprimatur").get("language") || best.proseLang(rroot), progress: (message) => progress.report({ message }) }));
     for (const c of r.categories) log.info(`review ${c.category}: ${c.proposed} proposed, $${c.cost.toFixed(2)}${c.retried ? ", answered again without tools (out of turns)" : ""}${c.error ? `, error ${c.error}` : ""}`);
     for (const d of r.dropped) log.info(`review dropped ${d.category} ${d.key}: ${d.why.join("; ")}`);
     log.info(`review: ${JSON.stringify(r.timings)} ms, ${r.excerpts} excerpts, ${r.kept} kept (${r.merged} merged), $${r.cost.toFixed(2)}`);

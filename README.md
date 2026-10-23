@@ -372,7 +372,10 @@ and so do waiting logs with nothing open. Open asks stay until you do them.
 ### Setup options, or install by hand
 
 `npm run setup` options: `--lang Turkish` (language of the model's
-descriptions and steps; default English), `--dry-run` shows the changes only,
+descriptions and steps; default English; a repo can set its own in
+`.claude/imprimatur.json`, `{"lang": "English"}`, which also tells the agent at
+session start to write that repo's records, documents, comments and commits in
+it), `--dry-run` shows the changes only,
 `--no-extension` skips the extension, `--show-in both` also marks Markdown in
 the editor (VS Code machine settings, `imprimatur.showIn`). It backs up
 `~/.claude/settings.json`, adds the hooks below for every repo (updates ours in

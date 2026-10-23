@@ -192,7 +192,7 @@ function slugify(title) {
     .replace(/^-+|-+$/g, "")
     .slice(0, 48)
     .replace(/-+$/, "");
-  return s || "bolum";
+  return s || "section";
 }
 
 /** The panel's edit state for this kind: a section id, "new", or undefined. @param {unknown} edit @param {string} kind */

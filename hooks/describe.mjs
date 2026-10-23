@@ -11,7 +11,7 @@ export const { DESCRIPTIONS, diffText, promptFor, cleanSentence, editTexts, desc
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [root, file, toolUseId, given] = process.argv.slice(2);
-  const lang = given || require("../vscode/config.js").hookLang() || "English";
+  const lang = given || require("../vscode/config.js").repoLang(root) || "English";
   describe(root, file, toolUseId, lang)
     .catch((e) => process.stderr.write(`imprimatur describe: ${e.message}\n`))
     .finally(() => process.exit(0));

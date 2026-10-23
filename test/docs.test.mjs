@@ -262,7 +262,7 @@ test("panel editing: the editor with draft keys, save and new section as the use
 test("slugify folds Turkish letters and punctuation", () => {
   assert.equal(docs.slugify("Veri Modeli & Eşitleme (sync)"), "veri-modeli-esitleme-sync");
   assert.equal(docs.slugify("İçe aktarma: ÖĞÜŞÇ"), "ice-aktarma-ogusc");
-  assert.equal(docs.slugify("!!!"), "bolum");
+  assert.equal(docs.slugify("!!!"), "section");
 });
 
 // ---- Markdown export ----
