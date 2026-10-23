@@ -39,16 +39,18 @@ function seed() {
   return { db, file: path.join(dir, "imprimatur.db"), root, repo, epic, t1, t2, t3, done1, next, agentTodo, q, adr, dec, test1, other, o1, oq };
 }
 
-test("#69 quick-add: ? question (yours), ! decision, # note, @ben your todo, else the agent's todo", () => {
+test("#69 quick-add: ? question (yours), ! decision, # note, @me (or @ben) your todo, else the agent's todo", () => {
   assert.deepEqual(tv.parseQuickAdd("? Now or later"), { kind: "question", title: "Now or later", owner: "K" });
   assert.deepEqual(tv.parseQuickAdd("!Ship it"), { kind: "decision", title: "Ship it" });
   assert.deepEqual(tv.parseQuickAdd("# a note"), { kind: "note", title: "a note" });
   assert.deepEqual(tv.parseQuickAdd("@ben test on the other machine"), { kind: "todo", title: "test on the other machine", owner: "K" });
+  assert.deepEqual(tv.parseQuickAdd("@me test on the other machine"), { kind: "todo", title: "test on the other machine", owner: "K" });
   assert.deepEqual(tv.parseQuickAdd("  write the README  "), { kind: "todo", title: "write the README", owner: "C" });
   assert.deepEqual(tv.parseQuickAdd("#67 follow-up"), { kind: "todo", title: "#67 follow-up", owner: "C" }, "a task key is not a note");
   assert.equal(tv.parseQuickAdd(""), undefined);
   assert.equal(tv.parseQuickAdd("?   "), undefined);
   assert.equal(tv.parseQuickAdd("@ben"), undefined);
+  assert.equal(tv.parseQuickAdd("@me"), undefined);
 });
 
 test("#69 Görevler: the list by status with counts, the selected task's page", () => {
@@ -71,11 +73,11 @@ test("#69 Görevler: the list by status with counts, the selected task's page", 
   assert.deepEqual(page.todos.map((r) => r.title), ["Switch this machine", "README section"], "done todos hidden");
   assert.equal(page.hiddenDone, 1);
   assert.equal(page.openTodos, 2);
-  assert.deepEqual(page.decisions.map((d) => [d.kind, d.who]), [["adr", "ajan"], ["decision", "sen"]]);
+  assert.deepEqual(page.decisions.map((d) => [d.kind, d.who]), [["adr", "agent"], ["decision", "you"]]);
   assert.deepEqual(page.tests.map((t) => t.title), ["MT-PL-001 validate passes"]);
   assert.ok(page.activity.length <= 5);
   assert.ok(page.older > 0, "older events behind a button");
-  assert.match(page.activity[0].what, /ekledi|taşıdı/);
+  assert.match(page.activity[0].what, /added|moved/);
 
   const all = tv.tasksPage(s.db, s.root, { sel: s.t1.id, showDone: [s.t1.id], old: [s.t1.id] }).cur;
   assert.deepEqual(all.todos.map((r) => r.title), ["plugin.json", "Switch this machine", "README section"]);
@@ -145,18 +147,18 @@ test("turn-end asks are cards under their task; the button ticks the step; ticke
   assert.deepEqual(turn.map((/** @type {any} */ r) => [r.title, r.done]), [["Deploy et", false], ["Logu sil", true]], "open and yours today; not audit's or replaced");
   assert.equal(m.groups.find((g) => !g.task).items[0].kind, "test", "a verify ask is a test; no task: Görevsiz");
   const html = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting, placeOf, now });
-  assert.match(html, /<button class="primary" data-act="turn" data-on="1" data-session="s9" data-item="2026-01-01T10:00:00Z" data-i="0">Yaptım<\/button>/);
-  assert.match(html, /data-act="turn" data-on="0" data-session="s9" data-item="2026-01-01T10:00:00Z" data-i="2">geri al/);
-  assert.ok(html.includes("tur sonu") && html.includes("prod bekliyor") && html.includes("Tam mesaj"));
+  assert.match(html, /<button class="primary" data-act="turn" data-on="1" data-session="s9" data-item="2026-01-01T10:00:00Z" data-i="0">Done it<\/button>/);
+  assert.match(html, /data-act="turn" data-on="0" data-session="s9" data-item="2026-01-01T10:00:00Z" data-i="2">undo/);
+  assert.ok(html.includes("end of turn") && html.includes("prod bekliyor") && html.includes("Full message"));
   // With no Bende bekleyenler tab: the open ones on their task's page, the ones with no task on Ana sayfa.
   const page = tv.paneHtml(s.db, s.root, { tab: "tasks", sel: g1.task.id }, { waiting, placeOf, now });
-  assert.match(page, /data-act="turn" data-on="1" data-session="s9" data-item="2026-01-01T10:00:00Z" data-i="0">Yaptım/);
+  assert.match(page, /data-act="turn" data-on="1" data-session="s9" data-item="2026-01-01T10:00:00Z" data-i="0">Done it/);
   assert.ok(!page.includes('data-i="2"'), "done ones stay off the task page");
   const home = tv.paneHtml(s.db, s.root, { tab: "home" }, { waiting, placeOf, now });
-  assert.match(home, /Görevsiz bekleyenler[\s\S]*?Gözle bak/);
+  assert.match(home, /Waiting on you, no task[\s\S]*?Gözle bak/);
   assert.ok(!home.includes("Deploy et"), "one with a task is on its page, not on Ana sayfa");
   assert.equal(tv.cleanView({ tab: "inbox" }).tab, "home", "a view saved on the old tab opens Ana sayfa");
-  assert.ok(html.includes("<span>Görevsiz</span>"));
+  assert.ok(html.includes("<span>No task</span>"));
   assert.ok(!html.includes("Audit kapattı") && !html.includes("Eski soru"));
 });
 
@@ -238,18 +240,18 @@ test("#69 the tabs' HTML: Turkish labels, escaped text, keyed blocks, no emoji i
   const s = seed();
   s.db.addRecord(s.t1.id, { kind: "note", title: "<script>alert(1)</script>" }, AGENT);
   const tasks = tv.paneHtml(s.db, s.root, { tab: "tasks", sel: s.t1.id }, { linkOf: () => "https://github.com/o/r/issues/1" });
-  for (const text of ["Aktif · 2", "Nerede kaldık", "Senden beklenen", "Yapılacaklar", "Bitenleri göster (1)", "Kararlar ve tasarım", "Elle testler", "Etkinlik", "Ajan değişikliklerinde göster", "GitHub'da aç", "sıradaki", "Cevapla"])
+  for (const text of ["Active · 2", "Where we left off", "Waiting on you", "To-dos", "Show done (1)", "Decisions and design", "Manual tests", "Activity", "Show in Agent changes", "Open on GitHub", "next", "Answer"])
     assert.ok(tasks.includes(text), text);
   assert.ok(!tasks.includes("<script>alert"), "titles are escaped");
   assert.match(tasks, /data-draft="ans-\d+"/);
   assert.match(tasks, /data-draft="add-\d+"/);
   const inbox = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting: [] });
-  for (const text of ["Bende bekleyenler", "Cevap bekliyor", "Senin işin", "Elle test", "Bugün bitirdin", "Bu repo", "Bütün repolar", "Yaptım", "Geçti"])
+  for (const text of ["Waiting on you", "Needs an answer", "Your to-do", "Manual test", "Done today", "This repo", "All repos", "Done it", "Passed"])
     assert.ok(inbox.includes(text), text);
   const home = tv.paneHtml(s.db, s.root, { tab: "home" });
-  for (const text of ["1 / 4 görev bitti", "Nerede kaldık", "Senden beklenen", "Son değişiklik"]) assert.ok(home.includes(text), text);
+  for (const text of ["1 / 4 tasks done", "Where we left off", "Waiting on you", "Last change"]) assert.ok(home.includes(text), text);
   // No Bende bekleyenler tab to link to: the count only.
-  assert.match(home, /<span>Senden beklenen<\/span><span class="dim">3<\/span>/);
+  assert.match(home, /<span>Waiting on you<\/span><span class="dim">3<\/span>/);
   assert.ok(!home.includes('data-tab="inbox"'));
   assert.equal(tv.paneHtml(s.db, s.root, { tab: "edits" }), "");
   for (const page of [tasks, inbox, home]) assert.doesNotMatch(page, /\p{Extended_Pictographic}/u, "SVG icons, no emoji");
@@ -305,7 +307,7 @@ test("steps in a record body: checkboxes with their line, a tick rewrites that l
   let inbox = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting: [] });
   assert.match(inbox, /<input type="checkbox" class="mdstep" data-line="2" aria-label="Step">Pod/);
   assert.match(inbox, /data-line="3" checked/);
-  assert.ok(inbox.includes("1/3 adım"));
+  assert.ok(inbox.includes("1/3 steps"));
   assert.ok(!docs.renderMarkdown(body).includes('data-line="2" aria'), "documents: boxes only show");
 
   tv.applyMessage(s.db, { type: "recStep", id: r.id, line: 2, done: true }, USER);
@@ -314,5 +316,5 @@ test("steps in a record body: checkboxes with their line, a tick rewrites that l
   tv.applyMessage(s.db, { type: "recStep", id: r.id, line: 3, done: false }, USER);
   assert.ok(s.db.record(r.id).body.includes("- [ ] Logu aç"));
   inbox = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting: [] });
-  assert.ok(inbox.includes("1/3 adım"));
+  assert.ok(inbox.includes("1/3 steps"));
 });

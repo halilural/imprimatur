@@ -17,30 +17,30 @@
 
 const LEVEL_ORDER = ["error", "warning", "info"];
 const LEVEL_ICON = { error: ["error", "problemsErrorIcon.foreground"], warning: ["warning", "problemsWarningIcon.foreground"], info: ["info", "problemsInfoIcon.foreground"] };
-/** [key, English, Turkish, icon] */
-const STATUSES = [["open", "Open", "Açık", "lightbulb"], ["done", "Applied", "Uygulandı", "pass"], ["dropped", "Dismissed", "Reddedildi", "circle-slash"]];
+/** [key, label, the same label (second slot of the old two-language tables), icon] */
+const STATUSES = [["open", "Open", "Open", "lightbulb"], ["done", "Applied", "Applied", "pass"], ["dropped", "Dismissed", "Dismissed", "circle-slash"]];
 const SOURCES = [
-  ["project", "Project", "Proje", "repo"],
-  ["user", "Your setup", "Senin ayarların", "account"],
-  ["synced", "Synced skills (claude.ai)", "Eşitlenen skill'ler (claude.ai)", "cloud"],
-  ["plugin", "Plugins", "Plugin'ler", "extensions"],
-  ["worktree", "Worktrees", "Worktree'ler", "git-branch"],
+  ["project", "Project", "Project", "repo"],
+  ["user", "Your setup", "Your setup", "account"],
+  ["synced", "Synced skills (claude.ai)", "Synced skills (claude.ai)", "cloud"],
+  ["plugin", "Plugins", "Plugins", "extensions"],
+  ["worktree", "Worktrees", "Worktrees", "git-branch"],
 ];
-/** Why Claude Code does not load a file (#78): [English, Turkish]. */
+/** Why Claude Code does not load a file (#78): [label, the same label]. */
 const IDLE_LABELS = {
-  catalog: ["Marketplace catalog", "Marketplace kataloğu"],
-  temp: ["Leftover temp clone", "Artık geçici kopya"],
-  "not-installed": ["Plugin version not installed", "Kurulu olmayan plugin sürümü"],
-  disabled: ["Plugin turned off", "Kapalı plugin"],
-  "other-tool": ["For another tool, not a plugin part", "Başka araç için, plugin parçası değil"],
-  worktree: ["Worktree copy", "Worktree kopyası"],
+  catalog: ["Marketplace catalog", "Marketplace catalog"],
+  temp: ["Leftover temp clone", "Leftover temp clone"],
+  "not-installed": ["Plugin version not installed", "Plugin version not installed"],
+  disabled: ["Plugin turned off", "Plugin turned off"],
+  "other-tool": ["For another tool, not a plugin part", "For another tool, not a plugin part"],
+  worktree: ["Worktree copy", "Worktree copy"],
 };
 const REASON_LABELS = {
-  plugin: ["Third-party plugin", "Üçüncü taraf plugin", "extensions"],
-  synced: ["Synced skill (claude.ai)", "Eşitlenen skill (claude.ai)", "cloud"],
-  false: ["False alarm", "Yanlış alarm", "close"],
-  local: ["Specific to this machine", "Bu makineye özel", "device-desktop"],
-  other: ["Other", "Diğer", "question"],
+  plugin: ["Third-party plugin", "Third-party plugin", "extensions"],
+  synced: ["Synced skill (claude.ai)", "Synced skill (claude.ai)", "cloud"],
+  false: ["False alarm", "False alarm", "close"],
+  local: ["Specific to this machine", "Specific to this machine", "device-desktop"],
+  other: ["Other", "Other", "question"],
 };
 
 /** "2 errors · 14 warnings". @param {AuditRecord[] | Record<string, number>} recs */
@@ -100,7 +100,7 @@ function groupBy(recs, keyOf, make, order) {
 
 /**
  * Source → (plugin / worktree name) → category → rule → findings.
- * @param {AuditRecord[]} recs @param {number} lang 1 English, 2 Turkish
+ * @param {AuditRecord[]} recs @param {number} lang 1 or 2 (both the same English labels now)
  * @returns {Group[]}
  */
 function bySource(recs, lang) {
@@ -140,7 +140,7 @@ function auditGroups(records, { lang = "en" } = {}) {
       if (on.length) out.push({ key: "st:open", label: L === 2 ? tr : en, icon, count: on.length, levels: countLevels(on), children: bySource(on, L) });
       if (off.length) {
         out.push({
-          key: "st:idle", label: L === 2 ? "Yüklenmiyor" : "Not loaded", icon: "eye-closed", count: off.length, levels: countLevels(off),
+          key: "st:idle", label: "Not loaded", icon: "eye-closed", count: off.length, levels: countLevels(off),
           children: groupBy(off, (r) => r.links.audit.why ?? "other-tool", (why, xs) => {
             const lab = IDLE_LABELS[/** @type {keyof typeof IDLE_LABELS} */ (why)] ?? [why, why];
             return { key: `idle:${why}`, label: lab[L - 1], icon: "eye-closed", children: bySource(xs, L) };

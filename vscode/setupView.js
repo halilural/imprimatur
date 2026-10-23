@@ -464,9 +464,9 @@ async function setFinding(provider, node, status) {
  */
 async function recommendationsMenu(provider) {
   const pick = await vscode.window.showQuickPick([
-    { label: "$(hubot) Ajan kurulumunu denetle", description: "agnix · hızlı, ücretsiz", id: "audit" },
-    { label: "$(repo) Projeyi incele", description: "Claude · ISO 25010 + NIST SSDF · 1–2 dk", id: "review" },
-    { label: "$(checklist) İkisi birden", id: "both" },
+    { label: "$(hubot) Audit the agent setup", description: "agnix · fast, free", id: "audit" },
+    { label: "$(repo) Review the project", description: "Claude · ISO 25010 + NIST SSDF · 1–2 min", id: "review" },
+    { label: "$(checklist) Both", id: "both" },
   ], { title: "Recommendations" });
   if (!pick) return;
   if (pick.id !== "review") await runAudit(provider);

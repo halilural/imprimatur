@@ -98,7 +98,7 @@ test("a task's analysis is unread on that task; a superseded section is not", ()
   db.close();
 });
 
-test("the panel: unread by task on the list, the task page and Ana sayfa; Mark as read marks it read", () => {
+test("the panel: unread by task on the list, the task page and Home; Mark as read marks it read", () => {
   const { db, repo, task, adr, doc } = seeded();
   db.upsertSection(doc.id, "reads", { title: "Reads", body: "one", records: [adr.id] }, agent);
   const openEdits = new Map([["#92", 2], ["", 1]]);
@@ -106,20 +106,20 @@ test("the panel: unread by task on the list, the task page and Ana sayfa; Mark a
   assert.equal(page.groups[0].tasks.find((t) => t.key === "#92").unread, 3);
   assert.equal(page.groups[0].tasks.find((t) => t.key === "#7")?.unread ?? 0, 0);
   assert.equal(page.cur.unread.edits, 2);
-  assert.deepEqual(page.cur.unread.sections.map((s) => [s.tab, s.key, s.label]), [["architecture", "reads", "Mimari"]]);
+  assert.deepEqual(page.cur.unread.sections.map((s) => [s.tab, s.key, s.label]), [["architecture", "reads", "Architecture"]]);
   const html = tv.tasksHtml(page);
-  assert.match(html, /3 okunmadı/);
-  assert.match(html, /Okumadıkların · 3/);
-  assert.match(html, /2 düzenleme kabul edilmedi/);
+  assert.match(html, /3 unread/);
+  assert.match(html, /Unread · 3/);
+  assert.match(html, /2 edits not accepted/);
   const home = tv.homeModel(db, "/a/proj", { openEdits });
   assert.deepEqual([home.unread.edits, home.unread.sections.length], [3, 1]);
-  assert.match(tv.homeHtml(home), /Okumadıkların · 4/);
+  assert.match(tv.homeHtml(home), /Unread · 4/);
   const m = docs.docModel(db, "/a/proj", "architecture");
   assert.ok(m.current.find((s) => s.key === "reads").unread);
   assert.match(docs.docHtml(m), /Unread/);
   tv.applyMessage(db, { type: "read", ids: [m.unread[0]] }, user, "/a/proj");
   assert.deepEqual(db.unreadSections(repo.id), []);
-  assert.doesNotMatch(tv.tasksHtml(tv.tasksPage(db, "/a/proj", { sel: task.id }, {})), /Okumadıkların/);
+  assert.doesNotMatch(tv.tasksHtml(tv.tasksPage(db, "/a/proj", { sel: task.id }, {})), /Unread/);
   assert.throws(() => tv.applyMessage(db, { type: "read", ids: [] }, user, "/a/proj"), /bad section ids/);
   db.close();
 });
