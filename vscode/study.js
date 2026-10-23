@@ -73,8 +73,8 @@ function filesOf(commits) {
   return [...by.values()].sort((a, b) => b.added + b.removed - (a.added + a.removed)).slice(0, MAX_FILES);
 }
 
-/** Question types of the skill; another is "other". */
-const TYPES = ["anlama", "neden", "alternatif", "kodda-nerede", "debug", "ya-şöyle-olsaydı", "itiraz"];
+/** Question types of the skill; another is "other". The Turkish ones are kept: older mastery records hold them. */
+const TYPES = ["understand", "why", "alternative", "where-in-code", "debug", "what-if", "objection", "anlama", "neden", "alternatif", "kodda-nerede", "ya-şöyle-olsaydı", "itiraz"];
 /** Free text from a record's links, one line and short: it is data, not a heading. @param {unknown} s */
 const line = (s) => {
   const t = String(s ?? "").replace(/\s+/g, " ").trim();

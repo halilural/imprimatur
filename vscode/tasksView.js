@@ -1,6 +1,6 @@
 // @ts-check
-// Tasks in the Agent Change Graph panel (#69): the "Ana sayfa", "Görevler" and
-// "Bende bekleyenler" tabs (the "Mimari" and "Ürün" document tabs: docsView.js, #72). Pure: every builder takes a database connection
+// Tasks in the Agent Change Graph panel (#69): the "Home", "Tasks" and
+// "Waiting on you" tabs (the "Architecture" and "Product" document tabs: docsView.js, #72). Pure: every builder takes a database connection
 // (vscode/db.js) and returns a model or HTML, so the unit tests run them without
 // VS Code. The panel (graphView.js) renders only the visible tab's HTML, sends
 // the user's clicks back here (applyMessage) and redraws on the database's change.
@@ -12,20 +12,20 @@ const os = require("node:os");
 const userActor = () => ({ kind: /** @type {"user"} */ ("user"), id: os.userInfo().username });
 
 const TABS = ["home", "tasks", "inbox", "architecture", "product", "glossary", "analysis", "edits"];
-/** The Analiz tab's pages (TASK-ANALYSIS): the design documents, the glossary and the tasks' analyses. */
-const ANALYSIS_TABS = [["architecture", "Mimari"], ["product", "Ürün"], ["glossary", "Sözlük"], ["analysis", "Görev analizleri"]];
+/** The Analysis tab's pages (TASK-ANALYSIS): the design documents, the glossary and the tasks' analyses. */
+const ANALYSIS_TABS = [["architecture", "Architecture"], ["product", "Product"], ["glossary", "Glossary"], ["analysis", "Task analyses"]];
 const FILTERS = ["active", "open", "done"];
 const TASK_STATUSES = ["open", "active", "done", "dropped"];
 /** The tasks that hold recommendations (#87: RECS; AUDIT and BEST before it). */
 const RECS_KEYS = ["RECS", "AUDIT", "BEST"];
-const STATUS_TR = { active: "Sürüyor", open: "Açık", done: "Bitti", dropped: "Bırakıldı" };
+const STATUS_TR = { active: "In progress", open: "Open", done: "Done", dropped: "Dropped" };
 /** Tasks the importer opens to hold records (#59), not work (#75); db.whereWeLeftOff leaves them out too. */
 const CONTAINERS = ["ADR", "PDR", "TEST", "AUDIT", "BEST", "RECS"];
-const KIND_TR = { todo: "yapılacak", question: "soru", answer: "cevap", decision: "karar", note: "not", fixme: "hata", adr: "ADR", pdr: "PDR", test: "test" };
-const WHO_TR = { user: "Sen", agent: "Ajan", hook: "Hook", import: "İçe aktarma" };
+const KIND_TR = { todo: "to-do", question: "question", answer: "answer", decision: "decision", note: "note", fixme: "fixme", adr: "ADR", pdr: "PDR", test: "test" };
+const WHO_TR = { user: "You", agent: "Agent", hook: "Hook", import: "Import" };
 /** The analysis section /study keeps its note in (study.js NOTE_KEY). */
 const STUDY_KEY = "study";
-const DOC_LABEL_TR = { architecture: "Mimari", product: "Ürün", glossary: "Sözlük" };
+const DOC_LABEL_TR = { architecture: "Architecture", product: "Product", glossary: "Glossary" };
 const TODO_KINDS = ["todo", "fixme"];
 const DESIGN_KINDS = ["decision", "adr", "pdr"];
 /** The task list's filter a status falls under. @param {string} s */
@@ -40,7 +40,7 @@ const icon = (name, size = 16) => `<svg class="ic" width="${size}" height="${siz
 
 /**
  * The quick-add box: "? text" a question to the user, "! text" a decision,
- * "# text" a note, "@ben text" a todo of the user's; anything else a todo of
+ * "# text" a note, "@me text" (or the Turkish "@ben") a todo of the user's; anything else a todo of
  * the agent's. "#67 …" (a task key) stays a todo.
  * @param {string} text @returns {{kind: string, title: string, owner?: string} | undefined}
  */
@@ -56,7 +56,7 @@ function parseQuickAdd(text) {
   if (t[0] === "?") return mk("question", t.slice(1), "K");
   if (t[0] === "!") return mk("decision", t.slice(1));
   if (t[0] === "#" && !/^#\d/.test(t)) return mk("note", t.slice(1));
-  const me = /^@ben\b\s*/i.exec(t);
+  const me = /^@(?:me|ben)\b\s*/i.exec(t);
   if (me) return mk("todo", t.slice(me[0].length), "K");
   return mk("todo", t, "C");
 }
@@ -110,17 +110,17 @@ function scopeRepos(db, root, all) {
 }
 
 const DAY = 86_400_000;
-/** "9 Eki 22:40" @param {number} ms */
-const when = (ms) => new Date(ms).toLocaleString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-/** "9 Eki" @param {number} ms */
-const day = (ms) => new Date(ms).toLocaleDateString("tr-TR", { day: "numeric", month: "short" });
-/** "bugün", "dün", "3 gün" @param {number} ms @param {number} now */
+/** "9 Oct, 22:40" @param {number} ms */
+const when = (ms) => new Date(ms).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+/** "9 Oct" @param {number} ms */
+const day = (ms) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+/** "today", "yesterday", "3 days" @param {number} ms @param {number} now */
 function age(ms, now) {
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
-  if (ms >= start.getTime()) return "bugün";
-  if (ms >= start.getTime() - DAY) return "dün";
-  return `${Math.ceil((start.getTime() - ms) / DAY)} gün`;
+  if (ms >= start.getTime()) return "today";
+  if (ms >= start.getTime() - DAY) return "yesterday";
+  return `${Math.ceil((start.getTime() - ms) / DAY)} days`;
 }
 /** Midnight today. @param {number} now */
 const today = (now) => {
@@ -170,8 +170,8 @@ function readSummaries(db, repo) {
   });
 }
 
-/** "2 açık yapılacak", "hepsi bitti", "plan yok". @param {{openTodos: number, todos: number}} t */
-const todoLine = (t) => (!t.todos ? "plan yok" : t.openTodos ? `${t.openTodos} açık yapılacak` : "hepsi bitti");
+/** "2 open to-dos", "all done", "no plan". @param {{openTodos: number, todos: number}} t */
+const todoLine = (t) => (!t.todos ? "no plan" : t.openTodos ? `${t.openTodos} open to-do${t.openTodos === 1 ? "" : "s"}` : "all done");
 
 /**
  * What the user has not read yet (#92), by task key: the agent's edits not accepted
@@ -202,7 +202,7 @@ function unreadOf(db, repo, openEdits = new Map()) {
 const unreadCount = (u) => (u ? u.edits + u.sections.length : 0);
 
 /** A section where the panel shows it: its document tab ("analysis": the task's, by its key). @param {any} s */
-const sectionPlace = (s) => ({ id: s.id, key: s.key, title: s.title, tab: s.kind, scope: s.scope, label: s.kind === "analysis" ? "Analiz" : DOC_LABEL_TR[s.kind] ?? s.kind });
+const sectionPlace = (s) => ({ id: s.id, key: s.key, title: s.title, tab: s.kind, scope: s.scope, label: s.kind === "analysis" ? "Analysis" : DOC_LABEL_TR[s.kind] ?? s.kind });
 
 /**
  * What one version of a record did, in words.
@@ -212,15 +212,15 @@ const sectionPlace = (s) => ({ id: s.id, key: s.key, title: s.title, tab: s.kind
 function describeVersion(v) {
   const k = KIND_TR[/** @type {keyof typeof KIND_TR} */ (v.kind)] ?? v.kind;
   const a = v.after ?? {};
-  if (v.op === "create") return `${k} ekledi: ${v.title}`;
-  if (a.status === "done") return `${v.kind === "question" ? "cevapladı" : "bitirdi"}: ${v.title}`;
-  if (a.status === "open") return `yeniden açtı: ${v.title}`;
-  if (a.status === "dropped") return `bıraktı: ${v.title}`;
-  if (a.pointer === true) return `sıradakini buraya taşıdı: ${v.title}`;
+  if (v.op === "create") return `added ${k}: ${v.title}`;
+  if (a.status === "done") return `${v.kind === "question" ? "answered" : "finished"}: ${v.title}`;
+  if (a.status === "open") return `reopened: ${v.title}`;
+  if (a.status === "dropped") return `dropped: ${v.title}`;
+  if (a.pointer === true) return `moved where we left off here: ${v.title}`;
   if (a.pointer === false && Object.keys(a).length === 1) return undefined;
-  if (typeof a.task === "string") return `${a.task} görevine taşıdı: ${v.title}`;
-  if ("title" in a) return `başlığı değiştirdi: ${v.title}`;
-  return `güncelledi: ${v.title}`;
+  if (typeof a.task === "string") return `moved to ${a.task}: ${v.title}`;
+  if ("title" in a) return `renamed: ${v.title}`;
+  return `updated: ${v.title}`;
 }
 
 /**
@@ -259,7 +259,7 @@ function taskPage(db, task, view, opts) {
     url: repo && opts.linkOf ? opts.linkOf(repo.root, task.key) : undefined,
     epic: epic ? { id: epic.id, key: epic.key, title: epic.title, status: epic.status } : undefined,
     pointer: pointer && { id: pointer.id, title: pointer.title, owner: pointer.owner, kind: pointer.kind, at: pointer.updated_at },
-    // Its records that wait on the user, then the turn-end asks placed on it (there is no Bende bekleyenler tab).
+    // Its records that wait on the user, then the turn-end asks placed on it (there is no Waiting on you tab).
     asks: [...live.filter(isAsk).map((/** @type {any} */ r) => ({ ...r, age: age(r.created_at, now) })), ...(opts.turns?.get(task.id) ?? [])],
     todos: todoAll.filter((/** @type {any} */ r) => showDone || r.status === "open" || r.pointer),
     openTodos: todoAll.filter((/** @type {any} */ r) => r.status === "open").length,
@@ -267,7 +267,7 @@ function taskPage(db, task, view, opts) {
     showDone: !!showDone,
     decisions: live.filter((/** @type {any} */ r) => DESIGN_KINDS.includes(r.kind)).map((/** @type {any} */ r) => {
       const c = creators.get(r.id);
-      return { ...r, date: day(r.created_at), who: c ? (c === "user" ? "sen" : c === "agent" ? "ajan" : c) : "" };
+      return { ...r, date: day(r.created_at), who: c ? (c === "user" ? "you" : c === "agent" ? "agent" : c) : "" };
     }),
     tests: recs.filter((/** @type {any} */ r) => r.kind === "test"),
     analysis: repo ? analysisOf(db, repo.id, task.key) : undefined,
@@ -318,7 +318,7 @@ function analysisOf(db, repoId, key) {
   }
   const orphans = Object.entries(require("./analysis.js").orphans(db, repoId)).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([source, at]) => ({ source, at }));
   // Only files read on this machine open from here; one synced from another has its text only.
-  // "aç" only for a file read on this machine and still there; one synced or deleted has its text only.
+  // "open" only for a file read on this machine and still there; one synced or deleted has its text only.
   const local = new Set(doc ? db.docSourceFiles(doc.id).map((/** @type {any} */ x) => x.path) : []);
   const root = db.repos().find((/** @type {any} */ r) => r.id === repoId)?.root;
   const there = (/** @type {string} */ src) => {
@@ -338,7 +338,7 @@ function analysisOf(db, repoId, key) {
 }
 
 /**
- * The Görevler tab: the filtered task list (this repo, or every repo) and the selected task's page.
+ * The Tasks tab: the filtered task list (this repo, or every repo) and the selected task's page.
  * @param {any} db @param {string} root
  * @param {{sel?: number | null, filter?: string, all?: boolean, showDone?: number[], old?: number[], flash?: number | null}} [view]
  * @param {{linkOf?: (root: string, key: string) => string | undefined, now?: number, home?: string, openEdits?: Map<string, number>, waiting?: any[], placeOf?: (w: any) => any}} [opts]
@@ -377,9 +377,9 @@ function tasksPage(db, root, view = {}, opts = {}) {
 }
 
 /**
- * The Bende bekleyenler tab: the user's open records grouped by task, with
+ * The Waiting on you tab: the user's open records grouped by task, with
  * buckets (answer, do, test by eye, done today). Turn-end asks (waiting.js
- * steps) are cards too, under the task placeOf finds for them (else "Görevsiz").
+ * steps) are cards too, under the task placeOf finds for them (else "No task").
  * @param {any} db @param {string} root
  * @param {{all?: boolean, waiting?: any[], now?: number, placeOf?: (step: any) => {task?: string}}} [o]
  */
@@ -393,10 +393,10 @@ function inboxModel(db, root, { all = false, waiting = [], now = Date.now(), pla
   const turn = openTurn(waiting);
   const n = (/** @type {string} */ k) => open.filter((r) => r.kind === k).length;
   const buckets = [
-    { id: "question", n: n("question") + turn.filter((w) => w.kind === "question").length, label: "Cevap bekliyor", hint: "ajan bir karar için duruyor" },
-    { id: "todo", n: n("todo") + turn.filter((w) => w.kind === "command" || w.kind === "input").length, label: "Senin işin", hint: "senin yapman gereken adımlar" },
-    { id: "test", n: n("test") + turn.filter((w) => w.kind === "verify").length, label: "Elle test", hint: "gözle bakılacaklar" },
-    { id: "done", n: done.length, label: "Bugün bitirdin", hint: "ajan görecek" },
+    { id: "question", n: n("question") + turn.filter((w) => w.kind === "question").length, label: "Needs an answer", hint: "the agent is stopped on a decision" },
+    { id: "todo", n: n("todo") + turn.filter((w) => w.kind === "command" || w.kind === "input").length, label: "Your to-do", hint: "steps for you to do" },
+    { id: "test", n: n("test") + turn.filter((w) => w.kind === "verify").length, label: "Manual test", hint: "things to check by eye" },
+    { id: "done", n: done.length, label: "Done today", hint: "the agent will see it" },
   ];
   // Turn-end asks: the open ones, and the ones you ticked today (like the records you finished).
   const here = repoOfRoot(db, root);
@@ -438,7 +438,7 @@ const openTurn = (waiting) => waiting.filter((w) => w.session !== "todo-files" &
 
 /**
  * How many things wait on the user: the one count the launcher's badge, the status
- * bar, the panel's tab badge and Bende bekleyenler show. Records of this root's repo
+ * bar, the panel's tab badge and Waiting on you show. Records of this root's repo
  * (or every repo), and open turn-end asks; without a database, the asks alone.
  * @param {any} db @param {string} root @param {any[]} [waiting] @param {{all?: boolean}} [o]
  */
@@ -448,7 +448,7 @@ function inboxCount(db, root, waiting = [], { all = false } = {}) {
 }
 
 /**
- * The Ana sayfa tab: progress of the repo's tasks, where each was left, the top asks, the task table.
+ * The Home tab: progress of the repo's tasks, where each was left, the top asks, the task table.
  * @param {any} db @param {string} root @param {{now?: number}} [o]
  */
 /**
@@ -490,7 +490,7 @@ function homeModel(db, root, { now = Date.now(), waiting, placeOf, openEdits } =
     pointers: left.slice(0, 6).map((/** @type {any} */ t) => ({ id: byId.get(t.key)?.id, key: t.key, task: t.title, next: t.pointer_title, record: t.pointer_id, mine: t.pointer_owner === "K", status: t.status })),
     asks: asks.slice(0, 5).map((r) => ({ id: r.id, task: r.task_id, kind: r.kind, title: r.title, key: r.task_key, status: byId.get(r.task_key)?.status })),
     askCount: asks.length,
-    // Turn-end asks no task was found for: only here, now that there is no Bende bekleyenler tab.
+    // Turn-end asks no task was found for: only here, now that there is no Waiting on you tab.
     loose: turnAsks(db, root, { now, waiting, placeOf }).get(0) ?? [],
     // Not read yet (#92): the repo's edits not accepted and its changed sections.
     unread: { edits: unread.edits, sections: unread.sections.map(sectionPlace) },
@@ -503,7 +503,7 @@ function homeModel(db, root, { now = Date.now(), waiting, placeOf, openEdits } =
 
 /** @param {string} status */
 const statusChip = (status) => `<span class="st st-${esc(status)}">${esc(STATUS_TR[/** @type {keyof typeof STATUS_TR} */ (status)] ?? status)}</span>`;
-const KIND_LABEL = { question: "Soru", todo: "Senin işin", test: "Elle test", decision: "Karar", adr: "ADR", pdr: "PDR", note: "Not", fixme: "Hata", answer: "Cevap" };
+const KIND_LABEL = { question: "Question", todo: "Your to-do", test: "Manual test", decision: "Decision", adr: "ADR", pdr: "PDR", note: "Note", fixme: "Fixme", answer: "Answer" };
 /** @param {string} kind @param {string} [label] */
 const kindChip = (kind, label) => `<span class="kchip k-${esc(kind)}">${esc(label ?? KIND_LABEL[/** @type {keyof typeof KIND_LABEL} */ (kind)] ?? kind)}</span>`;
 /** @param {number} id @param {string} status @param {string} key */
@@ -515,10 +515,10 @@ const openTask = (id, status, key, cls = "mono key") => `<a href="#" class="${cl
  * @param {string} text @param {number} id the record's
  */
 const mdBody = (text, id) => `<div class="body md" data-body="${id}">${require("./docsView.js").renderMarkdown(text, { steps: true })}</div>`;
-/** "2/5 adım" for a body with steps, else "". @param {string | null | undefined} text */
+/** "2/5 steps" for a body with steps, else "". @param {string | null | undefined} text */
 const stepCount = (text) => {
   const steps = require("./docsView.js").stepsOf(text);
-  return steps.length ? `<span class="steps${steps.every((x) => x.done) ? " all" : ""}">${steps.filter((x) => x.done).length}/${steps.length} adım</span>` : "";
+  return steps.length ? `<span class="steps${steps.every((x) => x.done) ? " all" : ""}">${steps.filter((x) => x.done).length}/${steps.length} steps</span>` : "";
 };
 
 /**
@@ -527,17 +527,17 @@ const stepCount = (text) => {
  */
 function askCard(r, o = {}) {
   if (r.turn) return turnCard(r);
-  // On a task page an open todo of yours shows twice (here and in Yapılacaklar): this copy gets its own id.
+  // On a task page an open todo of yours shows twice (here and in To-dos): this copy gets its own id.
   const id = `${o.prefix ?? "rec"}-${r.id}`;
   const k = r.kind === "test" ? "test" : r.kind;
   const head = `<div class="row1">${kindChip(k)}<span class="ttl">${esc(r.title)}</span>${stepCount(r.body)}<span class="age">${esc(r.age ?? "")}</span></div>`;
   const body = r.body ? mdBody(r.body, r.id) : "";
   const q = `data-q="${esc([r.title, r.body, r.task_key, r.task_title].filter(Boolean).join(" "))}" data-b="${r.done ? "done" : esc(k)}"`;
   if (r.done)
-    return `<article class="card ask done" id="${id}" data-k="r${r.id}" data-nav tabindex="0" ${q}>${head}<span class="okline">${icon("check", 14)} Tamamlandı — ajan bir sonraki turda görecek · <a href="#" data-act="rec" data-op="open" data-id="${r.id}">geri al</a></span></article>`;
+    return `<article class="card ask done" id="${id}" data-k="r${r.id}" data-nav tabindex="0" ${q}>${head}<span class="okline">${icon("check", 14)} Done — the agent will see it next turn · <a href="#" data-act="rec" data-op="open" data-id="${r.id}">undo</a></span></article>`;
   const action = r.kind === "question"
-    ? `<div class="answer"><textarea rows="2" data-draft="ans-${r.id}" placeholder="Cevabını yaz (Ctrl+Enter gönderir)" aria-label="Cevabın"></textarea><button class="primary" data-act="answer" data-id="${r.id}">Cevapla</button></div>`
-    : `<div class="acts"><button class="primary" data-act="rec" data-op="done" data-id="${r.id}">${r.kind === "test" ? "Geçti" : "Yaptım"}</button></div>`;
+    ? `<div class="answer"><textarea rows="2" data-draft="ans-${r.id}" placeholder="Write your answer (Ctrl+Enter sends)" aria-label="Your answer"></textarea><button class="primary" data-act="answer" data-id="${r.id}">Answer</button></div>`
+    : `<div class="acts"><button class="primary" data-act="rec" data-op="done" data-id="${r.id}">${r.kind === "test" ? "Passed" : "Done it"}</button></div>`;
   return `<article class="card ask${o.flash === r.id ? " flash" : ""}" id="${id}" data-k="r${r.id}" data-nav data-rec="${r.id}" tabindex="0" ${q}>${head}${body}${action}</article>`;
 }
 
@@ -548,31 +548,31 @@ function askCard(r, o = {}) {
  */
 function turnCard(r) {
   const at = `data-session="${esc(r.session)}" data-item="${esc(r.item)}" data-i="${r.i}"`;
-  const head = `<div class="row1">${kindChip(r.kind)}<span class="ttl">${esc(r.title)}</span><span class="src" title="Ajan bunu turun sonunda sohbette sordu">tur sonu</span><span class="age">${esc(r.age ?? "")}</span></div>`;
+  const head = `<div class="row1">${kindChip(r.kind)}<span class="ttl">${esc(r.title)}</span><span class="src" title="The agent asked this in the chat at the end of its turn">end of turn</span><span class="age">${esc(r.age ?? "")}</span></div>`;
   const q = `data-q="${esc([r.title, r.why, r.prompt, r.task_key, r.task_title].filter(Boolean).join(" "))}" data-b="${r.done ? "done" : esc(r.kind)}"`;
   const card = `class="card ask turn${r.done ? " done" : ""}" data-k="w${esc(r.session)}:${esc(r.item)}:${r.i}" data-nav tabindex="0" ${q}`;
   if (r.done)
-    return `<article ${card}>${head}<span class="okline">${icon("check", 14)} Tamamlandı — ajan bir sonraki turda görecek · <a href="#" data-act="turn" data-on="0" ${at}>geri al</a></span></article>`;
+    return `<article ${card}>${head}<span class="okline">${icon("check", 14)} Done — the agent will see it next turn · <a href="#" data-act="turn" data-on="0" ${at}>undo</a></span></article>`;
   const more = [
     r.why ? `<p class="body">${esc(r.why)}</p>` : "",
-    r.prompt ? `<p class="body dim">İstek: ${esc(r.prompt)}</p>` : "",
-    r.detail && r.detail !== r.title ? `<details class="full"><summary>Tam mesaj</summary><pre>${esc(r.detail)}</pre></details>` : "",
+    r.prompt ? `<p class="body dim">Request: ${esc(r.prompt)}</p>` : "",
+    r.detail && r.detail !== r.title ? `<details class="full"><summary>Full message</summary><pre>${esc(r.detail)}</pre></details>` : "",
   ].join("");
-  const label = r.kind === "test" ? "Geçti" : r.kind === "question" ? "Cevapladım" : "Yaptım";
+  const label = r.kind === "test" ? "Passed" : r.kind === "question" ? "Answered" : "Done it";
   return `<article ${card}>${head}${more}<div class="acts"><button class="primary" data-act="turn" data-on="1" ${at}>${label}</button></div></article>`;
 }
 
 /**
- * What the user has not read yet (#92): the edits to accept (on Ajan değişiklikleri) and each
+ * What the user has not read yet (#92): the edits to accept (on Agent changes) and each
  * section changed since they read it, to open or mark read.
  * @param {{edits: number, sections: any[]}} u @param {string} [key] the task's: its edits alone
  */
 function unreadHtml(u, key) {
   if (!u.edits && !u.sections.length) return "";
-  const edits = u.edits ? `<button class="mini" data-act="edits" data-key="${esc(key ?? "")}">${u.edits} düzenleme kabul edilmedi ${icon("arrow", 12)}</button>` : "";
-  const all = u.sections.length > 1 ? `<button class="link" data-act="read" data-ids="${u.sections.map((s) => s.id).join(",")}">Hepsini okudum</button>` : "";
-  const rows = u.sections.map((s) => `<div class="urow" data-k="u${s.id}"><a href="#" data-act="readGo" data-tab="${esc(s.tab)}" data-key="${esc(s.tab === "analysis" ? s.scope : s.key)}"><span class="dim">${esc(s.label)}</span> ${esc(s.title)}</a><button class="mini" data-act="read" data-ids="${s.id}">Okudum</button></div>`).join("");
-  return `<div class="unread" data-k="unread"><div class="uhead"><span class="lbl">Okumadıkların · ${u.edits + u.sections.length}</span>${edits}${all}</div>${rows}</div>`;
+  const edits = u.edits ? `<button class="mini" data-act="edits" data-key="${esc(key ?? "")}">${u.edits} edit${u.edits === 1 ? "" : "s"} not accepted ${icon("arrow", 12)}</button>` : "";
+  const all = u.sections.length > 1 ? `<button class="link" data-act="read" data-ids="${u.sections.map((s) => s.id).join(",")}">Mark all as read</button>` : "";
+  const rows = u.sections.map((s) => `<div class="urow" data-k="u${s.id}"><a href="#" data-act="readGo" data-tab="${esc(s.tab)}" data-key="${esc(s.tab === "analysis" ? s.scope : s.key)}"><span class="dim">${esc(s.label)}</span> ${esc(s.title)}</a><button class="mini" data-act="read" data-ids="${s.id}">Mark as read</button></div>`).join("");
+  return `<div class="unread" data-k="unread"><div class="uhead"><span class="lbl">Unread · ${u.edits + u.sections.length}</span>${edits}${all}</div>${rows}</div>`;
 }
 
 /** @param {ReturnType<typeof tasksPage>} m */
@@ -580,61 +580,61 @@ function tasksHtml(m) {
   const f = (/** @type {string} */ id, /** @type {string} */ label) =>
     `<button class="fpill${m.filter === id ? " on" : ""}" data-act="filter" data-f="${id}" aria-pressed="${m.filter === id}">${label} · ${m.counts[/** @type {keyof typeof m.counts} */ (id)]}</button>`;
   const row = (/** @type {any} */ t) => `<button class="trow${t.id === m.sel ? " on" : ""}" id="t-${t.id}" data-k="t${t.id}" data-act="sel" data-id="${t.id}" data-nav data-q="${esc(t.q)}"${t.id === m.sel ? ' aria-current="true"' : ""}>
-<span class="sdot s-${esc(t.status)}" aria-hidden="true"></span><span class="tcol"><span class="tmeta"><span class="mono">${esc(t.key)}</span><span>${esc(STATUS_TR[/** @type {keyof typeof STATUS_TR} */ (t.status)] ?? t.status)}</span></span><span class="tttl">${esc(t.title || t.key)}</span><span class="tmeta">${t.asks ? `<b class="mine">${t.asks} sende</b>` : ""}${t.unread ? `<b class="unr">${t.unread} okunmadı</b>` : ""}<span>${esc(todoLine(t))}</span></span></span></button>`;
+<span class="sdot s-${esc(t.status)}" aria-hidden="true"></span><span class="tcol"><span class="tmeta"><span class="mono">${esc(t.key)}</span><span>${esc(STATUS_TR[/** @type {keyof typeof STATUS_TR} */ (t.status)] ?? t.status)}</span></span><span class="tttl">${esc(t.title || t.key)}</span><span class="tmeta">${t.asks ? `<b class="mine">${t.asks} on you</b>` : ""}${t.unread ? `<b class="unr">${t.unread} unread</b>` : ""}<span>${esc(todoLine(t))}</span></span></span></button>`;
   const rows = m.groups.length
     ? m.groups.map((g) => `<div class="grp" data-k="g${g.repo.id}">${m.all || g.global ? `<div class="grp-h">${esc(g.global && !m.all ? "Global (~)" : g.repo.name)}</div>` : ""}${g.tasks.map(row).join("")}</div>`).join("")
-    : `<p class="empty" data-k="empty">Bu filtrede görev yok.</p>`;
-  const list = `<aside class="tlist" data-k="list" data-scroll="tlist" aria-label="Görevler"><div class="pills" data-k="filters" role="group" aria-label="Durum">${f("active", "Aktif")}${f("open", "Açık")}${f("done", "Biten")}</div><div class="tl-head" data-k="head"><span>${esc(m.all ? "Bütün repolar" : m.repoName)}</span><button class="link" data-act="scope" data-all="${m.all ? 0 : 1}">${m.all ? "Bu repo" : "Bütün repolar"}</button></div><div class="rows" data-k="rows" data-navgroup="list">${rows}</div><button class="dashed" data-k="new" data-act="newTask">${icon("plus")} Yeni görev</button></aside>`;
+    : `<p class="empty" data-k="empty">No tasks in this filter.</p>`;
+  const list = `<aside class="tlist" data-k="list" data-scroll="tlist" aria-label="Tasks"><div class="pills" data-k="filters" role="group" aria-label="Status">${f("active", "Active")}${f("open", "Open")}${f("done", "Done")}</div><div class="tl-head" data-k="head"><span>${esc(m.all ? "All repos" : m.repoName)}</span><button class="link" data-act="scope" data-all="${m.all ? 0 : 1}">${m.all ? "This repo" : "All repos"}</button></div><div class="rows" data-k="rows" data-navgroup="list">${rows}</div><button class="dashed" data-k="new" data-act="newTask">${icon("plus")} New task</button></aside>`;
   const c = m.cur;
-  if (!c) return `<div class="tl" data-k="tl">${list}<main class="tpage" data-k="page"><div class="emptyhero" data-k="none">${require("./mascot.js").mascot(56)}<p>Bu repoda henüz görev yok: ajan Imprimatur'un MCP araçlarıyla ekler, ya da soldan "Yeni görev".</p></div></main></div>`;
+  if (!c) return `<div class="tl" data-k="tl">${list}<main class="tpage" data-k="page"><div class="emptyhero" data-k="none">${require("./mascot.js").mascot(56)}<p>No tasks in this repo yet: the agent adds them through Imprimatur's MCP tools, or use "New task" on the left.</p></div></main></div>`;
   return `<div class="tl" data-k="tl">${list}<main class="tpage" data-k="page">${taskBlocks(c)}</main>${railHtml(c)}</div>`;
 }
 
 /** The task page's blocks. @param {NonNullable<ReturnType<typeof tasksPage>["cur"]>} c */
 function taskBlocks(c) {
   const fl = (/** @type {number} */ id) => (c.flash === id ? " flash" : "");
-  const head = `<section class="thead" data-k="head-${c.id}"><div class="meta"><span class="mono key">${esc(c.key)}</span>${statusChip(c.status)}${c.epic ? `<span class="dim">Epic ${openTask(c.epic.id, c.epic.status, c.epic.key, "mono")}</span>` : ""}${c.url ? `<a href="#" class="ext" data-act="url" data-url="${esc(c.url)}">GitHub'da aç ${icon("external", 13)}</a>` : ""}${c.analysis?.files.length || c.analysis?.study ? `<button class="mini analink" data-act="anaGo" data-key="${esc(c.key)}" title="Bu görevin analizleri Analiz sekmesinde">${icon("analysis", 12)} Analiz · ${[c.analysis.files.length ? `${c.analysis.files.length} dosya` : "", c.analysis.study ? "çalışma notu" : ""].filter(Boolean).join(" · ")} ${icon("arrow", 12)}</button>` : ""}</div>
-<h1>${esc(c.title || c.key)}</h1>${c.summary ? `<p class="sum">${esc(c.summary)}</p>` : ""}${c.pointer ? `<div class="callout${fl(c.pointer.id)}" id="ptr-${c.pointer.id}">${icon("arrow", 20)}<div><span class="lbl">Nerede kaldık</span><span class="ptitle">${esc(c.pointer.title)}</span><span class="dim">${c.pointer.owner === "K" ? "Senin işin" : c.pointer.owner === "C" ? "Ajanın işi" : esc(KIND_TR[/** @type {keyof typeof KIND_TR} */ (c.pointer.kind)] ?? c.pointer.kind)} · ${esc(day(c.pointer.at))}</span></div></div>` : ""}${unreadHtml(c.unread, c.key)}</section>`;
+  const head = `<section class="thead" data-k="head-${c.id}"><div class="meta"><span class="mono key">${esc(c.key)}</span>${statusChip(c.status)}${c.epic ? `<span class="dim">Epic ${openTask(c.epic.id, c.epic.status, c.epic.key, "mono")}</span>` : ""}${c.url ? `<a href="#" class="ext" data-act="url" data-url="${esc(c.url)}">Open on GitHub ${icon("external", 13)}</a>` : ""}${c.analysis?.files.length || c.analysis?.study ? `<button class="mini analink" data-act="anaGo" data-key="${esc(c.key)}" title="This task's analyses are in the Analysis tab">${icon("analysis", 12)} Analysis · ${[c.analysis.files.length ? `${c.analysis.files.length} file${c.analysis.files.length === 1 ? "" : "s"}` : "", c.analysis.study ? "study note" : ""].filter(Boolean).join(" · ")} ${icon("arrow", 12)}</button>` : ""}</div>
+<h1>${esc(c.title || c.key)}</h1>${c.summary ? `<p class="sum">${esc(c.summary)}</p>` : ""}${c.pointer ? `<div class="callout${fl(c.pointer.id)}" id="ptr-${c.pointer.id}">${icon("arrow", 20)}<div><span class="lbl">Where we left off</span><span class="ptitle">${esc(c.pointer.title)}</span><span class="dim">${c.pointer.owner === "K" ? "Waiting on you" : c.pointer.owner === "C" ? "Agent's job" : esc(KIND_TR[/** @type {keyof typeof KIND_TR} */ (c.pointer.kind)] ?? c.pointer.kind)} · ${esc(day(c.pointer.at))}</span></div></div>` : ""}${unreadHtml(c.unread, c.key)}</section>`;
   const asks = c.asks.length
-    ? `<section class="blk" data-k="asks" data-navgroup="asks" aria-label="Senden beklenen"><h2><span class="odot" aria-hidden="true"></span>Senden beklenen <span class="dim">· ${c.asks.length}</span></h2>${c.asks.map((r) => askCard(r, { prefix: "ask", flash: TODO_KINDS.includes(r.kind) ? undefined : c.flash })).join("")}</section>`
+    ? `<section class="blk" data-k="asks" data-navgroup="asks" aria-label="Waiting on you"><h2><span class="odot" aria-hidden="true"></span>Waiting on you <span class="dim">· ${c.asks.length}</span></h2>${c.asks.map((r) => askCard(r, { prefix: "ask", flash: TODO_KINDS.includes(r.kind) ? undefined : c.flash })).join("")}</section>`
     : "";
   const todo = (/** @type {any} */ r) => {
     const done = r.status !== "open";
     const mine = r.owner === "K";
     return `<div class="trec${done ? " done" : ""}${fl(r.id)}" id="rec-${r.id}" data-k="r${r.id}" data-nav data-todo="${r.id}" tabindex="0" data-q="${esc(r.title)}"${r.body ? ` title="${esc(r.body)}"` : ""}>
-<button class="check${done ? " on" : ""}" data-act="rec" data-op="${done ? "open" : "done"}" data-id="${r.id}" aria-label="${done ? "Yeniden aç" : "Bitti olarak işaretle"}">${done ? icon("check", 12) : ""}</button><span class="ttl">${esc(r.title)}</span>${r.kind === "fixme" ? kindChip("fixme") : ""}${r.pointer ? `<span class="next">${icon("arrow", 12)} sıradaki</span>` : !done ? `<button class="mini" data-act="rec" data-op="pointer" data-id="${r.id}" title="Nerede kaldığımızı buraya taşı">sıradaki yap</button>` : ""}<span class="owner${mine ? " me" : ""}">${mine ? "Sen" : r.owner === "C" ? "Ajan" : "—"}</span></div>`;
+<button class="check${done ? " on" : ""}" data-act="rec" data-op="${done ? "open" : "done"}" data-id="${r.id}" aria-label="${done ? "Reopen" : "Mark as done"}">${done ? icon("check", 12) : ""}</button><span class="ttl">${esc(r.title)}</span>${r.kind === "fixme" ? kindChip("fixme") : ""}${r.pointer ? `<span class="next">${icon("arrow", 12)} next</span>` : !done ? `<button class="mini" data-act="rec" data-op="pointer" data-id="${r.id}" title="Move where we left off here">make next</button>` : ""}<span class="owner${mine ? " me" : ""}">${mine ? "You" : r.owner === "C" ? "Agent" : "—"}</span></div>`;
   };
-  const todos = `<section class="blk" data-k="todos" data-navgroup="todos" aria-label="Yapılacaklar"><div class="h2row" data-k="h"><h2>Yapılacaklar <span class="dim">· ${c.openTodos} açık</span></h2>${c.hiddenDone || c.showDone ? `<button class="ghost" data-act="showDone" data-task="${c.id}">${c.showDone ? "Bitenleri gizle" : `Bitenleri göster (${c.hiddenDone})`}</button>` : ""}</div><div class="todos" data-k="list">${c.todos.map(todo).join("") || '<p class="empty" data-k="none">Açık yapılacak yok.</p>'}</div>
-<label class="quick" data-k="add">${icon("plus")}<input data-draft="add-${c.id}" data-add data-task="${c.id}" placeholder="Ekle… ( ? soru · ! karar · # not · @ben sende )" aria-label="Yeni kayıt"></label></section>`;
+  const todos = `<section class="blk" data-k="todos" data-navgroup="todos" aria-label="To-dos"><div class="h2row" data-k="h"><h2>To-dos <span class="dim">· ${c.openTodos} open</span></h2>${c.hiddenDone || c.showDone ? `<button class="ghost" data-act="showDone" data-task="${c.id}">${c.showDone ? "Hide done" : `Show done (${c.hiddenDone})`}</button>` : ""}</div><div class="todos" data-k="list">${c.todos.map(todo).join("") || '<p class="empty" data-k="none">No open to-dos.</p>'}</div>
+<label class="quick" data-k="add">${icon("plus")}<input data-draft="add-${c.id}" data-add data-task="${c.id}" placeholder="Add… ( ? question · ! decision · # note · @me yours )" aria-label="New record"></label></section>`;
   const notes = c.notes.length
-    ? `<section class="blk" data-k="notes" aria-label="Notlar ve cevaplanan sorular"><h2>Notlar ve cevaplanan sorular <span class="dim">· ${c.notes.length}</span></h2>${c.notes.map((r) => `<div class="note${fl(r.id)}" id="rec-${r.id}" data-k="r${r.id}" data-q="${esc(r.title)}">${kindChip(r.kind)}<div class="ncol"><span class="ttl">${esc(r.title)}</span>${r.body ? mdBody(r.body, r.id) : ""}${r.answers.map((/** @type {any} */ a) => `<div class="ans">${icon("arrow", 12)} ${esc(a.title)}${a.body && a.body !== a.title ? mdBody(a.body, a.id) : ""}</div>`).join("")}</div></div>`).join("")}</section>`
+    ? `<section class="blk" data-k="notes" aria-label="Notes and answered questions"><h2>Notes and answered questions <span class="dim">· ${c.notes.length}</span></h2>${c.notes.map((r) => `<div class="note${fl(r.id)}" id="rec-${r.id}" data-k="r${r.id}" data-q="${esc(r.title)}">${kindChip(r.kind)}<div class="ncol"><span class="ttl">${esc(r.title)}</span>${r.body ? mdBody(r.body, r.id) : ""}${r.answers.map((/** @type {any} */ a) => `<div class="ans">${icon("arrow", 12)} ${esc(a.title)}${a.body && a.body !== a.title ? mdBody(a.body, a.id) : ""}</div>`).join("")}</div></div>`).join("")}</section>`
     : "";
   const decisions = c.decisions.length
-    ? `<section class="blk" data-k="dec" aria-label="Kararlar ve tasarım"><h2>Kararlar ve tasarım <span class="dim">· ${c.decisions.length}</span></h2><div class="grid">${c.decisions.map((r) => `<details class="card dec${fl(r.id)}" id="rec-${r.id}" data-k="r${r.id}" data-q="${esc(r.title)}"${c.flash === r.id ? " open" : ""}><summary><span class="meta">${kindChip(r.kind)}<span class="dim">${esc(r.date)}</span><span class="dim">${esc(r.who)}</span></span><span class="ttl">${esc(r.title)}</span></summary>${r.body ? mdBody(r.body, r.id) : '<p class="body dim">Açıklama yok.</p>'}</details>`).join("")}</div></section>`
+    ? `<section class="blk" data-k="dec" aria-label="Decisions and design"><h2>Decisions and design <span class="dim">· ${c.decisions.length}</span></h2><div class="grid">${c.decisions.map((r) => `<details class="card dec${fl(r.id)}" id="rec-${r.id}" data-k="r${r.id}" data-q="${esc(r.title)}"${c.flash === r.id ? " open" : ""}><summary><span class="meta">${kindChip(r.kind)}<span class="dim">${esc(r.date)}</span><span class="dim">${esc(r.who)}</span></span><span class="ttl">${esc(r.title)}</span></summary>${r.body ? mdBody(r.body, r.id) : '<p class="body dim">No description.</p>'}</details>`).join("")}</div></section>`
     : "";
-  const testState = (/** @type {string} */ s) => (s === "done" ? ["pass", "Geçti"] : s === "dropped" ? ["skip", "Bırakıldı"] : ["wait", "Bekliyor"]);
+  const testState = (/** @type {string} */ s) => (s === "done" ? ["pass", "Passed"] : s === "dropped" ? ["skip", "Dropped"] : ["wait", "Waiting"]);
   const tests = c.tests.length
-    ? `<section class="blk" data-k="tests" aria-label="Elle testler"><h2>Elle testler <span class="dim">· ${c.tests.length}</span></h2>${c.tests.map((r) => {
+    ? `<section class="blk" data-k="tests" aria-label="Manual tests"><h2>Manual tests <span class="dim">· ${c.tests.length}</span></h2>${c.tests.map((r) => {
       const [cls, label] = testState(r.status);
       const code = /^([A-Z]{2,}(?:-[A-Z0-9]+)*-\d+)\b/.exec(r.title)?.[1];
       return `<div class="test${fl(r.id)}" id="rec-${r.id}" data-k="r${r.id}" data-q="${esc(r.title)}">${code ? `<span class="mono dim">${esc(code)}</span>` : ""}<span class="ttl">${esc(code ? r.title.slice(code.length).replace(/^[\s:·–—-]+/, "") : r.title)}</span><span class="tstate t-${cls}">${label}</span></div>`;
     }).join("")}</section>`
     : "";
-  const activity = `<section class="blk" data-k="act" aria-label="Etkinlik"><h2>Etkinlik</h2>${c.activity.map((v, i) => `<div class="ev" data-k="e${i}"><span class="when">${esc(when(v.at))}</span><span class="who w-${esc(v.kind)}">${esc(v.who)}</span><span class="what">${esc(v.what)}</span></div>`).join("") || '<p class="empty" data-k="none">Henüz olay yok.</p>'}${c.older || c.showOld ? `<button class="link" data-k="more" data-act="old" data-task="${c.id}">${c.showOld ? "Eski olayları gizle" : `${c.older} eski olayı göster`}</button>` : ""}</section>`;
+  const activity = `<section class="blk" data-k="act" aria-label="Activity"><h2>Activity</h2>${c.activity.map((v, i) => `<div class="ev" data-k="e${i}"><span class="when">${esc(when(v.at))}</span><span class="who w-${esc(v.kind)}">${esc(v.who)}</span><span class="what">${esc(v.what)}</span></div>`).join("") || '<p class="empty" data-k="none">No events yet.</p>'}${c.older || c.showOld ? `<button class="link" data-k="more" data-act="old" data-task="${c.id}">${c.showOld ? "Hide older events" : `Show ${c.older} older event${c.older === 1 ? "" : "s"}`}</button>` : ""}</section>`;
   const recBlocks = (c.audit ? auditBlock(c.audit) : "") + (c.best ? bestBlock(c.best) : "");
-  // The tabs right under the head (and Nerede kaldık): what waits on the user is the first, open by default.
+  // The tabs right under the head (and Where we left off): what waits on the user is the first, open by default.
   return head + taskTabs(c, [
-    { k: "asks", label: "Senden beklenen", n: c.asks.length, html: asks },
-    { k: "todos", label: recBlocks ? "Öneriler" : "Yapılacaklar", n: c.openTodos, html: recBlocks || todos },
-    { k: "dec", label: "Kararlar", n: c.decisions.length, html: decisions },
-    { k: "notes", label: "Notlar", n: c.notes.length, html: notes },
-    { k: "tests", label: "Testler", n: c.tests.length, html: tests },
-    { k: "act", label: "Etkinlik", n: 0, html: activity },
+    { k: "asks", label: "Waiting on you", n: c.asks.length, html: asks },
+    { k: "todos", label: recBlocks ? "Recommendations" : "To-dos", n: c.openTodos, html: recBlocks || todos },
+    { k: "dec", label: "Decisions", n: c.decisions.length, html: decisions },
+    { k: "notes", label: "Notes", n: c.notes.length, html: notes },
+    { k: "tests", label: "Tests", n: c.tests.length, html: tests },
+    { k: "act", label: "Activity", n: 0, html: activity },
   ]);
 }
 
 /**
- * The task page under its head as tabs, Senden beklenen first. Every pane is drawn; the page
+ * The task page under its head as tabs, Waiting on you first. Every pane is drawn; the page
  * shows the one chosen for this task (state.ttabs), else the first; all of them while the
  * search box filters. A tab with nothing in it is left out; the one holding a record to
  * flash opens.
@@ -648,17 +648,17 @@ function taskTabs(c, tabs) {
 }
 
 /**
- * The Analiz tab's sub-pages, over each of them: Mimari, Ürün, Sözlük, Görev analizleri (how many tasks have one).
+ * The Analysis tab's sub-pages, over each of them: Architecture, Product, Glossary, Task analyses (how many tasks have one).
  * @param {any} db @param {string} root @param {string} cur
  */
 function hubNav(db, root, cur) {
   const repo = repoOfRoot(db, root);
   const n = repo ? db.taskDocs(repo.id).filter((/** @type {any} */ d) => d.sections > 0).length : 0;
-  return `<nav class="hubnav" data-k="hubnav" aria-label="Analiz">${ANALYSIS_TABS.map(([t, label]) => `<button class="ttab${t === cur ? " on" : ""}" data-act="tab" data-tab="${t}"${t === cur ? ' aria-current="page"' : ""}>${icon(/** @type {any} */ (t), 14)} ${esc(label)}${t === "analysis" && n ? ` <span class="n">${n}</span>` : ""}</button>`).join("")}</nav>`;
+  return `<nav class="hubnav" data-k="hubnav" aria-label="Analysis">${ANALYSIS_TABS.map(([t, label]) => `<button class="ttab${t === cur ? " on" : ""}" data-act="tab" data-tab="${t}"${t === cur ? ' aria-current="page"' : ""}>${icon(/** @type {any} */ (t), 14)} ${esc(label)}${t === "analysis" && n ? ` <span class="n">${n}</span>` : ""}</button>`).join("")}</nav>`;
 }
 
 /**
- * Görev analizleri (TASK-ANALYSIS): the repo's tasks that have an analysis, newest first, each
+ * Task analyses (TASK-ANALYSIS): the repo's tasks that have an analysis, newest first, each
  * with its files; and the analysis files no task was found for, each to be given one.
  * @param {any} db @param {string} root
  */
@@ -692,7 +692,7 @@ function plainTitle(title, key) {
 }
 
 /**
- * A heading in two languages ("Background / *Arka plan*", #97): the first half, and the other
+ * A heading in two languages ("Background / *Arka plan*", #97: older documents were written in two languages): the first half, and the other
  * as a quiet second; a heading with no " / " is one.
  * @param {string} title @param {string} [key] @returns {{main: string, alt?: string}}
  */
@@ -729,17 +729,17 @@ function subHeads(body) {
 }
 
 /**
- * Görev analizleri laid out like Mimari and Ürün (TASK-ANALYSIS): on the left the tasks and,
+ * Task analyses laid out like Architecture and Product (TASK-ANALYSIS): on the left the tasks and,
  * under the chosen one, its contents; on the right its files in full, each section a
  * document section. Every task is drawn; the page shows the chosen one (state.asel).
  * @param {ReturnType<typeof analysisHub>} m
  */
 function analysisHubHtml(m) {
   if (!m.docs.length && !m.orphans.length) {
-    return `<div class="emptyhero" data-k="none">${require("./mascot.js").mascot(56)}<p>Bu repoda henüz görev analizi yok. Ajan bir görev için analiz, plan ya da araştırma notu yazdığında burada görünür; geçmiş oturumlar için "Imprimatur: Take Task Analyses from Past Sessions".</p></div>`;
+    return `<div class="emptyhero" data-k="none">${require("./mascot.js").mascot(56)}<p>No task analyses in this repo yet. When the agent writes an analysis, plan or research note for a task, it shows up here; for past sessions, use "Imprimatur: Take Task Analyses from Past Sessions".</p></div>`;
   }
   const { renderMarkdown } = require("./docsView.js");
-  const name = (/** @type {string} */ src) => (src.startsWith("plan:") ? "Plan (plan modu)" : src || "Analiz");
+  const name = (/** @type {string} */ src) => (src.startsWith("plan:") ? "Plan (plan mode)" : src || "Analysis");
   // The tree (#97): each file (its own title), its "##" sections, their "###" headings.
   const isOverview = (/** @type {any} */ s) => /(^|--)overview$/.test(s.key ?? "");
   const goTo = (/** @type {string} */ key, /** @type {string} */ label) => `<a href="#sec-${key}" data-act="docGo" data-key="${key}">${label}</a>`;
@@ -756,10 +756,10 @@ function analysisHubHtml(m) {
   };
   const studyToc = (/** @type {any} */ d) => (d.study ? `<li class="afile astudy" data-k="tstudy-${esc(d.key)}">${goTo(`a${d.study.id}`, `${icon("analysis", 12)} ${titleHtml(d.study.title)}`)}${subs(d.study)}</li>` : "");
   const toc = (/** @type {any} */ d) => `<ol class="atoc" data-k="toc-${esc(d.key)}" data-ak="${esc(d.key)}">${d.files.map(fileToc).join("")}${studyToc(d)}</ol>`;
-  const item = (/** @type {any} */ d) => `<button class="aitem" data-act="asel" data-key="${esc(d.key)}" data-nav data-q="${esc(`${d.key} ${d.task?.title ?? ""} ${d.files.map((/** @type {any} */ f) => f.source).join(" ")}`)}"><span class="mono key">${esc(d.key)}</span><span class="ttl">${titleHtml(d.task?.title, d.key) || esc(d.key)}</span><span class="dim">${d.files.length} dosya${d.study ? " · çalışma notu" : ""} · ${esc(day(d.at))}</span></button>${toc(d)}`;
-  const aside = `<aside class="dtoc alist" data-k="alist" data-scroll="dtoc" data-navgroup="analysis"><div class="lbl" data-k="h">Görevler · ${m.docs.length}</div>${m.docs.map(item).join("")}${m.orphans.length ? `<button class="aitem orph" data-act="asel" data-key="__orphans" data-nav><span class="ttl">Görevsiz analizler</span><span class="dim">${m.orphans.length} dosya</span></button>` : ""}</aside>`;
+  const item = (/** @type {any} */ d) => `<button class="aitem" data-act="asel" data-key="${esc(d.key)}" data-nav data-q="${esc(`${d.key} ${d.task?.title ?? ""} ${d.files.map((/** @type {any} */ f) => f.source).join(" ")}`)}"><span class="mono key">${esc(d.key)}</span><span class="ttl">${titleHtml(d.task?.title, d.key) || esc(d.key)}</span><span class="dim">${d.files.length} file${d.files.length === 1 ? "" : "s"}${d.study ? " · study note" : ""} · ${esc(day(d.at))}</span></button>${toc(d)}`;
+  const aside = `<aside class="dtoc alist" data-k="alist" data-scroll="dtoc" data-navgroup="analysis"><div class="lbl" data-k="h">Tasks · ${m.docs.length}</div>${m.docs.map(item).join("")}${m.orphans.length ? `<button class="aitem orph" data-act="asel" data-key="__orphans" data-nav><span class="ttl">Analyses without a task</span><span class="dim">${m.orphans.length} file${m.orphans.length === 1 ? "" : "s"}</span></button>` : ""}</aside>`;
   // No file names here: the text is the point. A file's first section opens it (its path in the tooltip).
-  const open = (/** @type {any} */ f) => (f.local && !f.source.startsWith("plan:") ? `<div class="dacts"><button class="mini aopen" data-act="anaOpen" data-file="${esc(f.source)}" data-repo="${m.repo?.id ?? ""}" title="Dosyayı aç: ${esc(name(f.source))}">${icon("external", 12)} aç</button></div>` : "");
+  const open = (/** @type {any} */ f) => (f.local && !f.source.startsWith("plan:") ? `<div class="dacts"><button class="mini aopen" data-act="anaOpen" data-file="${esc(f.source)}" data-repo="${m.repo?.id ?? ""}" title="Open the file: ${esc(name(f.source))}">${icon("external", 12)} open</button></div>` : "");
   // "###" headings get ids, for the tree's links.
   const bodyHtml = (/** @type {any} */ s) => {
     let n = 0;
@@ -767,29 +767,29 @@ function analysisHubHtml(m) {
   };
   const article = (/** @type {any} */ f, /** @type {any} */ s, /** @type {number} */ j) => isContents(s.title)
     ? `<details class="dsec acontents" id="sec-a${s.id}" data-k="s${s.id}"><summary>${titleHtml(s.title)}</summary>${s.body ? `<div class="md">${bodyHtml(s)}</div>` : ""}</details>`
-    : `<article class="dsec${j === 0 && /(^|--)overview$/.test(s.key ?? "") ? " afirst" : ""}" id="sec-a${s.id}" data-k="s${s.id}" data-nav tabindex="0"><div class="dsec-h"><h2>${titleHtml(s.title)}</h2>${j === 0 ? open(f) : ""}</div>${s.body ? `<div class="md">${bodyHtml(s)}</div>` : '<p class="empty">Bu bölüm boş.</p>'}</article>`;
+    : `<article class="dsec${j === 0 && /(^|--)overview$/.test(s.key ?? "") ? " afirst" : ""}" id="sec-a${s.id}" data-k="s${s.id}" data-nav tabindex="0"><div class="dsec-h"><h2>${titleHtml(s.title)}</h2>${j === 0 ? open(f) : ""}</div>${s.body ? `<div class="md">${bodyHtml(s)}</div>` : '<p class="empty">This section is empty.</p>'}</article>`;
   // The /study note under the analysis (#100), with how the last study went.
   const studyHtml = (/** @type {any} */ d) => {
     if (!d.study) return "";
     const m = d.study.mastery;
     const how = m
-      ? `<p class="amastery"><b>Son çalışma · ${esc(day(m.at))} · ${m.full}/${m.total} tam</b>${m.weak.length ? `<br><span class="dim">Zayıf: ${m.weak.map((/** @type {string} */ q) => esc(q)).join(" · ")}</span>` : ""}</p>`
-      : `<p class="amastery dim">Henüz kendini sınamadın: Claude Code'da <span class="mono">/study ${esc(d.key)}</span></p>`;
+      ? `<p class="amastery"><b>Last study · ${esc(day(m.at))} · ${m.full}/${m.total} full</b>${m.weak.length ? `<br><span class="dim">Weak: ${m.weak.map((/** @type {string} */ q) => esc(q)).join(" · ")}</span>` : ""}</p>`
+      : `<p class="amastery dim">You have not quizzed yourself yet: in Claude Code, run <span class="mono">/study ${esc(d.key)}</span></p>`;
     return `${d.files.length ? `<hr class="afsep" data-k="fs-study">` : ""}<article class="dsec astudy" id="sec-a${d.study.id}" data-k="s${d.study.id}" data-nav tabindex="0"><div class="dsec-h"><h2>${icon("analysis", 16)} ${titleHtml(d.study.title)}</h2></div>${how}${d.study.body ? `<div class="md">${bodyHtml(d.study)}</div>` : ""}</article>`;
   };
   const file = (/** @type {any} */ f, /** @type {number} */ i) => `${i ? `<hr class="afsep" data-k="fs-${esc(f.source)}">` : ""}${f.sections.map((/** @type {any} */ s, /** @type {number} */ j) => article(f, s, j)).join("")}`;
-  const pane = (/** @type {any} */ d) => `<div class="apane" data-k="ap-${esc(d.key)}" data-ak="${esc(d.key)}"><section class="dhead" data-k="head"><span class="lbl">Görev analizi · <span class="mono">${esc(d.key)}</span> · ${esc(m.repo?.name ?? "")}</span><h1>${titleHtml(d.task?.title, d.key) || esc(d.key)}</h1><p class="lead">Son güncelleme · ${esc(when(d.at))} · ${d.files.length} dosya${d.task ? ` · <button class="link" data-act="open" data-id="${d.task.id}" data-f="${bucketOf(d.task.status)}">Göreve git ${icon("arrow", 12)}</button>` : ""}</p></section>${d.files.map(file).join("")}${studyHtml(d)}</div>`;
+  const pane = (/** @type {any} */ d) => `<div class="apane" data-k="ap-${esc(d.key)}" data-ak="${esc(d.key)}"><section class="dhead" data-k="head"><span class="lbl">Task analysis · <span class="mono">${esc(d.key)}</span> · ${esc(m.repo?.name ?? "")}</span><h1>${titleHtml(d.task?.title, d.key) || esc(d.key)}</h1><p class="lead">Last updated · ${esc(when(d.at))} · ${d.files.length} file${d.files.length === 1 ? "" : "s"}${d.task ? ` · <button class="link" data-act="open" data-id="${d.task.id}" data-f="${bucketOf(d.task.status)}">Go to task ${icon("arrow", 12)}</button>` : ""}</p></section>${d.files.map(file).join("")}${studyHtml(d)}</div>`;
   const options = m.tasks.map((/** @type {any} */ t) => `<option value="${t.id}">${esc(t.key)} · ${esc((t.title || "").slice(0, 60))}</option>`).join("");
   const orphans = m.orphans.length
-    ? `<div class="apane" data-k="ap-orphans" data-ak="__orphans"><section class="dhead" data-k="head"><span class="lbl">Görev analizi · ${esc(m.repo?.name ?? "")}</span><h1>Görevsiz analizler</h1><p class="lead">Görevi bulunamayan analiz dosyaları: bir göreve bağla, o görevin analizine geçer.</p></section>${m.orphans.map((o) => `<div class="orow dsec" data-k="o-${esc(o.source)}" data-q="${esc(o.source)}"><span class="mono">${esc(o.source)}</span><span class="dim">${esc(day(o.at))}</span><select data-change="anaAssign" data-file="${esc(o.source)}" aria-label="Göreve bağla"><option value="">Göreve bağla…</option>${options}</select></div>`).join("")}</div>`
+    ? `<div class="apane" data-k="ap-orphans" data-ak="__orphans"><section class="dhead" data-k="head"><span class="lbl">Task analysis · ${esc(m.repo?.name ?? "")}</span><h1>Analyses without a task</h1><p class="lead">Analysis files no task was found for: assign one to a task and it moves into that task's analysis.</p></section>${m.orphans.map((o) => `<div class="orow dsec" data-k="o-${esc(o.source)}" data-q="${esc(o.source)}"><span class="mono">${esc(o.source)}</span><span class="dim">${esc(day(o.at))}</span><select data-change="anaAssign" data-file="${esc(o.source)}" aria-label="Assign to a task"><option value="">Assign to a task…</option>${options}</select></div>`).join("")}</div>`
     : "";
   return `<div class="doc ahub" data-k="ahub">${aside}<main class="dpage adoc" data-k="adoc">${m.docs.map(pane).join("")}${orphans}</main></div>`;
 }
 
-const SEV_TR = { high: "yüksek", medium: "orta", low: "düşük" };
+const SEV_TR = { high: "high", medium: "medium", low: "low" };
 /**
- * The BEST task's recommendations (#86): durum → (gerekçe) → başlık → bileşen → öneri,
- * each with its source, evidence and next step, and Uygulandı / Reddet / Geri aç; then
+ * The BEST task's recommendations (#86): status → (reason) → category → component → recommendation,
+ * each with its source, evidence and next step, and Applied / Dismiss / Reopen; then
  * the source map they were read from.
  * @param {{groups: any[], map?: any}} best
  */
@@ -800,25 +800,25 @@ function bestBlock(best) {
     const last = best.map?.lastRun?.[b.category ?? b.pillar];
     const stale = open && b.seen && last && b.seen < last;
     const acts = open
-      ? `<button class="primary" data-act="rec" data-op="done" data-id="${r.id}">Uygulandı</button><button class="ghost" data-act="recDismiss" data-id="${r.id}">Reddet…</button>`
-      : `<button class="ghost" data-act="rec" data-op="open" data-id="${r.id}">Geri aç</button>`;
-    return `<div class="bfind s-${esc(r.status)}" id="rec-${r.id}" data-k="r${r.id}" data-q="${esc(r.title)}"><div class="row1"><span class="sev sev-${esc(b.severity)}">${esc(SEV_TR[/** @type {keyof typeof SEV_TR} */ (b.severity)] ?? b.severity)}</span><span class="ttl">${esc(r.title)}</span>${stale ? '<span class="dim">son turda görülmedi</span>' : ""}</div>
+      ? `<button class="primary" data-act="rec" data-op="done" data-id="${r.id}">Applied</button><button class="ghost" data-act="recDismiss" data-id="${r.id}">Dismiss…</button>`
+      : `<button class="ghost" data-act="rec" data-op="open" data-id="${r.id}">Reopen</button>`;
+    return `<div class="bfind s-${esc(r.status)}" id="rec-${r.id}" data-k="r${r.id}" data-q="${esc(r.title)}"><div class="row1"><span class="sev sev-${esc(b.severity)}">${esc(SEV_TR[/** @type {keyof typeof SEV_TR} */ (b.severity)] ?? b.severity)}</span><span class="ttl">${esc(r.title)}</span>${stale ? '<span class="dim">not seen in the last run</span>' : ""}</div>
 <div class="bwhy">${esc(r.body?.split("\n\n")[0] ?? "")}</div>
-<div class="bmeta"><span><b>Sonraki adım:</b> ${esc(b.next_step ?? "")}</span><span><b>Kanıt:</b> <span class="mono">${esc((b.evidence ?? []).join(", "))}</span></span><span><b>Kaynak:</b> <a href="#" data-act="url" data-url="${esc(b.source?.url ?? "")}">${esc(b.source?.title ?? b.source?.url ?? "")}</a> <span class="dim">(${esc(b.source?.version_or_date ?? "")})</span></span>${b.decision_ids?.length ? `<span><b>İlgili kararlar:</b> ${b.decision_ids.map((/** @type {number} */ id) => `<a href="#" data-act="showRecord" data-id="${id}">#${id}</a>`).join(", ")}</span>` : ""}</div>
+<div class="bmeta"><span><b>Next step:</b> ${esc(b.next_step ?? "")}</span><span><b>Evidence:</b> <span class="mono">${esc((b.evidence ?? []).join(", "))}</span></span><span><b>Source:</b> <a href="#" data-act="url" data-url="${esc(b.source?.url ?? "")}">${esc(b.source?.title ?? b.source?.url ?? "")}</a> <span class="dim">(${esc(b.source?.version_or_date ?? "")})</span></span>${b.decision_ids?.length ? `<span><b>Related decisions:</b> ${b.decision_ids.map((/** @type {number} */ id) => `<a href="#" data-act="showRecord" data-id="${id}">#${id}</a>`).join(", ")}</span>` : ""}</div>
 <div class="acts">${acts}</div></div>`;
   };
   const group = (/** @type {any} */ g, /** @type {number} */ depth) =>
     `<details class="agrp d${depth}" data-k="${esc(g.key)}"${g.key === "st:open" || (depth === 1 && g.key.startsWith("cat:")) ? " open" : ""}><summary><span class="alabel">${esc(g.label)}</span><span class="dim">${g.count}</span></summary><div class="abody">${g.children ? g.children.map((/** @type {any} */ c) => group(c, depth + 1)).join("") : g.records.map(rec).join("")}</div></details>`;
   const open = best.groups.find((g) => g.key === "st:open")?.count ?? 0;
   const map = best.map
-    ? `<details class="agrp d0" data-k="srcmap"><summary><span class="alabel">Kaynak haritası</span><span class="dim">${best.map.components.length} bileşen</span></summary><div class="abody">${best.map.components.map((/** @type {any} */ c) => `<div class="afind"><span class="ttl"><b>${esc(c.name)}</b> <span class="dim">${esc(c.version)}</span></span><span class="dim">${[c.context7 && `Context7 ${esc(c.context7)}`, c.vendor && c.vendor !== "other" && `${esc(c.vendor)} docs MCP`, c.changelog_url && `<a href="#" data-act="url" data-url="${esc(c.changelog_url)}">changelog</a>`].filter(Boolean).join(" · ") || "kaynak yok"}</span></div>`).join("")}</div></details>`
+    ? `<details class="agrp d0" data-k="srcmap"><summary><span class="alabel">Source map</span><span class="dim">${best.map.components.length} component${best.map.components.length === 1 ? "" : "s"}</span></summary><div class="abody">${best.map.components.map((/** @type {any} */ c) => `<div class="afind"><span class="ttl"><b>${esc(c.name)}</b> <span class="dim">${esc(c.version)}</span></span><span class="dim">${[c.context7 && `Context7 ${esc(c.context7)}`, c.vendor && c.vendor !== "other" && `${esc(c.vendor)} docs MCP`, c.changelog_url && `<a href="#" data-act="url" data-url="${esc(c.changelog_url)}">changelog</a>`].filter(Boolean).join(" · ") || "no source"}</span></div>`).join("")}</div></details>`
     : "";
-  return `<section class="blk" data-k="best" aria-label="Proje"><div class="h2row" data-k="h"><h2>Proje <span class="dim">· ISO/IEC 25010 + NIST SSDF · ${open} açık</span></h2><button class="ghost" data-act="bestRun">Yeniden incele</button></div>${best.groups.map((g) => group(g, 0)).join("") || '<p class="empty" data-k="none">Henüz öneri yok.</p>'}${map}</section>`;
+  return `<section class="blk" data-k="best" aria-label="Project"><div class="h2row" data-k="h"><h2>Project <span class="dim">· ISO/IEC 25010 + NIST SSDF · ${open} open</span></h2><button class="ghost" data-act="bestRun">Review again</button></div>${best.groups.map((g) => group(g, 0)).join("") || '<p class="empty" data-k="none">No recommendations yet.</p>'}${map}</section>`;
 }
 
-const AUDIT_LEVEL_TR = { error: "hata", warning: "uyarı", info: "bilgi" };
+const AUDIT_LEVEL_TR = { error: "error", warning: "warning", info: "info" };
 /**
- * The AUDIT task's findings (#77): durum → (gerekçe) → kaynak → kategori → kural → bulgu,
+ * The AUDIT task's findings (#77): status → (reason) → source → category → rule → finding,
  * as nested <details>; the open findings start unfolded.
  * @param {any[]} groups auditGroups(…, {lang: "tr"})
  */
@@ -828,50 +828,50 @@ function auditBlock(groups) {
   const finding = (/** @type {any} */ r) => {
     const a = r.links.audit;
     const where = `${String(a.file).replace(/^.*?[\\/]\.claude[\\/]/, "~/.claude/")}${a.line ? `:${a.line}` : ""}`;
-    const act = r.status === "open" ? `<button class="link" data-act="recDismiss" data-id="${r.id}">Reddet…</button>` : `<button class="link" data-act="rec" data-op="open" data-id="${r.id}">Geri aç</button>`;
+    const act = r.status === "open" ? `<button class="link" data-act="recDismiss" data-id="${r.id}">Dismiss…</button>` : `<button class="link" data-act="rec" data-op="open" data-id="${r.id}">Reopen</button>`;
     return `<div class="afind s-${esc(r.status)}" id="rec-${r.id}" data-k="r${r.id}" data-q="${esc(r.title)}"${r.body ? ` title="${esc(r.body)}"` : ""}><span class="adot a-${esc(a.level)}" aria-hidden="true"></span><span class="ttl">${esc(r.title.replace(/^[^:]+:\s*/, ""))}</span><span class="mono dim">${esc(where)}</span>${act}</div>`;
   };
   const group = (/** @type {any} */ g, /** @type {number} */ depth) =>
     `<details class="agrp d${depth}" data-k="${esc(g.key)}"${g.key === "st:open" || (depth === 1 && g.key.startsWith("src:") && g.count <= 50) ? " open" : ""}><summary><span class="alabel">${esc(g.label)}</span><span class="dim">${g.count}</span>${levels(g.levels)}</summary><div class="abody">${g.children ? g.children.map((c) => group(c, depth + 1)).join("") : g.records.map(finding).join("")}</div></details>`;
   const open = groups.find((g) => g.key === "st:open")?.count ?? 0;
-  return `<section class="blk" data-k="audit" aria-label="Ajan kurulumu"><h2>Ajan kurulumu <span class="dim">· agnix · ${open} açık</span></h2>${groups.map((g) => group(g, 0)).join("") || '<p class="empty" data-k="none">Bulgu yok.</p>'}</section>`;
+  return `<section class="blk" data-k="audit" aria-label="Agent setup"><h2>Agent setup <span class="dim">· agnix · ${open} open</span></h2>${groups.map((g) => group(g, 0)).join("") || '<p class="empty" data-k="none">No findings.</p>'}</section>`;
 }
 
 /** The properties rail. @param {NonNullable<ReturnType<typeof tasksPage>["cur"]>} c */
 function railHtml(c) {
   const prop = (/** @type {string} */ label, /** @type {string} */ value) => `<div class="prop"><span class="lbl">${label}</span><span class="val">${value}</span></div>`;
-  const status = `<select data-change="taskStatus" data-task="${c.id}" aria-label="Durum">${TASK_STATUSES.map((s) => `<option value="${s}"${s === c.status ? " selected" : ""}>${STATUS_TR[/** @type {keyof typeof STATUS_TR} */ (s)]}</option>`).join("")}</select>`;
-  return `<aside class="rail" data-k="rail-${c.id}" aria-label="Özellikler">${prop("Durum", status)}${prop("Repo", esc(c.repo?.name ?? "—"))}${prop("Epic", c.epic ? `${openTask(c.epic.id, c.epic.status, c.epic.key, "mono")} ${esc(c.epic.title)}` : "—")}${prop("Kayıtlar", `${c.openCount} açık / ${c.recordCount}`)}${prop("Son değişiklik", c.last ? `${esc(when(c.last.at))}${c.last.who ? ` · ${esc(c.last.who.toLowerCase())}` : ""}` : "—")}
-<div class="links"><span class="lbl">Bu görevde</span><a href="#" data-act="edits" data-key="${esc(c.key)}">Ajan değişikliklerinde göster</a>${c.url ? `<a href="#" data-act="url" data-url="${esc(c.url)}">GitHub'da aç ${icon("external", 13)}</a>` : ""}</div></aside>`;
+  const status = `<select data-change="taskStatus" data-task="${c.id}" aria-label="Status">${TASK_STATUSES.map((s) => `<option value="${s}"${s === c.status ? " selected" : ""}>${STATUS_TR[/** @type {keyof typeof STATUS_TR} */ (s)]}</option>`).join("")}</select>`;
+  return `<aside class="rail" data-k="rail-${c.id}" aria-label="Properties">${prop("Status", status)}${prop("Repo", esc(c.repo?.name ?? "—"))}${prop("Epic", c.epic ? `${openTask(c.epic.id, c.epic.status, c.epic.key, "mono")} ${esc(c.epic.title)}` : "—")}${prop("Records", `${c.openCount} open / ${c.recordCount}`)}${prop("Last change", c.last ? `${esc(when(c.last.at))}${c.last.who ? ` · ${esc(c.last.who.toLowerCase())}` : ""}` : "—")}
+<div class="links"><span class="lbl">On this task</span><a href="#" data-act="edits" data-key="${esc(c.key)}">Show in Agent changes</a>${c.url ? `<a href="#" data-act="url" data-url="${esc(c.url)}">Open on GitHub ${icon("external", 13)}</a>` : ""}</div></aside>`;
 }
 
 /** @param {ReturnType<typeof inboxModel>} m */
 function inboxHtml(m) {
-  const seg = `<div class="seg" role="group" aria-label="Kapsam"><button class="fpill${m.all ? "" : " on"}" data-act="scope" data-all="0" aria-pressed="${!m.all}">Bu repo</button><button class="fpill${m.all ? " on" : ""}" data-act="scope" data-all="1" aria-pressed="${m.all}">Bütün repolar</button></div>`;
-  const top = `<div class="toprow" data-k="top"><div><h1>Bende bekleyenler</h1><p class="lead">Ajanın senden beklediği her şey, görev görev. Cevaplayınca ya da yapınca ajan bir sonraki turda görür.</p></div>${seg}</div>`;
+  const seg = `<div class="seg" role="group" aria-label="Scope"><button class="fpill${m.all ? "" : " on"}" data-act="scope" data-all="0" aria-pressed="${!m.all}">This repo</button><button class="fpill${m.all ? " on" : ""}" data-act="scope" data-all="1" aria-pressed="${m.all}">All repos</button></div>`;
+  const top = `<div class="toprow" data-k="top"><div><h1>Waiting on you</h1><p class="lead">Everything the agent is waiting on from you, task by task. When you answer or do it, the agent sees it on its next turn.</p></div>${seg}</div>`;
   // A click on a bucket shows its kind alone (the page script filters), again shows all.
-  const buckets = `<div class="buckets" role="group" aria-label="Tür" data-k="buckets">${m.buckets.map((b) => `<button class="bucket b-${b.id}" data-k="${b.id}" data-act="ibucket" data-b="${b.id}" aria-pressed="false"><span class="n">${b.n}</span><span class="bl">${b.label}</span><span class="dim">${b.hint}</span></button>`).join("")}</div>`;
+  const buckets = `<div class="buckets" role="group" aria-label="Kind" data-k="buckets">${m.buckets.map((b) => `<button class="bucket b-${b.id}" data-k="${b.id}" data-act="ibucket" data-b="${b.id}" aria-pressed="false"><span class="n">${b.n}</span><span class="bl">${b.label}</span><span class="dim">${b.hint}</span></button>`).join("")}</div>`;
   // One chip per task, with what is still open on it: a click shows that task alone (the page script filters).
   const chips = m.groups.length > 1
-    ? `<div class="seg itasks" role="group" aria-label="Görev" data-k="itasks">${m.groups.map((g) => `<button class="fpill" data-act="itask" data-id="${g.task?.id ?? -1}" aria-pressed="false" title="${esc(g.task?.title ?? "Görevi bilinmeyen tur sonu soruları")}"><span class="mono">${esc(g.task?.key ?? "Görevsiz")}</span> <span class="dim cnt">${g.items.filter((r) => !r.done).length}</span></button>`).join("")}</div>`
+    ? `<div class="seg itasks" role="group" aria-label="Task" data-k="itasks">${m.groups.map((g) => `<button class="fpill" data-act="itask" data-id="${g.task?.id ?? -1}" aria-pressed="false" title="${esc(g.task?.title ?? "End-of-turn asks with no known task")}"><span class="mono">${esc(g.task?.key ?? "No task")}</span> <span class="dim cnt">${g.items.filter((r) => !r.done).length}</span></button>`).join("")}</div>`
     : "";
   const groups = m.groups.length
-    ? m.groups.map((g) => `<section class="igrp" data-k="g${g.task?.id ?? "none"}" data-task="${g.task?.id ?? -1}"><h2 data-k="h">${g.task ? `${openTask(g.task.id, g.task.status, g.task.key)}<span>${esc(g.task.title)}</span>` : `<span>Görevsiz</span><span class="dim">ajanın tur sonunda sorup göreve bağlamadıkları</span>`}<span class="dim">${esc(g.repo?.name ?? "")}</span></h2>${g.items.map((r) => askCard(r)).join("")}</section>`).join("")
-    : `<div class="emptyhero" data-k="none">${require("./mascot.js").mascot(56)}<p><b>Her şey yolunda.</b><br>Şu an kayıtlarda senden beklenen bir şey yok.</p></div>`;
-  return `<div class="inbox" data-k="inbox">${top}${buckets}${chips}<div class="igroups" data-k="groups" data-navgroup="inbox">${groups}<p class="empty" id="ifnone" data-k="ifnone" hidden>Bu filtrede senden beklenen bir şey yok.</p></div></div>`;
+    ? m.groups.map((g) => `<section class="igrp" data-k="g${g.task?.id ?? "none"}" data-task="${g.task?.id ?? -1}"><h2 data-k="h">${g.task ? `${openTask(g.task.id, g.task.status, g.task.key)}<span>${esc(g.task.title)}</span>` : `<span>No task</span><span class="dim">asked by the agent at the end of a turn, with no task</span>`}<span class="dim">${esc(g.repo?.name ?? "")}</span></h2>${g.items.map((r) => askCard(r)).join("")}</section>`).join("")
+    : `<div class="emptyhero" data-k="none">${require("./mascot.js").mascot(56)}<p><b>All good.</b><br>Nothing is waiting on you.</p></div>`;
+  return `<div class="inbox" data-k="inbox">${top}${buckets}${chips}<div class="igroups" data-k="groups" data-navgroup="inbox">${groups}<p class="empty" id="ifnone" data-k="ifnone" hidden>Nothing in this filter is waiting on you.</p></div></div>`;
 }
 
 /** @param {ReturnType<typeof homeModel>} m */
 function homeHtml(m) {
   const pct = m.total ? Math.round((m.done / m.total) * 100) : 0;
-  const top = `<div data-k="top"><h1>${esc(m.repoName)}</h1><p class="lead">${m.done} / ${m.total} görev bitti · ${m.active} sürüyor · ${m.open} açık</p><div class="progress" role="progressbar" aria-label="Görev ilerlemesi" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div style="width: ${pct}%"></div></div></div>`;
-  const pointers = `<section class="card left" aria-label="Nerede kaldık"><h2 class="cap">${icon("arrow", 18)}Nerede kaldık</h2>${m.pointers.map((p) => `<a href="#" class="ptr" data-act="open" data-id="${p.id}" data-f="${bucketOf(p.status)}" data-rec="${p.record}"><span class="pm"><span class="mono">${esc(p.key)}</span><span class="dim">${esc(p.task)}</span></span><span class="ptitle">${esc(p.next)}${p.mine ? ' <b class="mine">(sende)</b>' : ""}</span></a>`).join("") || '<p class="empty">Açık görevlerin hiçbirinde nerede kaldığımız işaretli değil.</p>'}</section>`;
-  const asks = `<section class="card" aria-label="Senden beklenen"><h2 class="cap row"><span>Senden beklenen</span><span class="dim">${m.askCount}</span></h2>${m.asks.map((a) => `<a href="#" class="hask" data-act="open" data-id="${a.task}" data-f="${bucketOf(a.status ?? "active")}" data-rec="${a.id}">${kindChip(a.kind, a.kind === "question" ? "Soru" : a.kind === "test" ? "Test" : "İş")}<span class="ttl">${esc(a.title)}</span><span class="mono dim">${esc(a.key)}</span></a>`).join("") || '<p class="empty">Senden beklenen bir şey yok.</p>'}</section>`;
-  const head = `<tr><th>Görev</th><th>Durum</th><th>Nerede kaldık</th><th>Sende</th><th>Yapılacak</th><th>Son değişiklik</th></tr>`;
-  const rows = m.rows.map((t) => `<tr data-k="t${t.id}" id="h-${t.id}" data-nav tabindex="0" data-act="open" data-id="${t.id}" data-f="${bucketOf(t.status)}" data-q="${esc(t.q)}"><td><span class="mono key">${esc(t.key)}</span> <b>${esc(t.title)}</b></td><td>${statusChip(t.status)}</td><td class="dim">${esc(t.pointer ?? "—")}</td><td class="${t.asks ? "mine" : "dim"}">${t.asks || "—"}</td><td>${t.todos ? `${t.openTodos} / ${t.todos}` : "plan yok"}</td><td class="dim">${esc(t.when)}</td></tr>`).join("");
-  const table = `<section class="blk" data-k="table" aria-label="Görevler"><h2>Görevler</h2><div class="tablewrap"><table class="htable"><thead>${head}</thead><tbody data-navgroup="home">${rows || '<tr><td colspan="6" class="empty">Bu repoda henüz görev yok.</td></tr>'}</tbody></table></div></section>`;
+  const top = `<div data-k="top"><h1>${esc(m.repoName)}</h1><p class="lead">${m.done} / ${m.total} tasks done · ${m.active} in progress · ${m.open} open</p><div class="progress" role="progressbar" aria-label="Task progress" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div style="width: ${pct}%"></div></div></div>`;
+  const pointers = `<section class="card left" aria-label="Where we left off"><h2 class="cap">${icon("arrow", 18)}Where we left off</h2>${m.pointers.map((p) => `<a href="#" class="ptr" data-act="open" data-id="${p.id}" data-f="${bucketOf(p.status)}" data-rec="${p.record}"><span class="pm"><span class="mono">${esc(p.key)}</span><span class="dim">${esc(p.task)}</span></span><span class="ptitle">${esc(p.next)}${p.mine ? ' <b class="mine">(on you)</b>' : ""}</span></a>`).join("") || '<p class="empty">None of the open tasks has where we left off marked.</p>'}</section>`;
+  const asks = `<section class="card" aria-label="Waiting on you"><h2 class="cap row"><span>Waiting on you</span><span class="dim">${m.askCount}</span></h2>${m.asks.map((a) => `<a href="#" class="hask" data-act="open" data-id="${a.task}" data-f="${bucketOf(a.status ?? "active")}" data-rec="${a.id}">${kindChip(a.kind, a.kind === "question" ? "Question" : a.kind === "test" ? "Test" : "To-do")}<span class="ttl">${esc(a.title)}</span><span class="mono dim">${esc(a.key)}</span></a>`).join("") || '<p class="empty">Nothing is waiting on you.</p>'}</section>`;
+  const head = `<tr><th>Task</th><th>Status</th><th>Where we left off</th><th>On you</th><th>To-dos</th><th>Last change</th></tr>`;
+  const rows = m.rows.map((t) => `<tr data-k="t${t.id}" id="h-${t.id}" data-nav tabindex="0" data-act="open" data-id="${t.id}" data-f="${bucketOf(t.status)}" data-q="${esc(t.q)}"><td><span class="mono key">${esc(t.key)}</span> <b>${esc(t.title)}</b></td><td>${statusChip(t.status)}</td><td class="dim">${esc(t.pointer ?? "—")}</td><td class="${t.asks ? "mine" : "dim"}">${t.asks || "—"}</td><td>${t.todos ? `${t.openTodos} / ${t.todos}` : "no plan"}</td><td class="dim">${esc(t.when)}</td></tr>`).join("");
+  const table = `<section class="blk" data-k="table" aria-label="Tasks"><h2>Tasks</h2><div class="tablewrap"><table class="htable"><thead>${head}</thead><tbody data-navgroup="home">${rows || '<tr><td colspan="6" class="empty">No tasks in this repo yet.</td></tr>'}</tbody></table></div></section>`;
   const loose = m.loose.length
-    ? `<section class="blk" data-k="loose" data-navgroup="loose" aria-label="Görevsiz bekleyenler"><h2><span class="odot" aria-hidden="true"></span>Görevsiz bekleyenler <span class="dim">· ${m.loose.length} · ajanın tur sonunda sorup göreve bağlamadıkları</span></h2>${m.loose.map((r) => askCard(r)).join("")}</section>`
+    ? `<section class="blk" data-k="loose" data-navgroup="loose" aria-label="Waiting on you, no task"><h2><span class="odot" aria-hidden="true"></span>Waiting on you, no task <span class="dim">· ${m.loose.length} · asked by the agent at the end of a turn, with no task</span></h2>${m.loose.map((r) => askCard(r)).join("")}</section>`
     : "";
   return `<div class="home" data-k="home">${top}${unreadHtml(m.unread)}<div class="grid2" data-k="cards">${pointers}${asks}</div>${loose}${table}</div>`;
 }
@@ -882,7 +882,7 @@ function homeHtml(m) {
  * @param {{waiting?: any[], linkOf?: (root: string, key: string) => string | undefined, now?: number}} [o]
  */
 function paneHtml(db, root, view, o = {}) {
-  if (!db) return `<p class="empty" data-k="nodb">Imprimatur veritabanı açılamadı: ${esc(o.error ?? "kullanılamıyor")}</p>`;
+  if (!db) return `<p class="empty" data-k="nodb">Could not open the Imprimatur database: ${esc(o.error ?? "unavailable")}</p>`;
   if (view.tab === "home") return homeHtml(homeModel(db, root, o));
   if (view.tab === "tasks") return tasksHtml(tasksPage(db, root, view, o));
   if (view.tab === "inbox") return inboxHtml(inboxModel(db, root, { all: view.all, waiting: o.waiting, now: o.now, placeOf: o.placeOf }));
@@ -977,7 +977,7 @@ function cleanView(v) {
   const ids = (/** @type {any} */ a) => (Array.isArray(a) ? a.map(Number).filter((n) => Number.isInteger(n) && n > 0).slice(0, 100) : undefined);
   /** @type {Record<string, any>} */
   const out = {};
-  // Bende bekleyenler is gone: a view saved on it opens Ana sayfa.
+  // Waiting on you is gone: a view saved on it opens Home.
   if (v.tab === "inbox") out.tab = "home";
   else if (TABS.includes(v.tab)) out.tab = v.tab;
   if (v.sel === null || (Number.isInteger(Number(v.sel)) && Number(v.sel) > 0)) out.sel = v.sel === null ? null : Number(v.sel);
@@ -1046,7 +1046,7 @@ const TASKS_CSS = `
   .card.turn details.full summary { cursor: pointer; font-size: 13px; color: var(--vscode-descriptionForeground); } .card.turn details.full pre { white-space: pre-wrap; font-size: 12px; max-height: 320px; overflow: auto; }
   .flash { animation: flash 1.6s ease-out 1; }
   @keyframes flash { 0%, 30% { box-shadow: 0 0 0 2px var(--acc); background: color-mix(in srgb, var(--acc) 22%, transparent); } 100% { box-shadow: 0 0 0 0 transparent; } }
-  /* Görevler */
+  /* Tasks */
   .tl { display: flex; flex-wrap: wrap; align-items: stretch; margin: 0 -12px; border-top: 1px solid var(--line); min-height: calc(100vh - var(--appbar-h, 52px)); }
   .tlist { flex: 1 1 260px; max-width: 320px; min-width: 0; padding: 14px 10px; background: var(--vscode-sideBar-background); border-right: 1px solid var(--line);
     display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - var(--appbar-h, 52px)); overflow: auto; position: sticky; top: var(--appbar-h, 52px); box-sizing: border-box; }
@@ -1091,7 +1091,7 @@ const TASKS_CSS = `
   .ans { display: block; padding-left: 4px; color: var(--vscode-foreground); } .ans .ic { color: var(--acc); } .ans .body { display: block; }
   #waiting { max-width: 1000px; margin: 0 auto; }
   #pane.stale > * { opacity: .4; pointer-events: none; }
-  #pane.stale::before { content: "Yükleniyor…"; display: block; padding: 12px 0; color: var(--vscode-descriptionForeground); }
+  #pane.stale::before { content: "Loading…"; display: block; padding: 12px 0; color: var(--vscode-descriptionForeground); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
   .bfind { padding: 8px 0 8px 16px; border-bottom: 1px solid var(--vscode-widget-border, transparent); } .bfind .row1 { display: flex; gap: 8px; align-items: baseline; }
   .bfind .ttl { font-weight: 600; } .bfind.s-done .ttl, .bfind.s-dropped .ttl { color: var(--muted); } .bwhy { margin: 4px 0; }
@@ -1144,7 +1144,7 @@ const TASKS_CSS = `
   .prop { display: flex; flex-direction: column; gap: 2px; } .prop .val { font-weight: 600; }
   .prop select { font: inherit; padding: 3px 6px; border-radius: 4px; background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); border: 1px solid var(--vscode-dropdown-border, var(--line)); }
   .links { margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; } .links a { font-weight: 600; }
-  /* Bende bekleyenler */
+  /* Waiting on you */
   .inbox, .home { max-width: 1000px; margin: 0 auto; padding: 22px 12px 0; display: flex; flex-direction: column; gap: 20px; }
   .home { max-width: 1180px; gap: 26px; }
   .toprow { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
@@ -1156,7 +1156,7 @@ const TASKS_CSS = `
   .igroups { display: flex; flex-direction: column; gap: 18px; } .igrp { display: flex; flex-direction: column; gap: 8px; }
   .igrp h2 { align-items: baseline; gap: 10px; }
   .turn-h { margin-top: 8px !important; }
-  /* Ana sayfa */
+  /* Home */
   .progress { margin-top: 12px; height: 10px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); max-width: 520px; overflow: hidden; }
   .progress div { height: 10px; border-radius: var(--r-pill); background: linear-gradient(90deg, color-mix(in srgb, var(--acc) 65%, var(--vscode-editor-background)), var(--acc)); }
   .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }

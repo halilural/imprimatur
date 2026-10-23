@@ -158,7 +158,7 @@ test("review 10: the list and decision authors are read once per database change
   const versionsOf = s.db.versionsOf.bind(s.db);
   s.db.versionsOf = (id) => (versions++, versionsOf(id));
   const page = () => tv.tasksPage(s.db, s.root, { sel: s.task.id });
-  assert.equal(page().cur.decisions[0].who, "sen");
+  assert.equal(page().cur.decisions[0].who, "you");
   page();
   assert.equal(reads, 1, "the second draw reads nothing again");
   assert.equal(versions, 0, "authors in one query, not one per decision");

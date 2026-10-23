@@ -25,7 +25,7 @@ async function setRecommendation(db, id, status) {
   if (status === "dropped") {
     const likely = which === "audit" ? require("./setup-audit-tree.js").reasonOf(rec) : data.decision_ids?.length ? "decided" : "not-applicable";
     const picks = recs.reasonsFor(which, likely);
-    const pick = await vscode.window.showQuickPick(picks, { title: `Reddet: ${rec.title}`, placeHolder: "Neden? (bir daha önerilmez)" });
+    const pick = await vscode.window.showQuickPick(picks, { title: `Dismiss: ${rec.title}`, placeHolder: "Why? (it will not be suggested again)" });
     if (!pick) return false;
     let tag = pick.label;
     if (pick.key === "decided") {
@@ -35,16 +35,16 @@ async function setRecommendation(db, id, status) {
       const d = await vscode.window.showQuickPick(
         decisions.map((/** @type {any} */ r) => ({ label: `#${r.id} ${String(r.kind).toUpperCase()}`, description: r.title, id: r.id, near: touched.has(r.id) }))
           .sort((/** @type {any} */ a, /** @type {any} */ b) => Number(b.near) - Number(a.near)),
-        { title: "Hangi karar bunu belirliyor?", matchOnDescription: true },
+        { title: "Which decision settles this?", matchOnDescription: true },
       );
       if (!d) return false;
       data.decision = d.id;
       tag = `${pick.label} #${d.id}`;
     }
-    const note = await vscode.window.showInputBox({ title: `Reddet: ${pick.label}`, prompt: "Not (isteğe bağlı), kayıtta kalır" });
+    const note = await vscode.window.showInputBox({ title: `Dismiss: ${pick.label}`, prompt: "Note (optional), kept in the record" });
     if (note === undefined) return false;
     data.reason = pick.key;
-    patch.body = `${rec.body ?? ""}\n\n_Reddedildi (${tag})${note.trim() ? `:_ ${note.trim()}` : "._"}`;
+    patch.body = `${rec.body ?? ""}\n\n_Dismissed (${tag})${note.trim() ? `:_ ${note.trim()}` : "._"}`;
   } else {
     delete data.reason;
     delete data.decision;

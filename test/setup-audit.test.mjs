@@ -182,8 +182,8 @@ test("audit tree: Recommendations — status → (reason) → source → agnix c
   assert.equal(dismissed.children[2].children[0].label, "Project");
   // The same grouping in Turkish, for the task page.
   const tr = auditGroups(records, { lang: "tr" });
-  assert.deepEqual(tr.map((g) => [g.label, g.count]), [["Açık", 4], ["Uygulandı", 1], ["Reddedildi", 3]]);
-  assert.equal(tr[2].children[0].label, "Üçüncü taraf plugin");
+  assert.deepEqual(tr.map((g) => [g.label, g.count]), [["Open", 4], ["Applied", 1], ["Dismissed", 3]]);
+  assert.equal(tr[2].children[0].label, "Third-party plugin");
 });
 
 test("audit: a plugin update keeps its findings (no version in the fingerprint); a repo at the home is not walked", () => {
@@ -246,9 +246,9 @@ test("audit: synced skills are their own source; the AUDIT task page shows the f
     const task = db.taskByKey(db.repoByRoot(root).id, TASK);
     assert.equal(db.recordsOf(task.id)[0].links.audit.ruleName, "Timeout Policy");
     const m = tasksPage(db, root, { sel: task.id, filter: "active" }, { home: dir });
-    assert.equal(m.cur.audit[0].label, "Açık");
+    assert.equal(m.cur.audit[0].label, "Open");
     const html = tasksHtml(m);
-    assert.match(html, /Ajan kurulumu/);
+    assert.match(html, /Agent setup/);
     assert.match(html, /CC-HK-010 Timeout Policy/);
     assert.doesNotMatch(html, /data-k="todos"/, "no flat todo list for the audit");
   } finally {

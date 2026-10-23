@@ -12,19 +12,19 @@ const OLD = ["AUDIT", "BEST"];
 const ACTOR = { kind: "hook", id: "recs" };
 
 /**
- * Why a recommendation was dismissed, for both producers: [English, Turkish, which].
+ * Why a recommendation was dismissed, for both producers: [label, the same label (the second slot of the old two-language tables, kept for their callers), which].
  * which: the producers it makes sense for (the dismiss picker shows only those).
  */
 const REASONS = {
-  false: ["False alarm", "Yanlış alarm", ["audit", "best"]],
-  decided: ["Decided against (a decision)", "Bilerek yapmadık (karar)", ["audit", "best"]],
-  "not-applicable": ["Not applicable", "Uygulanmaz", ["best"]],
-  "accepted-risk": ["Accepted risk", "Kabul edilmiş risk", ["audit", "best"]],
-  postponed: ["Postponed", "Ertelendi", ["best"]],
-  plugin: ["Third-party plugin", "Üçüncü taraf plugin", ["audit"]],
-  synced: ["Synced skill (claude.ai)", "Eşitlenen skill (claude.ai)", ["audit"]],
-  local: ["Specific to this machine", "Bu makineye özel", ["audit"]],
-  other: ["Other", "Diğer", ["audit", "best"]],
+  false: ["False alarm", "False alarm", ["audit", "best"]],
+  decided: ["Decided against (a decision)", "Decided against (a decision)", ["audit", "best"]],
+  "not-applicable": ["Not applicable", "Not applicable", ["best"]],
+  "accepted-risk": ["Accepted risk", "Accepted risk", ["audit", "best"]],
+  postponed: ["Postponed", "Postponed", ["best"]],
+  plugin: ["Third-party plugin", "Third-party plugin", ["audit"]],
+  synced: ["Synced skill (claude.ai)", "Synced skill (claude.ai)", ["audit"]],
+  local: ["Specific to this machine", "Specific to this machine", ["audit"]],
+  other: ["Other", "Other", ["audit", "best"]],
 };
 
 /** Which producer a record is: "audit", "best", or undefined (another record). @param {any} r */
@@ -101,7 +101,7 @@ function writeSummary(db, task, actor = ACTOR) {
   return line;
 }
 
-/** The dismiss reasons for a producer: [{key, label (Turkish)}], the likely one first. @param {"audit" | "best"} which @param {string} [likely] */
+/** The dismiss reasons for a producer: [{key, label}], the likely one first. @param {"audit" | "best"} which @param {string} [likely] */
 function reasonsFor(which, likely) {
   return Object.entries(REASONS).filter(([, v]) => v[2].includes(which)).map(([key, v]) => ({ key, label: v[1] }))
     .sort((a, b) => Number(b.key === likely) - Number(a.key === likely));
