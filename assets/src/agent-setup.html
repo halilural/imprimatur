@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Agent setup, checked</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .side { left: 80px; top: 214px; width: 452px; height: 648px; background: #fbf6f0; }
+  .shead { display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 16px; border-bottom: 1.5px solid var(--line); font-size: 12.5px; font-weight: 800; letter-spacing: 1.4px; color: var(--ink); background: #fffaf4; }
+  .shead .act { letter-spacing: 0; font-size: 12.5px; color: var(--acc); }
+  .tree { padding: 8px 0; font-size: 14px; font-weight: 700; }
+  .tr { display: flex; align-items: center; gap: 7px; height: 29px; padding-right: 8px; white-space: nowrap; overflow: hidden; color: var(--text); }
+  .tr .tw { width: 12px; color: var(--muted); font-size: 11px; flex: none; text-align: center; }
+  .tr .d { color: var(--muted); font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+  .tr .d b { font-weight: 800; }
+  .tr.sel { background: #ffe9d6; box-shadow: inset 3px 0 0 var(--acc); }
+  .tr svg.ic { width: 15px; height: 15px; color: var(--muted); }
+  .new { color: var(--green) !important; } .chg { color: var(--amber) !important; }
+  .l1 { padding-left: 14px; } .l2 { padding-left: 34px; } .l3 { padding-left: 54px; } .l4 { padding-left: 74px; }
+  .hl { color: var(--acc) !important; }
+  .cnt { margin-left: 2px; }
+  .win.recs { left: 556px; top: 214px; width: 996px; height: 648px; }
+  .page { padding: 12px 24px; display: flex; flex-direction: column; gap: 8px; }
+  .meta { display: flex; gap: 10px; align-items: center; font-size: 13px; font-weight: 800; color: var(--blue); }
+  h2.t { margin: 0; font-size: 25px; font-weight: 800; color: var(--ink); }
+  .ttabs { display: flex; gap: 4px; border-bottom: 1.5px solid var(--line); }
+  .ttab { padding: 6px 11px; font-size: 13.5px; font-weight: 800; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1.5px; display: flex; gap: 6px; }
+  .ttab.on { color: var(--ink); border-bottom-color: var(--acc); }
+  .ttab .n { font-size: 11.5px; padding: 0 6px; border-radius: 9px; background: #f3e6d8; color: var(--ink); }
+  .blk h3 { margin: 0 0 7px; font-size: 16px; font-weight: 800; color: var(--ink); display: flex; gap: 8px; align-items: center; }
+  .blk h3 .dm { font-size: 13.5px; font-weight: 700; color: var(--muted); }
+  .blk h3 .btn { margin-left: auto; height: 27px; font-size: 12.5px; }
+  .grp { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 800; color: var(--ink); padding: 3px 0; }
+  .grp .c { color: var(--muted); }
+  .alv { font-size: 11.5px; font-weight: 800; padding: 0 7px; border-radius: 9px; border: 1.5px solid currentColor; }
+  .a-error { color: var(--red); } .a-warning { color: var(--amber); } .a-info { color: var(--blue); }
+  .g1 { padding-left: 16px; } .g2 { padding-left: 32px; }
+  .afind { display: flex; align-items: center; gap: 9px; padding: 6px 10px; margin: 3px 0 3px 48px; border: 1.5px solid var(--line); border-radius: 8px; background: #fff; font-size: 13.5px; font-weight: 700; }
+  .adot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; flex: none; }
+  .afind .ttl { flex: 1; } .afind .mono { font-size: 12px; color: var(--muted); }
+  .afind .lk { font-size: 12.5px; font-weight: 800; color: var(--acc); }
+  .bfind { border: 1.5px solid var(--line); border-left: 4px solid var(--red); border-radius: 10px; background: #fff; padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; margin-left: 32px; }
+  .bfind .row1 { display: flex; gap: 9px; align-items: center; font-size: 15px; font-weight: 800; }
+  .sev { font-size: 11.5px; font-weight: 800; padding: 0 8px; border-radius: 9px; border: 1.5px solid currentColor; }
+  .sev-high { color: var(--red); background: var(--red-soft); } .sev-medium { color: var(--amber); }
+  .bwhy { font-size: 13.5px; font-weight: 600; color: var(--text); }
+  .bmeta { display: flex; flex-direction: column; gap: 2px; font-size: 13px; font-weight: 600; color: var(--text); }
+  .bmeta b { font-weight: 800; color: var(--ink); } .bmeta .mono { font-size: 12px; }
+  .bmeta a { color: var(--acc); font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
+  .acts { display: flex; gap: 8px; }
+  .acts .btn { height: 28px; }
+  .closed { display: flex; gap: 10px; align-items: center; font-size: 13.5px; font-weight: 800; padding: 3px 0 3px 16px; }
+  .closed .c { color: var(--muted); }
+  .chipok { --c: var(--green); --cs: var(--green-soft); }
+</style></head>
+<body>
+<i class="plus p1"></i><i class="plus p2"></i><i class="plus p3"></i><i class="plus p4"></i>
+<div class="head"><h1>Agent setup, checked</h1><div class="ul"></div><p>Every file that shapes the agent, linted, with fixes that cite their source.</p></div>
+<img class="mascot" src="../logo.svg" alt="">
+
+<div class="win side">
+  <div class="shead">AGENT SETUP<span class="act">Mark all as seen</span></div>
+  <div class="tree">
+    <div class="tr l1"><span class="tw">▾</span><svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>web-app</div>
+    <div class="tr l2"><span class="tw">▾</span><svg class="ic hl" viewBox="0 0 24 24"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/></svg>Claude Code</div>
+    <div class="tr l3"><span class="tw">▾</span>Rules</div>
+    <div class="tr l4"><svg class="ic chg" viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg><span class="chg">CLAUDE.md</span><span class="d"><b class="chg">changed</b> · 142 lines · # web-app</span></div>
+    <div class="tr l3"><span class="tw">▾</span>Settings</div>
+    <div class="tr l4 sel"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>.claude/settings.json<span class="d">4 hooks</span></div>
+    <div class="tr l3"><span class="tw">▾</span>Hook scripts</div>
+    <div class="tr l4"><svg class="ic new" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg><span class="new">.claude/hooks/lint.sh</span><span class="d"><b class="new">new</b> · 18 lines</span></div>
+    <div class="tr l3"><span class="tw">▾</span>Skills</div>
+    <div class="tr l4"><svg class="ic" viewBox="0 0 24 24"><path d="M22 10 12 5 2 10l10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>deploy<span class="d">Deploy to staging or production</span></div>
+    <div class="tr l4"><svg class="ic" viewBox="0 0 24 24"><path d="M22 10 12 5 2 10l10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>release-notes<span class="d">Write notes from merged PRs</span></div>
+    <div class="tr l3"><span class="tw">▾</span>MCP servers</div>
+    <div class="tr l4"><svg class="ic" viewBox="0 0 24 24"><path d="M12 22v-5"/><path d="M15 8V2"/><path d="M17 8a1 1 0 0 1 1 1v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1z"/><path d="M9 8V2"/></svg>.mcp.json<span class="d">2 servers: postgres, browser</span></div>
+    <div class="tr l2"><span class="tw">▸</span>Cursor<span class="d">1 file</span></div>
+    <div class="tr l2"><span class="tw">▸</span>Git hooks<span class="d">2 files</span></div>
+    <div class="tr l1"><span class="tw">▸</span>Global (~)</div>
+    <div class="tr" style="padding-left:6px"><span class="tw">▾</span><svg class="ic hl" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg><span class="hl">Recommendations (5)</span><span class="d" style="font-size:12.5px">1 error · 2 warnings · 1 high · 1 medium</span></div>
+  </div>
+</div>
+
+<div class="win recs">
+  <div class="appbar">
+    <span class="brand"><img src="../logo.svg" alt="">Imprimatur<span class="repo">web-app</span></span>
+    <nav class="tabs"><span class="tab">Home</span><span class="tab on">Tasks</span><span class="tab">Analysis</span><span class="tab">Agent changes</span></nav>
+  </div>
+  <div class="page">
+    <div class="meta"><span class="key">RECS</span>● In progress</div>
+    <h2 class="t">Recommendations</h2>
+    <div class="ttabs"><span class="ttab on">Recommendations <span class="n">5</span></span><span class="ttab">Activity</span></div>
+    <section class="blk">
+      <h3>Agent setup <span class="dm">· agnix · 3 open</span></h3>
+      <div class="grp">▾ Open <span class="c">3</span><span class="alv a-error">1 error</span><span class="alv a-warning">2 warning</span></div>
+      <div class="grp g1">▾ Project <span class="c">3</span></div>
+      <div class="grp g2">▾ Claude hooks · CC-HK-010 <span class="c">1</span></div>
+      <div class="afind"><span class="adot a-error"></span><span class="ttl">PostToolUse hook has no timeout</span><span class="mono">.claude/settings.json:14</span><span class="lk">Dismiss…</span></div>
+      <div class="grp g2">▾ Claude memory · CC-MEM-006 <span class="c">2</span></div>
+      <div class="afind"><span class="adot a-warning"></span><span class="ttl">Imported file not found: @docs/style.md</span><span class="mono">CLAUDE.md:9</span><span class="lk">Dismiss…</span></div>
+    </section>
+    <section class="blk">
+      <h3>Project <span class="dm">· ISO/IEC 25010 + NIST SSDF · 2 open</span><span class="btn">Review again</span></h3>
+      <div class="grp">▾ Open <span class="c">2</span> <span class="grp" style="padding:0;margin-left:8px">▾ Security · ISO/IEC 25010</span></div>
+      <div class="bfind">
+        <div class="row1"><span class="sev sev-high">high</span>Verify the webhook signature before trusting the event</div>
+        <div class="bwhy">The payment webhook marks an order paid from the request body alone.</div>
+        <div class="bmeta"><span><b>Next step:</b> check the signature header with the signing secret; reject on mismatch</span>
+          <span><b>Evidence:</b> <span class="mono">src/payments/webhook.ts:22</span></span>
+          <span><b>Source:</b> <a>Payment provider docs: Verify webhook signatures</a> (2026-09)</span></div>
+        <div class="acts"><span class="btn primary">Applied</span><span class="btn">Dismiss…</span></div>
+      </div>
+      <div class="closed"><span class="chip chipok">Applied</span><span class="c">4</span><span class="chip c-gray">Dismissed</span><span class="c">2</span><span>▸ Accepted risk <span class="c">1</span> · Not applicable <span class="c">1</span></span></div>
+    </section>
+  </div>
+</div>
+</body></html>

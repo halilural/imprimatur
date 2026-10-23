@@ -36,8 +36,7 @@ test("settings: missing keys take the defaults; strings, booleans and objects", 
   assert.equal(s.hookBypass.mode, "warn");
   assert.equal(s.designFirst.mode, false);
   assert.deepEqual([s.mainGuard.mode, s.mainGuard.branch, s.mainGuard.allow], ["block", "main", ["^(todos|docs)/"]]);
-  // Turkish input: the default status section word (the Stop hook looks for "Neredeyiz")
-  assert.deepEqual([s.status.mode, s.status.word], ["block", "neredeyiz"]);
+  assert.deepEqual([s.status.mode, s.status.word], ["block", "Where we are"]);
   assert.equal(s.sweep.mode, "warn");
   assert.equal(settingsOf(repo(null)), undefined);
 });
@@ -122,8 +121,8 @@ test("issueCreate reminds; issueFields names what the new issue lacks", () => {
   assert.deepEqual(r.context.length, 1);
   assert.match(r.context[0], /link it under its epic/);
   // The fields are set in the next steps: checked once, at the turn's end.
-  // Turkish input: the answer must contain the status word "neredeyiz" to pass the Stop hook
-  const end = () => check("Stop", { cwd: root, session_id: "S1", last_assistant_message: "Neredeyiz" }, { gh });
+  // The answer has the default status section, so only issueFields is under test.
+  const end = () => check("Stop", { cwd: root, session_id: "S1", last_assistant_message: "Where we are" }, { gh });
   assert.deepEqual(end().notice, ["Imprimatur (issueFields): #57, opened this turn, has no milestone, board Status."]);
   assert.deepEqual(end(), {});
   assert.deepEqual(check("PostToolUse", { cwd: root, tool_name: "Bash", tool_input: { command: "gh issue list" } }), {});
@@ -139,12 +138,14 @@ test("sweep: a task set done while its issue is open", () => {
   assert.match(plugin.context[0], /#56 is done in Imprimatur/);
 });
 
-test("Stop: no 'Neredeyiz' blocks once (stop_hook_active ends it); merged branches left behind are named", () => {
+test("Stop: no status section blocks once (stop_hook_active ends it); the word is the repo's own", () => {
   const root = repo({ process: {} });
-  // Turkish input: the Stop hook's default section word "neredeyiz" (where are we)
-  assert.match(check("Stop", { cwd: root, last_assistant_message: "Done." }).block, /no "neredeyiz" section/);
-  assert.deepEqual(check("Stop", { cwd: root, last_assistant_message: "Done.\n\n## Neredeyiz\n- x" }), {});
+  assert.match(check("Stop", { cwd: root, last_assistant_message: "Done." }).block, /no "Where we are" section/);
+  assert.deepEqual(check("Stop", { cwd: root, last_assistant_message: "Done.\n\n## Where we are\n- x" }), {});
   assert.deepEqual(check("Stop", { cwd: root, stop_hook_active: true, last_assistant_message: "Done." }), {});
+  // Turkish input: a repo's own status word, matched with Turkish casing (İ/i, I/ı).
+  const tr = repo({ process: { status: { word: "neredeyiz" } } });
+  assert.deepEqual(check("Stop", { cwd: tr, last_assistant_message: "Bitti.\n\n## NEREDEYİZ\n- x" }), {});
 });
 
 test("branchFinish: merged branches left behind are told to the agent at session start and after a merge", () => {
@@ -158,8 +159,8 @@ test("branchFinish: merged branches left behind are told to the agent at session
   assert.deepEqual(check("SessionStart", { cwd: root }).context, want);
   assert.deepEqual(check("PostToolUse", { cwd: root, tool_name: "Bash", tool_input: { command: "git merge --ff-only feat/2-done" } }).context, want);
   assert.deepEqual(check("PostToolUse", { cwd: root, tool_name: "Bash", tool_input: { command: "npm test" } }), {});
-  // Turkish input: the status word "neredeyiz", so only the timing is under test
-  assert.deepEqual(check("Stop", { cwd: root, last_assistant_message: "Neredeyiz" }), {}, "not at Stop: only the user would see it");
+  // The default status section is there, so only the timing is under test.
+  assert.deepEqual(check("Stop", { cwd: root, last_assistant_message: "Where we are" }), {}, "not at Stop: only the user would see it");
 });
 
 test("SessionStart: the repo's tasks and their 👉 from the database", () => {

@@ -42,7 +42,7 @@ const DEFAULTS = {
   issueCreate: "warn",
   issueFields: "warn",
   sweep: "warn",
-  status: { mode: "block", word: "neredeyiz" },
+  status: { mode: "block", word: "Where we are" },
   branchFinish: "warn",
   docUpdate: "warn",
   docSync: "warn",

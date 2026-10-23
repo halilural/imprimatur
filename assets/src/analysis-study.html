@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Analyses kept, and learnt</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .win.ana { left: 80px; top: 214px; width: 930px; height: 648px; }
+  .hubnav { display: flex; gap: 6px; padding: 10px 18px; border-bottom: 1.5px solid var(--line); background: #fffaf4; }
+  .hub { display: flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 8px; font-size: 14px; font-weight: 800; color: var(--muted); }
+  .hub.on { background: var(--acc-soft); color: var(--acc); box-shadow: inset 0 0 0 1.5px var(--acc-line); }
+  .hub .n { font-size: 11.5px; padding: 0 6px; border-radius: 9px; background: var(--acc); color: #fff; }
+  .doc { display: flex; height: calc(100% - 54px - 52px); }
+  .alist { width: 262px; flex: none; background: #fff8f1; border-right: 1.5px solid var(--line); padding: 14px 10px; display: flex; flex-direction: column; gap: 4px; }
+  .alist .lbl { padding: 0 8px 4px; }
+  .aitem { display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border-radius: 8px; }
+  .aitem.on { background: #fff; box-shadow: inset 0 0 0 1.5px var(--acc-line); }
+  .aitem .ttl { font-size: 14px; font-weight: 800; color: var(--text); }
+  .aitem .dm { font-size: 12px; font-weight: 700; color: var(--muted); }
+  .atoc { list-style: none; margin: 2px 0 6px; padding: 0 0 0 14px; display: flex; flex-direction: column; gap: 1px; font-size: 13px; font-weight: 700; }
+  .atoc li { padding: 3px 6px; border-left: 2px solid var(--line); color: var(--text); }
+  .atoc li.sub { padding-left: 18px; color: var(--muted); }
+  .atoc li.st { color: var(--acc); font-weight: 800; }
+  .apage { flex: 1; padding: 12px 22px; display: flex; flex-direction: column; gap: 9px; min-width: 0; overflow: hidden; }
+  .dhead .k { font-size: 12.5px; font-weight: 800; color: var(--acc); letter-spacing: 1.2px; text-transform: uppercase; }
+  .dhead h2 { margin: 1px 0; font-size: 23px; font-weight: 800; color: var(--ink); }
+  .dhead .lead { font-size: 13px; font-weight: 700; color: var(--muted); } .dhead .lead b { color: var(--acc); }
+  .dsec { border: 1.5px solid var(--line); border-radius: 10px; background: var(--card); padding: 11px 16px; display: flex; flex-direction: column; gap: 6px; }
+  .dsec h3 { margin: 0; font-size: 16.5px; font-weight: 800; color: var(--ink); display: flex; gap: 8px; align-items: center; }
+  .dsec h4 { margin: 2px 0 0; font-size: 14px; font-weight: 800; color: var(--sub); }
+  .dsec p, .dsec li { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--text); line-height: 1.4; }
+  .dsec ol { margin: 0; padding-left: 20px; }
+  .dsec code { font-family: var(--mono); font-size: 12px; background: #f7ece0; padding: 0 4px; border-radius: 4px; word-spacing: 0; }
+  table { border-collapse: collapse; font-size: 13px; font-weight: 700; }
+  td, th { border: 1.5px solid var(--line); padding: 3px 10px; text-align: left; } th { background: #fbf1e6; color: var(--ink); font-weight: 800; }
+  td.w { color: var(--green); font-weight: 800; }
+  .astudy { border-color: var(--acc-line); background: #fff7ef; }
+  .mast { font-size: 13.5px; font-weight: 800; color: var(--ink); }
+  .mast .wk { display: block; font-weight: 700; color: var(--muted); margin-top: 2px; }
+  /* Claude Code chat */
+  .win.cc { left: 1034px; top: 214px; width: 518px; height: 648px; background: #fffdfa; }
+  .cchead { display: flex; align-items: center; gap: 9px; height: 48px; padding: 0 16px; border-bottom: 1.5px solid var(--line); font-weight: 800; font-size: 15px; color: var(--ink); background: #fffaf4; }
+  .cchead .dots { display: flex; gap: 6px; margin-right: 6px; } .cchead .dots i { width: 11px; height: 11px; border-radius: 50%; background: #e9cdb2; }
+  .cchead .m { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .chat { padding: 14px 18px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; font-weight: 600; line-height: 1.42; color: var(--text); }
+  .you { align-self: flex-end; max-width: 86%; background: var(--acc-soft); border: 1.5px solid var(--acc-line); border-radius: 12px 12px 3px 12px; padding: 7px 12px; font-weight: 700; }
+  .you .mono { color: var(--acc); font-weight: 700; }
+  .bot { display: flex; gap: 10px; }
+  .bot .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--acc); margin-top: 7px; flex: none; }
+  .bot .tx { display: flex; flex-direction: column; gap: 5px; }
+  .qh { font-size: 12px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: var(--acc); }
+  .q { font-size: 15.5px; font-weight: 800; color: var(--ink); }
+  .opt { display: flex; gap: 8px; padding: 4px 9px; border: 1.5px solid var(--line); border-radius: 7px; font-size: 13.5px; font-weight: 700; background: #fff; }
+  .opt b { color: var(--acc); }
+  .opt.pick { border-color: var(--green); background: var(--green-soft); }
+  .grade { display: inline-flex; align-self: flex-start; gap: 6px; align-items: center; padding: 1px 10px; border-radius: 10px; font-size: 12.5px; font-weight: 800; border: 1.5px solid currentColor; }
+  .g-full { color: var(--green); background: var(--green-soft); } .g-part { color: var(--amber); background: var(--amber-soft); }
+  .tx code, .chat code { font-family: var(--mono); font-size: 12.5px; font-weight: 600; background: #f7ece0; padding: 0 4px; border-radius: 4px; word-spacing: 0; }
+  .miss { border-left: 3px solid var(--amber); padding-left: 9px; }
+</style></head>
+<body>
+<i class="plus p1"></i><i class="plus p2"></i><i class="plus p3"></i><i class="plus p4"></i>
+<div class="head"><h1>Analyses kept, and learnt</h1><div class="ul"></div><p>Plans and spike results stay with the task; /study quizzes you on them.</p></div>
+<img class="mascot" src="../logo.svg" alt="">
+
+<div class="win ana">
+  <div class="appbar">
+    <span class="brand"><img src="../logo.svg" alt="">Imprimatur<span class="repo">web-app</span></span>
+    <nav class="tabs"><span class="tab">Home</span><span class="tab">Tasks</span><span class="tab on">Analysis</span><span class="tab">Agent changes</span></nav>
+  </div>
+  <nav class="hubnav"><span class="hub">Architecture</span><span class="hub">Product</span><span class="hub">Glossary</span><span class="hub on">Task analyses <span class="n">3</span></span></nav>
+  <div class="doc">
+    <aside class="alist">
+      <div class="lbl">Tasks · 3</div>
+      <div class="aitem on"><span class="key">#42</span><span class="ttl">Background job queue</span><span class="dm">2 files · study note · 22 Oct</span></div>
+      <ol class="atoc">
+        <li>Plan (plan mode)</li><li class="sub">Steps</li>
+        <li>Spike: Postgres under load</li><li class="sub">Results</li><li class="sub">What we keep</li>
+        <li class="st">Study: job queue</li>
+      </ol>
+      <div class="aitem"><span class="key">#38</span><span class="ttl">Sign in with email links</span><span class="dm">1 file · 18 Oct</span></div>
+      <div class="aitem"><span class="key">#45</span><span class="ttl">Retry failed payments</span><span class="dm">1 file · 15 Oct</span></div>
+    </aside>
+    <main class="apage">
+      <section class="dhead"><span class="k">Task analysis · #42 · web-app</span><h2>Background job queue</h2><span class="lead">Last updated · 22 Oct, 11:40 · 2 files · <b>Go to task →</b></span></section>
+      <article class="dsec"><h3>Plan (plan mode)</h3>
+        <h4>Steps</h4>
+        <ol><li>A <code>jobs</code> table, written in the same transaction as the order</li><li>One worker per instance claims with <code>SKIP LOCKED</code></li><li>Retry 5 times with backoff, then mark failed</li></ol>
+      </article>
+      <article class="dsec"><h3>Spike: Postgres under load</h3>
+        <h4>Results</h4>
+        <table><tr><th>Backend</th><th>Jobs / s</th><th>p99 claim</th><th>New service</th></tr>
+          <tr><td>Postgres, <code>SKIP LOCKED</code></td><td class="w">1 900</td><td>14 ms</td><td class="w">no</td></tr>
+          <tr><td>Redis list</td><td>6 200</td><td>3 ms</td><td>yes</td></tr></table>
+        <h4>What we keep</h4>
+        <p>We need about 50 jobs / s: Postgres is enough, one less service.</p>
+      </article>
+      <article class="dsec astudy"><h3>Study: job queue</h3>
+        <p class="mast">Last study · 22 Oct · 4/6 full<span class="wk">Weak: Why SKIP LOCKED and not an advisory lock? · Where is a failed job retried?</span></p>
+      </article>
+    </main>
+  </div>
+</div>
+
+<div class="win cc">
+  <div class="cchead"><span class="dots"><i></i><i></i><i></i></span>Claude Code<span class="m">web-app</span></div>
+  <div class="chat">
+    <div class="you"><span class="mono">/study #42</span></div>
+    <div class="bot"><span class="dot"></span><div class="tx"><span>The study note is under Analysis → #42. Quiz first? The weak ones from last time come first.</span></div></div>
+    <div class="bot"><span class="dot"></span><div class="tx">
+      <span class="qh">Question 3/6 · where in code</span>
+      <span class="q">Where is a failed job retried?</span></div></div>
+    <div class="you">In the worker loop, it puts the job back with a delay.</div>
+    <div class="bot"><span class="dot"></span><div class="tx">
+      <span class="grade g-part">partial</span>
+      <span>Right: the job goes back with a delay.</span>
+      <span class="miss">Missing: it is <code>retryLater()</code> in <code>src/jobs/worker.ts:58</code>, and it stops after 5 tries (decision [214]).</span></div></div>
+    <div class="bot"><span class="dot"></span><div class="tx">
+      <span class="qh">Question 4/6 · alternative</span>
+      <span class="q">With Redis, what would we have lost?</span>
+      <span class="opt"><b>A</b>Jobs in the same transaction as the order</span>
+      <span class="opt"><b>B</b>Retries with backoff</span>
+      <span class="opt"><b>C</b>One worker per instance</span>
+      <span class="opt"><b>D</b>Jobs older than 7 days deleted</span></div></div>
+  </div>
+</div>
+</body></html>

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Living design documents</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .win { left: 80px; top: 214px; width: 1085px; height: 648px; }
+  .hubnav { display: flex; gap: 6px; padding: 10px 18px; border-bottom: 1.5px solid var(--line); background: #fffaf4; }
+  .hub { display: flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 8px; font-size: 14px; font-weight: 800; color: var(--muted); }
+  .hub.on { background: var(--acc-soft); color: var(--acc); box-shadow: inset 0 0 0 1.5px var(--acc-line); }
+  .hub .n { font-size: 11.5px; padding: 0 6px; border-radius: 9px; background: #f3e6d8; color: var(--ink); }
+  .doc { display: flex; height: calc(100% - 54px - 52px); }
+  .dtoc { width: 236px; flex: none; background: #fff8f1; border-right: 1.5px solid var(--line); padding: 16px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .dtoc .lbl { padding: 0 8px 4px; }
+  .dtoc a { display: flex; gap: 9px; align-items: center; padding: 6px 8px; border-radius: 7px; font-size: 14px; font-weight: 700; color: var(--text); }
+  .dtoc a.on { background: var(--acc-soft); }
+  .dtoc .num { color: var(--acc); font-weight: 800; min-width: 16px; }
+  .udot { width: 9px; height: 9px; border-radius: 50%; background: var(--blue); margin-left: auto; }
+  .dold { font-size: 12.5px; font-weight: 800; color: var(--muted); padding: 6px 8px; }
+  .dpage { overflow: hidden; flex: 1; padding: 16px 24px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .dhead .k { font-size: 12.5px; font-weight: 800; color: var(--acc); letter-spacing: 1.2px; text-transform: uppercase; }
+  .dhead h2 { margin: 2px 0 2px; font-size: 25px; font-weight: 800; color: var(--ink); letter-spacing: -.4px; }
+  .dhead .lead { font-size: 13.5px; font-weight: 700; color: var(--muted); display: flex; gap: 12px; align-items: center; }
+  .upill { padding: 0 9px; border-radius: 10px; font-size: 12px; font-weight: 800; color: var(--blue); border: 1.5px solid var(--blue); background: var(--blue-soft); }
+  .lnk { color: var(--acc); font-weight: 800; }
+  .dsec { border: 1.5px solid var(--line); border-left: 5px solid var(--blue); border-radius: 11px; background: var(--card); padding: 14px 18px; display: flex; flex-direction: column; gap: 9px; }
+  .dsec-h { display: flex; align-items: center; gap: 10px; }
+  .dsec-h h3 { margin: 0; font-size: 19px; font-weight: 800; color: var(--ink); display: flex; gap: 8px; align-items: center; }
+  .dsec-h h3 .num { color: var(--acc); }
+  .dacts { margin-left: auto; display: flex; gap: 7px; align-items: center; }
+  .dacts .btn { height: 27px; font-size: 12.5px; }
+  .dacts .tl { font-size: 12.5px; font-weight: 800; color: var(--muted); }
+  .md { font-size: 14.5px; font-weight: 600; line-height: 1.45; color: var(--text); margin: 0; }
+  .md code { font-family: var(--mono); font-size: 13px; background: #f7ece0; padding: 0 5px; border-radius: 4px; word-spacing: 0; }
+  .diagram { border: 1.5px solid var(--line); border-radius: 9px; background: #fff; padding: 6px; display: flex; justify-content: center; }
+  .row2 { display: grid; grid-template-columns: 1.15fr 1fr; gap: 12px; }
+  .box2 { border: 1.5px solid var(--line); border-radius: 9px; padding: 8px 11px; background: #fff; display: flex; flex-direction: column; gap: 6px; }
+  .sumr { font-size: 13.5px; font-weight: 800; color: var(--ink); }
+  .rchip { display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 700; color: var(--text); }
+  .rchip .key { margin-left: auto; font-size: 12px; }
+  .ev { display: grid; grid-template-columns: 92px 52px 1fr; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--text); }
+  .ev .when { color: var(--muted); } .ev .who { font-weight: 800; } .w-agent { color: var(--acc); } .w-user { color: var(--blue); }
+  .notes { left: 1200px; top: 236px; width: 360px; gap: 26px; }
+</style></head>
+<body>
+<i class="plus p1"></i><i class="plus p2"></i><i class="plus p3"></i><i class="plus p4"></i>
+<div class="head"><h1>Living design documents</h1><div class="ul"></div><p>Architecture, Product and Glossary, kept up to date by the agent.</p></div>
+<img class="mascot" src="../logo.svg" alt="">
+
+<div class="win">
+  <div class="appbar">
+    <span class="brand"><img src="../logo.svg" alt="">Imprimatur<span class="repo">web-app</span></span>
+    <nav class="tabs">
+      <span class="tab">Home <span class="badge">7</span></span>
+      <span class="tab">Tasks</span>
+      <span class="tab on">Analysis</span>
+      <span class="tab">Agent changes <span class="badge">4</span></span>
+    </nav>
+    <span class="tools"><span class="search"><svg class="ic" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>Search… (/)</span></span>
+  </div>
+  <nav class="hubnav">
+    <span class="hub on"><svg class="ic" viewBox="0 0 24 24"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg>Architecture</span>
+    <span class="hub"><svg class="ic" viewBox="0 0 24 24"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><polyline points="3.29 7 12 12 20.71 7"/></svg>Product</span>
+    <span class="hub"><svg class="ic" viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="m8 13 4-7 4 7"/><path d="M9.1 11h5.7"/></svg>Glossary</span>
+    <span class="hub">Task analyses <span class="n">3</span></span>
+  </nav>
+  <div class="doc">
+    <aside class="dtoc">
+      <div class="lbl">Contents</div>
+      <a><span class="num">1</span>Overview</a>
+      <a><span class="num">2</span>Sign-in</a>
+      <a class="on"><span class="num">3</span>Job queue<span class="udot"></span></a>
+      <a><span class="num">4</span>Payments</a>
+      <a><span class="num">5</span>Deployment</a>
+      <span class="dold">Superseded sections · 1</span>
+    </aside>
+    <main class="dpage">
+      <section class="dhead"><span class="k">Architecture · web-app</span><h2>Architecture Design Document</h2>
+        <div class="lead">Last updated · 22 Oct, 14:10 · Agent <span class="upill">1 unread</span><span class="lnk">Mark all as read</span></div></section>
+      <article class="dsec">
+        <div class="dsec-h"><h3><span class="num">3.</span>Job queue <span class="upill">Unread</span></h3>
+          <div class="dacts"><span class="btn primary">Mark as read</span><span class="btn">Edit</span><span class="tl">Mark superseded</span></div></div>
+        <p class="md">The API writes a row to <code>jobs</code>; one worker per instance takes it with <code>SKIP LOCKED</code> and retries a failed job five times.</p>
+        <div class="diagram">
+          <svg width="720" height="96" viewBox="0 0 720 96" font-family="Plus Jakarta Sans" font-weight="800" font-size="15">
+            <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#7a3a10"/></marker></defs>
+            <g stroke="#7a3a10" stroke-width="2.2" fill="none" marker-end="url(#ar)">
+              <path d="M128 48H196"/><path d="M352 48H420"/><path d="M552 48H600"/>
+            </g>
+            <g font-size="12" fill="#7a3a10" font-weight="700" text-anchor="middle"><text x="162" y="38">insert</text><text x="386" y="38">take</text><text x="576" y="38">send</text></g>
+            <rect x="8" y="22" width="120" height="52" rx="10" fill="#fff0e3" stroke="#e8590c" stroke-width="2"/>
+            <text x="68" y="53" text-anchor="middle" fill="#3a1d0a">API</text>
+            <path d="M200 30a76 10 0 0 0 152 0v36a76 10 0 0 1 -152 0z" fill="#e6eefb" stroke="#2563c9" stroke-width="2"/>
+            <ellipse cx="276" cy="30" rx="76" ry="10" fill="#f4f8ff" stroke="#2563c9" stroke-width="2"/>
+            <text x="276" y="62" text-anchor="middle" fill="#1d3f80">jobs (Postgres)</text>
+            <rect x="424" y="22" width="128" height="52" rx="10" fill="#fff0e3" stroke="#e8590c" stroke-width="2"/>
+            <text x="488" y="53" text-anchor="middle" fill="#3a1d0a">Worker</text>
+            <rect x="604" y="22" width="108" height="52" rx="26" fill="#e3f5ea" stroke="#1d8a4a" stroke-width="2"/>
+            <text x="658" y="53" text-anchor="middle" fill="#145c32">Mail API</text>
+          </svg>
+        </div>
+        <div class="row2">
+          <div class="box2"><span class="sumr">▾ Based on records · 2</span>
+            <span class="rchip"><span class="chip c-adr">ADR</span>One worker process per instance<span class="key">#42</span></span>
+            <span class="rchip"><span class="chip c-dec">Decision</span>Jobs older than 7 days are deleted<span class="key">#42</span></span></div>
+          <div class="box2"><span class="sumr">▾ History · 3</span>
+            <div class="ev"><span class="when">22 Oct, 14:10</span><span class="who w-agent">Agent</span><span>changed text</span></div>
+            <div class="ev"><span class="when">21 Oct, 18:02</span><span class="who w-user">You</span><span>changed title</span></div>
+            <div class="ev"><span class="when">20 Oct, 09:32</span><span class="who w-agent">Agent</span><span>wrote the section</span></div></div>
+        </div>
+      </article>
+      <article class="dsec" style="border-left-color: var(--line)">
+        <div class="dsec-h"><h3><span class="num">4.</span>Payments</h3><div class="dacts"><span class="btn">Edit</span><span class="tl">Mark superseded</span></div></div>
+        <p class="md">Checkout goes through the payment provider's hosted page; the webhook marks the order paid.</p>
+      </article>
+    </main>
+  </div>
+</div>
+
+<div class="notes">
+  <div class="note"><h3>One section per topic</h3><p>written by the agent with each ADR, PDR or decision; also docs/ARCHITECTURE.md</p></div>
+  <div class="note"><h3>Diagrams drawn</h3><p>Mermaid in a section is shown as a diagram</p></div>
+  <div class="note"><h3>Based on records</h3><p>each section links the ADRs and decisions behind it</p></div>
+  <div class="note"><h3>History and Unread</h3><p>every version kept; what changed since you read it is marked</p></div>
+</div>
+</body></html>
