@@ -58,7 +58,7 @@ test("cascade: a task set done closes its epic line in the same write, by the sa
   db.upsertTask(t56.repo_id, "#56", { status: "done" }, agent);
   const line = db.record(l56.id);
   assert.equal(line.status, "done");
-  assert.equal(line.body, `#56 bitti (${today()})`);
+  assert.equal(line.body, `#56 done (${today()})`);
   assert.equal(line.pointer, false);
   // The mid-title mention stays open and, next by position, takes the 👉.
   assert.equal(db.record(mention.id).status, "open");
@@ -70,7 +70,7 @@ test("cascade: a task set done closes its epic line in the same write, by the sa
   const closed = v.find((x) => x.after?.status === "done");
   assert.equal(closed.actor_kind, "agent");
   assert.equal(closed.actor, "claude:s1");
-  assert.deepEqual(closed.after, { status: "done", body: `#56 bitti (${today()})` });
+  assert.deepEqual(closed.after, { status: "done", body: `#56 done (${today()})` });
   assert.ok(db.versionsOf(mention.id).some((x) => x.after?.pointer === true && x.actor === "claude:s1"));
   assert.equal(db.taskById(epic.id).status, "active");
 });
@@ -83,18 +83,18 @@ test("cascade: links.issue closes a line; its body keeps what it had; no next re
   const t = db.upsertTask(repo.id, "PROJ-12", { epicId: epic.id }, agent);
   db.upsertTask(repo.id, "PROJ-12", { status: "done" }, user);
   assert.equal(db.record(a.id).status, "done");
-  assert.equal(db.record(a.id).body, `önce plan\n\nPROJ-12 bitti (${today()})`);
+  assert.equal(db.record(a.id).body, `önce plan\n\nPROJ-12 done (${today()})`);
   assert.equal(db.record(a.id).pointer, false);
   assert.equal(db.recordsOf(epic.id).filter((r) => r.pointer).length, 0);
   assert.equal(db.versionsOf(a.id).at(-1).actor_kind, "user");
   assert.ok(t);
 });
 
-test("cascade: dropped closes the line too (noted as bırakıldı); reopening the task leaves it closed", () => {
+test("cascade: dropped closes the line too (noted as dropped); reopening the task leaves it closed", () => {
   const { db, l56, t56 } = epicSetup();
   db.upsertTask(t56.repo_id, "#56", { status: "dropped" }, user);
   assert.equal(db.record(l56.id).status, "done");
-  assert.equal(db.record(l56.id).body, `#56 bırakıldı (${today()})`);
+  assert.equal(db.record(l56.id).body, `#56 dropped (${today()})`);
   db.upsertTask(t56.repo_id, "#56", { status: "active" }, user);
   assert.equal(db.record(l56.id).status, "done");
   // Done again: the line is no longer open, nothing more is written to it.
@@ -206,9 +206,9 @@ test("push github: fixed comments only; done closes as completed, dropped as not
   const f = fakeGh({ states: { 3: "CLOSED" } });
   const r = await trackerOnce(db, { gh: f.gh });
   assert.deepEqual(f.writes(), [
-    ["issue", "close", "1", "-R", "halilural/imprimatur", "--reason", "completed", "--comment", "Imprimatur: tamamlandı"],
-    ["issue", "close", "2", "-R", "halilural/imprimatur", "--reason", "not planned", "--comment", "Imprimatur: bırakıldı"],
-    ["issue", "reopen", "3", "-R", "halilural/imprimatur", "--comment", "Imprimatur: yeniden açıldı"],
+    ["issue", "close", "1", "-R", "halilural/imprimatur", "--reason", "completed", "--comment", "Imprimatur: completed"],
+    ["issue", "close", "2", "-R", "halilural/imprimatur", "--reason", "not planned", "--comment", "Imprimatur: dropped"],
+    ["issue", "reopen", "3", "-R", "halilural/imprimatur", "--comment", "Imprimatur: reopened"],
   ]);
   assert.ok(!JSON.stringify(f.calls).includes("gizli") && !JSON.stringify(f.calls).includes("özel"));
   assert.equal(r.pushed, 3);
@@ -483,9 +483,9 @@ test("jira push: comment first (fixed text), then the transition by name; a retr
   const j = fakeJira(issues, { fail: { "PROJ-2/transitions:post": 409 } });
   const r = await trackerOnce(db, { env: jiraEnv, fetch: j.fetch, gh: async () => assert.fail("no gh for Jira") });
   assert.deepEqual(j.posts, [
-    ["PROJ-1", "/comment", "Imprimatur: tamamlandı"], ["PROJ-1", "/transitions", "31"],
-    ["PROJ-2", "/comment", "Imprimatur: bırakıldı"],
-    ["PROJ-3", "/comment", "Imprimatur: yeniden açıldı"], ["PROJ-3", "/transitions", "21"],
+    ["PROJ-1", "/comment", "Imprimatur: completed"], ["PROJ-1", "/transitions", "31"],
+    ["PROJ-2", "/comment", "Imprimatur: dropped"],
+    ["PROJ-3", "/comment", "Imprimatur: reopened"], ["PROJ-3", "/transitions", "21"],
   ]);
   assert.equal(r.failed, 1);
   const row = db.trackerOutbox()[0];
@@ -506,7 +506,7 @@ test("jira push: a retry finds the issue moved but its comment never went: the c
   assert.deepEqual([db.trackerOutbox()[0].tries, db.trackerOutbox()[0].commented], [1, 0]);
   issues["PROJ-4"].status = { statusCategory: { key: "done" } }; // someone moved it meanwhile
   await trackerOnce(db, { env: jiraEnv, fetch: j.fetch });
-  assert.deepEqual(j.posts, [["PROJ-4", "/comment", "Imprimatur: tamamlandı"]]);
+  assert.deepEqual(j.posts, [["PROJ-4", "/comment", "Imprimatur: completed"]]);
   assert.equal(db.trackerOutboxCount(), 0);
   flip(db, repo, "PROJ-4", "active");
   const k = fakeJira(issues, { fail: { "PROJ-4": 503 } });
@@ -561,7 +561,7 @@ test("sweep: quiet while GitHub sync covers the repo; on when it has not run, or
   db.trackerDone(db.trackerOutbox()[0].id);
   db.setMeta("tracker_ok_at:github", Date.now() - 3_600_000);
   assert.match(call().context[0], /#56 is done/);
-  assert.equal(COMMENT.close_done, "Imprimatur: tamamlandı");
+  assert.equal(COMMENT.close_done, "Imprimatur: completed");
 });
 
 test("runLoop: a named loop says its name when a run fails", async () => {

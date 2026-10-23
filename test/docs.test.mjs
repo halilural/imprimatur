@@ -1,5 +1,5 @@
 // Design documents (#72): the database (migration 4, sections, versions, sync), the MCP
-// tools, the panel's Mimari/Ürün models and writes, the Markdown export and the
+// tools, the panel's Architecture/Product models and writes, the Markdown export and the
 // docUpdate process check.
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -75,7 +75,7 @@ test("migration 5: a schema 4 database keeps its documents, sections, links and 
   assert.deepEqual([s.title, s.body, s.records, db.sectionVersions(1).length], ["Storage", "x", [1], 1]);
   assert.deepEqual(db.sqlite.prepare("PRAGMA foreign_key_check").all(), []);
   const g = db.docOf(1, "glossary");
-  assert.equal(g.title, "Proje Sözlüğü");
+  assert.equal(g.title, "Project Glossary");
   db.upsertSection(g.id, "pointer", { title: "Pointer", body: "Where work stopped." }, agent);
   assert.throws(() => db.sqlite.exec("DELETE FROM documents WHERE id = 1"), /FOREIGN KEY/, "the sections still point at their document");
   for (const i of ["doc_section_records_record", "doc_versions_section"]) {
@@ -95,13 +95,13 @@ test("glossary: terms read alphabetically (Turkish), unnumbered in the panel and
   db.upsertSection(g.id, "adr", { title: "ADR", body: "Mimari karar." }, agent);
   assert.deepEqual(db.docSections(g.id).map((s) => s.title), ["ADR", "Ceza", "Çizgi", "Zarf"]);
   const m = docs.docModel(db, root, "glossary");
-  assert.deepEqual([m.label, m.title, m.current.map((s) => s.n)], ["Sözlük", "Proje Sözlüğü", [null, null, null, null]]);
+  assert.deepEqual([m.label, m.title, m.current.map((s) => s.n)], ["Glossary", "Project Glossary", [null, null, null, null]]);
   const html = docs.docHtml(m);
-  assert.match(html, /Terimler · 4/);
-  assert.match(html, /Yeni terim/);
+  assert.match(html, /Terms · 4/);
+  assert.match(html, /New term/);
   assert.doesNotMatch(html, /class="num"/);
   const text = docMarkdown(db, g.id);
-  assert.match(text, /^## Terimler\n\n- \[ADR\]\(#adr\)\n- \[Ceza\]\(#ceza\)/m);
+  assert.match(text, /^## Terms\n\n- \[ADR\]\(#adr\)\n- \[Ceza\]\(#ceza\)/m);
   assert.match(text, /<a id="cizgi"><\/a>\n\n## Çizgi\n\nBir satır\./);
   exportDocs(db, root);
   assert.ok(fs.readFileSync(path.join(root, "docs", "GLOSSARY.md"), "utf8").startsWith(HEADER));
@@ -120,8 +120,8 @@ test("docOf creates on first use with the default titles; one per repo and kind"
   const { db, repo } = seeded();
   assert.equal(db.docFind(repo.id, "architecture"), undefined, "reading does not create");
   const a = db.docOf(repo.id, "architecture");
-  assert.equal(a.title, "Mimari Tasarım Dokümanı");
-  assert.equal(db.docOf(repo.id, "product").title, "Ürün Tasarım Dokümanı");
+  assert.equal(a.title, "Architecture Design Document");
+  assert.equal(db.docOf(repo.id, "product").title, "Product Design Document");
   assert.equal(db.docOf(repo.id, "architecture").id, a.id);
   assert.throws(() => db.docOf(repo.id, "roadmap"), /architecture, product/);
 });
@@ -168,7 +168,7 @@ test("MCP doc_get / doc_section_upsert: TOC, bodies, records of this repo only, 
   const ctx = { client: "test" };
   const call = (name, a) => callTool(db, name, { repo: root, ...a }, ctx);
   const empty = call("doc_get", { kind: "architecture" });
-  assert.equal(empty.document.title, "Mimari Tasarım Dokümanı");
+  assert.equal(empty.document.title, "Architecture Design Document");
   assert.match(empty.hint, /doc_section_upsert/);
   assert.equal(db.docFind(db.repoByRoot(root).id, "architecture"), undefined, "a read creates nothing");
   const { record: adr } = call("record_add", { task: "#72", kind: "adr", title: "Docs in the DB" });
@@ -203,8 +203,8 @@ test("panel model and HTML: numbered TOC, Markdown without raw HTML, contributor
   const root = "/a/proj";
   const { db, repo, adr } = seeded(root);
   const emptyHtml = docs.docHtml(docs.docModel(db, root, "architecture"));
-  assert.match(emptyHtml, /Bu doküman henüz boş\. Ajan, bir ADR ya da karar eklediğinde/);
-  assert.match(emptyHtml, /Yeni bölüm/);
+  assert.match(emptyHtml, /This document is empty\. When the agent adds an ADR or a decision/);
+  assert.match(emptyHtml, /New section/);
   const doc = db.docOf(repo.id, "architecture");
   db.upsertSection(doc.id, "storage", { title: "Storage", body: "**SQLite** <script>alert(1)</script> [x](javascript:alert(1)) [ok](https://example.com)", addRecords: [adr.id] }, agent);
   db.upsertSection(doc.id, "old-sync", { title: "Old sync", body: "gone", status: "superseded" }, agent);
@@ -212,22 +212,22 @@ test("panel model and HTML: numbered TOC, Markdown without raw HTML, contributor
   const m = docs.docModel(db, root, "architecture", { docFlash: "sync" });
   assert.deepEqual(m.current.map((s) => [s.n, s.key]), [[1, "storage"], [2, "sync"]]);
   assert.deepEqual(m.superseded.map((s) => s.key), ["old-sync"]);
-  assert.equal(m.last.who, "Sen");
+  assert.equal(m.last.who, "You");
   assert.equal(m.current[1].flash, true);
   const html = docs.docHtml(m);
   assert.match(html, /<strong>SQLite<\/strong>/);
   assert.ok(!html.includes("<script>alert"), "raw HTML stays text");
   assert.ok(!/href="javascript:/i.test(html), "no javascript: link");
   assert.match(html, /href="https:\/\/example.com"/);
-  assert.match(html, /<details class="contrib"><summary>Dayandığı kayıtlar · 1<\/summary><div class="rchips"><a href="#" class="rchip" data-act="showRecord" data-id="\d+"/);
+  assert.match(html, /<details class="contrib"><summary>Based on records · 1<\/summary><div class="rchips"><a href="#" class="rchip" data-act="showRecord" data-id="\d+"/);
   assert.match(html, /<span class="num">1<\/span><span>Storage<\/span>/);
-  assert.ok(html.indexOf("<summary>Eskimiş bölümler · 1</summary>") > html.indexOf('id="sec-sync"'), "superseded sections at the end");
+  assert.ok(html.indexOf("<summary>Superseded sections · 1</summary>") > html.indexOf('id="sec-sync"'), "superseded sections at the end");
   assert.match(html, /class="dsec flash" id="sec-sync"/);
-  assert.match(html, /Son güncelleme · .* · Sen/);
+  assert.match(html, /Last updated · .* · You/);
   // Every pane block has a key (the page swaps only the changed ones).
   // Under the Analiz tab: its sub-pages over the document (TASK-ANALYSIS).
   assert.match(tv.paneHtml(db, root, { tab: "product" }), /^<nav class="hubnav"[\s\S]*?data-tab="product" aria-current="page"[\s\S]*?<\/nav><div class="doc" data-k="doc-product">/);
-  assert.match(tv.paneHtml(db, root, { tab: "product" }), /bir PDR ya da karar/);
+  assert.match(tv.paneHtml(db, root, { tab: "product" }), /a PDR or a decision/);
 });
 
 test("panel editing: the editor with draft keys, save and new section as the user, status; cleanView keeps edit", () => {

@@ -98,7 +98,7 @@ test("a task's analysis is unread on that task; a superseded section is not", ()
   db.close();
 });
 
-test("the panel: unread by task on the list, the task page and Ana sayfa; Okudum marks it read", () => {
+test("the panel: unread by task on the list, the task page and Ana sayfa; Mark as read marks it read", () => {
   const { db, repo, task, adr, doc } = seeded();
   db.upsertSection(doc.id, "reads", { title: "Reads", body: "one", records: [adr.id] }, agent);
   const openEdits = new Map([["#92", 2], ["", 1]]);
@@ -116,7 +116,7 @@ test("the panel: unread by task on the list, the task page and Ana sayfa; Okudum
   assert.match(tv.homeHtml(home), /Okumadıkların · 4/);
   const m = docs.docModel(db, "/a/proj", "architecture");
   assert.ok(m.current.find((s) => s.key === "reads").unread);
-  assert.match(docs.docHtml(m), /Okunmadı/);
+  assert.match(docs.docHtml(m), /Unread/);
   tv.applyMessage(db, { type: "read", ids: [m.unread[0]] }, user, "/a/proj");
   assert.deepEqual(db.unreadSections(repo.id), []);
   assert.doesNotMatch(tv.tasksHtml(tv.tasksPage(db, "/a/proj", { sel: task.id }, {})), /Okumadıkların/);

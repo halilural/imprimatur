@@ -38,7 +38,7 @@ const STUCK_MS = 10 * 60_000;
 /** Jira resolutions that mean "not done, given up": the task becomes dropped. */
 const JIRA_DROPPED = /won'?t|declin|duplicate|cancel|reject|not planned|obsolete/i;
 /** The comment each push leaves: fixed, so nothing private reaches the issue. */
-const COMMENT = { close_done: "Imprimatur: tamamlandı", close_dropped: "Imprimatur: bırakıldı", reopen: "Imprimatur: yeniden açıldı" };
+const COMMENT = { close_done: "Imprimatur: completed", close_dropped: "Imprimatur: dropped", reopen: "Imprimatur: reopened" };
 /** The task status a queued action stands for: else the row is stale. */
 const WANTS = {
   close_done: (/** @type {string} */ s) => s === "done",

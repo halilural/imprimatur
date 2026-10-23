@@ -22,7 +22,7 @@ test("which inline code is a file reference", () => {
 
 test("rendered Markdown links them, the shorthand to the file before it, escaped", () => {
   const html = renderMarkdown("1. `vscode/tasksView.js:180` unreadOf. Liste `:338`, sayfa `:283`.\n2. `section_reads` tablosu");
-  assert.match(html, /<a href="#" class="fref" data-act="openFile" data-file="vscode\/tasksView.js" data-line="180" title="Editörde aç"><code>vscode\/tasksView.js:180<\/code><\/a>/);
+  assert.match(html, /<a href="#" class="fref" data-act="openFile" data-file="vscode\/tasksView.js" data-line="180" title="Open in the editor"><code>vscode\/tasksView.js:180<\/code><\/a>/);
   assert.match(html, /data-file="vscode\/tasksView.js" data-line="338"/);
   assert.match(html, /data-file="vscode\/tasksView.js" data-line="283"/);
   assert.match(html, /<code>section_reads<\/code>/);
