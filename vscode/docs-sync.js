@@ -208,12 +208,13 @@ function atRevision(root, rev, kind) {
 /**
  * Syncs one document and its file.
  * @param {any} db @param {any} repo @param {string} root @param {string} kind
- * @param {{dryRun?: boolean, take?: "file" | "db", adopt?: {rel: string, text: string}, adoptFiles?: boolean}} o
+ * @param {{dryRun?: boolean, take?: "file" | "db", adopt?: {rel: string, text: string}, adoptFiles?: boolean, asked?: boolean}} o
  * adopt: text to take in as hand-written (a git revision's file) instead of the file on disk;
- * adoptFiles: a hand-written file on disk may be adopted (else it is left alone, "manual")
+ * adoptFiles: a hand-written file on disk may be adopted (else it is left alone, "manual");
+ * asked: the caller asked for adoption, so a file synced before may be adopted too
  * @returns {SyncReport}
  */
-function syncKind(db, repo, root, kind, { dryRun = false, take, adopt, adoptFiles = false }) {
+function syncKind(db, repo, root, kind, { dryRun = false, take, adopt, adoptFiles = false, asked = false }) {
   const file = fileOf(root, kind);
   /** @type {SyncReport} */
   const report = { kind, file, imported: [], superseded: [], conflicts: [], linked: 0, written: false };
@@ -221,7 +222,9 @@ function syncKind(db, repo, root, kind, { dryRun = false, take, adopt, adoptFile
   try {
     text = fs.readFileSync(file, "utf8");
   } catch {}
-  if (!adopt && text !== undefined && !managed(text) && !adoptFiles) {
+  // A file this machine synced before that no longer looks generated is adopted only when asked.
+  const synced = Boolean(repo) && stateOf(db, repo.id, kind)?.file === path.relative(root, file);
+  if (!adopt && text !== undefined && !managed(text) && (!adoptFiles || (synced && !asked))) {
     report.skipped = "manual";
     return report;
   }
@@ -365,15 +368,16 @@ function syncKind(db, repo, root, kind, { dryRun = false, take, adopt, adoptFile
  * moving misfiled ones) and adopts the files as they were there.
  * adopt: a hand-written file on disk may be adopted; by default only when the repo opted in
  * ({"docs": {...}} in .claude/imprimatur.json), else it is left alone. The CLI and the
- * importer pass true: someone asked.
+ * importer pass true: someone asked. Unasked, a file this machine synced before is never
+ * adopted: it was Imprimatur's, so a hand-written look is an accident, not a new document.
  * @param {any} db @param {string} root a repo root on this machine
  * @param {{dryRun?: boolean, take?: "file" | "db", rev?: string, adopt?: boolean}} [o]
  * @returns {SyncReport[]}
  */
-function syncDocs(db, root, { dryRun = false, take, rev, adopt = optedIn(root) } = {}) {
+function syncDocs(db, root, { dryRun = false, take, rev, adopt } = {}) {
   const repo = repoFor(db, root, dryRun);
   const out = [];
-  for (const kind of Object.keys(FILES)) out.push(syncKind(db, repo, root, kind, { dryRun, take, adoptFiles: adopt }));
+  for (const kind of Object.keys(FILES)) out.push(syncKind(db, repo, root, kind, { dryRun, take, adoptFiles: adopt ?? optedIn(root), asked: adopt === true }));
   if (!rev || out.some((r) => r.conflicts.length || r.unreadable)) return out;
   if (!dryRun) importRepo(db, root, { rev, only: ["design", "product"] });
   return Object.keys(FILES).map((kind) => {

@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.70.3] - 2026-10-23
+
+### Fixed
+- Design document files: a header in another version's wording still marks the file as
+  Imprimatur's, and a file synced before is never adopted as hand-written unless asked
+  (`npm run docs -- sync`). Two versions running at once had adopted each other's files
+  about once a minute, adding a copy of every section each time.
+
 ## [0.70.2] - 2026-10-23
 
 ### Changed
