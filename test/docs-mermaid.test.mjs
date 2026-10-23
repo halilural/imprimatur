@@ -65,7 +65,7 @@ test("#72 the panel's document tab draws a mermaid block as an <svg> under its C
     const src = pathToFileURL(path.join(dir, "mermaid.min.js")).href;
     const section = (id, body) => ({ id, key: `s${id}`, title: `S${id}`, status: "current", n: id, body, html: dv.renderMarkdown(body), contributors: [], versions: [], editing: false, flash: false });
     const model = {
-      kind: "architecture", label: "Mimari", title: "Mimari", repoName: "repo", last: undefined, adding: false, empty: false, manual: undefined, superseded: [],
+      kind: "architecture", label: "Architecture", title: "Architecture", repoName: "repo", last: undefined, adding: false, empty: false, manual: undefined, superseded: [],
       current: [section(1, "```mermaid\ngraph TD\n  A[Hook] --> B[(DB)]\n```"), section(2, "```mermaid\ngraph TD\n  A --> \n```")],
     };
     const page = html({ rows: [], lanes: [], sessions: [] }, dir, "N", [], { view: { tab: "architecture" }, pane: dv.docHtml(model), repoName: "repo", mermaid: { src, csp: "file:" } });
@@ -99,9 +99,9 @@ test("#72 a click in the contents brings its section into view, in a narrow pane
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-toc-"));
   try {
     const { html } = req("../vscode/graphView.js");
-    const body = Array.from({ length: 30 }, (_, i) => `Paragraf ${i}.`).join("\n\n");
+    const body = Array.from({ length: 30 }, (_, i) => `Paragraph ${i}.`).join("\n\n");
     const section = (id) => ({ id, key: `s${id}`, title: `S${id}`, status: "current", n: id, body, html: dv.renderMarkdown(body), contributors: [], versions: [], editing: false, flash: false });
-    const model = { kind: "architecture", label: "Mimari", title: "Mimari", repoName: "repo", last: undefined, adding: false, empty: false, manual: undefined, superseded: [], current: [1, 2, 3, 4, 5, 6].map(section) };
+    const model = { kind: "architecture", label: "Architecture", title: "Architecture", repoName: "repo", last: undefined, adding: false, empty: false, manual: undefined, superseded: [], current: [1, 2, 3, 4, 5, 6].map(section) };
     const page = html({ rows: [], lanes: [], sessions: [] }, dir, "N", [], { view: { tab: "architecture" }, pane: dv.docHtml(model), repoName: "repo", mermaid: { src: "", csp: "file:" } });
     // Clicks the 4th entry, then reports what lies under the section's top-left corner.
     // VS Code's webview handles link clicks on the window: an <a href="#"> scrolls to the top.

@@ -33,13 +33,13 @@ test("describe: the model's sentence goes to descriptions.jsonl and becomes the 
   let asked = "";
   const text = await describe(root, "a.md", "t2", "Turkish", async (p) => {
     asked = p;
-    return '\n"b satırı büyük harfe çevrildi."\n';
+    return '\n"Line b was uppercased."\n';
   });
-  assert.equal(text, "b satırı büyük harfe çevrildi.");
+  assert.equal(text, "Line b was uppercased.");
   assert.match(asked, /In Turkish/);
   assert.match(asked, /- b\n\+ B/);
   const rows = graphRows(root).rows;
-  assert.equal(rows.find((r) => r.n === 2).intent, "b satırı büyük harfe çevrildi.");
+  assert.equal(rows.find((r) => r.n === 2).intent, "Line b was uppercased.");
   assert.equal(rows.find((r) => r.n === 1).intent, undefined);
 });
 

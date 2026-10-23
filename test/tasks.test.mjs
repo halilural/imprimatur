@@ -10,18 +10,18 @@ const { taskKeyIn, keyOfTodo, lineFor, placeOf } = req("../vscode/tasks.js");
 const records = req("../vscode/records.js");
 
 test("tasks: keys in text and in a TODO.md's folder", () => {
-  assert.equal(taskKeyIn("LATD-13937 için Tim'e yaz"), "LATD-13937");
-  assert.equal(taskKeyIn("#26'yı commit et"), "#26");
-  assert.equal(taskKeyIn("sürüm 0.28.6"), undefined);
+  assert.equal(taskKeyIn("write to Tim about LATD-13937"), "LATD-13937");
+  assert.equal(taskKeyIn("commit #26"), "#26");
+  assert.equal(taskKeyIn("version 0.28.6"), undefined);
   assert.equal(taskKeyIn("MT-AR-011 dirtywork"), undefined);
   assert.equal(keyOfTodo("todos/LATD-13937/TODO.md"), "LATD-13937");
   assert.equal(keyOfTodo("todos/25/TODO.md"), "#25");
 });
 
 test("tasks: the line that says the step", () => {
-  const md = "Epic\nTim'e takip mailini gönder (!2690)\nREADME\n";
-  assert.equal(lineFor(md, "LATD-13937: Tim'e !2690 için takip mailini gönder"), 2);
-  assert.equal(lineFor(md, "Paneli aç"), 0);
+  const md = "Epic\nSend Tim the follow-up mail (!2690)\nREADME\n";
+  assert.equal(lineFor(md, "LATD-13937: Send Tim the !2690 follow-up mail"), 2);
+  assert.equal(lineFor(md, "Open the panel"), 0);
 });
 
 test("tasks: a step's place from the records its session wrote", () => {
@@ -32,18 +32,18 @@ test("tasks: a step's place from the records its session wrote", () => {
   const db = req("../vscode/db.js").openDb({ path: file });
   const repoId = db.repoOf(root).id;
   const t = db.upsertTask(repoId, "LATD-13937", { title: "Tim" });
-  const r = db.addRecord(t.id, { kind: "todo", owner: "K", title: "Tim'e takip mailini gönder", body: "https://acme.atlassian.net/browse/LATD-13937" }, { kind: "agent", id: "claude-code:s1" });
+  const r = db.addRecord(t.id, { kind: "todo", owner: "K", title: "Send Tim the follow-up mail", body: "https://acme.atlassian.net/browse/LATD-13937" }, { kind: "agent", id: "claude-code:s1" });
   db.close();
   const sessions = records.sessionTasks(root);
   assert.deepEqual(sessions.get("s1"), ["LATD-13937"]);
-  assert.deepEqual(placeOf(root, { session: "s1", text: "Tim'e takip mailini gönder" }, sessions), {
+  assert.deepEqual(placeOf(root, { session: "s1", text: "Send Tim the follow-up mail" }, sessions), {
     task: "LATD-13937", url: "https://acme.atlassian.net/browse/LATD-13937", record: r.id,
   });
   assert.deepEqual(placeOf(root, { session: "other", text: "x" }, sessions), {});
   // A step that names the task finds its record without the session.
-  assert.equal(placeOf(root, { session: "old", text: "LATD-13937: Tim'e takip mailini gönder" }, sessions).record, r.id);
+  assert.equal(placeOf(root, { session: "old", text: "LATD-13937: Send Tim the follow-up mail" }, sessions).record, r.id);
   // A Jira key without a record of its own: the address learned from another record.
-  assert.deepEqual(placeOf(root, { session: "old", text: "LATD-13931: Tim'e özet mail gönder" }, sessions), { task: "LATD-13931", url: "https://acme.atlassian.net/browse/LATD-13931" });
+  assert.deepEqual(placeOf(root, { session: "old", text: "LATD-13931: Send Tim the summary mail" }, sessions), { task: "LATD-13931", url: "https://acme.atlassian.net/browse/LATD-13931" });
   // The same session asks something none of its records say: no task.
-  assert.deepEqual(placeOf(root, { session: "s1", text: "Jira adresi ne?" }, sessions), {});
+  assert.deepEqual(placeOf(root, { session: "s1", text: "What is the Jira address?" }, sessions), {});
 });

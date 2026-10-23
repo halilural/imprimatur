@@ -19,8 +19,8 @@ function render(base, before, current) {
 }
 
 test("changed paragraph: class on the block, old text struck right above", () => {
-  const html = render("# T\n\nSprint cumartesi başlar.\n", undefined, "# T\n\nSprint pazartesi başlar.\n");
-  assert.match(html, /<div class="imprimatur-old imprimatur-latest"><del>Sprint cumartesi başlar\.<\/del><\/div>\s*<p class="imprimatur-changed imprimatur-latest">Sprint pazartesi başlar\.<\/p>/);
+  const html = render("# T\n\nSprint saturday starts.\n", undefined, "# T\n\nSprint thursday starts.\n");
+  assert.match(html, /<div class="imprimatur-old imprimatur-latest"><del>Sprint saturday starts\.<\/del><\/div>\s*<p class="imprimatur-changed imprimatur-latest">Sprint thursday starts\.<\/p>/);
   assert.match(html, /<h1>T<\/h1>/); // untouched block stays plain
 });
 

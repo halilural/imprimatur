@@ -1,4 +1,4 @@
-// Anlama borcu (#92): when the user last read each section, what is unread since, by task,
+// Understanding debt (#92): when the user last read each section, what is unread since, by task,
 // and where the panel shows it.
 import fs from "node:fs";
 import { createRequire } from "node:module";
@@ -33,7 +33,7 @@ test("migration 7: sections already there count as read", () => {
   for (const m of MIGRATIONS.slice(0, 6)) raw.exec(m);
   raw.exec("PRAGMA user_version = 6");
   raw.exec(`INSERT INTO repos (id, uid, root, created_at) VALUES (1, 'r', '/a/p', 1);
-    INSERT INTO documents (id, uid, repo_id, kind, title, updated_at) VALUES (1, 'd', 1, 'architecture', 'Mimari', 1);
+    INSERT INTO documents (id, uid, repo_id, kind, title, updated_at) VALUES (1, 'd', 1, 'architecture', 'Architecture', 1);
     INSERT INTO doc_sections (id, uid, doc_id, key, title, body, position, updated_at) VALUES (1, 's', 1, 'storage', 'Storage', 'x', 1, 1);
     INSERT INTO doc_versions (section_id, at, actor_kind, after) VALUES (1, 1, 'agent', '{"body":"x"}');`);
   raw.close();
@@ -49,7 +49,7 @@ test("migration 8: a database with migration 7's draft table (no version_id) get
   for (const m of MIGRATIONS.slice(0, 6)) raw.exec(m);
   raw.exec(`CREATE TABLE section_reads (section_id INTEGER PRIMARY KEY REFERENCES doc_sections(id), at INTEGER NOT NULL);
     INSERT INTO repos (id, uid, root, created_at) VALUES (1, 'r', '/a/p', 1);
-    INSERT INTO documents (id, uid, repo_id, kind, title, updated_at) VALUES (1, 'd', 1, 'architecture', 'Mimari', 1);
+    INSERT INTO documents (id, uid, repo_id, kind, title, updated_at) VALUES (1, 'd', 1, 'architecture', 'Architecture', 1);
     INSERT INTO doc_sections (id, uid, doc_id, key, title, body, position, updated_at) VALUES (1, 's', 1, 'storage', 'Storage', 'x', 1, 1);
     INSERT INTO doc_versions (section_id, at, actor_kind, after) VALUES (1, 1, 'agent', '{"body":"x"}');
     INSERT INTO section_reads (section_id, at) VALUES (1, 5);

@@ -22,9 +22,9 @@ function repo() {
   const db = require("../vscode/db.js").openDb({ path: file });
   const repoId = db.repoOf(root).id;
   const actor = { kind: "user", id: "k" };
-  const t54 = db.upsertTask(repoId, "#54", { title: "Yerleşim", status: "active" });
-  db.addRecord(t54.id, { kind: "todo", owner: "K", title: "Taşıma sırasını seç" }, actor);
-  db.addRecord(t54.id, { kind: "todo", owner: "C", title: "Claude'un işi" }, actor);
+  const t54 = db.upsertTask(repoId, "#54", { title: "Layout", status: "active" });
+  db.addRecord(t54.id, { kind: "todo", owner: "K", title: "Choose the move order" }, actor);
+  db.addRecord(t54.id, { kind: "todo", owner: "C", title: "Claude's job" }, actor);
   const t7 = db.upsertTask(repoId, "LATD-7", { title: "Eski", status: "done" });
   db.addRecord(t7.id, { kind: "note", title: "Jira", body: "https://acme.atlassian.net/browse/LATD-7" }, actor);
   db.sqlite.prepare("UPDATE tasks SET updated_at = ? WHERE id = ?").run(Date.parse("2026-10-09T12:00:00Z"), t7.id);
@@ -44,11 +44,11 @@ test("layout: a file's task under docs/todos/ and todos/ (#54)", () => {
 
 test("layout: asks, Jira links and done tasks are read from the database (#54)", () => {
   const root = repo();
-  assert.deepEqual(todoAsks(root), [{ task: "#54", text: "Taşıma sırasını seç" }]);
-  assert.equal(placeOf(root, { session: "x", text: "LATD-99: bir şey" }, new Map()).url, "https://acme.atlassian.net/browse/LATD-99");
+  assert.deepEqual(todoAsks(root), [{ task: "#54", text: "Choose the move order" }]);
+  assert.equal(placeOf(root, { session: "x", text: "LATD-99: something" }, new Map()).url, "https://acme.atlassian.net/browse/LATD-99");
   const dir = path.join(root, ".claude/imprimatur/waiting");
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, "a.jsonl"), JSON.stringify({ session: "a", t: "2026-10-09T10:00:00Z", kind: "verify", text: "Kapat", task: "LATD-7" }) + "\n");
+  fs.writeFileSync(path.join(dir, "a.jsonl"), JSON.stringify({ session: "a", t: "2026-10-09T10:00:00Z", kind: "verify", text: "Close", task: "LATD-7" }) + "\n");
   assert.equal(closeDoneTasks(root), 1);
   assert.equal(waitingItems(root).find((i) => i.session === "a").open, false);
 });

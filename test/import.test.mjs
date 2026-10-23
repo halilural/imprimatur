@@ -16,84 +16,86 @@ const put = (root, rel, text) => {
   fs.writeFileSync(path.join(root, rel), text);
 };
 
-const TODO = `# #58 · MCP sunucusu
+const TODO = `# #58 · MCP server
 
 [#58](https://github.com/u/r/issues/58) · Epic [#53](../53/TODO.md)
 
-## Durum
+## Status
 
-Sürüyor: sunucu hazır — 2026-10-09
+In progress: server ready — 2026-10-09
 
-## Yapılacaklar
+## To do
 
 - DONE: (C) server.mjs
-  iki dönem, 8 araç
-- 👉 TODO: (K) İş makinesinde pull
-- FIXME: (C) yol boşluklu
-- CANCELED: (C, isteğe bağlı) SDK
-- ~~QUESTION~~: eski biçim
+  two terms, 8 tools
+- 👉 TODO: (K) Pull on the work machine
+- FIXME: (C) path with spaces
+- CANCELED: (C, optional) SDK
+- ~~QUESTION~~: old format
 
-## Sorular (kullanıcıya)
+## Questions (to the user)
 
-- QUESTION: Araçlar genel mi?
-- ANSWERED: Panel nerede? → #60'ta (2026-10-09)
+- QUESTION: Are the tools global?
+- ANSWERED: Where is the panel? → in #60 (2026-10-09)
 
-## Kararlar
+## Decisions
 
-- DECISION: (2026-10-09) SDK yok
+- DECISION: (2026-10-09) No SDK
 
-## Prova programı (kullanıcı)
+## Rehearsal schedule (user)
 
-Pazartesi: tekrar
-Salı: deneme
+Monday: repeat
+Tuesday: practice
 
-## Notlar / engeller
+## Notes / blockers
 
-- NOTE: (2026-10-09) Cursor yok
+- NOTE: (2026-10-09) No Cursor
 `;
 
 function repo() {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-59-")));
   execFileSync("git", ["init", "-q"], { cwd: root });
   put(root, "docs/todos/58/TODO.md", TODO);
-  put(root, "docs/todos/53/TODO.md", "# #53 · Epic\n\n## Durum\n\nSürüyor\n\n## Yapılacaklar\n\n- 👉 TODO: (C) #57\n");
-  put(root, "todos/53/TODO.md", "# #53 · old layout copy\n\n## Yapılacaklar\n\n- TODO: (C) old\n");
-  put(root, "docs/design/ARCHITECTURE.md", "# Mimari\n\n## Modül\n\nGiriş paragrafı.\n\n```mermaid\nflowchart LR\n  A --> B\n```\n\n- ARCH: Motor — node:sqlite\n- ARCH: Yer — cihaz başına\n");
-  put(root, "docs/testing/app.md", "# app · elle testler\n\n## İçindekiler\n\n- [MT-1 · Kurulum](#mt-1--kurulum)\n\n## Kurulum\n\n### MT-1 · Kurulum\n\n1. Kur\n2. Aç\n");
-  put(root, "PRODUCT.md", "# Ürün\n\n## STORY-1 · Kullanıcı görür\n\nAyrıntı\n");
+  put(root, "docs/todos/53/TODO.md", "# #53 · Epic\n\n## Status\n\nIn progress\n\n## To do\n\n- 👉 TODO: (C) #57\n");
+  put(root, "todos/53/TODO.md", "# #53 · old layout copy\n\n## To do\n\n- TODO: (C) old\n");
+  put(root, "docs/design/ARCHITECTURE.md", "# Architecture\n\n## Module\n\nIntro paragraph.\n\n```mermaid\nflowchart LR\n  A --> B\n```\n\n- ARCH: Engine — node:sqlite\n- ARCH: Location — per device\n");
+  put(root, "docs/testing/app.md", "# app · manual tests\n\n## Contents\n\n- [MT-1 · Setup](#mt-1--setup)\n\n## Setup\n\n### MT-1 · Setup\n\n1. Install\n2. Open\n");
+  put(root, "PRODUCT.md", "# Product\n\n## STORY-1 · User sees it\n\nDetail\n");
   return root;
 }
 
 test("task status from the Durum line", () => {
+  assert.equal(taskStatus("Done — 2026-10-09"), "done");
+  // Turkish input: the Turkish status words ("Bitti" = done) are read too.
   assert.equal(taskStatus("Bitti — 2026-10-09"), "done");
-  assert.equal(taskStatus("Sürüyor (Sprint 2)"), "active");
+  assert.equal(taskStatus("Started (Sprint 2)"), "active");
   assert.equal(taskStatus("In progress, plan revised"), "active");
-  assert.equal(taskStatus("İptal: gerek kalmadı"), "dropped");
+  assert.equal(taskStatus("Cancelled: no longer needed"), "dropped");
   assert.equal(taskStatus(""), "open");
 });
 
 test("TODO.md: task, prefixes, owners, 👉, continuation, answered, free sections", () => {
   const { task, records, unparsed } = parseTodo(TODO, "#58");
-  assert.deepEqual([task.title, task.epic, task.status], ["MCP sunucusu", "#53", "active"]);
-  assert.match(task.summary, /^Sürüyor/);
+  assert.deepEqual([task.title, task.epic, task.status], ["MCP server", "#53", "active"]);
+  assert.match(task.summary, /^In progress/);
   const brief = records.map((r) => `${r.kind}/${r.status}/${r.owner ?? "-"}${r.pointer ? "/👉" : ""} ${r.title}`);
   assert.deepEqual(brief, [
     "todo/done/C server.mjs",
-    "todo/open/K/👉 İş makinesinde pull",
-    "fixme/open/C yol boşluklu",
+    "todo/open/K/👉 Pull on the work machine",
+    "fixme/open/C path with spaces",
     "todo/dropped/C SDK",
-    "note/done/- Yapılacaklar",
-    "question/open/K Araçlar genel mi?",
-    "question/done/K Panel nerede?",
-    "answer/done/K #60'ta (2026-10-09)",
-    "decision/done/- (2026-10-09) SDK yok",
-    "note/done/- Prova programı (kullanıcı)",
-    "note/done/- (2026-10-09) Cursor yok",
+    "note/done/- To do",
+    "question/open/K Are the tools global?",
+    "question/done/K Where is the panel?",
+    "answer/done/K in #60 (2026-10-09)",
+    "decision/done/- (2026-10-09) No SDK",
+    "note/done/- Rehearsal schedule (user)",
+    "note/done/- (2026-10-09) No Cursor",
   ]);
-  assert.equal(records[0].body, "iki dönem, 8 araç");
-  assert.equal(records[4].body, "- ~~QUESTION~~: eski biçim", "an unknown line is kept as a note");
-  assert.deepEqual(unparsed, ["- ~~QUESTION~~: eski biçim"]);
-  assert.equal(records[9].body, "Pazartesi: tekrar\nSalı: deneme");
+  assert.equal(records[0].body, "two terms, 8 tools");
+  assert.equal(records[4].body, "- ~~QUESTION~~: old format", "an unknown line is kept as a note");
+  assert.deepEqual(unparsed, ["- ~~QUESTION~~: old format"]);
+  assert.equal(records[9].body, "Monday: repeat\nTuesday: practice");
 });
 
 test("a repo: every source, counts match, a second run adds nothing, a change updates", () => {
@@ -109,27 +111,27 @@ test("a repo: every source, counts match, a second run adds nothing, a change up
   assert.equal(db.taskByKey(rid, "#53").id, t58.epic_id);
   const recs = db.recordsOf(t58.id, { dropped: true });
   assert.equal(recs.length, 11);
-  assert.equal(recs.find((x) => x.kind === "answer").parent_id, recs.find((x) => x.title === "Panel nerede?").id);
+  assert.equal(recs.find((x) => x.kind === "answer").parent_id, recs.find((x) => x.title === "Where is the panel?").id);
   assert.equal(recs.filter((x) => x.pointer).length, 1);
   assert.equal(recs[0].links.source, "docs/todos/58/TODO.md");
   assert.equal(recs[0].links.md.status, "done", "what Markdown said, for the next run");
   assert.equal(db.versionsOf(recs[0].id)[0].actor_kind, "import");
 
   const adr = db.recordsOf(db.taskByKey(rid, "ADR").id);
-  assert.deepEqual(adr.map((x) => x.title), ["Modül", "Motor — node:sqlite", "Yer — cihaz başına"]);
-  assert.match(adr[0].body, /Giriş paragrafı\.[\s\S]*flowchart LR/);
+  assert.deepEqual(adr.map((x) => x.title), ["Module", "Engine — node:sqlite", "Location — per device"]);
+  assert.match(adr[0].body, /Intro paragraph\.[\s\S]*flowchart LR/);
   const tests = db.recordsOf(db.taskByKey(rid, "TEST").id);
-  assert.deepEqual(tests.map((x) => x.title), ["MT-1 · Kurulum"], "table of contents and empty sections left out");
+  assert.deepEqual(tests.map((x) => x.title), ["MT-1 · Setup"], "table of contents and empty sections left out");
   assert.equal(tests[0].kind, "test");
-  assert.deepEqual(db.recordsOf(db.taskByKey(rid, "PDR").id).map((x) => `${x.kind} ${x.title}`), ["pdr STORY-1 · Kullanıcı görür"]);
+  assert.deepEqual(db.recordsOf(db.taskByKey(rid, "PDR").id).map((x) => `${x.kind} ${x.title}`), ["pdr STORY-1 · User sees it"]);
 
   const again = importRepo(db, root);
   assert.deepEqual([again.added, again.updated], [0, 0]);
 
-  put(root, "docs/todos/58/TODO.md", TODO.replace("- 👉 TODO: (K) İş makinesinde pull", "- DONE: (K) İş makinesinde pull"));
+  put(root, "docs/todos/58/TODO.md", TODO.replace("- 👉 TODO: (K) Pull on the work machine", "- DONE: (K) Pull on the work machine"));
   const third = importRepo(db, root);
   assert.deepEqual([third.added, third.updated], [0, 1]);
-  const pull = db.recordsOf(t58.id).find((x) => x.title === "İş makinesinde pull");
+  const pull = db.recordsOf(t58.id).find((x) => x.title === "Pull on the work machine");
   assert.deepEqual([pull.status, pull.pointer], ["done", false]);
   db.close();
 });
@@ -163,26 +165,27 @@ test("a second run keeps database changes, follows Markdown changes, drops what 
   const byTitle = (t) => db.recordsOf(t58.id, { dropped: true }).find((x) => x.title === t);
   const agent = { kind: "agent", id: "s" };
   // In the database: an agent closes the FIXME and moves the 👉.
-  db.updateRecord(byTitle("yol boşluklu").id, { status: "done", body: "düzeldi" }, agent);
+  db.updateRecord(byTitle("path with spaces").id, { status: "done", body: "fixed" }, agent);
   // In Markdown: the question is reworded, the 👉 removed, a fenced example added.
   put(root, "docs/todos/58/TODO.md", TODO
-    .replace("- QUESTION: Araçlar genel mi?", "- QUESTION: Araçlar genel mi olsun?")
-    .replace("- 👉 TODO: (K) İş makinesinde pull", "- TODO: (K) İş makinesinde pull")
-    .replace("## Kararlar", "## Örnek\n\n```md\n- TODO: (C) bu bir örnek\n## Başlık değil\n```\n\n## Kararlar"));
+    .replace("- QUESTION: Are the tools global?", "- QUESTION: Should the tools be global?")
+    .replace("- 👉 TODO: (K) Pull on the work machine", "- TODO: (K) Pull on the work machine")
+    .replace("## Decisions", "## Example\n\n```md\n- TODO: (C) this is an example\n## Not a heading\n```\n\n## Decisions"));
   const r = importRepo(db, root);
   assert.match(summary(r), /counts match/);
-  const fixme = byTitle("yol boşluklu");
-  assert.deepEqual([fixme.status, fixme.body], ["done", "düzeldi"], "unchanged in Markdown: the database's change stays");
-  assert.equal(byTitle("Araçlar genel mi?").status, "dropped");
-  assert.equal(byTitle("Araçlar genel mi olsun?").status, "open");
-  assert.equal(byTitle("İş makinesinde pull").pointer, false, "👉 removed in Markdown");
-  assert.equal(byTitle("bu bir örnek"), undefined, "a fenced example is not a record");
-  assert.match(byTitle("Örnek").body, /```md[\s\S]*## Başlık değil[\s\S]*```/);
+  const fixme = byTitle("path with spaces");
+  assert.deepEqual([fixme.status, fixme.body], ["done", "fixed"], "unchanged in Markdown: the database's change stays");
+  assert.equal(byTitle("Are the tools global?").status, "dropped");
+  assert.equal(byTitle("Should the tools be global?").status, "open");
+  assert.equal(byTitle("Pull on the work machine").pointer, false, "👉 removed in Markdown");
+  assert.equal(byTitle("this is an example"), undefined, "a fenced example is not a record");
+  assert.match(byTitle("Example").body, /```md[\s\S]*## Not a heading[\s\S]*```/);
   assert.equal(r.dropped, 1);
   db.close();
 });
 
 test("headings keep a trailing # that is part of the text; prefixed lines outside parsed sections are not counted", () => {
+  // Turkish input: "## Durum" is the status heading, like "## Status".
   const { records, expected } = parseTodo("# #1 · x\n\n- TODO: in the title part\n\n## Durum\n\n- NOTE: in status\n\n## Fix C#\n\n- TODO: (C) a ##\n", "#1");
   assert.deepEqual(records.map((r) => `${r.section}|${r.title}`), ["Fix C#|a ##"]);
   assert.equal(expected, 1);

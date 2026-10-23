@@ -71,8 +71,8 @@ test("graph: hover preview lists removed and added lines, capped", () => {
 });
 
 test("graph: an edit without the agent's words is summed up from its text", () => {
-  const doc = "# T\n\n## Sorular\n\n- a\n";
-  assert.equal(summaryOf(doc, doc + "- **ANSWERED:** Tim'in maili\n"), "## Sorular · ANSWERED: Tim'in maili");
+  const doc = "# T\n\n## Questions\n\n- a\n";
+  assert.equal(summaryOf(doc, doc + "- **ANSWERED:** Tim's mail\n"), "## Questions · ANSWERED: Tim's mail");
   assert.equal(summaryOf("## A\nx\ny\n", "## A\ny\n"), "## A · Removed: x");
   assert.equal(summaryOf("a\n", "a\n"), "No change");
 });

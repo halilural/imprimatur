@@ -31,16 +31,16 @@ function epicSetup({ origin = ORIGIN } = {}) {
   const db = openDb({ path: tmpDb() });
   const repo = db.repoOf("/r", { origin });
   const epic = db.upsertTask(repo.id, "#53", { title: "Epic", status: "active" });
-  const l55 = db.addRecord(epic.id, { kind: "todo", owner: "C", title: "[#55 Grafik](https://github.com/halilural/imprimatur/issues/55) — ajanın her işi" }, agent);
-  const l56 = db.addRecord(epic.id, { kind: "todo", owner: "C", title: "[#56 Süreç hook'ları …](https://github.com/halilural/imprimatur/issues/56) — nerede kaldık, tur sonu", pointer: true }, agent);
-  const mention = db.addRecord(epic.id, { kind: "note", title: "Bulut desteği #61, #56 bittikten sonra" }, agent);
-  const l57 = db.addRecord(epic.id, { kind: "todo", title: "#57 veritabanı" }, agent);
-  const t56 = db.upsertTask(repo.id, "#56", { title: "Süreç hook'ları", status: "active", epicId: epic.id }, agent);
+  const l55 = db.addRecord(epic.id, { kind: "todo", owner: "C", title: "[#55 Graph](https://github.com/halilural/imprimatur/issues/55) — every job of the agent" }, agent);
+  const l56 = db.addRecord(epic.id, { kind: "todo", owner: "C", title: "[#56 Process hooks …](https://github.com/halilural/imprimatur/issues/56) — where we left off, end of turn", pointer: true }, agent);
+  const mention = db.addRecord(epic.id, { kind: "note", title: "Cloud support #61, after #56 is done" }, agent);
+  const l57 = db.addRecord(epic.id, { kind: "todo", title: "#57 database" }, agent);
+  const t56 = db.upsertTask(repo.id, "#56", { title: "Process hooks", status: "active", epicId: epic.id }, agent);
   return { db, repo, epic, l55, l56, mention, l57, t56 };
 }
 
 test("refersTo: links.issue, or the key at the title's start; a key mid-title or a longer number does not count", () => {
-  assert.ok(refersTo({ title: "[#56 Süreç hook'ları …](url) — …" }, "#56"));
+  assert.ok(refersTo({ title: "[#56 Process hooks …](url) — …" }, "#56"));
   assert.ok(refersTo({ title: "#56 x" }, "#56"));
   assert.ok(refersTo({ title: "PROJ-12 a" }, "PROJ-12"));
   assert.ok(refersTo({ title: "[PROJ-12](u) a" }, "PROJ-12"));
@@ -79,11 +79,11 @@ test("cascade: links.issue closes a line; its body keeps what it had; no next re
   const db = openDb({ path: tmpDb() });
   const repo = db.repoOf("/r");
   const epic = db.upsertTask(repo.id, "PROJ-1", { title: "Epic" });
-  const a = db.addRecord(epic.id, { kind: "todo", title: "Hook işleri", body: "önce plan", links: { issue: "PROJ-12" }, pointer: true }, agent);
+  const a = db.addRecord(epic.id, { kind: "todo", title: "Hook jobs", body: "plan first", links: { issue: "PROJ-12" }, pointer: true }, agent);
   const t = db.upsertTask(repo.id, "PROJ-12", { epicId: epic.id }, agent);
   db.upsertTask(repo.id, "PROJ-12", { status: "done" }, user);
   assert.equal(db.record(a.id).status, "done");
-  assert.equal(db.record(a.id).body, `önce plan\n\nPROJ-12 done (${today()})`);
+  assert.equal(db.record(a.id).body, `plan first\n\nPROJ-12 done (${today()})`);
   assert.equal(db.record(a.id).pointer, false);
   assert.equal(db.recordsOf(epic.id).filter((r) => r.pointer).length, 0);
   assert.equal(db.versionsOf(a.id).at(-1).actor_kind, "user");
@@ -105,7 +105,7 @@ test("cascade: dropped closes the line too (noted as dropped); reopening the tas
 
 test("cascade: a task without an epic, or a status that is not closing, touches no record", () => {
   const { db, l56, t56, epic } = epicSetup();
-  db.upsertTask(t56.repo_id, "#56", { summary: "sürüyor" }, user);
+  db.upsertTask(t56.repo_id, "#56", { summary: "in progress" }, user);
   db.upsertTask(t56.repo_id, "#56", { status: "open" }, user);
   assert.equal(db.record(l56.id).status, "open");
   db.upsertTask(t56.repo_id, "#99", { status: "done" }, user);
@@ -115,7 +115,7 @@ test("cascade: a task without an epic, or a status that is not closing, touches 
 test("tracker outbox: local status changes across open/closed are queued; the tracker's pull, imports and other keys are not", () => {
   const db = openDb({ path: tmpDb() });
   const repo = db.repoOf("/r", { origin: ORIGIN });
-  db.upsertTask(repo.id, "#1", { title: "One", summary: "kod hazır" }, agent);
+  db.upsertTask(repo.id, "#1", { title: "One", summary: "code ready" }, agent);
   assert.equal(db.trackerOutboxCount(), 0);
   db.upsertTask(repo.id, "#1", { status: "active" }, agent);
   assert.equal(db.trackerOutboxCount(), 0);
@@ -199,7 +199,7 @@ test("dbPath: under node --test without IMPRIMATUR_DB it is a temp file, never t
 
 test("push github: fixed comments only; done closes as completed, dropped as not planned, reopen reopens", async () => {
   const { db, repo } = ghRepo();
-  for (const k of ["#1", "#2", "#3"]) db.upsertTask(repo.id, k, { title: `gizli ${k}`, status: "active", summary: "özel not" }, agent);
+  for (const k of ["#1", "#2", "#3"]) db.upsertTask(repo.id, k, { title: `secret ${k}`, status: "active", summary: "private note" }, agent);
   flip(db, repo, "#1", "done");
   flip(db, repo, "#2", "dropped");
   flip(db, repo, "#3", "done", "active");
@@ -210,7 +210,7 @@ test("push github: fixed comments only; done closes as completed, dropped as not
     ["issue", "close", "2", "-R", "halilural/imprimatur", "--reason", "not planned", "--comment", "Imprimatur: dropped"],
     ["issue", "reopen", "3", "-R", "halilural/imprimatur", "--comment", "Imprimatur: reopened"],
   ]);
-  assert.ok(!JSON.stringify(f.calls).includes("gizli") && !JSON.stringify(f.calls).includes("özel"));
+  assert.ok(!JSON.stringify(f.calls).includes("secret") && !JSON.stringify(f.calls).includes("private"));
   assert.equal(r.pushed, 3);
   assert.equal(db.trackerOutboxCount(), 0);
   assert.equal(describe(r), "tracker github: pushed 3, pulled 0 changes, 0 new tasks");
@@ -315,11 +315,11 @@ test("pull github: the first pull records issue states only; later pulls act on 
   db.upsertTask(repo.id, "#1", { title: "one", status: "active" }, agent);
   db.upsertTask(repo.id, "#7", { status: "open" }, agent);
   const issues = [
-    { number: 56, title: "Süreç", state: "OPEN", stateReason: "", updatedAt: OLD },
+    { number: 56, title: "Process", state: "OPEN", stateReason: "", updatedAt: OLD },
     { number: 1, title: "one", state: "CLOSED", stateReason: "COMPLETED", updatedAt: later() },
-    { number: 2, title: "Yeni iş", state: "OPEN", stateReason: "", updatedAt: later() },
-    { number: 3, title: "Eski kapalı", state: "CLOSED", stateReason: "COMPLETED", updatedAt: later() },
-    { number: 7, title: "Başlıksızdı", state: "OPEN", stateReason: "", updatedAt: OLD },
+    { number: 2, title: "New job", state: "OPEN", stateReason: "", updatedAt: later() },
+    { number: 3, title: "Old closed", state: "CLOSED", stateReason: "COMPLETED", updatedAt: later() },
+    { number: 7, title: "Untitled", state: "OPEN", stateReason: "", updatedAt: OLD },
   ];
   const f = fakeGh({ issues });
   let r = await trackerOnce(db, { gh: f.gh, repos: [repo] });
@@ -328,7 +328,7 @@ test("pull github: the first pull records issue states only; later pulls act on 
   assert.equal(st("#1").status, "active");
   assert.equal(st("#2").status, "open");
   assert.equal(st("#3"), undefined);
-  assert.equal(st("#7").title, "Başlıksızdı");
+  assert.equal(st("#7").title, "Untitled");
   assert.equal(r.created, 1);
   // A comment bumps updatedAt, the state stays: nothing changes.
   issues[1].updatedAt = later();
@@ -476,7 +476,7 @@ test("jira push: comment first (fixed text), then the transition by name; a retr
     "PROJ-2": { summary: "two", status: { statusCategory: { key: "indeterminate" } } },
     "PROJ-3": { summary: "three", status: { statusCategory: { key: "done" } } },
   };
-  db.upsertTask(repo.id, "PROJ-1", { title: "gizli", summary: "özel", status: "active" }, agent);
+  db.upsertTask(repo.id, "PROJ-1", { title: "secret", summary: "private", status: "active" }, agent);
   flip(db, repo, "PROJ-1", "done");
   flip(db, repo, "PROJ-2", "active", "dropped");
   flip(db, repo, "PROJ-3", "done", "active");
@@ -520,7 +520,7 @@ test("jira pull: baseline first, then status category changes; unknown keys are 
   const issues = {
     "PROJ-3": { summary: "three", status: { statusCategory: { key: "indeterminate" } } },
     "PROJ-4": { summary: "four", status: { statusCategory: { key: "done" } }, resolution: { name: "Done" } },
-    "PROJ-5": { summary: "Jira'dan başlık", status: { statusCategory: { key: "new" } } },
+    "PROJ-5": { summary: "Title from Jira", status: { statusCategory: { key: "new" } } },
   };
   db.upsertTask(repo.id, "PROJ-3", { title: "three", status: "active" }, agent);
   db.upsertTask(repo.id, "PROJ-4", { title: "four", status: "active" }, agent);
@@ -530,7 +530,7 @@ test("jira pull: baseline first, then status category changes; unknown keys are 
   await trackerOnce(db, { repos: [repo], env: jiraEnv, fetch: j.fetch });
   const st = (k) => db.taskByKey(repo.id, k);
   assert.equal(st("PROJ-4").status, "active"); // baseline: no flip
-  assert.equal(st("PROJ-5").title, "Jira'dan başlık");
+  assert.equal(st("PROJ-5").title, "Title from Jira");
   issues["PROJ-3"] = { ...issues["PROJ-3"], status: { statusCategory: { key: "done" } }, resolution: { name: "Done" } };
   issues["PROJ-5"] = { ...issues["PROJ-5"], status: { statusCategory: { key: "done" } }, resolution: { name: "Won't Do" } };
   const r = await trackerOnce(db, { repos: [repo], env: jiraEnv, fetch: j.fetch });

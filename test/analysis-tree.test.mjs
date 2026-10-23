@@ -1,4 +1,4 @@
-// Görev analizleri's tree (#97): file › "##" sections › "###" headings; titles people can read.
+// Task analyses' tree (#97): file › "##" sections › "###" headings; titles people can read.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -15,23 +15,25 @@ test("titles: the key and the comma after it, emphasis, two languages", () => {
   assert.equal(plainTitle("LATD-13473, Business System Message JTA transaction refactoring", "LATD-13473"), "Business System Message JTA transaction refactoring");
   assert.equal(plainTitle("**Bold** and `code` and *it*"), "Bold and code and it");
   assert.equal(plainTitle("section_reads and doc_versions"), "section_reads and doc_versions", "snake_case kept");
+  // Turkish input: the bilingual heading splitter reads "English / *Turkish*".
   assert.deepEqual(titleParts("Background / *Arka plan*"), { main: "Background", alt: "Arka plan" });
   assert.deepEqual(titleParts("Plain"), { main: "Plain" });
-  assert.deepEqual(subHeads("### Goal / *Hedef*\ntext\n```\n### not a heading\n```\n### Retry ###"), ["Goal / *Hedef*", "Retry"]);
+  assert.deepEqual(subHeads("### Goal / *Aim*\ntext\n```\n### not a heading\n```\n### Retry ###"), ["Goal / *Aim*", "Retry"]);
 });
 
 test("the tree: the file's title over its sections over their headings; its own contents out of the tree", () => {
   const html = analysisHubHtml({
     repo: { id: 1, name: "r" }, orphans: [], tasks: [],
     docs: [{ key: "LATD-1", at: 1, task: { id: 9, title: "LATD-1, Refactor it", status: "active" }, files: [{ source: "docs/a.md", local: false, sections: [
-      { id: 1, key: "a--overview", title: "Transaction map / *Harita*", body: "intro" },
+      { id: 1, key: "a--overview", title: "Transaction map / *Overview*", body: "intro" },
+      // Turkish input: a file's own contents heading in Turkish ("İçindekiler") is left out of the tree too.
       { id: 2, key: "a--contents", title: "Contents / *İçindekiler*", body: "- [Background](#background)" },
-      { id: 3, key: "a--background", title: "Background / *Arka plan*", body: "### Goal / *Hedef*\nx\n### Retry\ny" },
+      { id: 3, key: "a--background", title: "Background / *Context*", body: "### Goal / *Aim*\nx\n### Retry\ny" },
     ] }] }],
   });
   const toc = /<ol class="atoc"[^>]*>([\s\S]*?)<\/ol><\/li><\/ol>/.exec(html)?.[0] ?? "";
-  assert.match(toc, /<li class="afile"[^>]*><a href="#sec-a1"[^>]*>Transaction map <span class="talt">· Harita<\/span><\/a>/);
-  assert.match(toc, /<ol class="asub"><li data-k="t3"><a href="#sec-a3"[^>]*>Background <span class="talt">· Arka plan<\/span><\/a><ol class="asub"><li data-k="t3h0"><a href="#sec-a3-h0"[^>]*>Goal <span class="talt">· Hedef<\/span><\/a><\/li><li data-k="t3h1"><a href="#sec-a3-h1"/);
+  assert.match(toc, /<li class="afile"[^>]*><a href="#sec-a1"[^>]*>Transaction map <span class="talt">· Overview<\/span><\/a>/);
+  assert.match(toc, /<ol class="asub"><li data-k="t3"><a href="#sec-a3"[^>]*>Background <span class="talt">· Context<\/span><\/a><ol class="asub"><li data-k="t3h0"><a href="#sec-a3-h0"[^>]*>Goal <span class="talt">· Aim<\/span><\/a><\/li><li data-k="t3h1"><a href="#sec-a3-h1"/);
   assert.doesNotMatch(toc, /İçindekiler/, "the file's own contents is not in the tree");
   assert.match(html, /<details class="dsec acontents" id="sec-a2"/);
   assert.match(html, /<h3 id="sec-a3-h0">/);
@@ -105,14 +107,14 @@ setTimeout(next, 500);
 test("#100 the /study note sits under the task's analysis files, with how the last study went", () => {
   const base = { repo: { id: 1, name: "r" }, orphans: [], tasks: [] };
   const files = [{ source: "docs/a.md", local: false, sections: [{ id: 1, key: "a--overview", title: "Map", body: "intro" }, { id: 3, key: "a--bg", title: "Background", body: "x" }] }];
-  const study = { id: 7, key: "study", title: "Çalışma notu: harita", body: "### Ne ve neden\nx\n### Kodda nerede\ny", mastery: { at: Date.parse("2026-10-22T10:00:00Z"), full: 6, total: 8, weak: ["Neden sürüm id?", "Eski sayı nereden?"] } };
+  const study = { id: 7, key: "study", title: "Study note: map", body: "### What and why\nx\n### Where in the code\ny", mastery: { at: Date.parse("2026-10-22T10:00:00Z"), full: 6, total: 8, weak: ["Why the version id?", "Where does the old count come from?"] } };
   const html = analysisHubHtml({ ...base, docs: [{ key: "LATD-1", at: 1, task: { id: 9, title: "T", status: "active" }, files, study }] });
   const toc = /<ol class="atoc"[\s\S]*?<\/aside>/.exec(html)[0];
   assert.ok(toc.indexOf('data-key="a3"') < toc.indexOf('data-key="a7"'), "after the files in the tree");
-  assert.match(toc, /<li class="afile astudy"[^>]*>[\s\S]*?Çalışma notu: harita[\s\S]*?data-key="a7-h0"[^>]*>Ne ve neden[\s\S]*?data-key="a7-h1"/);
+  assert.match(toc, /<li class="afile astudy"[^>]*>[\s\S]*?Study note: map[\s\S]*?data-key="a7-h0"[^>]*>What and why[\s\S]*?data-key="a7-h1"/);
   const page = html.slice(html.indexOf('<main class="dpage adoc"'));
   assert.ok(page.indexOf('id="sec-a3"') < page.indexOf('id="sec-a7"'), "after the files on the page");
-  assert.match(page, /<article class="dsec astudy" id="sec-a7"[\s\S]*?6\/8 full[\s\S]*?Weak: Neden sürüm id\? · Eski sayı nereden\?/);
+  assert.match(page, /<article class="dsec astudy" id="sec-a7"[\s\S]*?6\/8 full[\s\S]*?Weak: Why the version id\? · Where does the old count come from\?/);
   assert.match(html, /1 file · study note/);
   // Not studied yet: how to.
   const fresh = analysisHubHtml({ ...base, docs: [{ key: "LATD-1", at: 1, task: undefined, files: [], study: { ...study, mastery: undefined } }] });

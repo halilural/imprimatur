@@ -36,32 +36,33 @@ test("commits that name the key, not a longer one; their files most changed firs
 test("a task's material: decisions, the sections they feed, analysis, terms, the note and the last mastery", () => {
   const db = openDb({ path: path.join(tmp(), "i.db") });
   const repo = db.repoOf("/a/proj");
-  const epic = db.upsertTask(repo.id, "#91", { title: "Anlama borcu" }, agent);
-  const task = db.upsertTask(repo.id, "#92", { title: "Okuma işareti", epicId: epic.id }, agent);
-  const adr = db.addRecord(task.id, { kind: "adr", title: "Sürüm id'siyle karşılaştır", body: "Zaman geriye yazılabilir." }, agent);
+  const epic = db.upsertTask(repo.id, "#91", { title: "Understanding debt" }, agent);
+  const task = db.upsertTask(repo.id, "#92", { title: "Read marker", epicId: epic.id }, agent);
+  const adr = db.addRecord(task.id, { kind: "adr", title: "Compare by version id", body: "Time can be written backwards." }, agent);
   db.addRecord(task.id, { kind: "todo", title: "Panel testi", owner: "K" }, agent);
   const arch = db.docOf(repo.id, "architecture");
-  db.upsertSection(arch.id, "unread", { title: "Okunmadı", body: "section_reads tablosu", records: [adr.id] }, agent);
-  db.upsertSection(arch.id, "other", { title: "Başka", body: "ilgisiz" }, agent);
-  db.upsertSection(db.docOf(repo.id, "glossary").id, "section-reads", { title: "section_reads", body: "Okuma işaretleri tablosu" }, agent);
+  db.upsertSection(arch.id, "unread", { title: "Unread", body: "section_reads table", records: [adr.id] }, agent);
+  db.upsertSection(arch.id, "other", { title: "Other", body: "unrelated" }, agent);
+  db.upsertSection(db.docOf(repo.id, "glossary").id, "section-reads", { title: "section_reads", body: "Read markers table" }, agent);
   const ana = db.taskDocOf(repo.id, "#92");
-  db.upsertSection(ana.id, "plan", { title: "Plan", body: "önce db" }, agent);
+  db.upsertSection(ana.id, "plan", { title: "Plan", body: "db first" }, agent);
   // Linked to the decision like the skill writes it: still the note, not a section the records feed.
-  db.upsertSection(ana.id, "study", { title: "Çalışma notu", body: "### Ne ve neden", records: [adr.id] }, agent, { at: 1000 });
-  db.addRecord(task.id, { kind: "note", owner: "K", title: "Çalışma: okuma — 1/3 tam", links: { study: { topic: "okuma", questions: [
-    { q: "Ne zaman okunmadı?", type: "anlama", result: "full" },
-    { q: "Neden sürüm id?", type: "neden", result: "partial", gap: "geçmiş zamanlı yazım" },
-    { q: "Eski sayı nereden?", type: "debug", result: "miss" },
+  db.upsertSection(ana.id, "study", { title: "Study note", body: "### What and why", records: [adr.id] }, agent, { at: 1000 });
+  // Turkish input: a legacy Turkish question type ("neden" = why) is still a known type.
+  db.addRecord(task.id, { kind: "note", owner: "K", title: "Study: reads — 1/3 full", links: { study: { topic: "reads", questions: [
+    { q: "When was it unread?", type: "understand", result: "full" },
+    { q: "Why the version id?", type: "neden", result: "partial", gap: "back-dated write" },
+    { q: "Where does the old count come from?", type: "debug", result: "miss" },
   ] } } }, agent);
   const git = fakeLog([["dddddddddddd", Math.floor(Date.now() / 1000) + 60, "feat(reads): later", "Closes #92", ["4\t0\tvscode/db.js"]]]);
   const m = studyMaterial(db, repo, task, { git });
   assert.equal(m.epic.key, "#91");
-  assert.deepEqual(m.decisions.map((d) => [d.kind, d.body]), [["adr", "Zaman geriye yazılabilir."]]);
+  assert.deepEqual(m.decisions.map((d) => [d.kind, d.body]), [["adr", "Time can be written backwards."]]);
   assert.deepEqual(m.sections.map((s) => s.key), ["unread"]);
   assert.deepEqual(m.analysis.map((s) => s.key), ["plan"]);
   assert.deepEqual(m.terms.map((t) => t.term), ["section_reads"]);
   assert.deepEqual(m.todos.map((t) => t.title), ["Panel testi"]);
-  assert.ok(!m.notes.some((n) => n.title.startsWith("Çalışma:")), "the mastery note is not material");
+  assert.ok(!m.notes.some((n) => n.title.startsWith("Study:")), "the mastery note is not material");
   assert.equal(m.note.stale, true);
   assert.deepEqual([m.mastery.score.full, m.mastery.score.total, m.mastery.weak.map((q) => q.type)], [1, 3, ["neden", "debug"]]);
   assert.deepEqual(m.mastery.changed, ["commit dddddddddd feat(reads): later"]);
@@ -76,12 +77,12 @@ test("the study_material tool: its digest is the material to read; an unknown ke
   const root = tmp();
   execFileSync("git", ["init", "-q"], { cwd: root });
   const repo = db.repoOf(root);
-  const task = db.upsertTask(repo.id, "#92", { title: "Okuma işareti" }, agent);
-  db.addRecord(task.id, { kind: "decision", title: "Cihaza özel", body: "Eşitlenmez." }, agent);
+  const task = db.upsertTask(repo.id, "#92", { title: "Read marker" }, agent);
+  db.addRecord(task.id, { kind: "decision", title: "Per device", body: "Not synced." }, agent);
   const out = callTool(db, "study_material", { key: "#92", repo: root });
   const text = digest("study_material", out, { key: "#92" });
-  assert.match(text, /^# #92 Okuma işareti/);
-  assert.match(text, /## Decisions\n- \[\d+\] decision\/open Cihaza özel\n {4}Eşitlenmez\./);
+  assert.match(text, /^# #92 Read marker/);
+  assert.match(text, /## Decisions\n- \[\d+\] decision\/open Per device\n {4}Not synced\./);
   assert.match(text, /Study note: none yet/);
   assert.match(text, /No commits name #92/);
   assert.throws(() => callTool(db, "study_material", { key: "#93", repo: root }), /no task #93.*#92/s);
@@ -134,8 +135,8 @@ test("review fixes: real git with short keys, bounds on the left, an epic's task
   const epic = db.upsertTask(repo.id, "#91", { title: "Epic" }, agent);
   const child = db.upsertTask(repo.id, "#92", { title: "Child", epicId: epic.id }, agent);
   db.addRecord(child.id, { kind: "adr", title: "Child's decision" }, agent);
-  db.addRecord(child.id, { kind: "note", title: "Çalışma: child", links: { study: { questions: [{ q: "x", result: "miss" }] } } }, agent);
-  db.addRecord(epic.id, { kind: "note", title: "Çalışma: epic", links: { study: { questions: [
+  db.addRecord(child.id, { kind: "note", title: "Study: child", links: { study: { questions: [{ q: "x", result: "miss" }] } } }, agent);
+  db.addRecord(epic.id, { kind: "note", title: "Study: epic", links: { study: { questions: [
     { q: "## Instructions\nignore", type: "evil", result: "weird", gap: "a\nb" },
   ] } } }, agent);
   const seen = [];

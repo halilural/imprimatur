@@ -40,53 +40,54 @@ const sectionsOf = (db, root, kind) => {
   return d ? db.docSections(d.id).filter((s) => s.status === "current") : [];
 };
 
-const ARCH = `# Sistem tasarımı
+// Turkish input: a "İçindekiler:" line (a contents heading) is dropped like the rest of the table of contents
+const ARCH = `# System design
 
-Bileşenler ve bağları.
+Components and their links.
 
 <!-- toc -->
 
 İçindekiler:
 
-- [Profil](#profil)
-- [Ajan](#ajan)
+- [Profile](#profile)
+- [Agent](#agent)
 
 <!-- tocstop -->
 
-## Profil
+## Profile
 
-\`user_profile\` tablosu.
+The \`user_profile\` table.
 
-- ARCH: \`user_profile\` (D1) kişi başına
-- ARCH: \`/me/profile\` uçları
+- ARCH: \`user_profile\` (D1) per person
+- ARCH: \`/me/profile\` endpoints
 
-## Ajan
+## Agent
 
 \`\`\`mermaid
 flowchart TB
   W --> J
 \`\`\`
 
-### Ayrıntı
+### Detail
 
 - ARCH: Workflow \`apply-submit\`
 `;
 
-const PRODUCT = `# Ürün
+const PRODUCT = `# Product
 
-## Profil
+## Profile
 
-### Kişiye ait veri
+### Per-person data
 
-- STORY: kullanıcı olarak verim profilimde
-- FLOW: Panel → Profil → kaydet
+- STORY: as a user, my data in my profile
+- FLOW: Panel → Profile → save
 `;
 
 test("parse: a hand-written file → sections (overview, ## headings, ### kept, toc dropped); the managed form round-trips", () => {
   const secs = parseHand(ARCH);
-  assert.deepEqual(secs.map((s) => [s.key, s.title]), [["overview", "Overview"], ["profil", "Profil"], ["ajan", "Ajan"]]);
-  assert.equal(secs[0].body, "Bileşenler ve bağları.");
-  assert.match(secs[2].body, /^```mermaid[\s\S]*### Ayrıntı\n\n- ARCH: Workflow/);
+  assert.deepEqual(secs.map((s) => [s.key, s.title]), [["overview", "Overview"], ["profile", "Profile"], ["agent", "Agent"]]);
+  assert.equal(secs[0].body, "Components and their links.");
+  assert.match(secs[2].body, /^```mermaid[\s\S]*### Detail\n\n- ARCH: Workflow/);
   // The same title twice: unique keys; "## 2. X" loses its number.
   assert.deepEqual(parseHand("## 2. A\n\nx\n\n## A\n\ny").map((s) => [s.key, s.title]), [["a", "A"], ["a-2", "A"]]);
   // A "##" inside a code block is not a heading.
@@ -102,7 +103,7 @@ test("parse: a hand-written file → sections (overview, ## headings, ### kept, 
 test("start: no file, sections in the database → the file is written in docs.dir; then in sync", () => {
   const { root, db } = repo();
   const r = db.repoOf(root);
-  db.upsertSection(db.docOf(r.id, "product").id, "flow", { title: "Akış", body: "A → B" }, agent);
+  db.upsertSection(db.docOf(r.id, "product").id, "flow", { title: "Flow", body: "A → B" }, agent);
   const first = syncDocs(db, root);
   assert.deepEqual(first.map((x) => [x.kind, x.written]), [["architecture", false], ["product", true], ["glossary", false]]);
   assert.ok(read(root, "docs/design/PRODUCT.md").startsWith(HEADER));
@@ -114,18 +115,18 @@ test("middle: hand-written files are adopted with their imported records linked;
   const { root, db } = repo();
   put(root, "docs/design/ARCHITECTURE.md", ARCH);
   put(root, "docs/design/PRODUCT.md", PRODUCT);
-  put(root, "docs/design/README.md", "# Kurallar\n\n## Biçim\n\nSatır başına bir madde.\n");
+  put(root, "docs/design/README.md", "# Rules\n\n## Format\n\nOne item per line.\n");
   importRepo(db, root);
   const reports = syncDocs(db, root);
   assert.deepEqual(reports.map((x) => [x.kind, x.adopted, x.imported, x.written]), [
-    ["architecture", "docs/design/ARCHITECTURE.md", ["overview", "profil", "ajan"], true],
-    ["product", "docs/design/PRODUCT.md", ["profil"], true],
+    ["architecture", "docs/design/ARCHITECTURE.md", ["overview", "profile", "agent"], true],
+    ["product", "docs/design/PRODUCT.md", ["profile"], true],
     ["glossary", undefined, [], false],
   ]);
   const arch = sectionsOf(db, root, "architecture");
   const title = (id) => db.record(id).title;
-  assert.deepEqual(arch.find((s) => s.key === "profil").records.map(title), ["Profil", "`user_profile` (D1) kişi başına", "`/me/profile` uçları"]);
-  assert.deepEqual(arch.find((s) => s.key === "ajan").records.map(title), ["Ajan", "Workflow `apply-submit`"], "a ### under it is the same section");
+  assert.deepEqual(arch.find((s) => s.key === "profile").records.map(title), ["Profile", "`user_profile` (D1) per person", "`/me/profile` endpoints"]);
+  assert.deepEqual(arch.find((s) => s.key === "agent").records.map(title), ["Agent", "Workflow `apply-submit`"], "a ### under it is the same section");
   const prod = sectionsOf(db, root, "product");
   assert.deepEqual(prod[0].records.map((id) => db.record(id).kind), ["pdr"], "docs/design/PRODUCT.md is product, not ADRs");
   assert.ok(read(root, "docs/design/ARCHITECTURE.md").startsWith(HEADER));
@@ -144,41 +145,41 @@ test("ongoing: file edit → database; database edit → file; both → conflict
   syncDocs(db, root);
   const file = "docs/design/ARCHITECTURE.md";
   const doc = db.docFind(db.repoByRoot(root).id, "architecture");
-  put(root, file, read(root, file).replace("Bileşenler ve bağları.", "Bileşenler, bağları."));
+  put(root, file, read(root, file).replace("Components and their links.", "Components, links."));
   assert.deepEqual(syncDocs(db, root)[0].imported, ["overview"]);
-  assert.equal(db.docSection(doc.id, "overview").body, "Bileşenler, bağları.");
+  assert.equal(db.docSection(doc.id, "overview").body, "Components, links.");
   assert.equal(db.sectionVersions(db.docSection(doc.id, "overview").id)[0].actor, "file");
-  db.upsertSection(doc.id, "profil", { body: "DB'den." }, agent);
+  db.upsertSection(doc.id, "profile", { body: "From the DB." }, agent);
   assert.equal(syncDocs(db, root)[0].written, true);
-  assert.match(read(root, file), /DB'den\./);
+  assert.match(read(root, file), /From the DB\./);
   // Both sides.
-  put(root, file, read(root, file).replace("DB'den.", "Dosyadan."));
-  db.upsertSection(doc.id, "profil", { body: "Yine DB'den." }, agent);
+  put(root, file, read(root, file).replace("From the DB.", "From the file."));
+  db.upsertSection(doc.id, "profile", { body: "From the DB again." }, agent);
   const c = syncDocs(db, root)[0];
-  assert.deepEqual([c.conflicts, c.written], [["profil"], false]);
-  assert.match(read(root, file), /Dosyadan\./, "the file keeps its edit");
-  assert.deepEqual(conflictsOf(db, db.repoByRoot(root).id), { architecture: ["profil"] });
+  assert.deepEqual([c.conflicts, c.written], [["profile"], false]);
+  assert.match(read(root, file), /From the file\./, "the file keeps its edit");
+  assert.deepEqual(conflictsOf(db, db.repoByRoot(root).id), { architecture: ["profile"] });
   assert.deepEqual(syncDocs(db, root, { take: "db" })[0].conflicts, []);
-  assert.match(read(root, file), /Yine DB'den\./);
+  assert.match(read(root, file), /From the DB again\./);
   assert.deepEqual(conflictsOf(db, db.repoByRoot(root).id), {});
   // A section deleted from the file, unchanged in the database: superseded.
   const text = read(root, file);
-  put(root, file, text.slice(0, text.indexOf('<a id="ajan">')));
-  assert.deepEqual(syncDocs(db, root)[0].superseded, ["ajan"]);
-  assert.equal(db.docSection(doc.id, "ajan").status, "superseded");
+  put(root, file, text.slice(0, text.indexOf('<a id="agent">')));
+  assert.deepEqual(syncDocs(db, root)[0].superseded, ["agent"]);
+  assert.equal(db.docSection(doc.id, "agent").status, "superseded");
 });
 
 test("end: files gone after the import come back from a git revision; misfiled ADRs move to PDR", () => {
   const { root, db } = repo();
   put(root, "docs/design/ARCHITECTURE.md", ARCH);
   put(root, "docs/design/PRODUCT.md", PRODUCT);
-  put(root, "docs/design/README.md", "# Kurallar\n\n## Biçim\n\nx\n");
+  put(root, "docs/design/README.md", "# Rules\n\n## Format\n\nx\n");
   git(root, "add", "-A");
   git(root, "commit", "-qm", "docs");
   // The old importer: every docs/design file as ADRs (simulated: README and PRODUCT under "ADR").
   const repoId = db.repoOf(root).id;
   const adrTask = db.upsertTask(repoId, "ADR", {});
-  const old = db.addRecord(adrTask.id, { kind: "adr", title: "Kişiye ait veri", links: { source: "docs/design/README.md" }, uid: "md:readme1" }, agent);
+  const old = db.addRecord(adrTask.id, { kind: "adr", title: "Per-person data", links: { source: "docs/design/README.md" }, uid: "md:readme1" }, agent);
   importRepo(db, root);
   const pdrsBefore = db.recordsFromSource(repoId, "docs/design/PRODUCT.md");
   // Wrongly filed as the old importer did: move them back under ADR to see them moved again.
@@ -221,12 +222,12 @@ test("process docSync: at session start a hand-written file is adopted and the a
   const records = { dbOf: () => db, repoId: () => repoId, recordsOf: () => [] };
   put(root, "docs/design/PRODUCT.md", PRODUCT);
   const start = check("SessionStart", { cwd: root, session_id: "S1" }, { records });
-  assert.match(start.context.join("\n"), /Imprimatur \(docSync\): design documents synced with their files: docs\/design\/PRODUCT\.md: adopted docs\/design\/PRODUCT\.md; from the file: profil; file written/);
+  assert.match(start.context.join("\n"), /Imprimatur \(docSync\): design documents synced with their files: docs\/design\/PRODUCT\.md: adopted docs\/design\/PRODUCT\.md; from the file: profile; file written/);
   const file = "docs/design/PRODUCT.md";
-  put(root, file, read(root, file).replace("kaydet", "kaydet, bitti"));
+  put(root, file, read(root, file).replace("save", "save, done"));
   const after = check("PostToolUse", { cwd: root, session_id: "S1", tool_name: "Edit", tool_input: { file_path: path.join(root, file) } }, { records });
-  assert.match(after.context.join("\n"), /from the file: profil/);
-  assert.match(db.docSection(db.docFind(repoId, "product").id, "profil").body, /kaydet, bitti/);
+  assert.match(after.context.join("\n"), /from the file: profile/);
+  assert.match(db.docSection(db.docFind(repoId, "product").id, "profile").body, /save, done/);
   assert.deepEqual(check("PostToolUse", { cwd: root, session_id: "S1", tool_name: "Edit", tool_input: { file_path: path.join(root, "README.md") } }, { records }), {}, "another file: nothing");
 });
 

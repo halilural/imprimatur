@@ -13,28 +13,31 @@ const { itemsOf, waitingItems } = createRequire(import.meta.url)("../vscode/wait
 
 test("waiting: asks in a final message, code and tables skipped", () => {
   const msg = [
-    "Değişiklikler hazır, 64 test geçiyor.",
+    "Changes are ready, 64 tests pass.",
     "",
     "| a | b? |",
     "```",
     "why?",
     "```",
-    "- **Gözle:** Reload Window yap, panel açılıyor mu kontrol et.",
-    "Başlayayım mı?",
+    "- **Look:** Reload Window, check the panel opens.",
+    "Shall I start?",
   ].join("\n");
-  assert.deepEqual(asksIn(msg), { lines: ["Gözle: Reload Window yap, panel açılıyor mu kontrol et.", "Başlayayım mı?"], question: true, action: true });
+  assert.deepEqual(asksIn(msg), { lines: ["Look: Reload Window, check the panel opens.", "Shall I start?"], question: true, action: true });
   assert.deepEqual(asksIn("Done. Nothing committed yet."), { lines: [], question: false, action: false });
   // Past tense and quoted phrases are not asks.
+  assert.deepEqual(asksIn('I checked it before deleting, the tests passed.\nType: "please check / please test" style asks.'), { lines: [], question: false, action: false });
+  // Turkish input: "kontrol et" is an ask only as a whole word, not in the past tense ("kontrol ettim") or quoted
   assert.deepEqual(asksIn('Silmeden önce kontrol ettim, testler doğrulandı.\nTür: "kontrol et / test et" gibi istekler.'), { lines: [], question: false, action: false });
+  // Turkish input: the ACTION_PHRASES "kontrol eder misin"
   assert.deepEqual(asksIn("Panelde kontrol eder misin."), { lines: ["Panelde kontrol eder misin."], question: false, action: true });
-  assert.equal(asksIn("Graph'ta kontrol eder misin, README'yi de.").lines.length, 1);
-  assert.deepEqual(asksIn("- **👉 satırları:** artık yakalanıyor.").lines, []);
+  assert.equal(asksIn("Can you check it in the graph, and the README too.").lines.length, 1);
+  assert.deepEqual(asksIn("- **👉 lines:** now caught.").lines, []);
   // With 👉 lines, only those: the rest of the message is report, even with ask phrases.
-  assert.deepEqual(asksIn("Eklenti kuruldu; görmek için Reload Window yap.\n👉 Birleştireyim mi?"), { lines: ["Birleştireyim mi?"], question: true, action: true });
-  assert.equal(userText({ prompt: "<ide_opened_file>The user opened x.md</ide_opened_file>olur yapalım" }), "olur yapalım");
+  assert.deepEqual(asksIn("The extension is installed; Reload Window to see it.\n👉 Shall I merge?"), { lines: ["Shall I merge?"], question: true, action: true });
+  assert.equal(userText({ prompt: "<ide_opened_file>The user opened x.md</ide_opened_file>sounds good, do it" }), "sounds good, do it");
   // 👉 always counts, as something to do.
-  assert.deepEqual(asksIn("Bitti.\n- 👉 package-lock.json: commit'lemek senin kararın."), {
-    lines: ["package-lock.json: commit'lemek senin kararın."],
+  assert.deepEqual(asksIn("Done.\n- 👉 package-lock.json: committing it is your call."), {
+    lines: ["package-lock.json: committing it is your call."],
     question: false,
     action: true,
   });
@@ -55,8 +58,8 @@ test("waiting: hook events to records", () => {
   });
   assert.deepEqual(recordOf({ hook_event_name: "Stop", last_assistant_message: "All done." }), { kind: "step", closeOnly: true });
   assert.equal(recordOf({ hook_event_name: "Stop", last_assistant_message: "Shall I commit?" }).kind, "question");
-  assert.equal(recordOf({ hook_event_name: "Stop", last_assistant_message: "Lütfen panelde test et." }).kind, "verify");
-  assert.deepEqual(recordOf({ hook_event_name: "UserPromptSubmit", prompt: "evet\nbaşla" }), { kind: "answer", answer: "evet", closeOnly: true });
+  assert.equal(recordOf({ hook_event_name: "Stop", last_assistant_message: "Please test it in the panel." }).kind, "verify");
+  assert.deepEqual(recordOf({ hook_event_name: "UserPromptSubmit", prompt: "yes\nstart" }), { kind: "answer", answer: "yes", closeOnly: true });
   assert.deepEqual(recordOf({ hook_event_name: "PostToolUse", tool_name: "AskUserQuestion", tool_response: { answers: { "Which tab?": "Own" } } }), {
     kind: "answer",
     answer: "Own",
@@ -73,7 +76,7 @@ test("waiting: each record closes the session's earlier open items, answers carr
     [
       { t: "2026-10-05T10:00:00Z", kind: "command", text: "Bash: git push" },
       { t: "2026-10-05T10:00:05Z", kind: "question", text: "Shall I commit?" },
-      { t: "2026-10-05T10:01:00Z", kind: "answer", answer: "evet" },
+      { t: "2026-10-05T10:01:00Z", kind: "answer", answer: "yes" },
       { t: "2026-10-05T10:02:00Z", kind: "verify", text: "Reload Window" },
     ],
     "s1",
@@ -82,7 +85,7 @@ test("waiting: each record closes the session's earlier open items, answers carr
     items.map((i) => [i.kind, i.open, i.answer]),
     [
       ["command", false, undefined],
-      ["question", false, "evet"],
+      ["question", false, "yes"],
       ["verify", true, undefined],
     ],
   );
@@ -91,11 +94,11 @@ test("waiting: each record closes the session's earlier open items, answers carr
 test("waiting: things to do stay open past the next prompt, until done or all ticked", () => {
   const items = itemsOf(
     [
-      { t: "T1", kind: "verify", text: "Reload Window yap\nPaneli kontrol et" },
-      { t: "T2", kind: "answer", answer: "tamam bakarım" },
-      { t: "T3", kind: "question", text: "Commit edeyim mi?" },
-      { t: "T4", kind: "answer", answer: "evet" },
-      { t: "T5", kind: "verify", text: "Testi dene" },
+      { t: "T1", kind: "verify", text: "Reload Window\nCheck the panel" },
+      { t: "T2", kind: "answer", answer: "ok, I'll look" },
+      { t: "T3", kind: "question", text: "Shall I commit?" },
+      { t: "T4", kind: "answer", answer: "yes" },
+      { t: "T5", kind: "verify", text: "Try the test" },
       { t: "T6", kind: "check", item: "T1", i: 0, on: true },
       { t: "T7", kind: "check", item: "T1", i: 1, on: true },
       { t: "T8", kind: "done", item: "T5" },
@@ -105,13 +108,13 @@ test("waiting: things to do stay open past the next prompt, until done or all ti
   assert.deepEqual(
     items.map((i) => [i.t, i.open, !!i.done, i.answer ?? null, i.notes ?? null]),
     [
-      ["T1", false, true, null, ["tamam bakarım", "evet"]],
-      ["T3", false, false, "evet", null],
+      ["T1", false, true, null, ["ok, I'll look", "yes"]],
+      ["T3", false, false, "yes", null],
       ["T5", false, true, null, null],
     ],
   );
-  assert.equal(recordOf({ hook_event_name: "Stop", last_assistant_message: "Commit edip birleştireyim mi?" }).kind, "question");
-  assert.equal(recordOf({ hook_event_name: "Stop", last_assistant_message: "Reload Window yapıp dener misin?" }).kind, "verify");
+  assert.equal(recordOf({ hook_event_name: "Stop", last_assistant_message: "Shall I commit and merge?" }).kind, "question");
+  assert.equal(recordOf({ hook_event_name: "Stop", last_assistant_message: "Can you reload the window and try it?" }).kind, "verify");
 });
 
 test("waiting: ticked steps are kept per item and close nothing", () => {
@@ -133,14 +136,14 @@ test("waiting: the hook writes per-session logs; quiet events start none", () =>
   assert.equal(recordWaiting({ hook_event_name: "UserPromptSubmit", session_id: "s1", prompt: "hi" }, root), undefined);
   assert.equal(fs.existsSync(log), false);
   assert.equal(recordWaiting({ hook_event_name: "Stop", session_id: "s1", last_assistant_message: "Shall I start?" }, root), log);
-  recordWaiting({ hook_event_name: "Stop", session_id: "s2", last_assistant_message: "Test et lütfen." }, root);
-  recordWaiting({ hook_event_name: "UserPromptSubmit", session_id: "s1", prompt: "evet" }, root);
+  recordWaiting({ hook_event_name: "Stop", session_id: "s2", last_assistant_message: "Please test it." }, root);
+  recordWaiting({ hook_event_name: "UserPromptSubmit", session_id: "s1", prompt: "yes" }, root);
   const items = waitingItems(root);
   assert.deepEqual(
     items.map((i) => [i.session, i.kind, i.open, i.answer ?? null]),
     [
       ["s2", "verify", true, null],
-      ["s1", "question", false, "evet"],
+      ["s1", "question", false, "yes"],
     ],
   );
 });
@@ -153,7 +156,7 @@ test("waiting: a turn end closes the asks of a task the database says done, in o
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-waiting-"));
   const dir = path.join(root, ".claude/imprimatur/waiting");
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, "old.jsonl"), JSON.stringify({ t: "2020-01-01T00:00:00Z", session: "old", kind: "question", text: "#7 birleşsin mi?", task: "#7" }) + "\n");
+  fs.writeFileSync(path.join(dir, "old.jsonl"), JSON.stringify({ t: "2020-01-01T00:00:00Z", session: "old", kind: "question", text: "Should #7 be merged?", task: "#7" }) + "\n");
   const file = path.join(root, "imprimatur.db");
   process.env.IMPRIMATUR_DB = file;
   const req = createRequire(import.meta.url);
@@ -161,6 +164,6 @@ test("waiting: a turn end closes the asks of a task the database says done, in o
   const db = req("../vscode/db.js").openDb({ path: file });
   db.upsertTask(db.repoOf(root).id, "#7", { status: "done" });
   db.close();
-  recordWaiting({ hook_event_name: "Stop", session_id: "now", last_assistant_message: "Kapattım." }, root);
+  recordWaiting({ hook_event_name: "Stop", session_id: "now", last_assistant_message: "Closed." }, root);
   assert.deepEqual(waitingItems(root).map((i) => [i.session, i.open]), [["old", false]]);
 });
