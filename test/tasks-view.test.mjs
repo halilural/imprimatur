@@ -1,4 +1,4 @@
-// The panel's task tabs (#69): Ana sayfa, Görevler, Bende bekleyenler. Their models
+// The panel's task tabs (#69): Home, Tasks, Waiting on you. Their models
 // and HTML are pure (vscode/tasksView.js), so they run here on a temp database.
 import fs from "node:fs";
 import os from "node:os";
@@ -53,7 +53,7 @@ test("#69 quick-add: ? question (yours), ! decision, # note, @me (or @ben) your 
   assert.equal(tv.parseQuickAdd("@me"), undefined);
 });
 
-test("#69 Görevler: the list by status with counts, the selected task's page", () => {
+test("#69 Tasks: the list by status with counts, the selected task's page", () => {
   const s = seed();
   const m = tv.tasksPage(s.db, s.root, {});
   assert.deepEqual(m.counts, { active: 2, open: 1, done: 1 });
@@ -93,7 +93,7 @@ test("#69 Görevler: the list by status with counts, the selected task's page", 
   assert.ok(flash.todos.some((r) => r.id === s.done1.id));
 });
 
-test("#69 Görevler: this repo by default, every repo when asked", () => {
+test("#69 Tasks: this repo by default, every repo when asked", () => {
   const s = seed();
   const keys = (m) => m.groups.flatMap((g) => g.tasks.map((t) => t.key));
   assert.ok(!keys(tv.tasksPage(s.db, s.root, {})).includes("OT-1"));
@@ -102,10 +102,10 @@ test("#69 Görevler: this repo by default, every repo when asked", () => {
   assert.equal(m.groups[0].repo.name, "repo", "this window's repo first");
 });
 
-test("#69 Bende bekleyenler: buckets, groups by task, turn-end asks counted, today's done", () => {
+test("#69 Waiting on you: buckets, groups by task, turn-end asks counted, today's done", () => {
   const s = seed();
   const waiting = [
-    { kind: "question", state: "open", session: "a", item: "t1", i: 0, t: "2026-01-01T10:00:00Z", text: "Hangisi?" },
+    { kind: "question", state: "open", session: "a", item: "t1", i: 0, t: "2026-01-01T10:00:00Z", text: "Which one?" },
     { kind: "verify", state: "open", session: "a", item: "t1", i: 1, t: "2026-01-01T10:00:00Z", text: "Bak" },
     { kind: "verify", state: "open", session: "todo-files", item: "t2", i: 0, t: "2026-01-01T10:00:00Z", text: "x" },
     { kind: "command", state: "done", session: "a", by: "audit", item: "t3", i: 0, t: "2026-01-01T10:00:00Z", text: "y" },
@@ -115,7 +115,7 @@ test("#69 Bende bekleyenler: buckets, groups by task, turn-end asks counted, tod
   assert.deepEqual(n, { question: 2, todo: 1, test: 2, done: 0 }, "the todo-files log mirrors records: not counted twice");
   assert.equal(m.count, 5);
   assert.equal(m.turn, 2);
-  assert.deepEqual(m.groups.map((g) => g.task?.key ?? null), ["#1", null], "turn-end asks with no task: Görevsiz");
+  assert.deepEqual(m.groups.map((g) => g.task?.key ?? null), ["#1", null], "turn-end asks with no task: No task");
   assert.equal(m.groups[0].items[0].kind, "question", "questions first");
   assert.equal(tv.inboxCount(s.db, s.root, waiting), 5);
 
@@ -134,35 +134,35 @@ test("turn-end asks are cards under their task; the button ticks the step; ticke
   const now = Date.now();
   const w = (/** @type {any} */ o) => ({ kind: "command", session: "s9", item: "2026-01-01T10:00:00Z", t: "2026-01-01T10:00:00Z", prompt: "deploy", ...o });
   const waiting = [
-    w({ i: 0, state: "open", text: "#1: Deploy et", why: "prod bekliyor", detail: "uzun mesaj" }),
-    w({ i: 1, state: "open", kind: "verify", text: "Gözle bak" }),
-    w({ i: 2, state: "done", text: "#1: Logu sil", at: new Date(now).toISOString() }),
-    w({ i: 3, state: "done", by: "audit", text: "#1: Audit kapattı", at: new Date(now).toISOString() }),
-    w({ i: 4, state: "replaced", text: "#1: Eski soru" }),
+    w({ i: 0, state: "open", text: "#1: Deploy it", why: "waiting for prod", detail: "long message" }),
+    w({ i: 1, state: "open", kind: "verify", text: "Check by eye" }),
+    w({ i: 2, state: "done", text: "#1: Delete the log", at: new Date(now).toISOString() }),
+    w({ i: 3, state: "done", by: "audit", text: "#1: Audit closed it", at: new Date(now).toISOString() }),
+    w({ i: 4, state: "replaced", text: "#1: Old question" }),
   ];
   const placeOf = (/** @type {any} */ x) => (x.text.startsWith("#1") ? { task: "#1" } : {});
   const m = tv.inboxModel(s.db, s.root, { waiting, placeOf, now });
   const g1 = m.groups.find((g) => g.task?.key === "#1");
   const turn = g1.items.filter((/** @type {any} */ r) => r.turn);
-  assert.deepEqual(turn.map((/** @type {any} */ r) => [r.title, r.done]), [["Deploy et", false], ["Logu sil", true]], "open and yours today; not audit's or replaced");
-  assert.equal(m.groups.find((g) => !g.task).items[0].kind, "test", "a verify ask is a test; no task: Görevsiz");
+  assert.deepEqual(turn.map((/** @type {any} */ r) => [r.title, r.done]), [["Deploy it", false], ["Delete the log", true]], "open and yours today; not audit's or replaced");
+  assert.equal(m.groups.find((g) => !g.task).items[0].kind, "test", "a verify ask is a test; no task: No task");
   const html = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting, placeOf, now });
   assert.match(html, /<button class="primary" data-act="turn" data-on="1" data-session="s9" data-item="2026-01-01T10:00:00Z" data-i="0">Done it<\/button>/);
   assert.match(html, /data-act="turn" data-on="0" data-session="s9" data-item="2026-01-01T10:00:00Z" data-i="2">undo/);
-  assert.ok(html.includes("end of turn") && html.includes("prod bekliyor") && html.includes("Full message"));
-  // With no Bende bekleyenler tab: the open ones on their task's page, the ones with no task on Ana sayfa.
+  assert.ok(html.includes("end of turn") && html.includes("waiting for prod") && html.includes("Full message"));
+  // With no Waiting on you tab: the open ones on their task's page, the ones with no task on Home.
   const page = tv.paneHtml(s.db, s.root, { tab: "tasks", sel: g1.task.id }, { waiting, placeOf, now });
   assert.match(page, /data-act="turn" data-on="1" data-session="s9" data-item="2026-01-01T10:00:00Z" data-i="0">Done it/);
   assert.ok(!page.includes('data-i="2"'), "done ones stay off the task page");
   const home = tv.paneHtml(s.db, s.root, { tab: "home" }, { waiting, placeOf, now });
-  assert.match(home, /Waiting on you, no task[\s\S]*?Gözle bak/);
-  assert.ok(!home.includes("Deploy et"), "one with a task is on its page, not on Ana sayfa");
-  assert.equal(tv.cleanView({ tab: "inbox" }).tab, "home", "a view saved on the old tab opens Ana sayfa");
+  assert.match(home, /Waiting on you, no task[\s\S]*?Check by eye/);
+  assert.ok(!home.includes("Deploy it"), "one with a task is on its page, not on Home");
+  assert.equal(tv.cleanView({ tab: "inbox" }).tab, "home", "a view saved on the old tab opens Home");
   assert.ok(html.includes("<span>No task</span>"));
-  assert.ok(!html.includes("Audit kapattı") && !html.includes("Eski soru"));
+  assert.ok(!html.includes("Audit closed it") && !html.includes("Old question"));
 });
 
-test("Bende bekleyenler: one chip per task, cards found by the task's title", () => {
+test("Waiting on you: one chip per task, cards found by the task's title", () => {
   const s = seed();
   const one = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting: [] });
   assert.ok(!one.includes('data-act="itask"'), "one task: no chips");
@@ -178,7 +178,7 @@ test("Bende bekleyenler: one chip per task, cards found by the task's title", ()
   assert.ok(all.includes('id="ifnone"'));
 });
 
-test("#69 Ana sayfa: progress, where we left off, top asks, tasks by status", () => {
+test("#69 Home: progress, where we left off, top asks, tasks by status", () => {
   const s = seed();
   const m = tv.homeModel(s.db, s.root);
   assert.equal(m.repoName, "repo");
@@ -250,7 +250,7 @@ test("#69 the tabs' HTML: Turkish labels, escaped text, keyed blocks, no emoji i
     assert.ok(inbox.includes(text), text);
   const home = tv.paneHtml(s.db, s.root, { tab: "home" });
   for (const text of ["1 / 4 tasks done", "Where we left off", "Waiting on you", "Last change"]) assert.ok(home.includes(text), text);
-  // No Bende bekleyenler tab to link to: the count only.
+  // No Waiting on you tab to link to: the count only.
   assert.match(home, /<span>Waiting on you<\/span><span class="dim">3<\/span>/);
   assert.ok(!home.includes('data-tab="inbox"'));
   assert.equal(tv.paneHtml(s.db, s.root, { tab: "edits" }), "");
@@ -290,9 +290,9 @@ test("#69 the panel page: tabs, only the visible tab drawn, its script parses", 
 
 test("record bodies are Markdown: bold, code blocks, links; raw HTML stays text", () => {
   const s = seed();
-  s.db.addRecord(s.t1.id, { kind: "test", title: "Adhoc 03", body: "**Hazırlık:**\n```sql\nDELETE FROM T;\n```\n<script>alert(1)</script> [x](javascript:alert(1))" }, AGENT);
+  s.db.addRecord(s.t1.id, { kind: "test", title: "Adhoc 03", body: "**Preparation:**\n```sql\nDELETE FROM T;\n```\n<script>alert(1)</script> [x](javascript:alert(1))" }, AGENT);
   const inbox = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting: [] });
-  assert.ok(inbox.includes("<strong>Hazırlık:</strong>"));
+  assert.ok(inbox.includes("<strong>Preparation:</strong>"));
   assert.match(inbox, /<pre><code class="language-sql">DELETE FROM T;/);
   assert.ok(!inbox.includes("<script>alert"), "raw HTML is text");
   assert.ok(!inbox.includes('href="javascript:'), "no script links");
@@ -300,21 +300,21 @@ test("record bodies are Markdown: bold, code blocks, links; raw HTML stays text"
 
 test("steps in a record body: checkboxes with their line, a tick rewrites that line and stays", () => {
   const s = seed();
-  const body = "**Adımlar:**\n\n- [ ] Pod'u bul\n- [x] Logu aç\n\n```\n- [ ] not a step\n```\n1. [ ] numbered";
+  const body = "**Steps:**\n\n- [ ] Find the pod\n- [x] Open the log\n\n```\n- [ ] not a step\n```\n1. [ ] numbered";
   const r = s.db.addRecord(s.t1.id, { kind: "test", title: "Adhoc 05", body }, AGENT);
   const docs = req("../vscode/docsView.js");
   assert.deepEqual(docs.stepsOf(body), [{ line: 2, done: false }, { line: 3, done: true }, { line: 8, done: false }]);
   let inbox = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting: [] });
-  assert.match(inbox, /<input type="checkbox" class="mdstep" data-line="2" aria-label="Step">Pod/);
+  assert.match(inbox, /<input type="checkbox" class="mdstep" data-line="2" aria-label="Step">Find/);
   assert.match(inbox, /data-line="3" checked/);
   assert.ok(inbox.includes("1/3 steps"));
   assert.ok(!docs.renderMarkdown(body).includes('data-line="2" aria'), "documents: boxes only show");
 
   tv.applyMessage(s.db, { type: "recStep", id: r.id, line: 2, done: true }, USER);
   tv.applyMessage(s.db, { type: "recStep", id: r.id, line: 6, done: true }, USER);
-  assert.equal(s.db.record(r.id).body, body.replace("- [ ] Pod", "- [x] Pod"), "the step's line ticked; a fenced line is no step");
+  assert.equal(s.db.record(r.id).body, body.replace("- [ ] Find", "- [x] Find"), "the step's line ticked; a fenced line is no step");
   tv.applyMessage(s.db, { type: "recStep", id: r.id, line: 3, done: false }, USER);
-  assert.ok(s.db.record(r.id).body.includes("- [ ] Logu aç"));
+  assert.ok(s.db.record(r.id).body.includes("- [ ] Open the log"));
   inbox = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting: [] });
   assert.ok(inbox.includes("1/3 steps"));
 });

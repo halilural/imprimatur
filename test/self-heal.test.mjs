@@ -68,7 +68,7 @@ test("#47: a done-cache written under older rules is read again from scratch", (
   const log = path.join(root, ".claude/imprimatur/waiting/s1.jsonl");
   fs.mkdirSync(path.dirname(log), { recursive: true });
   // The item's task field names another task; the step itself is about #37.
-  fs.writeFileSync(log, JSON.stringify({ t: "2026-10-06T08:00:00Z", session: "s1", kind: "verify", task: "#36", text: "#37 için panelde kutuları tikle" }) + "\n");
+  fs.writeFileSync(log, JSON.stringify({ t: "2026-10-06T08:00:00Z", session: "s1", kind: "verify", task: "#36", text: "#37: tick the boxes in the panel" }) + "\n");
   const file = path.join(root, "imprimatur.db");
   process.env.IMPRIMATUR_DB = file;
   req("../vscode/records.js").reset();

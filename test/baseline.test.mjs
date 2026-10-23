@@ -168,24 +168,24 @@ test("history row carries the user's latest request from the transcript", () => 
       { type: "user", message: { content: "old" } },
       { type: "last-prompt", lastPrompt: "first ask", sessionId: "s1" },
       { type: "assistant" },
-      { type: "last-prompt", lastPrompt: "change cumartesi to pazartesi\nsecond line", sessionId: "s1" },
+      { type: "last-prompt", lastPrompt: "change saturday to monday\nsecond line", sessionId: "s1" },
     ].map((r) => JSON.stringify(r)).join("\n") + "\n",
   );
   fs.writeFileSync(path.join(dir, "a.md"), "x\n");
   const input = JSON.stringify({ session_id: "s1", tool_name: "Edit", transcript_path: tr, tool_input: { file_path: path.join(dir, "a.md") } });
   spawnSync("node", [hook], { input, env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
-  assert.equal(history(dir, "a.md")[0].prompt, "change cumartesi to pazartesi");
+  assert.equal(history(dir, "a.md")[0].prompt, "change saturday to monday");
 });
 
 test("history row carries the session title and where to find the agent's words", () => {
   const { dir } = repo();
   const tr = path.join(dir, "t.jsonl");
-  fs.writeFileSync(tr, [{ type: "ai-title", aiTitle: "Old" }, { type: "ai-title", aiTitle: "Tim'den gelen mail" }].map((r) => JSON.stringify(r)).join("\n") + "\n");
+  fs.writeFileSync(tr, [{ type: "ai-title", aiTitle: "Old" }, { type: "ai-title", aiTitle: "Mail from Tim" }].map((r) => JSON.stringify(r)).join("\n") + "\n");
   fs.writeFileSync(path.join(dir, "a.md"), "x\n");
   const input = JSON.stringify({ session_id: "s1", tool_name: "Edit", tool_use_id: "toolu_1", transcript_path: tr, tool_input: { file_path: path.join(dir, "a.md") } });
   spawnSync("node", [hook], { input, env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
   const row = history(dir, "a.md")[0];
-  assert.deepEqual([row.title, row.transcript, row.toolUseId, row.intent], ["Tim'den gelen mail", tr, "toolu_1", undefined]);
+  assert.deepEqual([row.title, row.transcript, row.toolUseId, row.intent], ["Mail from Tim", tr, "toolu_1", undefined]);
 });
 
 function bash(dir, id, command, event) {

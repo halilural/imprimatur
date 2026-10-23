@@ -35,44 +35,44 @@ test("history: turns are the user's prompts and the agent's final message; tool 
     s1: {
       records: [
         { type: "ai-title", aiTitle: "Fix the build" },
-        user("<ide_opened_file>x</ide_opened_file>build kırık", ago(50)),
-        said("Bakıyorum.", ago(49), "m1"),
+        user("<ide_opened_file>x</ide_opened_file>build is broken", ago(50)),
+        said("Looking.", ago(49), "m1"),
         tool(ago(48)),
         { ...said("subagent words", ago(47), "sub"), isSidechain: true },
-        said("Düzelttim.", ago(46), "m2"),
-        said("👉 Test eder misin?", ago(46), "m2"),
+        said("Fixed.", ago(46), "m2"),
+        said("👉 Can you test it?", ago(46), "m2"),
       ],
     },
   });
   const tx = turnsOf(path.join(home, slugOf(root), "s1.jsonl"));
   assert.equal(tx.title, "Fix the build");
   assert.equal(tx.cwd, root);
-  assert.deepEqual(tx.turns.map((t) => [t.request, t.message]), [["build kırık", "Düzelttim.\n👉 Test eder misin?"]]);
+  assert.deepEqual(tx.turns.map((t) => [t.request, t.message]), [["build is broken", "Fixed.\n👉 Can you test it?"]]);
 });
 
 test("history: a past session's 👉 asks become steps, the user's later words settle them through the audit", async () => {
   const { root, home } = project({
     s1: {
       records: [
-        user("deploy et", ago(60)),
-        said("Deploy bitti.\n\n👉 Staging'de girişi dener misin?", ago(59)),
-        user("denedim çalışıyor, şimdi README'yi güncelle", ago(30)),
-        said("README güncellendi.\n\n👉 Değişikliği commit edeyim mi?", ago(29)),
+        user("deploy it", ago(60)),
+        said("Deploy finished.\n\n👉 Can you try the login on staging?", ago(59)),
+        user("tried it, works, now update the README", ago(30)),
+        said("README updated.\n\n👉 Shall I commit the change?", ago(29)),
       ],
     },
   });
   let asked = "";
-  const res = await scanHistory(root, { home, ask: async (p) => ((asked = p), 'A settled: "denedim çalışıyor"\n{"settled": ["A"]}') });
+  const res = await scanHistory(root, { home, ask: async (p) => ((asked = p), 'A settled: "tried it, works"\n{"settled": ["A"]}') });
   assert.equal(res.sessions, 1);
   // The model saw the step with what the user wrote since.
-  assert.match(asked, /A\. Staging'de girişi dener misin\?/);
-  assert.match(asked, /the user wrote since: denedim çalışıyor/);
+  assert.match(asked, /A\. Can you try the login on staging\?/);
+  assert.match(asked, /the user wrote since: tried it, works/);
   const log = path.join(root, ".claude/imprimatur/waiting/s1.jsonl");
-  assert.deepEqual(openSteps(log).map((s) => s.text), ["Değişikliği commit edeyim mi?"]);
+  assert.deepEqual(openSteps(log).map((s) => s.text), ["Shall I commit the change?"]);
   // The new item keeps the turn's own time, not the scan's.
   const open = waitingSteps(root).find((s) => s.state === "open");
   assert.ok(Date.now() - Date.parse(open.t) > 20 * 60_000);
-  assert.equal(open.prompt, "denedim çalışıyor, şimdi README'yi güncelle");
+  assert.equal(open.prompt, "tried it, works, now update the README");
 });
 
 test("history: sessions already logged, scanned, too old or from another project are skipped", async () => {
@@ -97,9 +97,9 @@ test("history: sessions already logged, scanned, too old or from another project
 });
 
 test("history: without the model, the final message's 👉 lines are still recorded", async () => {
-  const { root, home } = project({ s1: { records: [user("a", ago(10)), said("Bitti.\n👉 Bakar mısın?", ago(9))] } });
+  const { root, home } = project({ s1: { records: [user("a", ago(10)), said("Done.\n👉 Can you look?", ago(9))] } });
   await scanHistory(root, { home, ask: async () => { throw new Error("no claude"); } });
-  assert.deepEqual(waitingSteps(root).map((s) => [s.text, s.state]), [["Bakar mısın?", "open"]]);
+  assert.deepEqual(waitingSteps(root).map((s) => [s.text, s.state]), [["Can you look?", "open"]]);
 });
 
 test("history: (K) records in the database become steps; done or dropped ones are ticked on the next scan", () => {
@@ -111,27 +111,27 @@ test("history: (K) records in the database become steps; done or dropped ones ar
   const actor = { kind: "user", id: "k" };
   const t = db.upsertTask(db.repoOf(root).id, "#7", { title: "Panel" });
   const add = (kind, owner, title, status) => db.addRecord(t.id, { kind, owner, title, status }, actor);
-  const r5 = add("todo", "K", "5. Gözle: düğme, liste");
-  const r6 = add("question", "K", "6. Gözle → #6");
-  add("todo", "C", "Claude'un işi");
+  const r5 = add("todo", "K", "5. Look: button, list");
+  const r6 = add("question", "K", "6. Look → #6");
+  add("todo", "C", "Claude's job");
   add("todo", "K", "Reload Window");
   add("todo", "K", "eski", "done");
   const sorted = (a) => [...a].sort((x, y) => x.text.localeCompare(y.text));
   assert.deepEqual(sorted(todoAsks(root)), [
-    { task: "#7", text: "5. Gözle: düğme, liste" }, { task: "#7", text: "6. Gözle → #6" }, { task: "#7", text: "Reload Window" },
+    { task: "#7", text: "5. Look: button, list" }, { task: "#7", text: "6. Look → #6" }, { task: "#7", text: "Reload Window" },
   ]);
   assert.deepEqual(scanTodos(root), { added: 3, ticked: 0 });
   assert.deepEqual(scanTodos(root), { added: 0, ticked: 0 });
   db.updateRecord(r5.id, { status: "done" }, actor);
   db.updateRecord(r6.id, { status: "dropped" }, actor);
-  add("todo", "K", "Yeni iş");
+  add("todo", "K", "New job");
   assert.deepEqual(scanTodos(root), { added: 1, ticked: 2 });
   const steps = waitingSteps(root).filter((s) => s.session === FILES_SESSION);
   assert.deepEqual(steps.map((s) => [s.text, s.state, s.by]).sort(), [
-    ["5. Gözle: düğme, liste", "done", "file"],
-    ["6. Gözle → #6", "done", "file"],
+    ["5. Look: button, list", "done", "file"],
+    ["6. Look → #6", "done", "file"],
+    ["New job", "open", undefined],
     ["Reload Window", "open", undefined],
-    ["Yeni iş", "open", undefined],
   ]);
   assert.equal(waitingItems(root)[0].title, "#7 · Panel");
   db.close();

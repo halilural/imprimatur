@@ -55,23 +55,23 @@ test("records: create, update, versions; nothing is deleted", () => {
   const repo = db.repoOf("/r", { origin: "git@github.com:u/r.git" });
   assert.equal(db.repoOf("/r").id, repo.id);
   const task = db.upsertTask(repo.id, "#57", { title: "DB" });
-  assert.equal(db.upsertTask(repo.id, "#57", { summary: "Sürüyor" }).title, "DB");
+  assert.equal(db.upsertTask(repo.id, "#57", { summary: "In progress" }).title, "DB");
 
   const a = db.addRecord(task.id, { kind: "todo", owner: "C", title: "db.js", links: { issue: 57 } }, agent);
-  const b = db.addRecord(task.id, { kind: "question", owner: "K", title: "Şema?" }, agent);
+  const b = db.addRecord(task.id, { kind: "question", owner: "K", title: "Schema?" }, agent);
   assert.deepEqual([a.position, b.position], [1, 2]);
   assert.deepEqual(a.links, { issue: 57 });
 
   const same = db.updateRecord(a.id, { title: "db.js" }, agent);
   assert.equal(same.updated_at, a.updated_at);
   db.updateRecord(b.id, { status: "dropped" }, { kind: "user" });
-  db.updateRecord(a.id, { status: "done", body: "yazıldı" }, agent);
+  db.updateRecord(a.id, { status: "done", body: "written" }, agent);
 
   const v = db.versionsOf(a.id);
   assert.deepEqual(v.map((x) => x.op), ["create", "update"]);
   assert.equal(v[0].after.title, "db.js");
   assert.deepEqual(v[1].before, { status: "open", body: null });
-  assert.deepEqual(v[1].after, { status: "done", body: "yazıldı" });
+  assert.deepEqual(v[1].after, { status: "done", body: "written" });
   assert.equal(v[1].actor, "s1");
 
   assert.deepEqual(db.recordsOf(task.id).map((r) => r.title), ["db.js"]);
@@ -80,7 +80,7 @@ test("records: create, update, versions; nothing is deleted", () => {
   assert.throws(() => db.addRecord(task.id, { kind: "wish", title: "x" }, agent), /CHECK/);
   assert.throws(() => db.addRecord(task.id, { kind: "note", title: "x" }, { kind: "robot" }), /actor kind/);
   assert.equal(db.recordsOf(task.id, { dropped: true }).length, 2, "a failed write leaves nothing behind");
-  const ans = db.addRecord(task.id, { kind: "answer", title: "evet", parent_id: b.id }, { kind: "user" });
+  const ans = db.addRecord(task.id, { kind: "answer", title: "yes", parent_id: b.id }, { kind: "user" });
   assert.equal(ans.parent_id, b.id);
   const other = db.upsertTask(repo.id, "#58");
   assert.throws(() => db.addRecord(other.id, { kind: "answer", title: "x", parent_id: b.id }, agent), /not another record/);

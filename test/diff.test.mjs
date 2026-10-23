@@ -20,11 +20,11 @@ test("deleted block sits after the previous new line", () => {
 });
 
 test("changed line marks only the changed word", () => {
-  const h = diff("Sprint cumartesi başlar.", "Sprint pazartesi başlar.");
+  const h = diff("Sprint saturday starts.", "Sprint thursday starts.");
   const m = h[0].marks[0];
   assert.equal(m.kind, "changed");
-  assert.deepEqual(m.inserted, [[7, 16]]); // "pazartesi"
-  assert.deepEqual(m.deleted, [{ at: 7, text: "cumartesi" }]);
+  assert.deepEqual(m.inserted, [[7, 15]]); // "thursday"
+  assert.deepEqual(m.deleted, [{ at: 7, text: "saturday" }]);
 });
 
 test("word diff: pure insertion and deletion at the end", () => {
@@ -75,9 +75,9 @@ test("review: file not in the index is all fresh", () => {
 
 test("one word changed: word marks; several words: whole line", () => {
   const { lineOrWordDiff } = createRequire(import.meta.url)("../vscode/diff.js");
-  assert.deepEqual(lineOrWordDiff("Sprint cumartesi başlar.", "Sprint pazartesi başlar."), {
-    inserted: [[7, 16]],
-    deleted: [{ at: 7, text: "cumartesi" }],
+  assert.deepEqual(lineOrWordDiff("Sprint saturday starts.", "Sprint thursday starts."), {
+    inserted: [[7, 15]],
+    deleted: [{ at: 7, text: "saturday" }],
   });
   const oldL = "7. Clinician side: what triggers an alert, and where is it stored?";
   const newL = "7. Alerts: what does the device flag, and who sets the threshold?";

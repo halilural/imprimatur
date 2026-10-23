@@ -36,6 +36,7 @@ test("settings: missing keys take the defaults; strings, booleans and objects", 
   assert.equal(s.hookBypass.mode, "warn");
   assert.equal(s.designFirst.mode, false);
   assert.deepEqual([s.mainGuard.mode, s.mainGuard.branch, s.mainGuard.allow], ["block", "main", ["^(todos|docs)/"]]);
+  // Turkish input: the default status section word (the Stop hook looks for "Neredeyiz")
   assert.deepEqual([s.status.mode, s.status.word], ["block", "neredeyiz"]);
   assert.equal(s.sweep.mode, "warn");
   assert.equal(settingsOf(repo(null)), undefined);
@@ -72,9 +73,9 @@ test("designFirst: code on a <type>/<n>-… branch before the task has an ADR or
   assert.deepEqual(edit({ ...known, recordsOf: () => [{ kind: "pdr" }] }), {});
   // An ADR or PDR under another task (imported design records) that names the issue counts.
   const elsewhere = (r) => edit({ ...known, recordsOf: () => [], dbOf: () => ({ recordsByKind: () => [r] }) });
-  assert.deepEqual(elsewhere({ kind: "pdr", title: "Vergi sayfası", links: { issue: 56 } }), {});
-  assert.deepEqual(elsewhere({ kind: "adr", title: "Vergi verisi (#56)" }), {});
-  assert.match(elsewhere({ kind: "adr", title: "başka iş (#567)" }).context[0], /#56 has no ADR/);
+  assert.deepEqual(elsewhere({ kind: "pdr", title: "Tax page", links: { issue: 56 } }), {});
+  assert.deepEqual(elsewhere({ kind: "adr", title: "Tax data (#56)" }), {});
+  assert.match(elsewhere({ kind: "adr", title: "other job (#567)" }).context[0], /#56 has no ADR/);
   assert.deepEqual(edit(noRecords), {}, "no database answer, no warning");
   const md = check("PreToolUse", { cwd: root, tool_name: "Edit", tool_input: { file_path: path.join(root, "notes.md") } }, { records: { ...known, recordsOf: () => [] } });
   assert.deepEqual(md, {}, "Markdown is not code");
@@ -107,7 +108,8 @@ test("docsToc runs the repo's script after a docs edit; unopenedSources warns", 
   fs.mkdirSync(path.join(root, "scripts"));
   fs.writeFileSync(path.join(root, "scripts", "docs-toc.mjs"), "console.log('toc: docs/a.md updated')");
   fs.mkdirSync(path.join(root, "docs", "market-research"), { recursive: true });
-  fs.writeFileSync(path.join(root, "docs", "market-research", "x.md"), "- kaynak (açılmadı)\n");
+  // Turkish input: the "açılmadı" (not opened) marker unopenedSources looks for
+  fs.writeFileSync(path.join(root, "docs", "market-research", "x.md"), "- source (açılmadı)\n");
   const post = (file) => check("PostToolUse", { cwd: root, tool_name: "Write", tool_input: { file_path: path.join(root, file) } });
   assert.deepEqual(post("docs/market-research/x.md").context, ["Imprimatur (docsToc): toc: docs/a.md updated", 'Imprimatur (unopenedSources): x.md has sources marked "not opened" ("açılmadı"). Open them now (WebFetch); only an HTTP error is written, as "açılamadı: 403".']);
   assert.deepEqual(post("src/a.js"), {});
@@ -120,6 +122,7 @@ test("issueCreate reminds; issueFields names what the new issue lacks", () => {
   assert.deepEqual(r.context.length, 1);
   assert.match(r.context[0], /link it under its epic/);
   // The fields are set in the next steps: checked once, at the turn's end.
+  // Turkish input: the answer must contain the status word "neredeyiz" to pass the Stop hook
   const end = () => check("Stop", { cwd: root, session_id: "S1", last_assistant_message: "Neredeyiz" }, { gh });
   assert.deepEqual(end().notice, ["Imprimatur (issueFields): #57, opened this turn, has no milestone, board Status."]);
   assert.deepEqual(end(), {});
@@ -138,9 +141,10 @@ test("sweep: a task set done while its issue is open", () => {
 
 test("Stop: no 'Neredeyiz' blocks once (stop_hook_active ends it); merged branches left behind are named", () => {
   const root = repo({ process: {} });
-  assert.match(check("Stop", { cwd: root, last_assistant_message: "Bitti." }).block, /no "neredeyiz" section/);
-  assert.deepEqual(check("Stop", { cwd: root, last_assistant_message: "Bitti.\n\n## Neredeyiz\n- x" }), {});
-  assert.deepEqual(check("Stop", { cwd: root, stop_hook_active: true, last_assistant_message: "Bitti." }), {});
+  // Turkish input: the Stop hook's default section word "neredeyiz" (where are we)
+  assert.match(check("Stop", { cwd: root, last_assistant_message: "Done." }).block, /no "neredeyiz" section/);
+  assert.deepEqual(check("Stop", { cwd: root, last_assistant_message: "Done.\n\n## Neredeyiz\n- x" }), {});
+  assert.deepEqual(check("Stop", { cwd: root, stop_hook_active: true, last_assistant_message: "Done." }), {});
 });
 
 test("branchFinish: merged branches left behind are told to the agent at session start and after a merge", () => {
@@ -154,6 +158,7 @@ test("branchFinish: merged branches left behind are told to the agent at session
   assert.deepEqual(check("SessionStart", { cwd: root }).context, want);
   assert.deepEqual(check("PostToolUse", { cwd: root, tool_name: "Bash", tool_input: { command: "git merge --ff-only feat/2-done" } }).context, want);
   assert.deepEqual(check("PostToolUse", { cwd: root, tool_name: "Bash", tool_input: { command: "npm test" } }), {});
+  // Turkish input: the status word "neredeyiz", so only the timing is under test
   assert.deepEqual(check("Stop", { cwd: root, last_assistant_message: "Neredeyiz" }), {}, "not at Stop: only the user would see it");
 });
 

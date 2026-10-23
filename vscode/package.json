@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.68.0",
+  "version": "0.69.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -10,6 +10,25 @@
     "theme": "light"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/halilural/imprimatur.git"
+  },
+  "bugs": {
+    "url": "https://github.com/halilural/imprimatur/issues"
+  },
+  "homepage": "https://github.com/halilural/imprimatur#readme",
+  "keywords": [
+    "ai",
+    "agent",
+    "claude",
+    "claude code",
+    "review",
+    "tracked changes",
+    "markdown",
+    "mcp"
+  ],
+  "pricing": "Free",
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -24,7 +43,10 @@
     "preview.css",
     "preview-markers.js",
     "media/imprimatur.svg",
-    "media/icon.png"
+    "media/icon.png",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "activationEvents": [
     "onStartupFinished",

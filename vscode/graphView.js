@@ -512,7 +512,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     const onKey = (e) => { if (e.key === "Escape") setFull(false); };
     const setFull = (on) => {
       wrap.classList.toggle("full", on);
-      full.textContent = on ? "Kapat" : "Tam ekran";
+      full.textContent = on ? "Close" : "Full screen";
       hint.textContent = on ? "wheel: zoom · drag: pan · Esc: close" : "Ctrl+wheel: zoom · drag: pan";
       if (on) document.addEventListener("keydown", onKey); else document.removeEventListener("keydown", onKey);
       fit();

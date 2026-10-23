@@ -34,7 +34,7 @@ function seeded(root = "/a/proj", origin) {
   const repo = db.repoOf(root, origin ? { origin } : {});
   const task = db.upsertTask(repo.id, "#72", { title: "Docs" });
   const adr = db.addRecord(task.id, { kind: "adr", title: "SQLite is the source of truth" }, agent);
-  const pdr = db.addRecord(task.id, { kind: "pdr", title: "Two tabs: Mimari and Ürün" }, agent);
+  const pdr = db.addRecord(task.id, { kind: "pdr", title: "Two tabs: Architecture and Product" }, agent);
   return { db, repo, task, adr, pdr };
 }
 
@@ -63,7 +63,7 @@ test("migration 5: a schema 4 database keeps its documents, sections, links and 
   raw.exec(`INSERT INTO repos (id, uid, root, created_at) VALUES (1, 'r', '/a/p', 1);
     INSERT INTO tasks (id, uid, repo_id, key, created_at, updated_at) VALUES (1, 't', 1, '#1', 1, 1);
     INSERT INTO records (id, uid, task_id, kind, title, position, created_at, updated_at) VALUES (1, 'a', 1, 'adr', 'SQLite', 1, 1, 1);
-    INSERT INTO documents (id, uid, repo_id, kind, title, updated_at) VALUES (1, 'd', 1, 'architecture', 'Mimari', 1);
+    INSERT INTO documents (id, uid, repo_id, kind, title, updated_at) VALUES (1, 'd', 1, 'architecture', 'Architecture', 1);
     INSERT INTO doc_sections (id, uid, doc_id, key, title, body, position, updated_at) VALUES (1, 's', 1, 'storage', 'Storage', 'x', 1, 1);
     INSERT INTO doc_section_records (section_id, record_id) VALUES (1, 1);
     INSERT INTO doc_versions (section_id, at, actor_kind, after) VALUES (1, 1, 'agent', '{}');`);
@@ -89,11 +89,12 @@ test("glossary: terms read alphabetically (Turkish), unnumbered in the panel and
   const db = openDb({ path: tmpDb() });
   const repo = db.repoOf(root);
   const g = db.docOf(repo.id, "glossary");
-  db.upsertSection(g.id, "zarf", { title: "Zarf", body: "Kayıtların kabı." }, agent);
-  db.upsertSection(g.id, "ceza", { title: "Ceza" }, agent);
-  db.upsertSection(g.id, "cizgi", { title: "Çizgi", body: "Bir satır." }, agent);
-  db.upsertSection(g.id, "adr", { title: "ADR", body: "Mimari karar." }, agent);
-  assert.deepEqual(db.docSections(g.id).map((s) => s.title), ["ADR", "Ceza", "Çizgi", "Zarf"]);
+  db.upsertSection(g.id, "envelope", { title: "Envelope", body: "The container of records." }, agent);
+  db.upsertSection(g.id, "penalty", { title: "Penalty" }, agent);
+  // Turkish input: the glossary sorts by Turkish collation (Ç right after C)
+  db.upsertSection(g.id, "cizgi", { title: "Çizgi", body: "One line." }, agent);
+  db.upsertSection(g.id, "adr", { title: "ADR", body: "Architecture decision." }, agent);
+  assert.deepEqual(db.docSections(g.id).map((s) => s.title), ["ADR", "Çizgi", "Envelope", "Penalty"]);
   const m = docs.docModel(db, root, "glossary");
   assert.deepEqual([m.label, m.title, m.current.map((s) => s.n)], ["Glossary", "Project Glossary", [null, null, null, null]]);
   const html = docs.docHtml(m);
@@ -101,17 +102,17 @@ test("glossary: terms read alphabetically (Turkish), unnumbered in the panel and
   assert.match(html, /New term/);
   assert.doesNotMatch(html, /class="num"/);
   const text = docMarkdown(db, g.id);
-  assert.match(text, /^## Terms\n\n- \[ADR\]\(#adr\)\n- \[Ceza\]\(#ceza\)/m);
-  assert.match(text, /<a id="cizgi"><\/a>\n\n## Çizgi\n\nBir satır\./);
+  assert.match(text, /^## Terms\n\n- \[ADR\]\(#adr\)\n- \[Çizgi\]\(#cizgi\)/m);
+  assert.match(text, /<a id="cizgi"><\/a>\n\n## Çizgi\n\nOne line\./);
   exportDocs(db, root);
   assert.ok(fs.readFileSync(path.join(root, "docs", "GLOSSARY.md"), "utf8").startsWith(HEADER));
   // The user adds a term from the panel; MCP reads and writes them.
   docs.applyDocMessage(db, { type: "docNew", kind: "glossary", title: "Pointer (👉)", body: "Where work stopped." }, user, root);
   assert.ok(db.docSection(g.id, "pointer"));
   const call = (name, a) => callTool(db, name, { repo: root, ...a }, { client: "test" });
-  assert.deepEqual(call("doc_get", { kind: "glossary" }).sections.map((s) => s.key), ["adr", "ceza", "cizgi", "pointer", "zarf"]);
-  call("doc_section_upsert", { kind: "glossary", key: "kayit", title: "Kayıt", body: "Bir görevin satırı." });
-  assert.equal(db.docSection(g.id, "kayit").body, "Bir görevin satırı.");
+  assert.deepEqual(call("doc_get", { kind: "glossary" }).sections.map((s) => s.key), ["adr", "cizgi", "envelope", "penalty", "pointer"]);
+  call("doc_section_upsert", { kind: "glossary", key: "record", title: "Record", body: "A task's row." });
+  assert.equal(db.docSection(g.id, "record").body, "A task's row.");
   assert.equal(db.docHealth(repo.id).glossary.sections, 6);
   db.close();
 });
@@ -197,7 +198,7 @@ test("MCP doc_get / doc_section_upsert: TOC, bodies, records of this repo only, 
   assert.throws(() => call("doc_get", { kind: "architecture", section: "nope" }), /Sections: storage/);
 });
 
-// ---- panel: Mimari / Ürün ----
+// ---- panel: Architecture / Product ----
 
 test("panel model and HTML: numbered TOC, Markdown without raw HTML, contributors, superseded last, empty state", () => {
   const root = "/a/proj";
@@ -242,13 +243,13 @@ test("panel editing: the editor with draft keys, save and new section as the use
   assert.ok(!docs.docHtml(docs.docModel(db, root, "architecture", { edit: `product:${s.id}` })).includes("<textarea"), "the edit is per kind");
   assert.deepEqual(tv.cleanView({ tab: "product", edit: "product:new" }), { tab: "product", edit: "product:new" });
   assert.deepEqual(tv.cleanView({ edit: "product:<x>" }), {});
-  tv.applyMessage(db, { type: "docSave", kind: "product", id: s.id, title: "Tabs ", body: "Two tabs: Mimari, Ürün.\r\n" }, user, root);
+  tv.applyMessage(db, { type: "docSave", kind: "product", id: s.id, title: "Tabs ", body: "Two tabs: Architecture, Product.\r\n" }, user, root);
   const saved = db.sectionById(s.id);
-  assert.deepEqual([saved.title, saved.body], ["Tabs", "Two tabs: Mimari, Ürün.\n"]);
+  assert.deepEqual([saved.title, saved.body], ["Tabs", "Two tabs: Architecture, Product.\n"]);
   assert.equal(db.sectionVersions(s.id)[0].actor_kind, "user");
-  const n1 = tv.applyMessage(db, { type: "docNew", kind: "product", title: "Çalışma şekli", body: "x" }, user, root);
-  const n2 = tv.applyMessage(db, { type: "docNew", kind: "product", title: "Çalışma Şekli!", body: "" }, user, root);
-  assert.deepEqual([n1.key, n2.key, n2.body], ["calisma-sekli", "calisma-sekli-2", null]);
+  const n1 = tv.applyMessage(db, { type: "docNew", kind: "product", title: "Working style", body: "x" }, user, root);
+  const n2 = tv.applyMessage(db, { type: "docNew", kind: "product", title: "Working Style!", body: "" }, user, root);
+  assert.deepEqual([n1.key, n2.key, n2.body], ["working-style", "working-style-2", null]);
   assert.throws(() => tv.applyMessage(db, { type: "docNew", kind: "product", title: "  " }, user, root), /needs a title/);
   tv.applyMessage(db, { type: "docStatus", id: n2.id, status: "superseded" }, user, root);
   assert.equal(db.sectionById(n2.id).status, "superseded");
@@ -260,7 +261,8 @@ test("panel editing: the editor with draft keys, save and new section as the use
 });
 
 test("slugify folds Turkish letters and punctuation", () => {
-  assert.equal(docs.slugify("Veri Modeli & Eşitleme (sync)"), "veri-modeli-esitleme-sync");
+  assert.equal(docs.slugify("Data Model & Syncing (sync)"), "data-model-syncing-sync");
+  // Turkish input: the slug folds the Turkish letters (İ ç ö ğ ü ş)
   assert.equal(docs.slugify("İçe aktarma: ÖĞÜŞÇ"), "ice-aktarma-ogusc");
   assert.equal(docs.slugify("!!!"), "section");
 });
@@ -311,7 +313,7 @@ test("docUpdate: an ADR added and not linked is told to the agent at its next to
   const pdr = db.addRecord(task.id, { kind: "pdr", title: "Two tabs" }, agent);
   run("PostToolUse", { tool_name: "mcp__imprimatur__record_update", tool_input: { id: pdr.id, status: "done" } });
   assert.deepEqual(run("Stop"), {});
-  run("PostToolUse", { tool_name: "mcp__imprimatur__record_update", tool_input: { id: pdr.id, title: "Two tabs, Mimari and Ürün" } });
+  run("PostToolUse", { tool_name: "mcp__imprimatur__record_update", tool_input: { id: pdr.id, title: "Two tabs, Architecture and Product" } });
   run("Stop");
   assert.match(run("SessionStart", {}, "S2").context.join("\n"), new RegExp(`PDR #${pdr.id} updated, but the product document was not updated`));
   // Linked to a section before Stop: nothing.

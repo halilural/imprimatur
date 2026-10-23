@@ -1,0 +1,180 @@
+# Main (#1): every push to main runs CI (ci.yml). A version in vscode/package.json that has no
+# v<version> tag yet is released: packaged once, attested (build provenance), published to the
+# Visual Studio Marketplace and to Open VSX from their own environments, then tagged with a
+# GitHub Release carrying the .vsix and its CHANGELOG section.
+#
+# How each store signs in (repository variables, so the switch to OIDC needs no edit here):
+#   MARKETPLACE_AUTH  oidc (vsce --oidc, once the Marketplace takes it) | pat (environment secret
+#                     VSCE_PAT) | unset: skipped
+#   OPENVSX_AUTH      oidc (ovsx --trusted-publishing) | pat (environment secret OVSX_PAT) | unset: skipped
+# Jobs start with no permissions and get only what they use.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  version:
+    name: New version?
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: v
+        run: |
+          version="$(node -p 'require("./vscode/package.json").version')"
+          if git ls-remote --exit-code --tags origin "refs/tags/v${version}" > /dev/null; then
+            release=false
+            echo "::notice::v${version} is released already: nothing to publish"
+          else
+            release=true
+            # Every release says what changed.
+            node scripts/release-notes.mjs "${version}" > /dev/null
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "release=${release}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build v${{ needs.version.outputs.version }}
+    needs: [ci, version]
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run package
+      - run: node scripts/check-vsix.mjs dist/*.vsix
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*.vsix
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-vsix
+          path: dist/*.vsix
+          if-no-files-found: error
+          retention-days: 30
+
+  marketplace:
+    name: Visual Studio Marketplace
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: marketplace
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-vsix
+          path: dist
+      - env:
+          AUTH: ${{ vars.MARKETPLACE_AUTH }}
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          vsix="dist/imprimatur-${VERSION}.vsix"
+          case "${AUTH}" in
+            oidc) npx vsce publish --packagePath "${vsix}" --oidc ;;
+            pat) npx vsce publish --packagePath "${vsix}" ;;
+            *) echo "::notice::Marketplace publishing is not set up (MARKETPLACE_AUTH): skipped" ;;
+          esac
+
+  openvsx:
+    name: Open VSX
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: openvsx
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-vsix
+          path: dist
+      - env:
+          AUTH: ${{ vars.OPENVSX_AUTH }}
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          vsix="dist/imprimatur-${VERSION}.vsix"
+          case "${AUTH}" in
+            # OVSX_PAT, when set, wins over OIDC in ovsx: unset it for trusted publishing.
+            oidc) env -u OVSX_PAT npx ovsx publish "${vsix}" --trusted-publishing ;;
+            pat) npx ovsx publish "${vsix}" ;;
+            *) echo "::notice::Open VSX publishing is not set up (OPENVSX_AUTH): skipped" ;;
+          esac
+
+  github-release:
+    name: GitHub Release v${{ needs.version.outputs.version }}
+    needs: [version, build, marketplace, openvsx]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-vsix
+          path: dist
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          node scripts/release-notes.mjs "${VERSION}" > notes.md
+          gh release create "v${VERSION}" "dist/imprimatur-${VERSION}.vsix" \
+            --target "${GITHUB_SHA}" --title "v${VERSION}" --notes-file notes.md

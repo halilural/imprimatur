@@ -72,14 +72,14 @@ test("#45: task keys are normalized; a step's own leading key is its task", () =
   assert.equal(normKey(" #80 "), "#80");
   assert.equal(normKey("LATD-13977"), "LATD-13977");
   assert.equal(normKey("none"), undefined);
-  assert.equal(leadKey("#88: Panoyu kontrol et"), "#88");
+  assert.equal(leadKey("#88: Check the board"), "#88");
   assert.equal(leadKey("LATD-1: mail"), "LATD-1");
-  assert.equal(leadKey("PR #36'yı incele"), undefined);
-  assert.equal(leadKey("UTF-8 dosyalarını kontrol et"), undefined);
-  assert.equal(leadKey("#658 ve 503 hatası"), "#658");
-  const it = { task: "#76", text: "#88: Panoyu kontrol et\nMaili gönder" };
-  assert.equal(stepTask(it, "#88: Panoyu kontrol et"), "#88");
-  assert.equal(stepTask(it, "Maili gönder"), "#76");
+  assert.equal(leadKey("Review PR #36"), undefined);
+  assert.equal(leadKey("UTF-8 files need a check"), undefined);
+  assert.equal(leadKey("#658 and error 503"), "#658");
+  const it = { task: "#76", text: "#88: Check the board\nSend the mail" };
+  assert.equal(stepTask(it, "#88: Check the board"), "#88");
+  assert.equal(stepTask(it, "Send the mail"), "#76");
   assert.equal(stepTask({ task: "80", text: "x" }, "x"), "#80");
 });
 
@@ -93,14 +93,14 @@ function waitingRepo(records) {
 
 test("#45: a record of an unknown kind closes nothing", () => {
   const { root } = waitingRepo([
-    { t: "2026-10-05T10:00:00Z", kind: "question", text: "Birleştireyim mi?" },
+    { t: "2026-10-05T10:00:00Z", kind: "question", text: "Shall I merge?" },
     { t: "2026-10-05T10:01:00Z", kind: "sent", item: "2026-10-05T10:00:00Z", i: 0 },
   ]);
   assert.equal(waitingItems(root)[0].open, true);
 });
 
 test("#45: a done task ticks only the steps about its task, also when the item names another", () => {
-  const { root, log } = waitingRepo([{ t: "2026-10-06T08:00:00Z", kind: "verify", task: "#76", text: "#88: Panoyu kontrol et\n#76: Notu güncelle" }]);
+  const { root, log } = waitingRepo([{ t: "2026-10-06T08:00:00Z", kind: "verify", task: "#76", text: "#88: Check the board\n#76: Update the note" }]);
   const file = path.join(root, "imprimatur.db");
   process.env.IMPRIMATUR_DB = file;
   req("../vscode/records.js").reset();
@@ -117,7 +117,7 @@ test("#45: audit keeps the task every ask starts with, and normalizes the model'
   assert.equal(parseAudit('{"settled": [], "asks": [], "task": "80"}', []).task, "#80");
   const { root, log } = waitingRepo([]);
   fs.writeFileSync(log, "");
-  await audit(log, { message: "Bitti.", task: "#76" }, async () => '{"settled": [], "asks": [{"text": "#88: Panoyu kontrol et"}], "task": "#76"}');
+  await audit(log, { message: "Done.", task: "#76" }, async () => '{"settled": [], "asks": [{"text": "#88: Check the board"}], "task": "#76"}');
   assert.equal(waitingItems(root)[0].task, "#88");
 });
 
@@ -137,7 +137,7 @@ test("#45: a deleted file's history is not in the graph", () => {
 test("#45: latestBefore reads the last line from the end, with or without a final newline, across chunks", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-45l-"));
   const log = path.join(dir, "a.md.jsonl");
-  const big = "ş".repeat(100_000); // longer than one 64 KB chunk, multi-byte
+  const big = "é".repeat(100_000); // longer than one 64 KB chunk, multi-byte
   fs.writeFileSync(log, JSON.stringify({ before: "first" }) + "\n" + JSON.stringify({ before: big }) + "\n");
   assert.equal(latestBefore(log), big);
   fs.writeFileSync(log, JSON.stringify({ before: "first" }) + "\n" + JSON.stringify({ before: "last" }));

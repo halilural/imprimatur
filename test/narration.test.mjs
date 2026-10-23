@@ -14,11 +14,11 @@ test("narration: the text written in the same message as the tool call, read as 
   fs.writeFileSync(tr, rec("m1", { type: "text", text: "Earlier words." }) + rec("m2", { type: "tool_use", id: "t2" }) + '{"type":"assis');
   assert.equal(narrationOf(tr, "t2"), undefined);
   fs.writeFileSync(tr, rec("m1", { type: "text", text: "Earlier words." }) + rec("m2", { type: "tool_use", id: "t2" }));
-  fs.appendFileSync(tr, rec("m2", { type: "text", text: "Tim'e cevabı TODO'ya yazıyorum. Sonra testler.\nikinci satır" }) + rec("m3", { type: "tool_use", id: "t3" }));
-  assert.equal(narrationOf(tr, "t2"), "Tim'e cevabı TODO'ya yazıyorum.");
+  fs.appendFileSync(tr, rec("m2", { type: "text", text: "Writing the reply to Tim into the TODO. Then tests.\nsecond line" }) + rec("m3", { type: "tool_use", id: "t3" }));
+  assert.equal(narrationOf(tr, "t2"), "Writing the reply to Tim into the TODO.");
   assert.equal(narrationOf(tr, "t3"), undefined); // a call without words of its own
-  fs.appendFileSync(tr, rec("m4", { type: "text", text: "Deneyelim. İki düzenleme yapıyorum. Sonra bakarız." }) + rec("m4", { type: "tool_use", id: "t4" }));
-  assert.equal(narrationOf(tr, "t4"), "Deneyelim. İki düzenleme yapıyorum.");
+  fs.appendFileSync(tr, rec("m4", { type: "text", text: "Let's try. Making two edits. We'll see." }) + rec("m4", { type: "tool_use", id: "t4" }));
+  assert.equal(narrationOf(tr, "t4"), "Let's try. Making two edits.");
   assert.equal(narrationOf(path.join(path.dirname(tr), "gone.jsonl"), "t2"), undefined);
   assert.equal(narrationOf(undefined, "t2"), undefined);
 });

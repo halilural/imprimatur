@@ -127,12 +127,12 @@ test("every tool: a task, its records, 👉, versions with the session, search, 
   assert.ok(task.epic_id);
 
   const { record: todo } = json(await call(s, "record_add", { task: "#58", kind: "todo", owner: "C", title: "server.mjs", pointer: true, links: { issue: 58 }, _session: "S1" }));
-  const { record: q } = json(await call(s, "record_add", { task: "#58", kind: "question", owner: "K", title: "Araçlar genel mi?" }));
-  json(await call(s, "record_add", { task: "#58", kind: "answer", owner: "K", title: "Genel", parent_id: q.id }));
-  const { record: dec } = json(await call(s, "record_add", { task: "#59", kind: "decision", title: "dev-workflow v3 #59'da" }));
+  const { record: q } = json(await call(s, "record_add", { task: "#58", kind: "question", owner: "K", title: "Are the tools general?" }));
+  json(await call(s, "record_add", { task: "#58", kind: "answer", owner: "K", title: "General", parent_id: q.id }));
+  const { record: dec } = json(await call(s, "record_add", { task: "#59", kind: "decision", title: "dev-workflow v3 in #59" }));
   assert.equal(dec.kind, "decision", "a missing task is created");
 
-  const { record: doneTodo } = json(await call(s, "record_update", { id: todo.id, status: "done", body: "yazıldı", _session: "S2" }));
+  const { record: doneTodo } = json(await call(s, "record_update", { id: todo.id, status: "done", body: "written", _session: "S2" }));
   assert.equal(doneTodo.status, "done");
   assert.equal(doneTodo.pointer, false, "a done record loses the 👉");
   json(await call(s, "pointer_set", { id: q.id }));
@@ -145,11 +145,11 @@ test("every tool: a task, its records, 👉, versions with the session, search, 
 
   const left = json(await call(s, "where_we_left_off", {}));
   const t58 = left.tasks.find((t) => t.key === "#58");
-  assert.equal(t58.pointer_title, "Araçlar genel mi?");
+  assert.equal(t58.pointer_title, "Are the tools general?");
   assert.equal(t58.open_records, 2);
 
   assert.deepEqual(json(await call(s, "task_list", { status: "active" })).tasks.map((t) => t.key), ["#58"]);
-  assert.deepEqual(json(await call(s, "search", { text: "GENEL" })).records.map((r) => r.title).sort(), ["Araçlar genel mi?", "Genel"]);
+  assert.deepEqual(json(await call(s, "search", { text: "GENERAL" })).records.map((r) => r.title).sort(), ["Are the tools general?", "General"]);
   assert.deepEqual(json(await call(s, "search", { text: "v3", kind: "decision", repo: "*" })).records.length, 1);
   assert.deepEqual(json(await call(s, "search", { text: "100%_" })).records, [], "LIKE wildcards are literal");
 
@@ -213,7 +213,7 @@ test("setup: Codex's config.toml gets one [mcp_servers.imprimatur] table, the re
 });
 
 test("starts from a path with a space and non-ASCII letters", async () => {
-  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur 58 ")), "çalışma alanı");
+  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur 58 ")), "work area");
   const repo = path.join(new URL("..", import.meta.url).pathname);
   fs.mkdirSync(path.join(dir, "mcp"), { recursive: true });
   fs.copyFileSync(SERVER, path.join(dir, "mcp", "server.mjs"));
@@ -429,21 +429,21 @@ test("digests: compact text for the model", async () => {
   await call(s, "task_upsert", { key: "#58", title: "MCP", status: "active", summary: "server written" });
   const add = { task: "#58", kind: "todo", owner: "C", title: "server.mjs", pointer: true, body: "line one\nline two" };
   const { record: todo } = (await call(s, "record_add", add)).structuredContent;
-  await call(s, "record_add", { task: "#58", kind: "question", owner: "K", title: "Genel mi?" });
+  await call(s, "record_add", { task: "#58", kind: "question", owner: "K", title: "Is it general?" });
   const text = async (name, args) => (await call(s, name, args)).content[0].text;
 
   assert.equal(await text("where_we_left_off", {}), `1 unfinished task:\n- #58 MCP [active] 👉 [${todo.id}] server.mjs (2 open)\n  where we are: server written`);
   const got = await text("task_get", { key: "#58" });
   assert.equal(got.split("\n")[0], "#58 MCP [active] — server written");
   assert.ok(got.includes(`[${todo.id}] todo/open C server.mjs 👉\n    line one line two`), got);
-  assert.ok(got.includes(`[${todo.id + 1}] question/open K Genel mi?`), got);
+  assert.ok(got.includes(`[${todo.id + 1}] question/open K Is it general?`), got);
   assert.match(got, /2 of 2 records \(status open\)/);
   assert.equal(await text("task_list", {}), "1 task:\n- #58 MCP [active] — server written");
-  assert.match(await text("search", { text: "genel" }), /^1 record:\n- #58 \[\d+\] question\/open K Genel mi\?$/);
+  assert.match(await text("search", { text: "general" }), /^1 record:\n- #58 \[\d+\] question\/open K Is it general\?$/);
   assert.equal(await text("search", { text: "zzz" }), "No records match \"zzz\".");
   assert.match(await text("record_update", { id: todo.id, status: "done" }), /^Updated \[\d+\] todo\/done C server\.mjs$/);
   assert.match(await text("record_add", { task: "#58", kind: "note", title: "n" }), /^Added \[\d+\] note\/open - n$/);
-  assert.match(await text("pointer_set", { id: todo.id + 1 }), /^👉 now on \[\d+\] question\/open K Genel mi\? 👉$/);
+  assert.match(await text("pointer_set", { id: todo.id + 1 }), /^👉 now on \[\d+\] question\/open K Is it general\? 👉$/);
   assert.match(await text("task_upsert", { key: "#58" }), /^Saved task #58 MCP/);
   await s.close();
 });

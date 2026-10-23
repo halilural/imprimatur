@@ -33,17 +33,17 @@ function seeded(root = "/a/proj", origin) {
   return { db, repo };
 }
 
-const DOC = `# Analiz: önbellek
+const DOC = `# Analysis: cache
 
-Neden yavaş?
+Why slow?
 
-## Bulgular
+## Findings
 
-- sorgu N+1
+- N+1 query
 
-## Öneri
+## Recommendation
 
-Toplu okuma.
+Batch reads.
 `;
 
 // ---- which files ----
@@ -62,17 +62,19 @@ test("heuristic: the path, the name or a heading says analysis; else the model d
   assert.equal(a.heuristic("docs/todos/5/notes.md", ""), "yes");
   assert.equal(a.heuristic("spikes/81-ta/RESULT.md", ""), "yes");
   assert.equal(a.heuristic("x/cache-analysis.md", ""), "yes");
+  assert.equal(a.heuristic("x/notes.md", "# Cache\n\n## Root cause\n"), "yes");
+  // Turkish input: an analysis heading in Turkish ("Kök neden" = root cause) says analysis too.
   assert.equal(a.heuristic("x/notes.md", "# Önbellek\n\n## Kök neden\n"), "yes");
-  assert.equal(a.heuristic("x/notes.md", "# Kurulum\n\n## Adımlar\n"), undefined);
+  assert.equal(a.heuristic("x/notes.md", "# Setup\n\n## Steps\n"), undefined);
   const { db, repo } = seeded();
   let asked = 0;
   const ask = async () => (asked++, "NO");
-  assert.equal(await a.verdictOf(db, repo.id, "x/notes.md", "# Kurulum", { ask }), "no");
+  assert.equal(await a.verdictOf(db, repo.id, "x/notes.md", "# Setup", { ask }), "no");
   // Kept: not asked again.
-  assert.equal(await a.verdictOf(db, repo.id, "x/notes.md", "# Kurulum", { ask }), "no");
+  assert.equal(await a.verdictOf(db, repo.id, "x/notes.md", "# Setup", { ask }), "no");
   assert.equal(asked, 1);
-  assert.equal(await a.verdictOf(db, repo.id, "y/notes.md", "# Kurulum", { model: false }), undefined);
-  assert.equal(await a.verdictOf(db, repo.id, "y/notes.md", "# Kurulum", { ask: async () => { throw new Error("offline"); } }), undefined);
+  assert.equal(await a.verdictOf(db, repo.id, "y/notes.md", "# Setup", { model: false }), undefined);
+  assert.equal(await a.verdictOf(db, repo.id, "y/notes.md", "# Setup", { ask: async () => { throw new Error("offline"); } }), undefined);
 });
 
 test("settings: analysis false turns it off, sync false keeps it on this machine, exclude leaves paths out", () => {
@@ -96,8 +98,8 @@ test("taskFor: task folder, key in the path, branch, the session's task, the req
   assert.equal(t({ rel: "spikes/80-x/RESULT.md" }), "#80");
   assert.equal(t({ rel: "notes/a.md", branch: "feat/5-cache" }), "#5");
   assert.equal(t({ rel: "notes/a.md", branch: "feature/LATD-12-cache" }), "LATD-12");
-  assert.equal(t({ rel: "notes/a.md", prompt: "LATD-12 için analiz yaz" }), "LATD-12");
-  assert.equal(t({ rel: "notes/a.md", text: "# #5 önbellek analizi" }), "#5");
+  assert.equal(t({ rel: "notes/a.md", prompt: "write the analysis for LATD-12" }), "LATD-12");
+  assert.equal(t({ rel: "notes/a.md", text: "# #5 cache analysis" }), "#5");
   // A key with no number: its folder, and the session's task.
   const plain = db.upsertTask(repo.id, "DOCS-BACKFILL", {});
   assert.equal(t({ rel: "docs/todos/DOCS-BACKFILL/notes.md" }), "DOCS-BACKFILL");
@@ -129,17 +131,17 @@ test("ingest: a section per ## under the file's title; same text writes nothing;
   assert.equal(db.docFind(repo.id, "analysis"), undefined);
   let secs = db.docSections(doc.id);
   assert.deepEqual(secs.map((s) => [s.key, s.title, s.source]), [
-    ["analysis--overview", "Analiz: önbellek", "docs/todos/5/ANALYSIS.md"],
-    ["analysis--bulgular", "Bulgular", "docs/todos/5/ANALYSIS.md"],
-    ["analysis--oneri", "Öneri", "docs/todos/5/ANALYSIS.md"],
+    ["analysis--overview", "Analysis: cache", "docs/todos/5/ANALYSIS.md"],
+    ["analysis--findings", "Findings", "docs/todos/5/ANALYSIS.md"],
+    ["analysis--recommendation", "Recommendation", "docs/todos/5/ANALYSIS.md"],
   ]);
-  assert.equal(secs[1].body, "- sorgu N+1");
+  assert.equal(secs[1].body, "- N+1 query");
   assert.deepEqual(a.ingest(db, repo.id, "#5", "docs/todos/5/ANALYSIS.md", DOC, { actor: hook }), { doc: doc.id, changed: 0, superseded: 0, unchanged: true });
-  const r3 = a.ingest(db, repo.id, "#5", "docs/todos/5/ANALYSIS.md", DOC.replace(/## Öneri[\s\S]*/, "## Sonuç\n\nTamam.\n"), { actor: hook });
+  const r3 = a.ingest(db, repo.id, "#5", "docs/todos/5/ANALYSIS.md", DOC.replace(/## Recommendation[\s\S]*/, "## Conclusion\n\nDone.\n"), { actor: hook });
   assert.equal(r3.superseded, 1);
   secs = db.docSections(doc.id);
-  assert.deepEqual(secs.filter((s) => s.status === "current").map((s) => s.key), ["analysis--overview", "analysis--bulgular", "analysis--sonuc"]);
-  assert.equal(secs.find((s) => s.key === "analysis--oneri").status, "superseded");
+  assert.deepEqual(secs.filter((s) => s.status === "current").map((s) => s.key), ["analysis--overview", "analysis--findings", "analysis--conclusion"]);
+  assert.equal(secs.find((s) => s.key === "analysis--recommendation").status, "superseded");
   // A second file of the same name in the task: its own prefix; it sits after the first.
   a.ingest(db, repo.id, "#5", "other/ANALYSIS.md", "# B\n\n## X\n\ny\n", { actor: hook });
   const other = db.docSections(doc.id).filter((s) => s.source === "other/ANALYSIS.md");
@@ -153,12 +155,12 @@ test("ingest: a section per ## under the file's title; same text writes nothing;
 });
 
 test("splitBody: a section over the limit is cut at ### headings", () => {
-  const big = `## Uzun\n\n${Array.from({ length: 30 }, (_, i) => `### Parça ${i}\n\n${"x".repeat(2000)}`).join("\n\n")}`;
+  const big = `## Long\n\n${Array.from({ length: 30 }, (_, i) => `### Part ${i}\n\n${"x".repeat(2000)}`).join("\n\n")}`;
   const secs = a.sectionsOf("n/analysis.md", big);
   assert.ok(secs.length >= 2);
-  assert.deepEqual(secs.map((s) => s.key).slice(0, 2), ["uzun", "uzun-2"]);
+  assert.deepEqual(secs.map((s) => s.key).slice(0, 2), ["long", "long-2"]);
   for (const s of secs) assert.ok(s.body.length <= 40_000);
-  assert.match(secs[1].body, /^### Parça/);
+  assert.match(secs[1].body, /^### Part/);
 });
 
 // ---- the hook ----
@@ -176,7 +178,7 @@ test("hook: a Write of an analysis file goes into its task's document, without .
   // A file only the model can judge goes to the background process.
   const started = [];
   const notes = path.join(root, "notes.md");
-  fs.writeFileSync(notes, "# Kurulum\n");
+  fs.writeFileSync(notes, "# Setup\n");
   check("PostToolUse", { cwd: root, session_id: "S1", tool_name: "Edit", tool_input: { file_path: notes } }, { records, analysis: { start: (r, it) => started.push(it.rel) } });
   assert.deepEqual(started, ["notes.md"]);
   // Not Markdown, and README: nothing.
@@ -190,9 +192,9 @@ test("hook: the plan the agent leaves plan mode with is the session's task's ana
   const { db, repo } = seeded(root);
   db.addRecord(db.taskByKey(repo.id, "LATD-12").id, { kind: "note", title: "x" }, agent("abcdef1234"));
   const records = { repoId: () => repo.id, dbOf: () => db };
-  check("PostToolUse", { cwd: root, session_id: "abcdef1234", tool_name: "ExitPlanMode", tool_input: { plan: "# Plan\n\n## Adımlar\n\n1. a\n" } }, { records });
+  check("PostToolUse", { cwd: root, session_id: "abcdef1234", tool_name: "ExitPlanMode", tool_input: { plan: "# Plan\n\n## Steps\n\n1. a\n" } }, { records });
   const secs = db.docSections(db.taskDocFind(repo.id, "LATD-12").id);
-  assert.deepEqual(secs.map((s) => [s.key, s.source]), [["plan--adimlar", "plan:abcdef12"]]);
+  assert.deepEqual(secs.map((s) => [s.key, s.source]), [["plan--steps", "plan:abcdef12"]]);
 });
 
 test("onEdit: a file with no task waits in the orphans; assign gives it one", () => {
@@ -240,18 +242,18 @@ test("backfill: past sessions' analyses, each state a version at its time; run a
   const file = path.join(root, "docs", "todos", "5", "ANALYSIS.md");
   const t0 = Date.parse("2026-09-01T10:00:00Z");
   fs.writeFileSync(path.join(dir, "P1.jsonl"), [
-    line({ cwd: root, at: t0 - 10, rec: { message: { role: "user", content: "#5 için analiz" } } }),
-    line({ cwd: root, at: t0, rec: { toolUseResult: { type: "create", filePath: file, content: "# A\n\n## Bulgular\n\nbir\n" } } }),
-    line({ cwd: root, at: t0 + 1000, rec: { toolUseResult: { filePath: file, oldString: "bir", newString: "iki", replaceAll: false, originalFile: null } } }),
+    line({ cwd: root, at: t0 - 10, rec: { message: { role: "user", content: "analysis for #5" } } }),
+    line({ cwd: root, at: t0, rec: { toolUseResult: { type: "create", filePath: file, content: "# A\n\n## Findings\n\none\n" } } }),
+    line({ cwd: root, at: t0 + 1000, rec: { toolUseResult: { filePath: file, oldString: "one", newString: "two", replaceAll: false, originalFile: null } } }),
     line({ cwd: root, at: t0 + 2000, rec: { toolUseResult: { type: "create", filePath: path.join(root, "src", "a.ts"), content: "x" } } }),
     line({ cwd: root, at: t0 + 3000, rec: { toolUseResult: { type: "create", filePath: path.join(root, "guide.md"), content: "# Guide\n" } } }),
   ].join("\n"));
   // The file now: one more change after the session.
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, "# A\n\n## Bulgular\n\nüç\n");
+  fs.writeFileSync(file, "# A\n\n## Findings\n\nthree\n");
   // A spike's result in the repo, never in a session.
   fs.mkdirSync(path.join(root, "spikes", "80-x"), { recursive: true });
-  fs.writeFileSync(path.join(root, "spikes", "80-x", "RESULT.md"), "# Sonuç\n\nolur\n");
+  fs.writeFileSync(path.join(root, "spikes", "80-x", "RESULT.md"), "# Result\n\nok\n");
   execFileSync("git", ["add", "-A"], { cwd: root });
   const asked = [];
   const r = await bf.backfill(db, repo.id, root, { home, transcriptsHome: path.join(home, ".claude", "projects"), ask: async (p) => (asked.push(p), "NO") });
@@ -259,10 +261,10 @@ test("backfill: past sessions' analyses, each state a version at its time; run a
   assert.equal(r.notAnalysis, 1);
   assert.equal(asked.length, 1);
   const doc = db.taskDocFind(repo.id, "#5");
-  const s = db.docSections(doc.id).find((x) => x.key === "analysis--bulgular");
-  assert.equal(s.body, "üç");
+  const s = db.docSections(doc.id).find((x) => x.key === "analysis--findings");
+  assert.equal(s.body, "three");
   const vs = db.sectionVersions(s.id).reverse();
-  assert.deepEqual(vs.map((v) => v.after.body), ["bir", "iki", "üç"]);
+  assert.deepEqual(vs.map((v) => v.after.body), ["one", "two", "three"]);
   assert.equal(vs[0].at, t0);
   assert.equal(db.docSections(db.taskDocFind(repo.id, "#80").id)[0].source, "spikes/80-x/RESULT.md");
   const again = await bf.backfill(db, repo.id, root, { home, transcriptsHome: path.join(home, ".claude", "projects"), ask: async () => "NO" });
@@ -282,9 +284,9 @@ test("backfill: a file git moved is one source, under its live path; what an ear
   const live = "docs/analysis/LATD-12/a.md";
   const t0 = Date.parse("2026-09-01T10:00:00Z");
   // An earlier run (or the hook) kept the file under its first path.
-  a.ingest(db, repo.id, "LATD-12", old, "# A\n\n## Bulgular\n\nbir\n", { actor: hook, at: t0 - 5000 });
+  a.ingest(db, repo.id, "LATD-12", old, "# A\n\n## Findings\n\none\n", { actor: hook, at: t0 - 5000 });
   fs.mkdirSync(path.join(root, "todos", "LATD-12"), { recursive: true });
-  fs.writeFileSync(path.join(root, old), "# A\n\n## Bulgular\n\nbir\n");
+  fs.writeFileSync(path.join(root, old), "# A\n\n## Findings\n\none\n");
   git("add", "-A");
   git("commit", "-q", "-m", "a");
   // Moved twice: a chain todos/ → docs/todos/ → docs/analysis/.
@@ -294,22 +296,22 @@ test("backfill: a file git moved is one source, under its live path; what an ear
   fs.mkdirSync(path.join(root, "docs", "analysis", "LATD-12"), { recursive: true });
   git("mv", mid, live);
   git("commit", "-q", "-m", "move again");
-  fs.writeFileSync(path.join(root, live), "# A\n\n## Bulgular\n\niki\n");
+  fs.writeFileSync(path.join(root, live), "# A\n\n## Findings\n\ntwo\n");
   assert.deepEqual([...bf.renamesOf(root)].sort(), [[mid, live], [old, live]]);
   // A past session edited it at the old path.
   const dir = path.join(home, ".claude", "projects", slugOf(root));
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "P1.jsonl"), [
-    line({ cwd: root, at: t0, rec: { toolUseResult: { type: "create", filePath: path.join(root, old), content: "# A\n\n## Bulgular\n\nbir buçuk\n" } } }),
+    line({ cwd: root, at: t0, rec: { toolUseResult: { type: "create", filePath: path.join(root, old), content: "# A\n\n## Findings\n\none and a half\n" } } }),
   ].join("\n"));
   await bf.backfill(db, repo.id, root, { home, transcriptsHome: path.join(home, ".claude", "projects"), model: false });
   const doc = db.taskDocFind(repo.id, "LATD-12");
   const current = db.docSections(doc.id).filter((x) => x.status === "current");
   assert.deepEqual([...new Set(current.map((x) => x.source))], [live], "one current source");
-  const bulgular = current.find((x) => x.title === "Bulgular");
-  assert.equal(bulgular.body, "iki");
+  const findings = current.find((x) => x.title === "Findings");
+  assert.equal(findings.body, "two");
   // The old path's replayed state went in under the live path.
-  assert.deepEqual(db.sectionVersions(bulgular.id).reverse().map((v) => v.after.body), ["bir buçuk", "iki"]);
+  assert.deepEqual(db.sectionVersions(findings.id).reverse().map((v) => v.after.body), ["one and a half", "two"]);
   assert.ok(db.docSections(doc.id).filter((x) => x.source === old).every((x) => x.status === "superseded"));
 });
 
@@ -320,7 +322,7 @@ test("backfill: a gone file git did not move (a deleted draft) stays history und
   const dir = path.join(home, ".claude", "projects", slugOf(root));
   fs.mkdirSync(dir, { recursive: true });
   const draft = path.join(root, "todos", "LATD-12", "draft.md");
-  fs.writeFileSync(path.join(dir, "P1.jsonl"), line({ cwd: root, at: Date.parse("2026-09-01T10:00:00Z"), rec: { toolUseResult: { type: "create", filePath: draft, content: "# D\n\n## Not\n\nx\n" } } }));
+  fs.writeFileSync(path.join(dir, "P1.jsonl"), line({ cwd: root, at: Date.parse("2026-09-01T10:00:00Z"), rec: { toolUseResult: { type: "create", filePath: draft, content: "# D\n\n## Notes\n\nx\n" } } }));
   await bf.backfill(db, repo.id, root, { home, transcriptsHome: path.join(home, ".claude", "projects"), model: false });
   const secs = db.docSections(db.taskDocFind(repo.id, "LATD-12").id);
   assert.deepEqual(secs.map((x) => [x.source, x.status]), [["todos/LATD-12/draft.md", "current"]]);
@@ -346,7 +348,7 @@ test("migration 6: a schema 5 database keeps its documents and takes analyses", 
   for (const m of MIGRATIONS.slice(0, 5)) raw.exec(m);
   raw.exec("PRAGMA user_version = 5");
   raw.exec(`INSERT INTO repos (id, uid, root, created_at) VALUES (1, 'r', '/a/p', 1);
-    INSERT INTO documents (id, uid, repo_id, kind, title, updated_at) VALUES (1, 'd', 1, 'glossary', 'Sözlük', 1);
+    INSERT INTO documents (id, uid, repo_id, kind, title, updated_at) VALUES (1, 'd', 1, 'glossary', 'Glossary', 1);
     INSERT INTO doc_sections (id, uid, doc_id, key, title, body, position, updated_at) VALUES (1, 's', 1, 'wal', 'WAL', 'x', 1, 1);
     INSERT INTO doc_versions (section_id, at, actor_kind, after) VALUES (1, 1, 'agent', '{}');`);
   raw.close();
@@ -365,26 +367,26 @@ test("MCP: doc_get and doc_section_upsert read and write a task's analysis; task
   const root = gitRepo();
   const { db, repo } = seeded(root);
   a.ingest(db, repo.id, "#5", "docs/todos/5/ANALYSIS.md", DOC, { actor: hook });
-  const got = callTool(db, "doc_get", { kind: "analysis", task: "#5", repo: root, section: "analysis--bulgular" });
+  const got = callTool(db, "doc_get", { kind: "analysis", task: "#5", repo: root, section: "analysis--findings" });
   assert.equal(got.document.scope, "#5");
-  assert.equal(got.sections.find((s) => s.key === "analysis--bulgular").body, "- sorgu N+1");
+  assert.equal(got.sections.find((s) => s.key === "analysis--findings").body, "- N+1 query");
   assert.equal(got.sections[0].source, "docs/todos/5/ANALYSIS.md");
   const empty = callTool(db, "doc_get", { kind: "analysis", task: "#80", repo: root });
   assert.deepEqual(empty.sections, []);
   assert.match(empty.hint, /no analysis kept for #80/);
-  const w = callTool(db, "doc_section_upsert", { kind: "analysis", task: "#80", key: "notes", title: "Notlar", body: "x", repo: root }, { client: "claude-code" });
+  const w = callTool(db, "doc_section_upsert", { kind: "analysis", task: "#80", key: "notes", title: "Notes", body: "x", repo: root }, { client: "claude-code" });
   assert.equal(w.created, true);
   assert.equal(db.taskDocFind(repo.id, "#80").id, w.document.id);
   assert.throws(() => callTool(db, "doc_get", { kind: "analysis", repo: root }), /needs task/);
   assert.throws(() => callTool(db, "doc_get", { kind: "architecture", task: "#5", repo: root }), /task is for kind analysis/);
 });
 
-test("panel: the task page links its analysis; Analiz → Görev analizleri lists the tasks' files and the orphans, each to be given a task", () => {
+test("panel: the task page links its analysis; Analysis → Task analyses lists the tasks' files and the orphans, each to be given a task", () => {
   const tv = req("../vscode/tasksView.js");
   const root = gitRepo();
   const { db, repo } = seeded(root);
   a.ingest(db, repo.id, "#5", "docs/todos/5/ANALYSIS.md", DOC, { actor: hook });
-  fs.writeFileSync(path.join(root, "loose.md"), "# Gevşek\n\n## Bulgular\n\nq\n");
+  fs.writeFileSync(path.join(root, "loose.md"), "# Loose\n\n## Findings\n\nq\n");
   a.setOrphan(db, repo.id, "loose.md", Date.now());
   const t5 = db.taskByKey(repo.id, "#5");
   const page = tv.tasksPage(db, root, { sel: t5.id });
@@ -393,10 +395,10 @@ test("panel: the task page links its analysis; Analiz → Görev analizleri list
   const html = tv.tasksHtml(page);
   assert.match(html, /data-act="anaGo" data-key="#5"[^>]*>[\s\S]*?Analysis · 1 file/);
   assert.doesNotMatch(html, /class="card ana"/);
-  // The tabs right under the head; with nothing waiting on the user, Yapılacaklar opens first.
+  // The tabs right under the head; with nothing waiting on the user, the todos tab opens first.
   assert.match(html, new RegExp(`class="ttabs"[^>]*data-task="${t5.id}" data-def="todos"`));
   assert.ok(html.indexOf('class="ttabs"') < html.indexOf('data-tp="todos"'));
-  // Something waiting on the user: Senden beklenen is the first tab, open by default.
+  // Something waiting on the user: the asks tab is the first tab, open by default.
   db.addRecord(t5.id, { kind: "question", owner: "K", title: "Merge?" }, agent());
   const asked = tv.tasksHtml(tv.tasksPage(db, root, { sel: t5.id }));
   assert.match(asked, /data-def="asks"/);
@@ -409,18 +411,18 @@ test("panel: the task page links its analysis; Analiz → Görev analizleri list
   const hub = tv.paneHtml(db, root, { tab: "analysis" });
   assert.match(hub, /data-tab="analysis" aria-current="page">[\s\S]*?Task analyses <span class="n">1<\/span>/);
   assert.match(hub, /data-act="asel" data-key="#5"/);
-  // In full, like Mimari: each section a document section, the task's contents on the left.
+  // In full, like the architecture page: each section a document section, the task's contents on the left.
   assert.match(hub, /<div class="doc ahub"/);
-  assert.match(hub, /<article class="dsec[^"]*" id="sec-a\d+"[^>]*><div class="dsec-h"><h2>Bulgular<\/h2>/);
-  assert.match(hub, /<ol class="atoc"[^>]*data-ak="#5">[\s\S]*?data-act="docGo" data-key="a\d+">Bulgular<\/a>/);
+  assert.match(hub, /<article class="dsec[^"]*" id="sec-a\d+"[^>]*><div class="dsec-h"><h2>Findings<\/h2>/);
+  assert.match(hub, /<ol class="atoc"[^>]*data-ak="#5">[\s\S]*?data-act="docGo" data-key="a\d+">Findings<\/a>/);
   assert.doesNotMatch(hub, /<details class="card ana"/);
-  // No file names on the page: only in the "aç" tooltip (and on the orphans, to choose one).
+  // No file names on the page: only in the "Open the file" tooltip (and on the orphans, to choose one).
   assert.doesNotMatch(hub, />docs\/todos\/5\/ANALYSIS\.md</);
-  // The file is not in this repo's tree (only ingested): no "aç".
+  // The file is not in this repo's tree (only ingested): no "Open the file".
   assert.doesNotMatch(hub, /title="Open the file: docs\/todos\/5\/ANALYSIS\.md"/);
   fs.mkdirSync(path.join(root, "docs", "todos", "5"), { recursive: true });
   fs.writeFileSync(path.join(root, "docs", "todos", "5", "ANALYSIS.md"), DOC);
-  // There: "aç" names the task's repo (on "Bütün repolar" the panel's repo is another one).
+  // There: "Open the file" names the task's repo (on "All repos" the panel's repo is another one).
   assert.match(tv.paneHtml(db, root, { tab: "analysis" }), new RegExp(`data-act="anaOpen" data-file="docs/todos/5/ANALYSIS.md" data-repo="${repo.id}" title="Open the file: docs/todos/5/ANALYSIS.md"`));
   assert.match(hub, /data-key="__orphans"/);
   assert.match(hub, /<select data-change="anaAssign" data-file="loose.md"[\s\S]*?<option value="\d+">#80/);
@@ -447,7 +449,7 @@ test("review fixes: long headings alike stay two sections; an older replayed sta
   const root = gitRepo();
   const s2 = seeded(root);
   const started = [];
-  const it = { rel: "notes.md", text: "# Kurulum\n", actor: hook };
+  const it = { rel: "notes.md", text: "# Setup\n", actor: hook };
   a.onEdit(s2.db, s2.repo.id, root, it, { start: () => started.push(1) });
   a.onEdit(s2.db, s2.repo.id, root, it, { start: () => started.push(1) });
   assert.equal(started.length, 1);
@@ -473,9 +475,9 @@ test("taskFor: every folder of the path, nearest first; a number prefix only whe
 
 test("panel: titles read as text — a Markdown link keeps its text, a key the page shows already goes", () => {
   const { plainTitle } = req("../vscode/tasksView.js");
-  assert.equal(plainTitle("[#620](https://github.com/u/r/issues/620) — T6: Çökme kurtarma", "#620"), "T6: Çökme kurtarma");
+  assert.equal(plainTitle("[#620](https://github.com/u/r/issues/620) — T6: Crash recovery", "#620"), "T6: Crash recovery");
   assert.equal(plainTitle("[LATD-14041](https://jira/x) Fix it", "LATD-14041"), "Fix it");
-  assert.equal(plainTitle("[#620](https://x) — Çökme: [deneme](https://y)"), "#620 — Çökme: deneme");
+  assert.equal(plainTitle("[#620](https://x) — Crash: [test](https://y)"), "#620 — Crash: test");
   assert.equal(plainTitle("#5", "#5"), "#5");
   assert.equal(plainTitle(undefined), "");
 });

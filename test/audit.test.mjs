@@ -17,8 +17,8 @@ function session() {
   const rec = (r) => JSON.stringify({ session: "s1", ...r }) + "\n";
   fs.writeFileSync(
     log,
-    rec({ t: "T1", kind: "verify", text: "0.22.0 değişikliklerini birleştireyim mi?\nEklenti kuruldu, 79 test geçiyor." }) +
-      rec({ t: "T2", kind: "verify", text: "#11'i kapatayım mı?" }),
+    rec({ t: "T1", kind: "verify", text: "Shall I merge the 0.22.0 changes?\nExtension installed, 79 tests pass." }) +
+      rec({ t: "T2", kind: "verify", text: "Shall I close #11?" }),
   );
   return { root, log };
 }
@@ -26,71 +26,71 @@ function session() {
 test("audit: the agent's turn ticks settled steps and adds what it really asks, as short steps", async () => {
   const { root, log } = session();
   let asked = "";
-  const res = await audit(log, { message: "PR #18 birleştirildi.\n\n👉 Yeni değişiklikleri de birleştireyim mi?", request: "tamam birleştir", session: "s1" }, async (p) => {
+  const res = await audit(log, { message: "PR #18 merged.\n\n👉 Shall I merge the new changes too?", request: "ok, merge", session: "s1" }, async (p) => {
     asked = p;
-    return 'Sure:\n{"settled": ["A", "B", "Z"], "asks": ["Yeni değişiklikleri birleştireyim mi?"]}';
+    return 'Sure:\n{"settled": ["A", "B", "Z"], "asks": ["Shall I merge the new changes?"]}';
   });
   // 👉 lines are the asks; the model writes them out clearly, as many as there are.
-  assert.deepEqual(res, { settled: [1, 2], asks: ["Yeni değişiklikleri birleştireyim mi?"], whys: [""], task: undefined });
-  assert.match(asked, /A\. 0\.22\.0 değişikliklerini birleştireyim mi\?/);
-  assert.match(asked, /<user_request>tamam birleştir<\/user_request>/);
-  assert.match(asked, /<new_asks>\n- Yeni değişiklikleri de birleştireyim mi\?/);
+  assert.deepEqual(res, { settled: [1, 2], asks: ["Shall I merge the new changes?"], whys: [""], task: undefined });
+  assert.match(asked, /A\. Shall I merge the 0\.22\.0 changes\?/);
+  assert.match(asked, /<user_request>ok, merge<\/user_request>/);
+  assert.match(asked, /<new_asks>\n- Shall I merge the new changes too\?/);
   assert.match(asked, /the new_asks rewritten: exactly 1 entry,/);
   const items = waitingItems(root);
   const t1 = items.find((i) => i.t === "T1");
-  assert.deepEqual([t1.open, t1.chat[0]], [false, "audit: agent: PR #18 birleştirildi."]);
+  assert.deepEqual([t1.open, t1.chat[0]], [false, "audit: agent: PR #18 merged."]);
   assert.equal(items.find((i) => i.t === "T2").open, true);
-  assert.deepEqual(openSteps(log).map((s) => s.text), ["#11'i kapatayım mı?", "Yeni değişiklikleri birleştireyim mi?"]);
+  assert.deepEqual(openSteps(log).map((s) => s.text), ["Shall I close #11?", "Shall I merge the new changes?"]);
 });
 
 test("audit: an ask in nearly the same words replaces the old step, even if the model keeps it", async () => {
   const { log } = session();
-  const res = await audit(log, { message: "👉 #11'i şimdi kapatayım mı?" }, async () => '{"settled": []}');
+  const res = await audit(log, { message: "👉 Shall I close #11 now?" }, async () => '{"settled": []}');
   assert.deepEqual(res.settled, [3]);
-  assert.deepEqual(openSteps(log).map((s) => s.text), ["0.22.0 değişikliklerini birleştireyim mi?", "Eklenti kuruldu, 79 test geçiyor.", "#11'i şimdi kapatayım mı?"]);
-  assert.ok(overlap("Chat senkronu henüz commit'lenmedi; commit edip main'e birleştireyim mi?", "Önceki değişiklikler (chat senkronu) hâlâ commit'lenmedi; commit edip main'e birleştireyim mi?") >= 0.5);
-  assert.ok(overlap("İkisini de yapayım mı?", "#11'i kapatayım mı?") < 0.5);
+  assert.deepEqual(openSteps(log).map((s) => s.text), ["Shall I merge the 0.22.0 changes?", "Extension installed, 79 tests pass.", "Shall I close #11 now?"]);
+  assert.ok(overlap("Chat sync is not committed yet; shall I commit and merge to main?", "Earlier changes (chat sync) are still not committed; shall I commit and merge to main?") >= 0.5);
+  assert.ok(overlap("Shall I do both of them?", "Shall I close #11?") < 0.5);
 });
 
 test("audit: without 👉 lines the model writes the asks", async () => {
   const { log } = session();
   let asked = "";
-  const res = await audit(log, { message: "Kurdum. Paneli açıp rozetlere bakabilirsin." }, async (p) => ((asked = p), 'x\n{"settled": [], "asks": ["Paneli açıp rozetlere bak"]}'));
-  assert.deepEqual(res, { settled: [], asks: ["Paneli açıp rozetlere bak"], whys: [""], task: undefined });
+  const res = await audit(log, { message: "Installed. You can open the panel and look at the badges." }, async (p) => ((asked = p), 'x\n{"settled": [], "asks": ["Open the panel and look at the badges"]}'));
+  assert.deepEqual(res, { settled: [], asks: ["Open the panel and look at the badges"], whys: [""], task: undefined });
   assert.match(asked, /"asks"/);
-  assert.deepEqual(pointedAsks("- 👉'lı mesajla denedim.\n👉 Birleştireyim mi?"), ["Birleştireyim mi?"]);
-  assert.ok(openSteps(log).some((s) => s.text === "Paneli açıp rozetlere bak"));
+  assert.deepEqual(pointedAsks("- Tried it with the 👉 message.\n👉 Shall I merge?"), ["Shall I merge?"]);
+  assert.ok(openSteps(log).some((s) => s.text === "Open the panel and look at the badges"));
 });
 
 test("audit: the review alone (Audit button) only closes; a failed model falls back to the rules", async () => {
   const { root, log } = session();
   assert.doesNotMatch(auditPrompt(openSteps(log), {}), /"asks"/);
   await audit(log, {}, async () => '{"settled": ["B"]}');
-  assert.deepEqual(openSteps(log).map((s) => s.n + s.text), ["10.22.0 değişikliklerini birleştireyim mi?", "2#11'i kapatayım mı?"]);
+  assert.deepEqual(openSteps(log).map((s) => s.n + s.text), ["1Shall I merge the 0.22.0 changes?", "2Shall I close #11?"]);
   assert.throws(() => parseAudit("no json", []));
-  await auditTurn(log, { message: "Kuruldu.\n👉 Paneli kontrol eder misin?" }, async () => {
+  await auditTurn(log, { message: "Installed.\n👉 Can you check the panel?" }, async () => {
     throw new Error("offline");
   });
-  assert.ok(waitingItems(root).some((i) => i.open && i.text === "Paneli kontrol eder misin?"));
+  assert.ok(waitingItems(root).some((i) => i.open && i.text === "Can you check the panel?"));
 });
 
 test("audit: asks are self-contained, with a why and the task; a rewrite that loses a 👉 line keeps them verbatim", async () => {
   const { root, log } = session();
   let asked = "";
-  await audit(log, { message: "Mail hazır.\n👉 Tim'e takip mailini gönder", request: "LATD-13937 için follow-up", session: "s1" }, async (p) => (
+  await audit(log, { message: "Mail is ready.\n👉 Send Tim the follow-up mail", request: "follow-up for LATD-13937", session: "s1" }, async (p) => (
     (asked = p),
-    '{"settled": [], "asks": [{"text": "LATD-13937: Tim\'e !2690 review\'u için takip mailini gönder", "why": "Review iki gündür bekliyor."}], "task": "LATD-13937"}'
+    '{"settled": [], "asks": [{"text": "LATD-13937: Send Tim the follow-up mail for review !2690", "why": "The review has been waiting for two days."}], "task": "LATD-13937"}'
   ));
   assert.match(asked, /<task_hint>LATD-13937<\/task_hint>/);
   assert.match(asked, /make sense on its own a week later/);
   const step = waitingSteps(root).find((s) => s.text.startsWith("LATD-13937"));
-  assert.deepEqual([step.why, step.task], ["Review iki gündür bekliyor.", "LATD-13937"]);
+  assert.deepEqual([step.why, step.task], ["The review has been waiting for two days.", "LATD-13937"]);
   // The model dropped a line: the agent's own words stay.
-  const res = await audit(log, { message: "👉 A yap\n👉 B yap" }, async () => '{"settled": [], "asks": ["A ve B"]}');
-  assert.deepEqual(res.asks, ["A yap", "B yap"]);
+  const res = await audit(log, { message: "👉 Do A\n👉 Do B" }, async () => '{"settled": [], "asks": ["A and B"]}');
+  assert.deepEqual(res.asks, ["Do A", "Do B"]);
   // A routine 👉 line next to a real ask is left out.
-  const res2 = await audit(log, { message: "👉 Tim'e yaz\n👉 Reload Window" }, async () => '{"settled": [], "asks": [{"text": "LATD-1: Tim\'e yaz"}, {"text": ""}]}');
-  assert.deepEqual(res2.asks, ["LATD-1: Tim'e yaz"]);
+  const res2 = await audit(log, { message: "👉 Write to Tim\n👉 Reload Window" }, async () => '{"settled": [], "asks": [{"text": "LATD-1: Write to Tim"}, {"text": ""}]}');
+  assert.deepEqual(res2.asks, ["LATD-1: Write to Tim"]);
 });
 
 test("audit: the model's JSON may be fenced and spread over lines", () => {
