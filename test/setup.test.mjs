@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mergeHooks, mergeShowIn, mergeLanguage, mergeStatusLine } from "../scripts/setup.mjs";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { mergeHooks, mergeShowIn, mergeLanguage, mergeStatusLine, installedFrom } from "../scripts/setup.mjs";
 
 const root = "/home/u/projects/imprimatur";
 
@@ -85,4 +88,23 @@ test("setup: one of our hooks under a matcher no longer used goes (it would run 
   assert.ok(changes.some((c) => c.startsWith("removed (stale) PostToolUse")));
   // Run again: nothing to do.
   assert.deepEqual(mergeHooks(settings, { root }).changes, []);
+});
+
+test("installedFrom: gallery (Marketplace / Open VSX) or vsix from VS Code's list; undefined when absent or unreadable", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-ext-"));
+  const write = (name, list) => {
+    const f = path.join(dir, name);
+    fs.writeFileSync(f, JSON.stringify(list));
+    return f;
+  };
+  const other = { identifier: { id: "someone.else" }, metadata: { source: "gallery" } };
+  const store = write("a.json", [other, { identifier: { id: "Halilural.Imprimatur" }, metadata: { source: "gallery" } }]);
+  const local = write("b.json", [{ identifier: { id: "halilural.imprimatur" }, metadata: { source: "vsix" } }]);
+  const none = write("c.json", [other]);
+  const bad = path.join(dir, "d.json");
+  fs.writeFileSync(bad, "{not json");
+  assert.equal(installedFrom([store]), "gallery");
+  assert.equal(installedFrom([local]), "vsix");
+  assert.equal(installedFrom([bad, none, path.join(dir, "missing.json")]), undefined);
+  assert.equal(installedFrom([none, local, store]), "vsix", "the first list that has it");
 });
