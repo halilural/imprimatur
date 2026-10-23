@@ -353,7 +353,7 @@ async function trackerOnce(db, o = {}) {
   const slugOf = (/** @type {any} */ repo) => {
     if (!origins.has(repo.id)) {
       let origin = repo.origin;
-      if (!origin && originOf && repo.root && !repo.root.startsWith("origin:") && fs.existsSync(repo.root)) origin = originOf(repo.root);
+      if (!origin && originOf && repo.root && path.isAbsolute(repo.root) && fs.existsSync(repo.root)) origin = originOf(repo.root);
       origins.set(repo.id, githubRepo(origin));
     }
     return origins.get(repo.id);

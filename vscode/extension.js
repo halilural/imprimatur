@@ -15,9 +15,8 @@ const { registerSetupView } = require("./setupView.js");
 const { registerRecordCommands } = require("./recordsView.js");
 const { registerLauncher } = require("./launcherView.js");
 const records = require("./records.js");
-const { readConfig, syncOnce, syncLoop, describe } = require("./sync.js");
+const { runLoop } = require("./loop.js");
 const { trackerOnce, describe: describeTracker, githubRepo } = require("./tracker.js");
-const { liveClient } = require("./live.js");
 const { trustGate } = require("./trust.js");
 
 /** @type {ReturnType<typeof registerSetupView> | undefined} */
@@ -811,87 +810,6 @@ function activate(ctx) {
   // The side bar: records (Imprimatur's database), then a way to the graph and every file that shapes the agent.
   /** @type {{ui: Record<string, any>} | undefined} */
   let recordCommands;
-  // Sync between machines (#61), when set up (config.json next to the database): now,
-  // every 60 s (5 min while live updates are connected, #71), at once when the Worker
-  // says another device pushed, and 5 s after a local write. Only queued local changes start a sync:
-  // applying pulled changes queues nothing, so the change it makes to the file ends there.
-  /** @type {ReturnType<typeof syncLoop> | undefined} */
-  let syncer;
-  const runSync = async () => {
-    const db = records.dbOf();
-    if (!db) throw new Error(records.lastError ?? "database not available");
-    const cfg = readConfig(db.file);
-    if (!cfg) return "sync: not set up (npm run sync -- --setup <url>)";
-    // New address or token: live updates start again with them (a refused token waits for this).
-    if (live && liveKey !== `${cfg.url}\n${cfg.token}`) {
-      live.dispose();
-      live = undefined;
-      startLive(db);
-    }
-    return describe(await syncOnce(db, cfg, { log: (line, loud) => { if (!loud) return log.warn(line); log.error(line); vscode.window.showWarningMessage(`Imprimatur ${line}`); } }));
-  };
-  const SYNC_POLL_MS = 60_000;
-  const LIVE_POLL_MS = 300_000;
-  /** @type {ReturnType<typeof liveClient> | undefined} */
-  let live;
-  /** The settings live runs with. */
-  let liveKey = "";
-  /**
-   * Live updates (#71): one WebSocket to the sync Worker. Connected: pull now (and on
-   * every reconnect), poll every 5 min; another device's push pulls at once; a GitHub
-   * issue change runs the tracker when it is one of this window's repos. Closed on deactivate.
-   * @param {any} db
-   */
-  const startLive = (db) => {
-    const cfg = readConfig(db.file);
-    if (live || !cfg) return;
-    liveKey = `${cfg.url}\n${cfg.token}`;
-    live = liveClient({
-      url: cfg.url,
-      token: cfg.token,
-      device: db.deviceId(),
-      log: (line) => log.info(line),
-      onState: (up) => syncer?.setIntervalMs(up ? LIVE_POLL_MS : SYNC_POLL_MS),
-      // On every (re)connect, at most once per 10 s (live.js).
-      onPull: () => syncer?.now(),
-      onUnavailable: () => syncer?.setIntervalMs(SYNC_POLL_MS),
-      onSync: () => syncer?.now(),
-      onTracker: (repo) => {
-        try {
-          const ids = new Set([...roots].map((r) => records.repoId(r)).filter((id) => id !== undefined));
-          const mine = records.dbOf()?.repos().some((/** @type {any} */ r) => ids.has(r.id) && githubRepo(r.origin)?.toLowerCase() === repo.toLowerCase());
-          if (mine) trackerer.now();
-        } catch {}
-      },
-    });
-  };
-  ctx.subscriptions.push({ dispose: () => live?.dispose() });
-  /** Starts the loop once sync is set up (at activation, or later by Sync Now). */
-  const startSync = () => {
-    const db = records.dbOf();
-    if (syncer || !db || !readConfig(db.file)) return false;
-    syncer = syncLoop(runSync, (line, error) => (error ? log.warn(line) : log.info(line)), { intervalMs: SYNC_POLL_MS });
-    ctx.subscriptions.push({ dispose: () => syncer?.dispose() });
-    startLive(db);
-    // Said once: a second clone of an origin does not sync (the first one by id does).
-    for (const r of db.unsyncedClones()) log.info(`sync: ${r.root} is a second clone of ${r.origin}; only the first one syncs`);
-    return true;
-  };
-  try {
-    if (startSync()) syncer?.now();
-  } catch (e) {
-    log.error(`sync: ${e instanceof Error ? e.message : e}`);
-  }
-  // Through the loop, so it never runs alongside a timed sync.
-  ctx.subscriptions.push(vscode.commands.registerCommand("imprimatur.syncNow", async () => {
-    try {
-      startSync();
-    } catch {}
-    if (!syncer) return void vscode.window.showInformationMessage("Imprimatur: sync is not set up; run npm run sync -- --setup <url> in the Imprimatur folder.");
-    const { line, error } = await syncer.now();
-    if (error) vscode.window.showErrorMessage(`Imprimatur ${error}`);
-    else if (line) vscode.window.setStatusBarMessage(`Imprimatur ${line}`, 5000);
-  }));
   // Issue tracker sync (#70): task status to and from GitHub Issues / Jira. Now, every
   // 5 min, and 5 s after a status change queues a push. Not in an untrusted folder (gh, fetch).
   const trackerAllowed = trustGate(() => vscode.workspace.isTrusted, (msg) => log.info(msg));
@@ -904,7 +822,7 @@ function activate(ctx) {
     const createTasks = vscode.workspace.getConfiguration("imprimatur").get("tracker.createTasks", true);
     return describeTracker(await trackerOnce(db, { repos, createTasks, originOf: (root) => require("./import.js").originOf(root), log: (line) => log.warn(line) }));
   };
-  const trackerer = syncLoop(runTracker, (line, error) => (error ? log.warn(line) : log.info(line)), { intervalMs: 300_000, name: "tracker sync" });
+  const trackerer = runLoop(runTracker, (line, error) => (error ? log.warn(line) : log.info(line)), { intervalMs: 300_000, name: "tracker sync" });
   ctx.subscriptions.push({ dispose: () => trackerer.dispose() });
   const trackerStart = setTimeout(() => trackerer.now(), 3_000);
   ctx.subscriptions.push({ dispose: () => clearTimeout(trackerStart) });
@@ -914,6 +832,63 @@ function activate(ctx) {
     const { line, error } = await trackerer.now();
     if (error) vscode.window.showErrorMessage(`Imprimatur ${error}`);
     else if (line) vscode.window.setStatusBarMessage(`Imprimatur ${line}`, 5000);
+  }));
+  // Plugins (#106, db.js loadPlugins): each one's activate gets what it may use here; getDb
+  // gives the open database each time (it may be reopened). It may return {changed?(),
+  // actions?: [{label, run}], dispose?()}: changed after each local write, actions in
+  // "Imprimatur: Plugin Actions…". Activated once a database opens: now, or on a later look.
+  /** @type {Array<{name: string, changed?: () => void, actions?: Array<{label: string, run: () => any}>, dispose?: () => void}>} */
+  const plugins = [];
+  let pluginsActive = false;
+  const activatePlugins = () => {
+    if (pluginsActive) return;
+    const db = records.dbOf();
+    if (!db) return;
+    pluginsActive = true;
+    for (const p of db.plugins) {
+      if (!p.activate) continue;
+      try {
+        const h = p.activate({
+          vscode,
+          context: ctx,
+          getDb: () => records.dbOf(),
+          log,
+          runLoop,
+          /** Runs the issue tracker sync now when the GitHub repo ("owner/name") is one of this window's. @param {string} repo */
+          trackerFor: (repo) => {
+            const ids = new Set([...roots].map((r) => records.repoId(r)).filter((id) => id !== undefined));
+            const mine = records.dbOf()?.repos().some((/** @type {any} */ r) => ids.has(r.id) && githubRepo(r.origin)?.toLowerCase() === repo.toLowerCase());
+            if (mine) trackerer.now();
+          },
+        });
+        if (h) {
+          plugins.push({ name: p.name, ...h });
+          if (h.dispose) ctx.subscriptions.push({ dispose: () => h.dispose() });
+        }
+      } catch (e) {
+        log.error(`plugin ${p.name}: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+  };
+  try {
+    activatePlugins();
+  } catch (e) {
+    log.error(`plugins: ${e instanceof Error ? e.message : e}`);
+  }
+  ctx.subscriptions.push(vscode.commands.registerCommand("imprimatur.pluginActions", async () => {
+    try {
+      activatePlugins();
+    } catch {}
+    const items = plugins.flatMap((p) => (p.actions ?? []).map((a) => ({ label: a.label, description: p.name, run: a.run })));
+    if (!items.length) return void vscode.window.showInformationMessage("Imprimatur: no plugin is installed.");
+    const pick = await vscode.window.showQuickPick(items, { placeHolder: "Plugin action" });
+    if (!pick) return;
+    try {
+      const line = await pick.run();
+      if (typeof line === "string" && line) vscode.window.setStatusBarMessage(`Imprimatur ${line}`, 5000);
+    } catch (e) {
+      vscode.window.showErrorMessage(`Imprimatur ${e instanceof Error ? e.message : e}`);
+    }
   }));
   try {
     // The repos as git spells them: roots are normalised (lower case on Windows).
@@ -934,8 +909,15 @@ function activate(ctx) {
         updateGraphButton();
         exportSoon();
         try {
-          if (syncer && records.dbOf()?.outboxCount()) syncer.kick();
+          activatePlugins();
         } catch {}
+        for (const p of plugins) {
+          try {
+            p.changed?.();
+          } catch (e) {
+            log.warn(`plugin ${p.name}: ${e instanceof Error ? e.message : e}`);
+          }
+        }
         try {
           const n = records.dbOf()?.trackerOutboxCount() ?? 0;
           if (n > trackerQueued) trackerer.kick();

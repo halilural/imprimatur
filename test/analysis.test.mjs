@@ -340,32 +340,6 @@ test("maybeStart: once per repo with transcripts, in the background", () => {
 
 // ---- sync and migration ----
 
-test("sync: an analysis section reaches the other machine under its task; old kinds unchanged; sync false keeps it here", () => {
-  const A = seeded("/a/proj", "https://github.com/u/proj");
-  A.db.enableSync();
-  a.ingest(A.db, A.repo.id, "#5", "docs/todos/5/ANALYSIS.md", DOC, { actor: hook });
-  const rows = A.db.outbox().filter((r) => r.entity === "section");
-  assert.ok(rows.every((r) => r.key.startsWith("github.com/u/proj\tanalysis:#5\tanalysis--")));
-  assert.ok(rows.some((r) => r.field === "source"));
-  const B = openDb({ path: tmpDb() });
-  const device = A.db.deviceId();
-  B.applyRemote(rows.map((r) => ({ ...r, device })));
-  const repoB = B.repos()[0];
-  const docB = B.taskDocFind(repoB.id, "#5");
-  assert.equal(docB.title, "Analiz · #5");
-  const secs = B.docSections(docB.id);
-  assert.deepEqual(secs.map((s) => [s.key, s.source]), [
-    ["analysis--overview", "docs/todos/5/ANALYSIS.md"], ["analysis--bulgular", "docs/todos/5/ANALYSIS.md"], ["analysis--oneri", "docs/todos/5/ANALYSIS.md"],
-  ]);
-  // A bad analysis key is refused.
-  assert.equal(B.applyRemote([{ entity: "section", key: "github.com/u/proj\tanalysis:\tx", field: "title", value: '"T"', at: Date.now(), device }]).applied, 0);
-  // Off for the repo: nothing queued.
-  const n = A.db.outbox().length;
-  A.db.setMeta(`analysis:nosync:${A.repo.id}`, "1");
-  a.ingest(A.db, A.repo.id, "#5", "docs/todos/5/ANALYSIS.md", `${DOC}\n## Ek\n\nz\n`, { actor: hook });
-  assert.equal(A.db.outbox().length, n);
-});
-
 test("migration 6: a schema 5 database keeps its documents and takes analyses", () => {
   const file = tmpDb();
   const raw = new DatabaseSync(file);

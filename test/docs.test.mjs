@@ -8,12 +8,10 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { handle } from "../cloud/src/server.js";
 import { callTool, digest } from "../mcp/server.mjs";
 
 const req = createRequire(import.meta.url);
-const { openDb, VERSION, MIGRATIONS, normOrigin } = req("../vscode/db.js");
-const { syncOnce } = req("../vscode/sync.js");
+const { openDb, VERSION, MIGRATIONS } = req("../vscode/db.js");
 const docs = req("../vscode/docsView.js");
 const tv = req("../vscode/tasksView.js");
 const { docMarkdown, exportDocs, HEADER } = req("../vscode/docs-export.js");
@@ -160,103 +158,6 @@ test("upsertSection: a record of another repo is refused", () => {
   const doc = db.docOf(repo.id, "architecture");
   assert.throws(() => db.upsertSection(doc.id, "x", { title: "X", addRecords: [rec.id] }, agent), /another repo/);
   assert.equal(db.docSection(doc.id, "x"), undefined, "nothing written");
-});
-
-// ---- sync (#61) between two databases ----
-
-class FakeD1 {
-  constructor() {
-    this.db = new DatabaseSync(":memory:");
-    this.db.exec(fs.readFileSync(new URL("../cloud/migrations/0001_changes.sql", import.meta.url), "utf8"));
-  }
-  prepare(sql) {
-    const db = this.db;
-    const make = (args) => ({
-      bind: (...a) => make(a),
-      exec: () => ({ results: db.prepare(sql).all(...args) }),
-      all: async () => ({ results: db.prepare(sql).all(...args) }),
-      first: async () => db.prepare(sql).get(...args) ?? null,
-      run: async () => ({ meta: db.prepare(sql).run(...args) }),
-    });
-    return make([]);
-  }
-  async batch(stmts) {
-    this.db.exec("BEGIN");
-    try {
-      const out = stmts.map((s) => s.exec());
-      this.db.exec("COMMIT");
-      return out;
-    } catch (e) {
-      this.db.exec("ROLLBACK");
-      throw e;
-    }
-  }
-}
-const TOKEN = "t0ken";
-const server = () => {
-  const env = { DB: new FakeD1(), SYNC_TOKEN: TOKEN };
-  return { fetch: (url, init) => handle(new Request(url, init), env) };
-};
-const cfg = { url: "https://sync.example", token: TOKEN };
-const ORIGIN = "git@github.com:u/proj.git";
-const docOn = (db, kind) => {
-  const r = db.repos().find((x) => x.origin && normOrigin(x.origin) === "github.com/u/proj");
-  return r && db.docFind(r.id, kind);
-};
-
-test("sync: a section, its body and its records reach the other machine; field-level last writer wins", async () => {
-  const s = server();
-  const a = seeded("/a/proj", ORIGIN);
-  a.db.enableSync();
-  const b = openDb({ path: tmpDb() });
-  b.enableSync();
-  const docA = a.db.docOf(a.repo.id, "architecture");
-  a.db.upsertSection(docA.id, "storage", { title: "Storage", body: "v1", addRecords: [a.adr.id] }, agent);
-  await syncOnce(a.db, cfg, { fetch: s.fetch });
-  await syncOnce(b, cfg, { fetch: s.fetch });
-  const docB = docOn(b, "architecture");
-  assert.ok(docB, "the document is made on B (a placeholder repo)");
-  const onB = b.docSection(docB.id, "storage");
-  assert.deepEqual([onB.title, onB.body, onB.status], ["Storage", "v1", "current"]);
-  assert.deepEqual(onB.records.map((id) => b.record(id).uid), [a.adr.uid], "records arrive by uid");
-  assert.equal(b.sectionVersions(onB.id)[0].actor_kind, "import");
-  // Both change: B's title, then A's body later: each field keeps its last writer.
-  b.upsertSection(docB.id, "storage", { title: "Storage (B)" }, user);
-  await new Promise((r) => setTimeout(r, 5));
-  a.db.upsertSection(docA.id, "storage", { body: "v2 from A" }, user);
-  for (const m of [a.db, b, a.db]) await syncOnce(m, cfg, { fetch: s.fetch });
-  for (const [db, doc] of [[a.db, docA], [b, docB]]) {
-    const x = db.docSection(doc.id, "storage");
-    assert.deepEqual([x.title, x.body], ["Storage (B)", "v2 from A"]);
-  }
-  // A placeholder opened for real here: its document merges into the repo.
-  b.repoOf("/b/proj", { origin: ORIGIN });
-  const real = b.repoByRoot("/b/proj");
-  assert.equal(b.docFind(real.id, "architecture").id, docB.id);
-  assert.equal(b.repos().filter((r) => r.root.startsWith("origin:")).length, 0);
-});
-
-test("sync: enabling sync seeds existing sections", () => {
-  const a = seeded("/a/proj", ORIGIN);
-  const doc = a.db.docOf(a.repo.id, "product");
-  a.db.upsertSection(doc.id, "tabs", { title: "Tabs", addRecords: [a.pdr.id] }, agent);
-  a.db.enableSync();
-  const rows = a.db.outbox().filter((r) => r.entity === "section");
-  assert.deepEqual(rows.map((r) => r.field).sort(), ["body", "position", "records", "source", "status", "title"]);
-  assert.equal(rows[0].key, "github.com/u/proj\tproduct\ttabs");
-  assert.deepEqual(JSON.parse(rows.find((r) => r.field === "records").value), [a.pdr.uid]);
-});
-
-test("sync: a bad section change is ignored", () => {
-  const b = openDb({ path: tmpDb() });
-  const at = Date.now();
-  const r = b.applyRemote([
-    { entity: "section", key: "github.com/u/proj\troadmap\tx", field: "title", value: '"T"', at, device: "d" },
-    { entity: "section", key: "github.com/u/proj\tproduct\tBad Key", field: "title", value: '"T"', at, device: "d" },
-    { entity: "section", key: "github.com/u/proj\tproduct\tok", field: "status", value: '"gone"', at, device: "d" },
-  ]);
-  assert.equal(r.applied, 0);
-  assert.equal(docOn(b, "product"), undefined);
 });
 
 // ---- MCP tools ----

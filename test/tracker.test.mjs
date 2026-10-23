@@ -12,7 +12,7 @@ const { openDb, refersTo } = req("../vscode/db.js");
 const { trackerOnce, describe, trackerActive, githubSyncCovers, githubRepo, readJira, pickTransition, isTransient, MAX_TRIES, COMMENT } = req("../vscode/tracker.js");
 const { dbPath } = req("../vscode/db.js");
 const { check } = req("../vscode/process.js");
-const { syncLoop } = req("../vscode/sync.js");
+const { runLoop } = req("../vscode/loop.js");
 
 const agent = { kind: "agent", id: "claude:s1" };
 const user = { kind: "user" };
@@ -110,28 +110,6 @@ test("cascade: a task without an epic, or a status that is not closing, touches 
   assert.equal(db.record(l56.id).status, "open");
   db.upsertTask(t56.repo_id, "#99", { status: "done" }, user);
   assert.equal(db.recordsOf(epic.id).filter((r) => r.status === "done").length, 0);
-});
-
-test("cascade: applyRemote (another machine) does not cascade nor queue a tracker push", () => {
-  const { db, l56, t56 } = epicSetup();
-  db.enableSync();
-  const before = db.trackerOutboxCount();
-  const out = db.applyRemote([{ entity: "task", key: "github.com/halilural/imprimatur\t#56", field: "status", value: JSON.stringify("done"), at: Date.now() + 10_000, device: "zzz-other" }]);
-  assert.equal(out.applied, 1);
-  assert.equal(db.taskById(t56.id).status, "done");
-  assert.equal(db.record(l56.id).status, "open");
-  assert.equal(db.record(l56.id).pointer, true);
-  assert.equal(db.trackerOutboxCount(), before);
-});
-
-test("cascade: with sync on, the closed line and the moved 👉 are queued for other machines", () => {
-  const { db, l56, t56 } = epicSetup();
-  db.enableSync();
-  db.ackOutbox(db.outbox(10_000).map((r) => r.id));
-  db.upsertTask(t56.repo_id, "#56", { status: "done" }, agent);
-  const queued = db.outbox();
-  assert.ok(queued.some((r) => r.entity === "record" && r.key === db.record(l56.id).uid && r.field === "status" && r.value === '"done"'));
-  assert.ok(queued.some((r) => r.entity === "task" && r.key.endsWith("\t#53") && r.field === "pointer"));
 });
 
 test("tracker outbox: local status changes across open/closed are queued; the tracker's pull, imports and other keys are not", () => {
@@ -586,9 +564,9 @@ test("sweep: quiet while GitHub sync covers the repo; on when it has not run, or
   assert.equal(COMMENT.close_done, "Imprimatur: tamamlandı");
 });
 
-test("syncLoop: a named loop says its name when a run fails", async () => {
+test("runLoop: a named loop says its name when a run fails", async () => {
   const lines = [];
-  const loop = syncLoop(async () => {
+  const loop = runLoop(async () => {
     throw new Error("boom");
   }, (l) => lines.push(l), { intervalMs: 1e9, name: "tracker sync" });
   const r = await loop.now();

@@ -1322,7 +1322,7 @@ function openAnalysisFile(rel, repoId) {
   const repo = db ? db.repos().find((/** @type {any} */ r) => r.id === repoId) ?? (shown ? db.repoByRoot(shown) : undefined) : undefined;
   const known = repo && db.sqlite.prepare("SELECT 1 FROM doc_sources x JOIN documents d ON d.id = x.doc_id WHERE d.repo_id = ? AND x.path = ?").get(repo.id, rel);
   if (!known) return;
-  if (repo.root.startsWith("origin:")) return void vscode.window.showInformationMessage(`Imprimatur: ${repo.name} is not on this machine; its text stays in the task's analysis.`);
+  if (!path.isAbsolute(repo.root)) return void vscode.window.showInformationMessage(`Imprimatur: ${repo.name} is not on this machine; its text stays in the task's analysis.`);
   const file = require("./analysis.js").absPath(repo.root, rel);
   if (!fs.existsSync(file)) return void vscode.window.showInformationMessage(`Imprimatur: ${rel} is no longer there; its text stays in the task's analysis.`);
   return vscode.window.showTextDocument(vscode.Uri.file(file), { preview: true });
