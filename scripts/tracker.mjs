@@ -13,7 +13,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { openDb, PLACEHOLDER } = require("../vscode/db.js");
+const { openDb } = require("../vscode/db.js");
 const { trackerOnce, describe } = require("../vscode/tracker.js");
 const { originOf } = require("../vscode/import.js");
 
@@ -29,7 +29,8 @@ let code = 0;
 try {
   let repos;
   if (argv.includes("--all")) {
-    repos = db.repos().filter((r) => !r.root.startsWith(PLACEHOLDER));
+    // Repos with a folder on this machine (a plugin may keep others, known only by their origin).
+    repos = db.repos().filter((r) => path.isAbsolute(r.root));
   } else {
     let root;
     try {

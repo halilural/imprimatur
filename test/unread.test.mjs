@@ -133,19 +133,3 @@ test("the status line's edit count: fresh from the extension, else none", () => 
   assert.equal(readUnread(root, Date.now() + 16 * 60 * 1000), 0);
   assert.ok(fs.existsSync(path.join(root, UNREAD_FILE)));
 });
-
-test("a placeholder's section merged into the repo's takes its read with it", () => {
-  const db = openDb({ path: tmpDb() });
-  const repo = db.repoOf("/b/proj");
-  const doc = db.docOf(repo.id, "architecture");
-  db.upsertSection(doc.id, "storage", { title: "Storage", body: "here" }, user);
-  // The same section synced before this repo had its origin: a placeholder repo holds it.
-  const r = db.applyRemote([{ entity: "section", key: "github.com/u/proj\tarchitecture\tstorage", field: "title", value: '"Storage"', at: Date.now(), device: "d" }]);
-  assert.equal(r.applied, 1);
-  const ph = db.repos().find((x) => x.root.startsWith("origin:"));
-  db.markSectionsRead([db.docSection(db.docFind(ph.id, "architecture").id, "storage").id]);
-  db.repoOf("/b/proj", { origin: "git@github.com:u/proj.git" });
-  assert.equal(db.repos().filter((x) => x.root.startsWith("origin:")).length, 0);
-  assert.deepEqual(db.sqlite.prepare("PRAGMA foreign_key_check").all(), []);
-  db.close();
-});

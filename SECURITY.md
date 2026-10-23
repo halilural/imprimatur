@@ -28,7 +28,6 @@ Imprimatur runs with your permissions on your machine, so these matter most:
   untrusted folder; webviews render agent and model output.
 - **Child processes**: the extension and hooks start `claude`, `git`, `gh` and
   `npx agnix`; the project review sends repository content to Claude.
-- **The sync Worker** (`cloud/`): tokens, webhook signatures, the data it stores.
 
 Text that an agent or a model wrote (records, recommendations, synced data) is
 untrusted input; a way to make it run code, read secrets or reach the network

@@ -463,86 +463,12 @@ Or by hand:
 3. Extension: `npm run package`, then install `dist/imprimatur-<version>.vsix`
    (`code --install-extension …`, or Extensions view → Install from VSIX).
 
-### Sync between machines
+### Plugins
 
-Tasks and records live in one database per machine. To share them, run the
-small sync server in `cloud/` (a Cloudflare Worker with a D1 database) on your
-own Cloudflare account, once:
-
-```sh
-cd cloud
-npx wrangler d1 create imprimatur-sync        # put the printed database_id in wrangler.jsonc
-npx wrangler d1 migrations apply imprimatur-sync --remote
-npx wrangler secret put SYNC_TOKEN            # a long random string, e.g. `openssl rand -hex 32`
-npx wrangler deploy
-```
-
-Then on each machine: `npm run sync -- --setup https://imprimatur-sync.<you>.workers.dev`.
-It asks for the token (or reads `IMPRIMATUR_SYNC_TOKEN`; never put it on the
-command line, where shell history keeps it), saves the address and token next to
-the database (`config.json`, readable only by you), turns sync on and sends what
-is already there. VS Code then syncs on start, every minute (every 5 minutes
-while live updates are connected, see below), at once when another machine
-pushed, and a few seconds after each change (**Imprimatur: Sync Now** to force it; one line per sync in the
-Imprimatur output). `npm run sync` syncs from a terminal; `npm run sync -- --off`
-stops queueing changes (`--setup` again queues everything, edits made meanwhile included).
-
-- Repos are matched by their `origin` remote (ssh and https spellings are the
-  same); repos without one stay on their machine. A task that arrives before you
-  open its repo here waits under `origin:<remote>` and moves in when you do.
-  Two clones of one remote on the same machine: only the first one Imprimatur
-  saw syncs.
-- Each field (title, status, 👉, …) keeps the newest change; a change on one
-  machine never undoes a different field changed on another.
-- A value over 100,000 characters (a huge record body) is sent cut short, ending
-  in "…"; the machine that wrote it keeps it whole.
-- Once a day (03:23 UTC, a cron trigger) the server deletes changes a newer value
-  of the same field supersedes, by the machines' own rule; a new machine replays
-  what is left. Over 300 requests a minute from one address it answers 429, and
-  503 when D1 is busy or out of quota; VS Code then waits (Retry-After, doubling
-  up to 30 minutes). A transient D1 error on a push is retried.
-
-**Each time you deploy the Worker** (after a `git pull` that changed `cloud/`):
-
-```sh
-cd cloud
-# 1. Set compatibility_date in wrangler.jsonc to today: the runtime's newer defaults
-#    (https://developers.cloudflare.com/workers/configuration/compatibility-flags/).
-#    Read the flags that turn on between the old date and today first.
-npx wrangler d1 migrations apply imprimatur-sync --remote   # any new migrations/
-npx wrangler deploy
-```
-
-### Live updates
-
-- **On this machine** the Imprimatur panel follows the database file: a record
-  written by an agent, a hook or another window shows in tens of milliseconds
-  (the first change draws at once, a burst at most every 50 ms). While the panel
-  is visible it also looks at the database every 500 ms, in case the file watch
-  missed something.
-- **Between machines**, once sync is set up, VS Code keeps one WebSocket open to
-  the sync Worker (`GET /v1/live`, the same token). After another machine pushes,
-  the Worker tells every connection and they pull at once (about a second end to
-  end). While connected the timed sync runs every 5 minutes instead of every
-  minute; it reconnects by itself (1 s up to 30 s apart) and pulls on every
-  reconnect. One line in the Imprimatur output when it connects or drops.
-- **GitHub issues**: a webhook on each repo (`POST /v1/github`, signed with
-  `GITHUB_WEBHOOK_SECRET`) makes VS Code run the tracker sync for that repo within
-  seconds of an issue being opened, closed, reopened or edited. The 5-minute run stays as a fallback.
-  A delivery seen before (its id or its exact body, the last 500) is ignored.
-- A Worker deployed before live updates has no `/v1/live`: VS Code notices once
-  and keeps syncing every minute. A refused token is tried again every 5 minutes.
-
-The Worker update (once, in `cloud/`; the Durable Object's migration is applied by `deploy`):
-
-```sh
-npx wrangler secret put GITHUB_WEBHOOK_SECRET   # e.g. `openssl rand -hex 32`; only for GitHub webhooks
-npx wrangler deploy
-```
-
-Then add the webhooks: `node scripts/github-webhooks.mjs` prints one `gh api …/hooks`
-command per GitHub repo in the database (it runs nothing). Export
-`GITHUB_WEBHOOK_SECRET` with the same value in your shell and run them.
+Imprimatur loads optional plugins: `config.json` next to the database (`~/.local/share/imprimatur/` on Linux)
+names them in `"plugins": ["/absolute/path/to/plugin.js"]`. A plugin is told about every change to a repo, task,
+record or document section, and can add actions to **Imprimatur: Plugin Actions…**. The contract is in
+`vscode/db.js` (`loadPlugins`). Without plugins nothing changes.
 
 ### Epics and the issue tracker
 

@@ -16,7 +16,6 @@
     "import": "node scripts/import.mjs",
     "analysis": "node scripts/analysis.mjs",
     "docs": "node scripts/docs.mjs",
-    "sync": "node scripts/sync.mjs",
     "tracker": "node scripts/tracker.mjs",
     "build": "node scripts/build.mjs",
     "plugin": "node scripts/plugin.mjs",
