@@ -4,32 +4,32 @@
 
 ## Terms
 
-- [Accept](#kabul)
+- [Accept](#accept)
 - [ADR](#adr)
 - [Agent Change Graph](#agent-change-graph)
 - [Agent Setup](#agent-setup)
-- [Analysis document](#analiz-belgesi)
-- [Audit](#denetim)
-- [Comprehension debt](#anlama-borcu)
-- [End-of-turn question](#tur-sonu-sorusu)
+- [Analysis document](#analysis-document)
+- [Audit](#audit)
+- [Comprehension debt](#comprehension-debt)
+- [End-of-turn question](#end-of-turn-question)
 - [Epic](#epic)
 - [Hook](#hook)
 - [Imprimatur](#imprimatur)
-- [Living document](#yasayan-dokuman)
-- [Owner (K / C)](#sahip-k-c)
+- [Living document](#living-document)
+- [Owner (K / C)](#owner)
 - [PDR](#pdr)
 - [Pointer (👉)](#pointer)
-- [Process checks](#surec-kontrolleri)
-- [Record](#kayit)
-- [Section](#bolum)
-- [Session](#oturum)
-- [Superseded](#eskimis)
-- [Task](#gorev)
-- [Tracked change](#iz)
-- [Tracker sync](#tracker-esitlemesi)
-- [Waiting on you](#bende-bekleyenler)
+- [Process checks](#process-checks)
+- [Record](#record)
+- [Section](#section)
+- [Session](#session)
+- [Superseded](#superseded)
+- [Task](#task)
+- [Tracked change](#tracked-change)
+- [Tracker sync](#tracker-sync)
+- [Waiting on you](#waiting-on-you)
 
-<a id="kabul"></a>
+<a id="accept"></a>
 
 ## Accept
 
@@ -53,25 +53,25 @@ The "Agent changes" tab: every agent edit in the repo, one lane per Claude sessi
 
 A documentation-based audit of the agent setup (CLAUDE.md, skills, hooks, MCP): best-practice recommendations and the status of each one.
 
-<a id="analiz-belgesi"></a>
+<a id="analysis-document"></a>
 
 ## Analysis document
 
 A living document, one per task, made of the task's analysis, plan, spike result and research note files (`kind = analysis`, `scope` = the task key). The hook picks files up as they are written; past sessions are replayed once. A file whose task cannot be found is an **analysis without a task**.
 
-<a id="denetim"></a>
+<a id="audit"></a>
 
 ## Audit
 
 After every turn Haiku keeps the Waiting on you list honest: it marks items that were answered, done or asked again. It can also be run by hand.
 
-<a id="anlama-borcu"></a>
+<a id="comprehension-debt"></a>
 
 ## Comprehension debt
 
 The gap between the amount of code and documentation in a system and the part a person actually understands. In Imprimatur it shows as "Unread": unaccepted edits plus the sections the agent changed since the last read (#92). Not to be confused with technical debt: the code can be clean, the debt sits with the person.
 
-<a id="tur-sonu-sorusu"></a>
+<a id="end-of-turn-question"></a>
 
 ## End-of-turn question
 
@@ -95,13 +95,13 @@ Imprimatur scripts that Claude Code runs on events (tool call, end of turn, sess
 
 Latin for "let it be printed": a seal of approval. The product's name: a VS Code extension, Claude Code hooks and an MCP server that show the agent's edits as tracked changes until you accept them.
 
-<a id="yasayan-dokuman"></a>
+<a id="living-document"></a>
 
 ## Living document
 
 A document kept per repo and made of sections: **Architecture** (how it is built), **Product** (what the user gets) and **Glossary** (the project's terms). It is stored in the database; it is written to the repo as `docs/ARCHITECTURE.md`, `PRODUCT.md` and `GLOSSARY.md`, and edits made in the files are reverted.
 
-<a id="sahip-k-c"></a>
+<a id="owner"></a>
 
 ## Owner (K / C)
 
@@ -119,55 +119,55 @@ Product Decision Record: a record of a product decision (kind `pdr`). It is link
 
 The record in a task where work stopped (shown as "Where we left off"). Only an open record can hold it; `pointer_set` or `record_add` (pointer: true) moves it. A new session continues from here with `where_we_left_off`.
 
-<a id="surec-kontrolleri"></a>
+<a id="process-checks"></a>
 
 ## Process checks
 
 Rules a repo turns on with `.claude/imprimatur.json`; the agent is reminded at the next tool call. Example: an ADR was added but is not linked to any document section.
 
-<a id="kayit"></a>
+<a id="record"></a>
 
 ## Record
 
 A row of a task. Kinds: `todo`, `question` (a question to the user), `answer` (the answer to a question), `decision`, `note`, `fixme`, `adr`, `pdr`, `test`. A record is never deleted, it becomes `dropped`; every change is kept as a version.
 
-<a id="bolum"></a>
+<a id="section"></a>
 
 ## Section
 
 One part of a living document. Its key is a slug (`storage`), unique within the document. It is never deleted; every change is versioned with who made it. Records are linked to a section as contributors. In the glossary each term is one section.
 
-<a id="oturum"></a>
+<a id="session"></a>
 
 ## Session
 
 One Claude Code session. The hooks write the session onto records and edits themselves (`_session`); the agent leaves that field empty.
 
-<a id="eskimis"></a>
+<a id="superseded"></a>
 
 ## Superseded
 
 The status of a section that no longer applies. It is not deleted: it moves to the end, stays visible with its history, and is not written to the file. "Make current" brings it back.
 
-<a id="gorev"></a>
+<a id="task"></a>
 
 ## Task
 
 The unit of work. Its key is a GitHub issue (`#58`) or a Jira key (`PROJ-12`). Its status is `open`, `active`, `done` or `dropped`; its summary is a one-line "where we left off". A task has records and a 👉 pointer.
 
-<a id="iz"></a>
+<a id="tracked-change"></a>
 
 ## Tracked change
 
 A change the agent made in a file that has not been accepted yet: an added line is green, a changed word sits in a red box next to the old one, a deleted block gets a marker. It is independent of git; staging or committing does not remove it.
 
-<a id="tracker-esitlemesi"></a>
+<a id="tracker-sync"></a>
 
 ## Tracker sync
 
 Syncing task statuses with GitHub or Jira: when a task is done or dropped the issue is closed, when it is reopened the issue is opened again; the machine that made the change sends it.
 
-<a id="bende-bekleyenler"></a>
+<a id="waiting-on-you"></a>
 
 ## Waiting on you
 
