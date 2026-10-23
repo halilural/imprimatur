@@ -46,7 +46,7 @@ const PREFIXES = {
 };
 const ITEM = new RegExp(`^- (👉 )?(${Object.keys(PREFIXES).join("|")}): ?(.*)$`);
 
-/** Task status from the "## Durum" / "## Status" text. @param {string} text */
+/** Task status from the "## Status" text ("## Durum" in Turkish files; the Turkish words below are kept on purpose). @param {string} text */
 function taskStatus(text) {
   // "İ".toLowerCase() leaves a combining dot: "i̇ptal".
   const t = text.trim().toLowerCase().replace(/\u0307/g, "");
@@ -56,7 +56,7 @@ function taskStatus(text) {
   return "open";
 }
 
-/** "(C) text", "(K, isteğe bağlı) text" → owner and the rest. @param {string} text */
+/** "(C) text", "(K, optional) text" → owner and the rest (the text in the brackets after C/K is ignored, in any language). @param {string} text */
 function ownerOf(text) {
   const m = /^\((C|K)\b[^)]*\)\s*/.exec(text);
   return m ? { owner: m[1], rest: text.slice(m[0].length) } : { owner: null, rest: text };
@@ -276,7 +276,7 @@ function filesAt(root, rev) {
 }
 
 /** Whether Imprimatur wrote the text (docs-export.js HEADER on its first line). @param {string | undefined} text */
-const generated = (text) => text?.split("\n", 1)[0].replace(/\r$/, "") === require("./docs-export.js").HEADER;
+const generated = (text) => require("./docs-export.js").isHeader(text?.split("\n", 1)[0].replace(/\r$/, "") ?? "");
 
 /** @typedef {"todo" | "design" | "product" | "test" | "skip" | "generated"} SourceType */
 
@@ -317,7 +317,7 @@ function sources(root, { rev } = {}) {
   return out;
 }
 
-const SPECIAL = { ADR: "Mimari kararlar (ADR)", PDR: "Ürün kararları (PDR)", TEST: "Elle testler" };
+const SPECIAL = { ADR: "Architecture decisions (ADR)", PDR: "Product decisions (PDR)", TEST: "Manual tests" };
 
 /** The repo's origin remote, or undefined. @param {string} root */
 function originOf(root) {
@@ -397,7 +397,7 @@ function importRepo(db, root, { dryRun = false, origin = originOf(root), rev, on
       positions.set(task.id, position);
       // What Markdown says now; kept in links.md, so a later run applies only
       // what changed in Markdown and leaves changes made in the database.
-      const md = { kind: r.kind, status: r.status, owner: r.owner, title: r.title || "(boş)", body: r.body, position, pointer: Boolean(r.pointer) };
+      const md = { kind: r.kind, status: r.status, owner: r.owner, title: r.title || "(empty)", body: r.body, position, pointer: Boolean(r.pointer) };
       const where = { source: rel, ...(r.area !== undefined && { area: r.area }) };
       const parentId = r.answers ? ids.get(r.answers) ?? null : null;
       let old = db.recordByUid(movedUid) ?? db.recordByUid(uid);

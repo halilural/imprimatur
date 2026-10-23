@@ -125,7 +125,7 @@ test("ingest: a section per ## under the file's title; same text writes nothing;
   const r1 = a.ingest(db, repo.id, "#5", "docs/todos/5/ANALYSIS.md", DOC, { actor: hook });
   assert.equal(r1.changed, 3);
   const doc = db.taskDocFind(repo.id, "#5");
-  assert.equal(doc.title, "Analiz · #5");
+  assert.equal(doc.title, "Analysis · #5");
   assert.equal(db.docFind(repo.id, "analysis"), undefined);
   let secs = db.docSections(doc.id);
   assert.deepEqual(secs.map((s) => [s.key, s.title, s.source]), [

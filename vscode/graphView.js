@@ -1,9 +1,9 @@
 // @ts-check
 // The Imprimatur panel (a webview, viewType imprimatur.graph). Six tabs:
-// "Ana sayfa", "Görevler" and "Bende bekleyenler" show Imprimatur's task records
-// (tasksView.js, #69); "Mimari" and "Ürün" the repo's design documents (docsView.js, #72); "Ajan değişiklikleri" is the Agent Change Graph: rows from
+// "Home", "Tasks" and "Waiting on you" show Imprimatur's task records
+// (tasksView.js, #69); "Architecture" and "Product" the repo's design documents (docsView.js, #72); "Agent changes" is the Agent Change Graph: rows from
 // graph.js, one colored lane per Claude session, click a row to open that edit's
-// diff, Accept an edit from its row or its right-click menu. Bende bekleyenler
+// diff, Accept an edit from its row or its right-click menu. Waiting on you
 // also shows what the agent asked at a turn's end (waiting.js) as cards.
 "use strict";
 const vscode = require("vscode");
@@ -81,13 +81,13 @@ const reviewStyle = () => (reviewCss ??= (() => {
 })());
 
 /** A table's rows until the host draws its tab (it draws only the visible one). @param {number} cols */
-const LOADING = (cols) => `<tr class="loading"><td colspan="${cols}" class="empty">Yükleniyor…</td></tr>`;
+const LOADING = (cols) => `<tr class="loading"><td colspan="${cols}" class="empty">Loading…</td></tr>`;
 
 const { THEME_CSS } = require("./theme.js");
 const { mascot } = require("./mascot.js");
 /** The panel's tabs: key (also its icon) and label. */
-// No Bende bekleyenler tab: a task's asks are on its page, the ones with no task on Ana sayfa (its badge counts them all).
-const TAB_BUTTONS = [["home", "Ana sayfa"], ["tasks", "Görevler"], ["analysis", "Analiz"], ["edits", "Ajan değişiklikleri"]];
+// No Waiting on you tab: a task's asks are on its page, the ones with no task on Home (its badge counts them all).
+const TAB_BUTTONS = [["home", "Home"], ["tasks", "Tasks"], ["analysis", "Analysis"], ["edits", "Agent changes"]];
 /** The pages under the Analiz tab (TASK-ANALYSIS): its button is on for each. */
 const HUB_TABS = ["architecture", "product", "glossary", "analysis"];
 
@@ -105,7 +105,7 @@ const ACTIVITY = {
   other: ["other", "Other"],
 };
 
-/** The waiting log that mirrors the user's open records (history.js): the records show in Bende bekleyenler themselves. */
+/** The waiting log that mirrors the user's open records (history.js): the records show in Waiting on you themselves. */
 const FILES_SESSION = "todo-files";
 
 /** Lane colours: the theme's chart colours first (#90: a high-contrast theme gets its own), fixed ones after. */
@@ -169,11 +169,11 @@ function html(data, root, nonce, waiting = [], opts = {}) {
   const cols = columnsOf(data.lanes);
   const time = (t) => new Date(t).toLocaleString();
   const sessionTitle = new Map(data.sessions.map((s) => [s.session, s.title]));
-  // Each lane's task, as in Bende bekleyenler: the key opens the task in Görevler, then its title.
+  // Each lane's task, as in Waiting on you: the key opens the task in Tasks, then its title.
   const taskCell = data.lanes.map((l, k) => {
     const color = `style="color:${COLORS[k % COLORS.length]}"`;
     if (!l.task) return `<span class="none" ${color} title="No todos/ file, branch or key names its task">No task</span>`;
-    const key = `<a href="#" class="task key" data-task="${esc(l.task)}" title="${esc(`Show ${l.task} in Görevler`)}">${esc(l.task)}</a>`;
+    const key = `<a href="#" class="task key" data-task="${esc(l.task)}" title="${esc(`Show ${l.task} in Tasks`)}">${esc(l.task)}</a>`;
     return `${key}<span ${color}>${esc(l.title ?? "")}</span>`;
   });
   // A record change: shown in its task's lane; it opens the record, nothing to accept (#60).
@@ -242,7 +242,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   label { display: inline-flex; align-items: center; gap: 4px; } label input { margin: 0; }
   table { border-collapse: collapse; width: 100%; }
   th { text-align: left; font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--vscode-panel-border); }
-  /* Ajan değişiklikleri */
+  /* Agent changes */
   #edits { padding-top: 14px; }
   .ehead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding-bottom: 10px; }
   #count-edits { color: var(--muted); font-size: var(--fs-sm); font-weight: 600; }
@@ -327,12 +327,12 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   .todo .chat { font-size: 10px; padding: 0 5px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
 </style></head><body>
 <header class="appbar"><span class="brand">${mascot(26)}<strong>Imprimatur</strong><span class="repo">${esc(opts.repoName ?? path.basename(root))}</span></span>
-<nav class="tabs" aria-label="Görünümler">${TAB_BUTTONS.map(([t, label]) => `<button data-tab="${t}">${tasksView.icon(/** @type {any} */ (t), 15)}${label}${t === "home" && inbox ? ` <span class="badge" title="${inbox} senden bekleniyor">${inbox}</span>` : t === "edits" && pending ? ` <span class="badge">${pending}</span>` : ""}</button>`).join("")}</nav>
-<span class="tools-r"><label class="searchbox">${tasksView.icon("search", 14)}<input id="filter" type="search" aria-label="Ara" placeholder="Ara… (/)"></label><button id="audit" class="tbtn" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">${tasksView.icon("audit", 14)}Audit</button><button id="scan" class="tbtn" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">${tasksView.icon("scan", 14)}Scan history</button></span></header>
+<nav class="tabs" aria-label="Views">${TAB_BUTTONS.map(([t, label]) => `<button data-tab="${t}">${tasksView.icon(/** @type {any} */ (t), 15)}${label}${t === "home" && inbox ? ` <span class="badge" title="${inbox} waiting on you">${inbox}</span>` : t === "edits" && pending ? ` <span class="badge">${pending}</span>` : ""}</button>`).join("")}</nav>
+<span class="tools-r"><label class="searchbox">${tasksView.icon("search", 14)}<input id="filter" type="search" aria-label="Search" placeholder="Search… (/)"></label><button id="audit" class="tbtn" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">${tasksView.icon("audit", 14)}Audit</button><button id="scan" class="tbtn" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">${tasksView.icon("scan", 14)}Scan history</button></span></header>
 <section id="edits"${tab === "edits" ? "" : " hidden"}><div class="ehead"><div id="kinds">${chips}</div><span class="n" id="count-edits">${data.rows.filter((r) => !r.record && !r.activity).length} edits · ${data.rows.filter((r) => r.activity).length} other calls · ${data.rows.filter((r) => r.record).length} record changes · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span></div><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><div class="etable"><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
 <tbody>${body}</tbody></table></div>
 <script type="application/json" id="rows">${JSON.stringify((tab === "edits" ? data.rows : []).map((r) => (r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview, file: r.file, n: r.n, md: /\.mdx?$/i.test(r.file) } : null))).replace(/</g, "\\u003c")}</script></section>
-<section id="pane" data-tab="${tab}"${tab === "edits" ? " hidden" : ""}>${tab === "edits" ? '<p class="empty loading" data-k="loading">Yükleniyor…</p>' : opts.pane ?? ""}</section>
+<section id="pane" data-tab="${tab}"${tab === "edits" ? " hidden" : ""}>${tab === "edits" ? '<p class="empty loading" data-k="loading">Loading…</p>' : opts.pane ?? ""}</section>
 <div id="pop"></div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
@@ -381,7 +381,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   // The repo goes into the saved state too: a panel restored after a reload shows the same one.
   // The host's view (tab, selected task, …) wins over the saved one: it opened the page.
   const state = Object.assign({ tab: "edits", qs: {}, expanded: [], kinds: ${JSON.stringify(Object.fromEntries(Object.keys({ edit: 1, record: 1, agent: 1, skill: 1, web: 1, mcp: 1, read: 0, search: 0, bash: 0, other: 0 }).map((k) => [k, ["edit", "record", "agent", "skill", "web", "mcp"].includes(k)])))}, agents: [], drafts: {}, back: [], showDone: [], old: [], edit: null }, vscode.getState(), ${JSON.stringify(view).replace(/</g, "\\u003c")}, { root: ${JSON.stringify(root).replace(/</g, "\\u003c")} });
-  // Bende bekleyenler is gone: a page saved on it opens Ana sayfa.
+  // Waiting on you is gone: a page saved on it opens Home.
   if (state.tab === "inbox") state.tab = "home";
   if (typeof state.q === "string") { state.qs.edits = state.qs.edits ?? state.q; delete state.q; }
   const filter = document.getElementById("filter");
@@ -391,7 +391,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   barHeight();
   if (appbar) new ResizeObserver(barHeight).observe(appbar);
   const HUB_TABS = ${JSON.stringify(HUB_TABS)};
-  const HINTS = { analysis: "Analizlerde ara… (/)", home: "Görevlerde ara… (/)", tasks: "Görev, karar, soru ara… (/)", inbox: "Bekleyenlerde ara… (/)", architecture: "Bölümlerde ara… (/)", product: "Bölümlerde ara… (/)", glossary: "Terimlerde ara… (/)", edits: "Dosya, istek ya da cevap süz… (/)" };
+  const HINTS = { analysis: "Search analyses… (/)", home: "Search tasks… (/)", tasks: "Search tasks, decisions, questions… (/)", inbox: "Search what is waiting… (/)", architecture: "Search sections… (/)", product: "Search sections… (/)", glossary: "Search terms… (/)", edits: "Filter by file, prompt or answer… (/)" };
   // The document tabs' mermaid blocks (#72): drawn with the extension's mermaid, loaded
   // once on the first block, into a shadow root of their div. The block patching compares
   // outerHTML, which leaves a shadow root out: a refresh neither redraws nor flickers, and a
@@ -457,7 +457,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     }
     const err = document.createElement("p");
     err.className = "err";
-    err.textContent = "Diyagram çizilemedi: " + entry.error;
+    err.textContent = "Could not draw the diagram: " + entry.error;
     const pre = document.createElement("pre");
     pre.textContent = div.textContent;
     root.replaceChildren(style, err, pre);
@@ -502,18 +502,18 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     const fit = () => { k = 1; x = 0; y = 0; draw(); };
     const hint = document.createElement("span");
     hint.className = "hint";
-    hint.textContent = "Ctrl+tekerlek: yakınlaştır · sürükle: kaydır";
+    hint.textContent = "Ctrl+wheel: zoom · drag: pan";
     tools.appendChild(hint);
-    button("−", "Uzaklaştır", () => center(1 / (1 + zoomStep / 100)));
-    const pct = button("100%", "Sığdır", fit);
+    button("−", "Zoom out", () => center(1 / (1 + zoomStep / 100)));
+    const pct = button("100%", "Fit", fit);
     pct.className = "pct";
-    button("+", "Yakınlaştır", () => center(1 + zoomStep / 100));
-    const full = button("Tam ekran", "Tam ekran (Esc kapatır)", () => setFull(!wrap.classList.contains("full")));
+    button("+", "Zoom in", () => center(1 + zoomStep / 100));
+    const full = button("Full screen", "Full screen (Esc closes)", () => setFull(!wrap.classList.contains("full")));
     const onKey = (e) => { if (e.key === "Escape") setFull(false); };
     const setFull = (on) => {
       wrap.classList.toggle("full", on);
       full.textContent = on ? "Kapat" : "Tam ekran";
-      hint.textContent = on ? "tekerlek: yakınlaştır · sürükle: kaydır · Esc: kapat" : "Ctrl+tekerlek: yakınlaştır · sürükle: kaydır";
+      hint.textContent = on ? "wheel: zoom · drag: pan · Esc: close" : "Ctrl+wheel: zoom · drag: pan";
       if (on) document.addEventListener("keydown", onKey); else document.removeEventListener("keydown", onKey);
       fit();
     };
@@ -590,7 +590,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
    * A task page's tabs: the chosen one (kept across tasks), else its first; a record to flash
    * opens its own; while the search box filters, every pane shows. Again after each redraw.
    */
-  /** Görev analizleri: the chosen task's analysis (kept), else the first; every one while the search filters. */
+  /** Task analyses: the chosen task's analysis (kept), else the first; every one while the search filters. */
   const anaHub = () => {
     const list = document.querySelector("#pane .alist");
     if (!list) return;
@@ -630,7 +630,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     if (tab !== "edits" && paneEl.dataset.tab !== tab) paneEl.className = "stale";
     else paneEl.removeAttribute("class");
     document.getElementById("count-edits").hidden = tab !== "edits";
-    // Mimari, Ürün, Sözlük and Görev analizleri are one tab, Analiz: it opens the last one seen.
+    // Architecture, Product, Glossary and Task analyses are one tab, Analysis: it opens the last one seen.
     const top = HUB_TABS.includes(tab) ? "analysis" : tab;
     if (HUB_TABS.includes(tab)) state.atab = tab;
     document.querySelectorAll("nav.tabs [data-tab]").forEach((b) => { b.classList.toggle("on", b.dataset.tab === top); b.setAttribute("aria-current", b.dataset.tab === top ? "page" : "false"); });
@@ -640,13 +640,13 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     const q = (state.qs[tab] || "").toLowerCase();
     document.querySelectorAll("#kinds .chip").forEach((b) => b.classList.toggle("on", state.kinds[b.dataset.kind] !== false));
     document.querySelectorAll("a.grp").forEach((a) => (a.textContent = (state.agents.includes(a.dataset.agent) ? "▾" : "▸") + a.textContent.slice(1)));
-    // Bende bekleyenler: a task chip and a bucket, each kept only while the page still has it; they combine.
+    // Waiting on you: a task chip and a bucket, each kept only while the page still has it; they combine.
     const chip = state.itask ? document.querySelector('#pane [data-act="itask"][data-id="' + state.itask + '"]') : null;
     const bucket = document.querySelector('#pane [data-act="ibucket"][data-b="' + state.ibucket + '"]') ? state.ibucket : null;
     document.querySelectorAll("#edits tr[data-q]").forEach((tr) => {
       // A subagent's call shows with its open Agent row, whatever its kind; other rows by kind.
       const kindOn = tr.dataset.parent ? state.agents.includes(tr.dataset.parent) : !tr.dataset.kind || state.kinds[tr.dataset.kind] !== false;
-      // A bucket chosen on Bende bekleyenler shows its turn-end asks alone.
+      // A bucket chosen on Waiting on you shows its turn-end asks alone.
       const bucketOn = tr.dataset.b === undefined || ((!bucket || tr.dataset.b === bucket) && (!chip || tr.dataset.tk === chip.dataset.key));
       const show = kindOn && bucketOn && tr.dataset.q.toLowerCase().includes(q);
       tr.style.display = show ? "" : "none";
@@ -749,13 +749,13 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   };
   /** Steps ticked on the page that the host has not drawn back yet: "record:line" → ticked. */
   const steps = new Map();
-  /** A card's "2/5 adım" from its boxes. */
+  /** A card's "2/5 steps" from its boxes. */
   const countSteps = (card) => {
     const n = card?.querySelector(".row1 .steps");
     if (!n) return;
     const boxes = [...card.querySelectorAll("input.mdstep")];
     const done = boxes.filter((b) => b.checked).length;
-    n.textContent = done + "/" + boxes.length + " adım";
+    n.textContent = done + "/" + boxes.length + " steps";
     n.classList.toggle("all", done === boxes.length);
   };
   /** After a redraw: a tick the host has drawn is confirmed; one it has not yet stays as clicked. */
@@ -1223,7 +1223,7 @@ function setPanelScope(store) {
 const pageView = () => ({ tab: view.tab, sel: view.sel, filter: view.filter, all: view.all, showDone: view.showDone, old: view.old, edit: view.edit });
 
 /**
- * Moves the view: a tab, or a task (by key in a repo, or by one of its records) on Görevler.
+ * Moves the view: a tab, or a task (by key in a repo, or by one of its records) on Tasks.
  * A document tab with `section` (a key) lights that section up (#72).
  * @param {{tab?: string, sel?: number | null, filter?: string, all?: boolean, showDone?: number[], old?: number[], root?: string, task?: string, record?: number, section?: string, edit?: string | null}} at
  * @returns {boolean} false: the task or record is not in the database
@@ -1314,7 +1314,7 @@ async function openRepoFile(root, rel, line) {
 
 /**
  * Opens a task's analysis file (TASK-ANALYSIS): only a path some analysis of the task's repo
- * (any repo on "Bütün repolar") was read from, in that repo or under ~/.claude/plans.
+ * (any repo on "All repos") was read from, in that repo or under ~/.claude/plans.
  * @param {string} rel @param {number} repoId
  */
 function openAnalysisFile(rel, repoId) {
@@ -1328,7 +1328,7 @@ function openAnalysisFile(rel, repoId) {
   return vscode.window.showTextDocument(vscode.Uri.file(file), { preview: true });
 }
 
-/** Show a task (or record) of the open panel's repo on Görevler. @param {{root: string, task?: string, record?: number}} at */
+/** Show a task (or record) of the open panel's repo on Tasks. @param {{root: string, task?: string, record?: number}} at */
 function showIn(at) {
   if (!moveView(at)) return void vscode.window.showInformationMessage(`Imprimatur: ${at.task ?? "this record"} has no records yet.`);
   panel?.webview.postMessage({ type: "view", view: pageView() });
@@ -1384,18 +1384,18 @@ async function recDismiss(id) {
   refresh?.(true);
 }
 
-/** "Yeni görev": a key and a title, then the task opens. */
+/** "New task": a key and a title, then the task opens. */
 async function newTask() {
   const root = shown;
   if (!root || !records.dbOf()) return;
-  const key = (await vscode.window.showInputBox({ prompt: "Görev anahtarı (#70, PROJ-12 …)", validateInput: (v) => (v.trim() ? undefined : "Boş olamaz") }))?.trim();
+  const key = (await vscode.window.showInputBox({ prompt: "Task key (#70, PROJ-12 …)", validateInput: (v) => (v.trim() ? undefined : "Cannot be empty") }))?.trim();
   if (!key) return;
   const db = records.dbOf();
   const repo = db?.repoOf(root);
   if (!repo) return;
   let task = db.taskByKey(repo.id, key);
   if (!task) {
-    const title = await vscode.window.showInputBox({ prompt: `${key} başlığı` });
+    const title = await vscode.window.showInputBox({ prompt: `Title of ${key}` });
     if (title === undefined) return;
     task = db.upsertTask(repo.id, key, { title: title.trim(), status: "active" });
   }
@@ -1530,7 +1530,7 @@ const panelState = () => ({ open: !!panel, visible: !!panel?.visible, root: show
 
 /**
  * What waits on the user, counted once for every place that shows it (the launcher's
- * badge, the status bar, the panel's tab badge, Bende bekleyenler): the open panel's
+ * badge, the status bar, the panel's tab badge, Waiting on you): the open panel's
  * repo and scope, else this root's repo.
  * @param {string | undefined} root the window's repo when no panel is open
  */

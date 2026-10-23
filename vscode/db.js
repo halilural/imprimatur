@@ -312,11 +312,11 @@ const FIELDS = {
   section: ["title", "body", "position", "status", "records", "source"],
 };
 /** Design documents (#72) and the project glossary: kind → the title a new one gets. */
-const DOC_KINDS = { architecture: "Mimari Tasarım Dokümanı", product: "Ürün Tasarım Dokümanı", glossary: "Proje Sözlüğü" };
+const DOC_KINDS = { architecture: "Architecture Design Document", product: "Product Design Document", glossary: "Project Glossary" };
 /** A task's analysis document (TASK-ANALYSIS): one per task, its scope the task's key. */
 const ANALYSIS = "analysis";
 /** The title a new analysis document gets. @param {string} taskKey */
-const analysisTitle = (taskKey) => `Analiz · ${taskKey}`;
+const analysisTitle = (taskKey) => `Analysis · ${taskKey}`;
 /** A section source's path, at most. */
 const SOURCE_MAX = 1000;
 const SECTION_STATUSES = ["current", "superseded"];
@@ -600,7 +600,7 @@ class Db {
     const lines = this.q("SELECT * FROM records WHERE task_id = ? AND status = 'open' ORDER BY position").all(task.epic_id)
       .map(recordOf).filter((r) => refersTo(r, task.key));
     if (!lines.length) return [];
-    const note = `${task.key} ${task.status === "dropped" ? "bırakıldı" : "bitti"} (${day(now)})`;
+    const note = `${task.key} ${task.status === "dropped" ? "dropped" : "done"} (${day(now)})`;
     const held = lines.find((r) => r.pointer);
     for (const r of lines) this.updateRecord(r.id, { status: "done", body: r.body ? `${r.body}\n\n${note}` : note }, actor);
     if (held) {

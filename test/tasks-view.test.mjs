@@ -269,10 +269,10 @@ test("#69 the panel page: tabs, only the visible tab drawn, its script parses", 
     const data = { rows: [{ file: "a.md", n: 1, t: Date.now(), added: 1, removed: 0, lane: 0, intent: "Edit a" }], lanes: [{ first: 0, last: 0 }], sessions: [] };
     const pane = tv.paneHtml(s.db, s.root, { tab: "tasks" });
     const page = html(data, s.root, "N", [], { view: { tab: "tasks", sel: s.t1.id }, pane, inbox: 4, repoName: "repo" });
-    for (const label of ["Ana sayfa", "Görevler", "Analiz", "Ajan değişiklikleri"]) assert.ok(page.includes(`>${label}`), label);
-    // No Bende bekleyenler tab: what waits is counted on Ana sayfa.
+    for (const label of ["Home", "Tasks", "Analysis", "Agent changes"]) assert.ok(page.includes(`>${label}`), label);
+    // No Waiting on you tab: what waits is counted on Home.
     assert.ok(!page.includes('data-tab="inbox"'));
-    assert.match(page, /data-tab="home">[\s\S]*?Ana sayfa <span class="badge" title="4 senden bekleniyor">4<\/span>/);
+    assert.match(page, /data-tab="home">[\s\S]*?Home <span class="badge" title="4 waiting on you">4<\/span>/);
     assert.match(page, /<section id="pane" data-tab="tasks">/);
     assert.match(page, /<section id="edits" hidden>/);
     assert.ok(!page.includes('data-file="a.md"'), "the edits table is not drawn on another tab");
@@ -303,7 +303,7 @@ test("steps in a record body: checkboxes with their line, a tick rewrites that l
   const docs = req("../vscode/docsView.js");
   assert.deepEqual(docs.stepsOf(body), [{ line: 2, done: false }, { line: 3, done: true }, { line: 8, done: false }]);
   let inbox = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting: [] });
-  assert.match(inbox, /<input type="checkbox" class="mdstep" data-line="2" aria-label="Adım">Pod/);
+  assert.match(inbox, /<input type="checkbox" class="mdstep" data-line="2" aria-label="Step">Pod/);
   assert.match(inbox, /data-line="3" checked/);
   assert.ok(inbox.includes("1/3 adım"));
   assert.ok(!docs.renderMarkdown(body).includes('data-line="2" aria'), "documents: boxes only show");

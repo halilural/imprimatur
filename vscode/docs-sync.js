@@ -22,12 +22,12 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
-const { docMarkdown, fileOf, inside, docsSettings, FILES, HEADER } = require("./docs-export.js");
+const { docMarkdown, fileOf, inside, docsSettings, FILES, isHeader } = require("./docs-export.js");
 const { fenceTracker, filesAt, importRepo, originOf } = require("./import.js");
 const { slugify } = require("./docsView.js");
 
 const ACTOR = { kind: /** @type {"import"} */ ("import"), id: "file" };
-const OVERVIEW = { key: "overview", title: "Genel bakış" };
+const OVERVIEW = { key: "overview", title: "Overview" };
 
 const hash = (/** @type {string} */ s) => crypto.createHash("sha1").update(s).digest("hex").slice(0, 16);
 const norm = (/** @type {string | null | undefined} */ s) => String(s ?? "").replace(/\r\n/g, "\n").trim();
@@ -142,7 +142,7 @@ function optedIn(root) {
 }
 
 /** Whether the text is one Imprimatur wrote. @param {string} text */
-const managed = (text) => text.split("\n", 1)[0].replace(/\r$/, "") === HEADER;
+const managed = (text) => isHeader(text.split("\n", 1)[0].replace(/\r$/, ""));
 
 /** @param {number} repoId @param {string} kind */
 const stateKey = (repoId, kind) => `docsync:${repoId}:${kind}`;

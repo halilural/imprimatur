@@ -1,7 +1,7 @@
 // @ts-check
 // The Imprimatur side bar's launcher (#69): rows that open the Imprimatur panel
-// on a tab: Ana sayfa, Görevler, Bende bekleyenler (with what waits on the user),
-// Mimari and Ürün (the design documents, #72) and Ajan değişiklikleri (edits under review). Its badge counts what waits on
+// on a tab: Home, Tasks, Waiting on you (with what waits on the user),
+// Architecture and Product (the design documents, #72) and Agent changes (edits under review). Its badge counts what waits on
 // the user, as the old "Waiting on me" view's did.
 "use strict";
 const vscode = require("vscode");
@@ -9,12 +9,12 @@ const vscode = require("vscode");
 /** @typedef {{edits: number, inbox: number}} Counts */
 
 const ROWS = [
-  { id: "home", label: "Ana sayfa", icon: "home", command: "imprimatur.openHome", tooltip: "Nerede kaldık, senden beklenenler, görevler" },
-  { id: "tasks", label: "Görevler", icon: "checklist", command: "imprimatur.openTasks", tooltip: "Görevler ve kayıtları" },
-  { id: "architecture", label: "Mimari", icon: "symbol-structure", command: "imprimatur.openArchitecture", tooltip: "Mimari tasarım dokümanı: nasıl kurulu" },
-  { id: "product", label: "Ürün", icon: "package", command: "imprimatur.openProduct", tooltip: "Ürün tasarım dokümanı: kullanıcı ne alıyor" },
-  { id: "glossary", label: "Sözlük", icon: "book", command: "imprimatur.openGlossary", tooltip: "Proje sözlüğü: terimler ve anlamları" },
-  { id: "edits", label: "Ajan değişiklikleri", icon: "git-merge", command: "imprimatur.openGraph", tooltip: "Agent Change Graph: ajanın düzenlemeleri" },
+  { id: "home", label: "Home", icon: "home", command: "imprimatur.openHome", tooltip: "Where we left off, what is waiting on you, tasks" },
+  { id: "tasks", label: "Tasks", icon: "checklist", command: "imprimatur.openTasks", tooltip: "Tasks and their records" },
+  { id: "architecture", label: "Architecture", icon: "symbol-structure", command: "imprimatur.openArchitecture", tooltip: "Architecture design document: how it is built" },
+  { id: "product", label: "Product", icon: "package", command: "imprimatur.openProduct", tooltip: "Product design document: what the user gets" },
+  { id: "glossary", label: "Glossary", icon: "book", command: "imprimatur.openGlossary", tooltip: "Project glossary: terms and their meanings" },
+  { id: "edits", label: "Agent changes", icon: "git-merge", command: "imprimatur.openGraph", tooltip: "Agent Change Graph: the agent's edits" },
 ];
 
 class LauncherView {
@@ -37,7 +37,7 @@ class LauncherView {
       // the database or a log being written: the next change catches up
     }
     const n = this.now.inbox;
-    if (this.view) this.view.badge = n ? { value: n, tooltip: `${n} bende bekliyor` } : undefined;
+    if (this.view) this.view.badge = n ? { value: n, tooltip: `${n} waiting on you` } : undefined;
     this.changed.fire(undefined);
   }
 
@@ -47,13 +47,13 @@ class LauncherView {
 
   /** @param {typeof ROWS[number]} row */
   getTreeItem(row) {
-    // What waits on the user counts on Ana sayfa (no Bende bekleyenler row): asks are on their task pages.
+    // What waits on the user counts on Home (no Waiting on you row): asks are on their task pages.
     const label = row.id === "home" && this.now.inbox ? `${row.label} (${this.now.inbox})` : row.label;
     const it = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
     it.id = row.id;
     it.iconPath = new vscode.ThemeIcon(row.icon, row.id === "home" && this.now.inbox ? new vscode.ThemeColor("charts.orange") : undefined);
     it.tooltip = row.tooltip;
-    if (row.id === "edits" && this.now.edits) it.description = `${this.now.edits} incelemede`;
+    if (row.id === "edits" && this.now.edits) it.description = `${this.now.edits} under review`;
     it.command = { command: row.command, title: row.label };
     return it;
   }

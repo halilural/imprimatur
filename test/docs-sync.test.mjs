@@ -84,7 +84,7 @@ const PRODUCT = `# Ürün
 
 test("parse: a hand-written file → sections (overview, ## headings, ### kept, toc dropped); the managed form round-trips", () => {
   const secs = parseHand(ARCH);
-  assert.deepEqual(secs.map((s) => [s.key, s.title]), [["overview", "Genel bakış"], ["profil", "Profil"], ["ajan", "Ajan"]]);
+  assert.deepEqual(secs.map((s) => [s.key, s.title]), [["overview", "Overview"], ["profil", "Profil"], ["ajan", "Ajan"]]);
   assert.equal(secs[0].body, "Bileşenler ve bağları.");
   assert.match(secs[2].body, /^```mermaid[\s\S]*### Ayrıntı\n\n- ARCH: Workflow/);
   // The same title twice: unique keys; "## 2. X" loses its number.
