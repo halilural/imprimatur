@@ -113,7 +113,7 @@ test("the panel: unread by task on the list, the task page and Home; Mark as rea
   assert.match(html, /2 edits not accepted/);
   const home = tv.homeModel(db, "/a/proj", { openEdits });
   assert.deepEqual([home.unread.edits, home.unread.sections.length], [3, 1]);
-  assert.match(tv.homeHtml(home), /Unread · 4/);
+  assert.match(tv.homeHtml(home), /3 edits not accepted.*1 section changed in the docs/s);
   const m = docs.docModel(db, "/a/proj", "architecture");
   assert.ok(m.current.find((s) => s.key === "reads").unread);
   assert.match(docs.docHtml(m), /Unread/);
@@ -132,4 +132,19 @@ test("the status line's edit count: fresh from the extension, else none", () => 
   assert.equal(readUnread(root), 4);
   assert.equal(readUnread(root, Date.now() + 16 * 60 * 1000), 0);
   assert.ok(fs.existsSync(path.join(root, UNREAD_FILE)));
+});
+
+test("Home: unread is one line however many sections changed; a task's page still lists its own", () => {
+  const tv = req("../vscode/tasksView.js");
+  const sec = (id, label) => ({ id, label, title: `S${id}`, tab: "architecture", key: `s${id}` });
+  const sections = [...Array(75)].map((_, i) => sec(i + 1, i < 40 ? "Architecture" : "Glossary"));
+  const home = tv.unreadHtml({ edits: 2, sections });
+  assert.equal((home.match(/class="urow"/g) ?? []).length, 0);
+  assert.match(home, /75 sections changed in the docs since you last read/);
+  assert.match(home, /data-act="readGo" data-tab="architecture" data-key="s1"/);
+  assert.match(home, /2 edits not accepted/);
+  assert.match(home, new RegExp(`data-act="read" data-ids="${sections.map((s) => s.id).join(",")}"`));
+  assert.match(tv.unreadHtml({ edits: 0, sections: [sec(1, "Architecture")] }), /1 section changed/);
+  const page = tv.unreadHtml({ edits: 0, sections: sections.slice(0, 3) }, "#42");
+  assert.equal((page.match(/class="urow"/g) ?? []).length, 3);
 });

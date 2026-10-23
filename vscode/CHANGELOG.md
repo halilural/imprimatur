@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.70.1] - 2026-10-23
+
+### Changed
+- Home shows unread document changes as one line ("N sections changed in the docs since you
+  last read", with Mark as read) instead of a list, so a large rewrite no longer pushes Where
+  we left off and Waiting on you off the page. The sections stay marked on the Analysis tab.
+- README badges: Marketplace and Open VSX version and downloads, release status, license.
+
 ## [0.70.0] - 2026-10-23
 
 First release on the Visual Studio Marketplace and Open VSX.
