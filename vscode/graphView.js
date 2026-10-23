@@ -88,7 +88,7 @@ const { mascot } = require("./mascot.js");
 /** The panel's tabs: key (also its icon) and label. */
 // No Waiting on you tab: a task's asks are on its page, the ones with no task on Home (its badge counts them all).
 const TAB_BUTTONS = [["home", "Home"], ["tasks", "Tasks"], ["analysis", "Analysis"], ["edits", "Agent changes"]];
-/** The pages under the Analiz tab (TASK-ANALYSIS): its button is on for each. */
+/** The pages under the Analysis tab (TASK-ANALYSIS): its button is on for each. */
 const HUB_TABS = ["architecture", "product", "glossary", "analysis"];
 
 /** Row kinds of the graph's filter (#55): badge and label. */
