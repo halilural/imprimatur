@@ -563,13 +563,23 @@ function turnCard(r) {
 }
 
 /**
- * What the user has not read yet (#92): the edits to accept (on Agent changes) and each
- * section changed since they read it, to open or mark read.
+ * What the user has not read yet (#92): the edits to accept (on Agent changes) and the
+ * sections changed since they read them. On Home a single line; on a task's page each
+ * section of that task, to open or mark read.
  * @param {{edits: number, sections: any[]}} u @param {string} [key] the task's: its edits alone
  */
 function unreadHtml(u, key) {
   if (!u.edits && !u.sections.length) return "";
   const edits = u.edits ? `<button class="mini" data-act="edits" data-key="${esc(key ?? "")}">${u.edits} edit${u.edits === 1 ? "" : "s"} not accepted ${icon("arrow", 12)}</button>` : "";
+  // Home (no task): one line, however many changed; the sections themselves are on Analysis,
+  // each with its Unread mark. A rewrite of a whole document must not bury Where we left off.
+  if (key === undefined) {
+    const first = u.sections[0];
+    const n = u.sections.length;
+    const docs = first ? `<a href="#" class="ulink" data-act="readGo" data-tab="${esc(first.tab)}" data-key="${esc(first.tab === "analysis" ? first.scope : first.key)}">${n} section${n === 1 ? "" : "s"} changed in the docs since you last read ${icon("arrow", 12)}</a>` : "";
+    const markAll = n ? `<button class="link" data-act="read" data-ids="${u.sections.map((s) => s.id).join(",")}">Mark as read</button>` : "";
+    return `<div class="unread compact" data-k="unread"><div class="uhead"><span class="lbl">Unread</span>${edits}${docs}${markAll}</div></div>`;
+  }
   const all = u.sections.length > 1 ? `<button class="link" data-act="read" data-ids="${u.sections.map((s) => s.id).join(",")}">Mark all as read</button>` : "";
   const rows = u.sections.map((s) => `<div class="urow" data-k="u${s.id}"><a href="#" data-act="readGo" data-tab="${esc(s.tab)}" data-key="${esc(s.tab === "analysis" ? s.scope : s.key)}"><span class="dim">${esc(s.label)}</span> ${esc(s.title)}</a><button class="mini" data-act="read" data-ids="${s.id}">Mark as read</button></div>`).join("");
   return `<div class="unread" data-k="unread"><div class="uhead"><span class="lbl">Unread · ${u.edits + u.sections.length}</span>${edits}${all}</div>${rows}</div>`;
@@ -1000,7 +1010,8 @@ const TASKS_CSS = `
   .unr { color: var(--vscode-editorInfo-foreground, var(--acc)); font-weight: 700; }
   .unread { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); }
   .unread .uhead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; } .unread .lbl { font-weight: 700; }
-  .unread .urow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 0; } .unread .urow a { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+  .unread .urow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 0; }
+  .unread.compact { padding: 8px 14px; } .unread .ulink { font-weight: 600; } .unread .urow a { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
   #pane { --card: var(--surface); line-height: 1.5; padding-bottom: 32px; }
   #pane h1 { margin: 0; font-size: var(--fs-h1); line-height: 1.25; font-weight: 800; letter-spacing: -.01em; }
   #pane h2 { margin: 0; font-size: var(--fs-h3); font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -1179,5 +1190,5 @@ const TASKS_CSS = `
 
 module.exports = {
   TABS, ANALYSIS_TABS, FILTERS, plainTitle, titleParts, subHeads, TASKS_CSS, analysisHub, analysisHubHtml, ICON, icon, KIND_LABEL, kindChip, bucketOf, userActor, parseQuickAdd, isAsk, repoOfRoot, scopeRepos, describeVersion,
-  tasksPage, inboxModel, inboxCount, openTurn, splitText, TITLE_MAX, BODY_MAX, homeModel, unreadOf, tasksHtml, inboxHtml, homeHtml, paneHtml, applyMessage, cleanView, esc,
+  tasksPage, inboxModel, inboxCount, openTurn, splitText, TITLE_MAX, BODY_MAX, homeModel, unreadOf, unreadHtml, tasksHtml, inboxHtml, homeHtml, paneHtml, applyMessage, cleanView, esc,
 };

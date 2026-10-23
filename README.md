@@ -2,6 +2,13 @@
 
 # Imprimatur
 
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/halilural.imprimatur?label=VS%20Code%20Marketplace&color=e8590c)](https://marketplace.visualstudio.com/items?itemName=halilural.imprimatur)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/halilural.imprimatur?color=e8590c)](https://marketplace.visualstudio.com/items?itemName=halilural.imprimatur)
+[![Open VSX](https://img.shields.io/open-vsx/v/halilural/imprimatur?label=Open%20VSX&color=a60ee5)](https://open-vsx.org/extension/halilural/imprimatur)
+[![Open VSX downloads](https://img.shields.io/open-vsx/dt/halilural/imprimatur?label=downloads&color=a60ee5)](https://open-vsx.org/extension/halilural/imprimatur)
+[![Release](https://github.com/halilural/imprimatur/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/halilural/imprimatur/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/github/license/halilural/imprimatur)](LICENSE)
+
 **See every doc edit your AI agent makes as tracked changes, until you accept it.**
 
 Imprimatur is a VS Code extension and a Claude Code plugin (hooks and an MCP server).
