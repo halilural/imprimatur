@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Where you left off</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .win { left: 80px; top: 214px; width: 1075px; height: 648px; }
+  .tl { display: flex; height: calc(100% - 54px); }
+  .tlist { width: 290px; flex: none; background: #fff8f1; border-right: 1.5px solid var(--line); padding: 14px 12px; display: flex; flex-direction: column; gap: 9px; }
+  .pills { display: flex; gap: 6px; }
+  .fpill { padding: 4px 10px; border-radius: 14px; border: 1.5px solid var(--line); font-size: 12.5px; font-weight: 800; color: var(--muted); background: #fff; }
+  .fpill.on { border-color: var(--acc); color: var(--acc); background: var(--acc-soft); }
+  .tlh { display: flex; justify-content: space-between; font-size: 13px; font-weight: 800; color: var(--ink); padding: 2px 4px; }
+  .tlh .lk { color: var(--acc); }
+  .trow { display: flex; gap: 9px; padding: 9px 10px; border-radius: 9px; border: 1.5px solid transparent; }
+  .trow.on { background: #fff; border-color: var(--acc-line); box-shadow: 0 2px 6px rgba(120,60,20,.08); }
+  .sdot { margin-top: 5px; width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--c); }
+  .s-active { --c: var(--blue); } .s-open { --c: #a98c74; } .s-done { --c: var(--green); }
+  .tcol { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .tmeta { display: flex; gap: 8px; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .tttl { font-size: 14.5px; font-weight: 800; color: var(--text); }
+  .tmeta b.on-you { color: var(--acc); } .tmeta b.unr { color: var(--blue); }
+  .dashed { margin-top: auto; border: 1.5px dashed #dcc3aa; border-radius: 9px; padding: 8px; text-align: center; font-size: 13px; font-weight: 800; color: var(--muted); }
+  .tpage { flex: 1; padding: 16px 24px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .meta { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; }
+  .st { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 800; color: var(--blue); }
+  .st::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--blue); }
+  .ext { color: var(--acc); font-weight: 800; display: inline-flex; gap: 5px; align-items: center; }
+  .mini-b { display: inline-flex; gap: 6px; align-items: center; padding: 2px 9px; border: 1.5px solid var(--line); border-radius: 7px; font-size: 12.5px; font-weight: 800; color: var(--ink); }
+  h2.t { margin: 0; font-size: 26px; font-weight: 800; color: var(--ink); letter-spacing: -.4px; }
+  .sum { margin: -4px 0 0; font-size: 14.5px; font-weight: 600; color: var(--muted); }
+  .callout { display: flex; gap: 12px; align-items: flex-start; padding: 10px 14px; border: 1.5px solid var(--acc); border-radius: 9px; background: var(--acc-soft); }
+  .callout svg { width: 22px; height: 22px; color: var(--acc); stroke-width: 2.6; margin-top: 2px; }
+  .callout .c { display: flex; flex-direction: column; gap: 1px; }
+  .callout .pt { font-size: 16px; font-weight: 800; color: var(--text); }
+  .callout .d { font-size: 13px; font-weight: 700; color: var(--muted); }
+  .unread { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border: 1.5px solid #bcd0f2; border-radius: 9px; background: #f4f8ff; font-size: 13px; font-weight: 700; }
+  .unread .u { color: var(--blue); font-weight: 800; letter-spacing: .4px; }
+  .unread .lnk { color: var(--text); } .unread .lnk .dk { color: var(--muted); }
+  .ttabs { display: flex; gap: 4px; border-bottom: 1.5px solid var(--line); margin-top: 2px; }
+  .ttab { padding: 7px 11px; font-size: 13.5px; font-weight: 800; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1.5px; display: flex; gap: 6px; align-items: center; }
+  .ttab.on { color: var(--ink); border-bottom-color: var(--acc); }
+  .ttab .n { font-size: 11.5px; padding: 0 6px; border-radius: 9px; background: #f3e6d8; color: var(--ink); }
+  .ttab.ask .n { background: var(--acc); color: #fff; }
+  .h2row { display: flex; justify-content: space-between; align-items: center; }
+  .h2row h3 { margin: 0; font-size: 15px; font-weight: 800; color: var(--ink); }
+  .h2row .ghost { font-size: 12.5px; font-weight: 800; color: var(--muted); }
+  .trec { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-bottom: 1px solid #f5eadf; font-size: 14.5px; font-weight: 700; }
+  .check { width: 18px; height: 18px; border-radius: 5px; border: 2px solid #b0896a; flex: none; display: flex; align-items: center; justify-content: center; }
+  .check.on { background: var(--green); border-color: var(--green); color: #fff; } .check svg { width: 12px; height: 12px; stroke-width: 3.4; }
+  .trec .ttl { flex: 1; } .trec.done .ttl { color: #7d5a40; text-decoration: line-through; text-decoration-thickness: 1.5px; }
+  .owner { padding: 0 9px; border-radius: 10px; border: 1.5px solid #d9c3ad; font-size: 12px; font-weight: 800; color: var(--muted); }
+  .owner.me { border-color: var(--acc); color: var(--acc); }
+  .mk { font-size: 12px; font-weight: 800; color: var(--muted); border: 1.5px solid var(--line); border-radius: 7px; padding: 1px 7px; }
+  .quick { display: flex; gap: 9px; align-items: center; padding: 8px 11px; border: 1.5px dashed #dcc3aa; border-radius: 9px; font-size: 13px; font-weight: 700; color: var(--muted); margin-top: 4px; }
+  .quick .mono { font-size: 12.5px; color: var(--ink); }
+  /* right column */
+  .notes { left: 1195px; top: 226px; width: 360px; gap: 16px; }
+  .note p { font-size: 16px; }
+  .pop { margin-top: 10px; background: #fff; border: 1.5px solid var(--line); border-radius: 11px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 10px 24px -14px rgba(120,60,20,.35); }
+  .dec { border: 1.5px solid var(--line); border-radius: 9px; padding: 7px 10px; display: flex; flex-direction: column; gap: 4px; background: var(--card); }
+  .dec .m { display: flex; gap: 8px; align-items: center; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .dec .tt { font-size: 14px; font-weight: 800; color: var(--text); }
+  .qrow { display: flex; gap: 8px; align-items: center; font-size: 14px; font-weight: 800; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+</style></head>
+<body>
+<i class="plus p1"></i><i class="plus p2"></i><i class="plus p3"></i><i class="plus p4"></i>
+<div class="head"><h1>Where you left off</h1><div class="ul"></div><p>Every task keeps its records, and the 👉 marks where work stopped.</p></div>
+<img class="mascot" src="../logo.svg" alt="">
+
+<div class="win">
+  <div class="appbar">
+    <span class="brand"><img src="../logo.svg" alt="">Imprimatur<span class="repo">web-app</span></span>
+    <nav class="tabs">
+      <span class="tab">Home <span class="badge">7</span></span>
+      <span class="tab on"><svg class="ic" viewBox="0 0 24 24"><path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/></svg>Tasks</span>
+      <span class="tab">Analysis</span>
+      <span class="tab">Agent changes <span class="badge">4</span></span>
+    </nav>
+    <span class="tools"><span class="search"><svg class="ic" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>Search… (/)</span></span>
+  </div>
+  <div class="tl">
+    <aside class="tlist">
+      <div class="pills"><span class="fpill on">Active · 4</span><span class="fpill">Open · 2</span><span class="fpill">Done · 4</span></div>
+      <div class="tlh"><span>web-app</span><span class="lk">All repos</span></div>
+      <div class="trow on"><span class="sdot s-active"></span><span class="tcol"><span class="tmeta"><span class="key">#42</span><span>In progress</span></span><span class="tttl">Background job queue</span><span class="tmeta"><b class="on-you">1 on you</b><b class="unr">2 unread</b><span>3 open to-dos</span></span></span></div>
+      <div class="trow"><span class="sdot s-active"></span><span class="tcol"><span class="tmeta"><span class="key">#38</span><span>In progress</span></span><span class="tttl">Sign in with email links</span><span class="tmeta"><b class="on-you">2 on you</b><span>1 open to-do</span></span></span></div>
+      <div class="trow"><span class="sdot s-active"></span><span class="tcol"><span class="tmeta"><span class="key">#45</span><span>In progress</span></span><span class="tttl">Retry failed payments</span><span class="tmeta"><b class="on-you">1 on you</b><span>2 open to-dos</span></span></span></div>
+      <div class="trow"><span class="sdot s-active"></span><span class="tcol"><span class="tmeta"><span class="key">#49</span><span>In progress</span></span><span class="tttl">Export the audit log as CSV</span><span class="tmeta"><b class="unr">1 unread</b><span>all done</span></span></span></div>
+      <div class="dashed">+ New task</div>
+    </aside>
+    <main class="tpage">
+      <div class="meta"><span class="key">#42</span><span class="st">In progress</span><span class="ext">Open on GitHub <svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></span><span class="mini-b">Analysis · 2 files · study note →</span></div>
+      <h2 class="t">Background job queue</h2>
+      <p class="sum">Jobs table and worker loop are in; retries next, once the backend is picked.</p>
+      <div class="callout"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg><div class="c"><span class="lbl">Where we left off</span><span class="pt">Pick the queue backend: Postgres or Redis?</span><span class="d">Waiting on you · 21 Oct</span></div></div>
+      <div class="unread"><span class="u">UNREAD · 2</span><span class="mini-b">1 edit not accepted →</span><span class="lnk"><span class="dk">Architecture</span> Job queue</span><span class="mini-b" style="margin-left:auto">Mark as read</span></div>
+      <div class="ttabs"><span class="ttab ask">Waiting on you <span class="n">1</span></span><span class="ttab on">To-dos <span class="n">3</span></span><span class="ttab">Decisions <span class="n">2</span></span><span class="ttab">Notes <span class="n">1</span></span><span class="ttab">Activity</span></div>
+      <div class="h2row"><h3>To-dos · 3 open</h3><span class="ghost">Hide done</span></div>
+      <div>
+        <div class="trec"><i class="check"></i><span class="ttl">Retry a failed job 5 times, with backoff</span><span class="mk">make next</span><span class="owner">Agent</span></div>
+        <div class="trec"><i class="check"></i><span class="ttl">Set QUEUE_URL on staging</span><span class="mk">make next</span><span class="owner me">You</span></div>
+        <div class="trec"><i class="check"></i><span class="ttl">Worker keeps a DB connection after a crash</span><span class="chip c-red">Fixme</span><span class="owner">Agent</span></div>
+        <div class="trec done"><i class="check on"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></i><span class="ttl">Create the jobs table</span><span class="owner">Agent</span></div>
+      </div>
+      <div class="quick">+ <span>Add… ( <span class="mono">?</span> question · <span class="mono">!</span> decision · <span class="mono">#</span> note · <span class="mono">@me</span> yours )</span></div>
+    </main>
+  </div>
+</div>
+
+<div class="notes">
+  <div class="note"><h3>Tasks by status</h3><p>keyed by the GitHub issue (#42) or a Jira key, with what is on you and unread</p></div>
+  <div class="note"><h3>The 👉 record</h3><p>where work stopped: a new session starts there</p></div>
+  <div class="note"><h3>Records, not chat</h3><p>to-dos for you or the agent, questions, decisions, ADRs, notes, tests</p>
+    <div class="pop">
+      <div class="qrow"><span class="chip c-q">Question</span>Postgres or Redis?</div>
+      <div class="dec"><span class="m"><span class="chip c-adr">ADR</span>20 Oct · Agent</span><span class="tt">One worker process per instance</span></div>
+      <div class="dec"><span class="m"><span class="chip c-dec">Decision</span>21 Oct · You</span><span class="tt">Jobs older than 7 days are deleted</span></div>
+    </div></div>
+</div>
+</body></html>

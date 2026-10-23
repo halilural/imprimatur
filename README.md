@@ -4,534 +4,160 @@
 
 **See every doc edit your AI agent makes as tracked changes, until you accept it.**
 
-Your agent rewrote the spec. What changed, and what is it still waiting on you
-for? Imprimatur, a VS Code extension with Claude Code hooks, marks the agent's
-edits right in your editor and keeps a list of what it asked you.
-*Imprimatur* (Latin, "let it be printed") is the approval stamp.
+Imprimatur is a VS Code extension and a Claude Code plugin (hooks and an MCP server).
+*Imprimatur* is Latin for "let it be printed": the approval stamp.
+
+- **Review what the agent wrote.** Its edits stay marked in the editor and the Markdown
+  preview until you accept them. Committing does not clear them.
+- **Never miss what it asked you.** Questions, permission requests and "test this" steps
+  from every session land in one list that keeps itself up to date.
+- **Know where you left off.** Tasks, decisions and design documents live in one local
+  database that the agent reads and writes through MCP.
+
+## Tracked changes until you accept
 
 ![An agent's edits marked in the editor: added lines in green, a changed word next to the old one in a red box, a marker for a deleted block, and Accept above the block](assets/tracked-changes.png)
 
-## See exactly what your agent changed
+Added lines are green. A changed word sits next to the old one in a red box. A deleted
+block leaves a marker. **✓ Accept** a block, a file or a whole agent edit, and the view
+moves to the next change. The **Agent Change Graph** lists every agent edit in the repo,
+one lane per Claude session, each with a one-sentence description.
 
-- Added lines in green, a changed word next to the old one in a red box, a
-  marker where a block was deleted; in the editor and the Markdown preview.
-- **✓ Accept** a block, a file or a whole agent edit, and the mark is gone.
-  The view moves to the next change, like a review queue.
-- Git is not involved: staging or committing does not clear the marks.
-- The **Agent Change Graph** lists every agent edit in the repo, one lane per
-  Claude session, each with a one-sentence description of what it changed.
+## Waiting on you
 
-## Never miss what it asked you
+![Waiting on you on the panel's Home: where you left off per task, the open questions, tests and to-dos, and the asks closed by the audit, replaced by a later one, or answered](assets/waiting-on-you.png)
 
-![Waiting on you: open steps with a checkbox, steps the audit closed, asks replaced by a later one, and questions you answered](assets/waiting-on-you.png)
+The agent's questions, permission requests and "test this" steps, across sessions, each
+written to make sense on its own and tied to its task. After each turn a small model
+ticks what you answered or what was done. **Scan history** finds asks from before you
+installed Imprimatur.
 
-- **Waiting on you** collects the agent's questions, permission requests and
-  "test this" steps, across sessions, each written to make sense on its own
-  ("LATD-13937: send Tim the follow-up mail about the !2690 review"), with a
-  line on why.
-- A step shows its task: click the key to open its issue or Jira page (the link
-  in the task's TODO.md, or the repo's GitHub issue), or the 📄 to open the
-  TODO.md at the line that says it.
-- After each turn Haiku keeps the list honest: what you answered, what was done
-  or asked again is ticked. **Audit** reviews it on demand.
-- Set up after work began? **Scan history** reads your past Claude sessions and
-  `TODO.md` files for asks you may have missed.
+## Where you left off: tasks and 👉
 
-## Keep each task's analysis
+![The Tasks tab: tasks by status, and a task's page with its Where we left off callout, unread changes, to-dos for you or the agent, decisions and ADRs](assets/tasks.png)
 
-- Every analysis, plan, spike result or research note the agent writes for a
-  task, wherever it puts it, is kept in the task's **Analysis** section on its
-  page: one part per `##` heading, every change a version. The plan it leaves
-  plan mode with too.
-- The task comes from the file's folder (`docs/todos/<key>/`), a key in its
-  path (`spikes/81-x/`) or branch, or the task the session was working on;
-  Haiku decides only when the path and headings cannot tell.
-- Past sessions are read once per repo in the background, or on demand:
-  **Imprimatur: Take Task Analyses from Past Sessions**, `npm run analysis`.
-  `"analysis": false` in `.claude/imprimatur.json` turns it off,
-  `{"sync": false}` keeps it on this machine.
+Each task keeps its to-dos, questions, decisions, notes, ADRs, PDRs and tests. The 👉
+pointer marks where work stopped. The agent gets it at session start; you see it on
+**Home**, in the **Tasks** tab and in Claude Code's status line.
 
-## Quick start
+## Living design documents: Architecture, Product, Glossary
 
-1. Clone this repo; you need Node 22+, git, VS Code 1.100+ and the `claude` CLI.
-2. Run `npm run setup` in it: it adds the Claude Code hooks for every repo and
-   installs the extension.
-3. Ask Claude to edit a Markdown file, then open it: the changes are marked.
-   Click **Agent Graph** in the status bar for the edits and what waits on you.
+![The Architecture document: its contents, a section with a diagram, the ADR and decision it is based on, its history and an Unread mark](assets/living-docs.png)
 
-### Install as a Claude Code plugin
+Every repo has three documents kept in sections: Architecture, Product and Glossary.
+The agent updates a section when it records a decision and links the two. They stay in
+step with `docs/ARCHITECTURE.md`, `docs/PRODUCT.md` and `docs/GLOSSARY.md`.
 
-The hooks and the MCP server also ship as a Claude Code plugin, so Claude Code
-keeps them up to date instead of `~/.claude/settings.json`:
+## Analyses kept, and /study
 
-```sh
-claude plugin marketplace add halilural/imprimatur
-claude plugin install imprimatur@imprimatur
-```
+![A task's analysis with its plan and spike results, and /study in Claude Code asking a question and grading the answer](assets/analysis-study.png)
 
-The plugin does not bring the VS Code extension or the status line. In a clone
-of this repo, run `npm run setup -- --plugin [--lang Turkish] [--exts md,mdx]`:
-it installs the plugin from the clone, takes the settings-file hooks and the
-user-scope MCP server out (a backup first), and adds the status line and the
-extension. Plugin hooks take no arguments: they read the language and file
-extensions from `IMPRIMATUR_LANG`, the plugin's options (`/config`), or the
-`config.json` next to Imprimatur's database that `--lang` / `--exts` write.
-While the plugin is enabled, a plain `npm run setup` writes no hooks.
+Every analysis, plan or research note the agent writes for a task is kept on the task,
+one version per change. `/study #92` writes a study note on a topic, then quizzes you
+and keeps a mastery score, so the next study asks the weak questions first.
 
-## Reference
+## Agent setup audit and recommendations
 
-### Features
+![The Agent setup tree of rules, settings, hooks, skills and MCP servers, and Recommendations with agnix findings and a sourced project fix marked Applied](assets/agent-setup.png)
 
-- Added lines get a green background.
-- A changed line where only one word changed marks that word: the new word
-  highlighted, the old one in a red box next to it. When more than one word
-  changed, the old sentence is shown above the line (a CodeLens: the editor API
-  cannot insert a real line) and the new line is highlighted.
-- A deleted block shows a red marker on the line before it; hover to read it.
-- Marks in the overview ruler, a change count in the status bar.
-- **✓ Accept** in the editor (CodeLens) per Markdown unit: a block that is all
-  new (table, quote, list item, paragraph, heading, code, HTML, rule) is one
-  unit, a changed line (e.g. a table cell) is its own; and on each
-  changed block in the Markdown preview accepts that block; **Imprimatur:
-  Accept Agent Change at Cursor** and **Accept All Agent Changes in File** do
-  the same from the command palette. After an accept the view moves to the
-  next change, like a review queue.
-- Old text is shown as plain text in a red box (no strike line, so it stays
-  readable); in the preview it is rendered as Markdown.
-- **Imprimatur: Show Agent Edit History** (command palette) lists the
-  agent's edits to the file newest first, like a commit log; pick one to open
-  its diff (before / after), or **All changes under review**.
-- **Agent Change Graph** (status bar **Agent Graph**, or the command palette): every agent
-  edit in the repo as a table like Git Graph, one colored lane per Claude
-  session, click a row for its diff. The description is one plain sentence on
-  what the edit changed, written a few seconds later by a small model from the
-  edit's diff ([hooks/describe.mjs](hooks/describe.mjs), `claude -p --model
-  haiku`, run in the background; language from `IMPRIMATUR_LANG`, default
-  English; `IMPRIMATUR_DESCRIBE=off` turns it off). Until then, or without it:
-  what the agent said it was doing, else the nearest heading and the first
-  changed line. Hover the description for all of it. Your request is in the row's tooltip, the
-  session column shows Claude's title for the conversation.
-  A green ✓ marks edits with nothing left under review, an amber dot the rest:
-  hover it for an Accept button (or right-click the row: Accept this edit, Go to change, Open
-  diff); hover the status cell to see its change (the popup stays while you move into
-  it, and scrolls). A Markdown edit shows rendered, as the preview's review: its added
-  and changed blocks marked, old text in red boxes, one block of context around each. The status bar's **Agent Graph** button opens it and shows
-  how many asks wait on you.
-- **Imprimatur panel tabs** (#69): next to the edits (**Agent changes**),
-  **Home** (progress, where each task was left, the top asks, the turn-end
-  asks with no task, Audit and Scan history; its badge counts what waits on you),
-  **Tasks** (the task list by status, this repo or every repo; a task's page:
-  where we left off, then tabs: what waits on you, with the turn-end asks for it
-  and an answer box, todos to tick and a quick-add box (`?` question, `!`
-  decision, `#` note, `@me` your todo), decisions, notes, manual tests,
-  activity) and **Analysis** (Architecture, Product, Glossary and each task's analyses).
-  Keyboard: j/k, Enter, x, a, /, Esc. Writes go to Imprimatur's database as you.
-- **Unread (comprehension debt, #92)**: what the agent wrote that you have not
-  seen yet. Each task in the list shows "N unread". Its page and Home list
-  the edits not accepted and the design-document sections the agent changed since
-  you last read them, each with **Read it**. A changed section is marked in Architecture,
-  Product and Glossary. Sections you write count as read. Read marks stay on this machine.
-- **`/study` (#95)**: study one topic end to end, as if studying its documentation.
-  The topic can be a decision, a feature, a document or an epic: `/study #92`. The
-  agent writes a study note into the task's analysis (what and why, how it works,
-  a code tour with `file:line`, the alternatives, the limits, the terms). Then it
-  quizzes you one question at a time. You answer first, it grades the answer against
-  the records and the code and points to what was missing. A mastery note keeps the
-  score, and the next study asks the weak questions first. The skill reads
-  everything with the `study_material` MCP tool; setup links it into
-  `~/.claude/skills` (the plugin brings it by itself).
-- **Imprimatur side bar** (its own icon in the activity bar): rows that open
-  the panel on a tab (the badge counts what waits on you), then **Agent setup**: every file in the repo, and in your home folder, that
-  shapes a coding agent, whatever the tool: Claude Code (CLAUDE.md, settings
-  hooks and permissions, hook scripts, skills, commands, agents, MCP), Cursor
-  rules, Copilot instructions, AGENTS.md, GEMINI.md, Windsurf, Cline, Aider,
-  and the git hooks commits run through. Grouped by tool, each with a one-line
-  summary (a settings file lists its hooks); files new, changed or removed
-  since you last looked are marked until you Mark all as seen. Read only.
-- **Recommendations** (Agent setup, the lightbulb): one place for what to
-  improve, from two producers, each finding a record that stays (open, applied,
-  or dismissed with why; a dismissed one does not come back):
-  - *Agent setup*: lints every agent file with
-    [agnix](https://github.com/agent-sh/agnix), whose rules cite the tools'
-    docs — the repo, and your home's agent folders with their plugins. Findings
-    in files Claude Code does not load are kept apart ("not loaded").
-    Also `npm run audit -- [repo] [--global] [--dry-run]` and the `setup_audit`
-    MCP tool.
-  - *Project*: best practices for how the repo is built, by ISO/IEC 25010:2023
-    and NIST SSDF (security, reliability, maintainability, compatibility,
-    performance, the development process; the rest on request). Code fetches
-    the stack's current documentation (Context7, vendors' docs MCP servers,
-    changelogs); Claude judges one category per call against your architecture
-    document and decisions. A recommendation is kept only citing a page fetched
-    in the run and with evidence in the repo. About 2–3 minutes; it uses
-    Claude (your plan's limits on a subscription) and asks first. Also
-    `npm run best -- [repo] [--categories …|all] [--refresh-sources]`.
-- **Waiting on you** collects the agent's questions, permission requests and
-  "test this" steps, across sessions, each written to make sense on its own
-  ("LATD-13937: send Tim the follow-up mail about the !2690 review"), with a
-  line on why.
-- A step shows its task: click the key to open its issue or Jira page (the link
-  in the task's TODO.md, or the repo's GitHub issue), or the 📄 to open the
-  TODO.md at the line that says it.
-- After each turn Haiku keeps the list honest: what you answered, what was done
-  or asked again is ticked. **Audit** reviews it on demand.
-- Set up after work began? **Scan history** reads your past Claude sessions and
-  `TODO.md` files for asks you may have missed.
+**Agent setup** shows every file that shapes a coding agent, in the repo and your home
+folder: Claude Code, Cursor, Copilot, AGENTS.md, Gemini, Windsurf, Cline, Aider.
+**Recommendations** lints them with [agnix](https://github.com/agent-sh/agnix) and, on
+request, reviews the project against current best practice. Each finding stays as a
+record: open, applied or dismissed.
 
-## Quick start
+## More
 
-1. Clone this repo; you need Node 22+, git, VS Code 1.100+ and the `claude` CLI.
-2. Run `npm run setup` in it: it adds the Claude Code hooks for every repo and
-   installs the extension.
-3. Ask Claude to edit a Markdown file, then open it: the changes are marked.
-   Click **Agent Graph** in the status bar for the edits and what waits on you.
+- **Issue tracker sync**: task status follows GitHub Issues or Jira, both ways.
+- **Process checks** (opt-in per repo): block `--no-verify`, keep code off `main`, warn
+  when code starts before its ADR.
+- **Unread marks**: edits and document sections the agent changed that you have not read.
+- **Edit history**: the agent's edits to a file, newest first, each with its diff.
+- **Mermaid diff** (off by default): changed flowcharts colored in the preview.
+- **Archive**: edits and asks older than 7 days leave review on their own.
+- **Plugins**: optional local plugins hear every change and can add commands.
+- **Other agents**: Cursor and Codex get the same MCP tools.
 
-### Install as a Claude Code plugin
+## Install
 
-The hooks and the MCP server also ship as a Claude Code plugin, so Claude Code
-keeps them up to date instead of `~/.claude/settings.json`:
+Imprimatur has two parts. Install both.
+
+**1. The Claude Code plugin** (hooks and the MCP server):
 
 ```sh
 claude plugin marketplace add halilural/imprimatur
 claude plugin install imprimatur@imprimatur
 ```
 
-The plugin does not bring the VS Code extension or the status line. In a clone
-of this repo, run `npm run setup -- --plugin [--lang Turkish] [--exts md,mdx]`:
-it installs the plugin from the clone, takes the settings-file hooks and the
-user-scope MCP server out (a backup first), and adds the status line and the
-extension. Plugin hooks take no arguments: they read the language and file
-extensions from `IMPRIMATUR_LANG`, the plugin's options (`/config`), or the
-`config.json` next to Imprimatur's database that `--lang` / `--exts` write.
-While the plugin is enabled, a plain `npm run setup` writes no hooks.
+**2. The VS Code extension**, from the Visual Studio Marketplace or Open VSX:
 
-## Reference
+```text
+ext install halilural.imprimatur
+```
 
-### Features
+Or install a `.vsix` from the [GitHub releases](https://github.com/halilural/imprimatur/releases)
+(Extensions view → Install from VSIX).
 
-- Added lines get a green background.
-- A changed line where only one word changed marks that word: the new word
-  highlighted, the old one in a red box next to it. When more than one word
-  changed, the old sentence is shown above the line (a CodeLens: the editor API
-  cannot insert a real line) and the new line is highlighted.
-- A deleted block shows a red marker on the line before it; hover to read it.
-- Marks in the overview ruler, a change count in the status bar.
-- **✓ Accept** in the editor (CodeLens) per Markdown unit: a block that is all
-  new (table, quote, list item, paragraph, heading, code, HTML, rule) is one
-  unit, a changed line (e.g. a table cell) is its own; and on each
-  changed block in the Markdown preview accepts that block; **Imprimatur:
-  Accept Agent Change at Cursor** and **Accept All Agent Changes in File** do
-  the same from the command palette. After an accept the view moves to the
-  next change, like a review queue.
-- Old text is shown as plain text in a red box (no strike line, so it stays
-  readable); in the preview it is rendered as Markdown.
-- **Imprimatur: Show Agent Edit History** (command palette) lists the
-  agent's edits to the file newest first, like a commit log; pick one to open
-  its diff (before / after), or **All changes under review**.
-- **Agent Change Graph** (status bar **Agent Graph**, or the command palette): every agent
-  edit in the repo as a table like Git Graph, one colored lane per Claude
-  session, click a row for its diff. The description is one plain sentence on
-  what the edit changed, written a few seconds later by a small model from the
-  edit's diff ([hooks/describe.mjs](hooks/describe.mjs), `claude -p --model
-  haiku`, run in the background; language from `IMPRIMATUR_LANG`, default
-  English; `IMPRIMATUR_DESCRIBE=off` turns it off). Until then, or without it:
-  what the agent said it was doing, else the nearest heading and the first
-  changed line. Hover the description for all of it. Your request is in the row's tooltip, the
-  session column shows Claude's title for the conversation.
-  A green ✓ marks edits with nothing left under review, an amber dot the rest:
-  hover it for an Accept button (or right-click the row: Accept this edit, Go to change, Open
-  diff); hover the status cell to see its change (the popup stays while you move into
-  it, and scrolls). A Markdown edit shows rendered, as the preview's review: its added
-  and changed blocks marked, old text in red boxes, one block of context around each. The status bar's **Agent Graph** button opens it and shows
-  how many asks wait on you.
-- **Imprimatur panel tabs** (#69): next to the edits (**Agent changes**),
-  **Home** (progress, where each task was left, the top asks, the turn-end
-  asks with no task, Audit and Scan history; its badge counts what waits on you),
-  **Tasks** (the task list by status, this repo or every repo; a task's page:
-  where we left off, then tabs: what waits on you, with the turn-end asks for it
-  and an answer box, todos to tick and a quick-add box (`?` question, `!`
-  decision, `#` note, `@me` your todo), decisions, notes, manual tests,
-  activity) and **Analysis** (Architecture, Product, Glossary and each task's analyses).
-  Keyboard: j/k, Enter, x, a, /, Esc. Writes go to Imprimatur's database as you.
-- **Imprimatur side bar** (its own icon in the activity bar): rows that open
-  the panel on a tab (the badge counts what waits on you), then **Agent setup**: every file in the repo, and in your home folder, that
-  shapes a coding agent, whatever the tool: Claude Code (CLAUDE.md, settings
-  hooks and permissions, hook scripts, skills, commands, agents, MCP), Cursor
-  rules, Copilot instructions, AGENTS.md, GEMINI.md, Windsurf, Cline, Aider,
-  and the git hooks commits run through. Grouped by tool, each with a one-line
-  summary (a settings file lists its hooks); files new, changed or removed
-  since you last looked are marked until you Mark all as seen. Read only.
-- **Recommendations** (Agent setup, the lightbulb): audits the agent setup with
-  [agnix](https://github.com/agent-sh/agnix), whose rules each cite the tools'
-  docs: the repo, and your home's agent folders with their plugins. Nothing is
-  filtered out; findings are grouped by project, your setup, plugin and
-  worktree, then by category. Each finding is a record that stays: open, applied
-  (gone in a later audit) or dismissed with a reason (it does not come back).
-  Also `npm run audit -- [repo] [--global] [--dry-run]` and the `setup_audit`
-  MCP tool.
-- **Best practice review** (command *Imprimatur: Best Practice Review*, or
-  `npm run best`): recommendations for how the repo is built, from its own
-  architecture document, decisions and code. Claude first maps the stack to
-  where its best practice is read (public docs MCP servers, Context7, official
-  release notes and changelogs; checked before use), then reviews dependencies,
-  security and testing in parallel. A recommendation is kept only with an
-  official source read in the run and evidence in the repo; it says which
-  decisions it touches. Each is a record of the BEST task: open, applied, or
-  dismissed with why (a decision settles it, not applicable, accepted risk,
-  postponed). It costs Claude usage (about $1 a call, capped) and asks first.
-- **Waiting on you** (the turn-end part of Home): everything the agent asked of
-  you (questions, commands waiting for permission, "verify / test this" at the
-  end of a turn), open ones first. Questions close once you reply; things to go
-  and do ("test this", "Reload Window") stay open until you Mark as done or
-  tick every step, your later replies kept on them as notes. The tab is a flat
-  list like the edits: one row per step, newest first, history kept. A row's
-  status is a checkbox while open (tick it when done), then ✓ done (by you, a
-  chat reply or the audit), "replaced" (asked again later), or Answered;
-  "open only" hides the rest. Click a row for the full message; right-click:
-  Mark as done, Copy. The Graph column shows
-  only with more than one session. The filter works on both tabs.
+To install from a clone instead, with the status line, see
+[Setup options](docs/REFERENCE.md#setup-options).
 
-Setting `imprimatur.showIn`: Markdown files are marked only in the preview by
-default (`preview`); `both` adds the editor marks and its ✓ Accept lenses,
-`editor` uses the editor only. Other file types are always marked in the editor.
-`imprimatur.editorAlsoFor` (globs, e.g. `["**/todos/**"]`) adds the editor
-marks for matching Markdown files while `showIn` stays `preview`.
+### Requirements
 
-The Markdown preview also gets thin marks over its scrollbar, like the editor's
-overview ruler: one colored tick
-per change (green added, blue changed, red old or deleted),
-click a tick to jump there.
+- Node.js 22.13 or later, and the `claude` CLI on your `PATH` (the model features use it).
+- VS Code 1.100 or later.
+- Linux, macOS or WSL. On WSL, keep the database on the Linux side, not under
+  `/mnt/<drive>`: Imprimatur refuses a database there.
 
-With `imprimatur.mermaidDiff` on (off by default; two Mermaid preview
-extensions in one window can then fail to render), changed Mermaid flowcharts
-are colored in the preview like a visual diff: new
-nodes and arrows green, changed labels orange, removed ones red and dashed
-(kept visible), with a legend and an Accept button above the diagram.
+## Quick start
 
-The Markdown preview shows the same changes per block: changed blocks are
-colored, their old text struck through right above them, deleted lines struck
-through where they were.
+1. Install both parts, then reload VS Code.
+2. Ask Claude to edit a Markdown file in a repo.
+3. Open the file's preview: the changes are marked. Click **✓ Accept** on a block.
+4. Click **Agent Graph** in the status bar for every edit and what waits on you.
+5. Open the Imprimatur icon in the activity bar for **Home**, **Tasks** and **Analysis**.
+6. Markdown is marked in the preview only; set `imprimatur.showIn` to `both` for
+   editor marks too.
 
-**Archive.** Once a day per repo, what is older than `imprimatur.archive.afterDays`
-(7 by default, `0` = never) leaves the graph and the waiting list: an older
-agent edit counts as accepted, its history row moves to
-`.claude/imprimatur/archive/<date>/` (gzipped, same layout, read with `zcat`),
-and so do waiting logs with nothing open. Open asks stay until you do them.
-**Imprimatur: Archive Old Agent Edits and Asks Now** runs it at once.
-
-### How it works
+## How it works
 
 ![How it works: Claude edits a file, a hook saves a copy, VS Code marks the diff, you accept; when the agent's turn ends, Haiku reads its message and keeps the Waiting on you list honest](assets/how-it-works.png)
 
-1. A Claude Code hook ([hooks/baseline.mjs](hooks/baseline.mjs)), before each
-   agent edit of a listed file type (Edit, Write, or a Bash command that names
-   the file, e.g. a python or sed edit; Bash is compared before/after so read-only
-   commands leave no trace):
-   - copies the file to `.claude/imprimatur/baseline/<path>` if there is no
-     copy yet (an empty copy for a new file);
-   - appends `{t, session, tool, prompt, before}` to
-     `.claude/imprimatur/history/<path>.jsonl`, a history of the agent's edits.
-2. The VS Code extension ([vscode/](vscode/)) diffs each open file against its
-   copy (line LCS, then word LCS inside changed lines). Every change looks the
-   same, whichever agent edit made it; the edit history keeps the order.
-3. Accept writes the change at the cursor into the copy; Accept all deletes the
-   copy. The history stays.
-4. A second hook ([hooks/waiting.mjs](hooks/waiting.mjs)) appends what the
-   agent waits on you for to `.claude/imprimatur/waiting/<session>.jsonl`:
-   AskUserQuestion, PermissionRequest, input notifications, and the lines of
-   the final message that ask something (a `?`, phrases like "please test",
-   "please verify", "shall I", or any line starting with 👉). A later event in
-   the session closes earlier questions, your next prompt kept as the answer;
-   things to go and do stay open until you mark them done. After each of your
-   messages, [hooks/resolve.mjs](hooks/resolve.mjs) asks a small model which
-   open steps the message settled ("ok, merge it" settles "shall I merge?")
-   and ticks them, tagged "chat"; the agent's next message does the same for
-   steps it reports done or asks again. A message that names a task
-   (`LATD-13977`, or `13977` alone) also settles that task's steps asked in
-   other sessions. An item closes when all its steps are ticked. When a task's
-   `docs/todos/<task>/TODO.md` (or the older `todos/<task>/TODO.md`) says done (its `## Status` starts with
-   Done), the next turn end ticks the task's steps in every session,
-   except ones asked after the TODO.md last changed. After each agent turn, Haiku audits the list with the agent's final
-   message ([vscode/audit.js](vscode/audit.js)): it closes steps that are done,
-   answered or only reports, and writes what the message really asks as short
-   steps (the agent's 👉 lines verbatim, when it marks its asks; an ask in
-   nearly the same words replaces the old step). The **Audit** button in the
-   tab runs the same review on demand. Without the model, the rules above.
+1. Before each agent edit of a Markdown file, a hook copies the file to
+   `.claude/imprimatur/baseline/` and logs the edit.
+2. The extension diffs each open file against its copy. Accept writes the change into
+   the copy. Git is not involved.
+3. Other hooks record what the agent waits on you for, and at the end of a turn a small
+   model keeps that list honest.
+4. Tasks and records live in one SQLite database per machine. The agent uses them
+   through the MCP server; you use the panel.
 
-5. **Scan history** ([vscode/history.js](vscode/history.js)) finds what was
-   already waiting on you when Imprimatur was set up after work began. It runs
-   once when the panel first opens in a project, and again from the button.
-   It reads Claude Code's own transcripts of the project
-   (`~/.claude/projects/<project>/*.jsonl`, last 30 days): earlier turns' 👉
-   lines become steps, your later messages are kept on them, and Haiku audits
-   each session with its final message, as the hook would have. Sessions that
-   already have a log or were scanned before are skipped (`.claude/imprimatur/scanned.json`).
-   It also adds the `TODO: (K)` lines (your own to-dos) of `TODO.md` and
-   `docs/todos/*/TODO.md` (or `todos/*/TODO.md`); on the next scan the ones marked DONE or removed are ticked.
+Details: [Reference](docs/REFERENCE.md#how-it-works).
 
-### Setup options, or install by hand
+## Privacy and cost
 
-`npm run setup` options: `--lang Turkish` (language of the model's
-descriptions and steps; default English; a repo can set its own in
-`.claude/imprimatur.json`, `{"lang": "English"}`, which also tells the agent at
-session start to write that repo's records, documents, comments and commits in
-it), `--dry-run` shows the changes only,
-`--no-extension` skips the extension, `--show-in both` also marks Markdown in
-the editor (VS Code machine settings, `imprimatur.showIn`). It backs up
-`~/.claude/settings.json`, adds the hooks below for every repo (updates ours in
-place, leaves others alone), packages and installs the extension, and checks
-for the `claude` CLI. It also registers the **Imprimatur MCP server**
-(`mcp/server.mjs`; Node 22.13+): Claude Code at user scope, Cursor
-(`~/.cursor/mcp.json`) and Codex (`~/.codex/config.toml`) when installed. Agents
-read and write tasks and their records (todos, questions, decisions, notes,
-ADRs, PDRs) through its tools; the records live in one database per machine
-(`~/.local/share/imprimatur/imprimatur.db`, `IMPRIMATUR_DB` to move it).
-**Status line**: setup adds Claude Code's status line (only if you have none):
-`Imprimatur · 3 waiting on you · 12 unread · #64 👉 …` for the session's repo and task.
-In an untrusted VS Code folder Imprimatur shows changes and records but starts
-no model calls or repo scripts (Workspace Trust).
+- Everything is stored on your machine: the copies in `.claude/imprimatur/` in each repo
+  (add it to `.gitignore`) and the database in your data folder.
+- Model calls run through your own `claude` CLI and count against your Claude plan.
+  Most use Haiku, and only where a rule is not enough: an edit's one-sentence description,
+  closing answered asks, the end-of-turn audit, Scan history and placing an analysis.
+- Once per repo with at least 10 records and no design documents, a background Sonnet run
+  writes them (capped at $3). The best-practice review runs only when you ask, after a
+  confirmation.
+- Nothing else leaves your machine, except the issue tracker sync (GitHub with `gh`
+  logged in, or Jira once you configure it), agnix fetched with `npx` for the audit, and
+  the documentation the best-practice review fetches.
+- `IMPRIMATUR_DESCRIBE=off` turns off edit descriptions. In an untrusted folder no model
+  call, `gh` or repo script runs.
 
-**Process checks** (opt-in per repo): **Imprimatur: Turn On Process Checks for
-This Repo** writes `.claude/imprimatur.json`; commit it. Then Imprimatur's hooks
-show where work stopped (and design documents that need attention: ADRs/PDRs no
-section links, conflicts with their files) at session start, block `git --no-verify` / `HUSKY=0`,
-keep code off `main` (allowed paths are set there), refresh the docs TOC, and
-check that each answer ends with "Neredeyiz"; they warn when a new issue lacks
-its milestone or board item, a task is done but its issue is open, code starts
-before its ADR/PDR, an ADR/PDR (or a decision a section links) changes but its
-document section does not follow, or a merged branch is left behind. Each check is
-`"block"`, `"warn"` or `false`. Without the file nothing runs.
-Records a repo still keeps in Markdown (`docs/todos/*/TODO.md`, `docs/design`,
-`PRODUCT.md` / `docs/product`, `docs/testing`) move in with
-`npm run import -- <repo> [--dry-run]` or **Imprimatur: Import Markdown Records**;
-it can run again (nothing is added twice) and checks each file's count.
+## Links
 
-**Design documents** (the panel's **Architecture** and **Product** tabs) stay in step with
-`ARCHITECTURE.md` and `PRODUCT.md` in `docs/`, or the folder
-`.claude/imprimatur.json` names: `{"docs": {"dir": "docs/design"}}`. Whenever
-Imprimatur comes to a repo, the sync gets both sides to the same text: with no
-files it writes them; a hand-written file is adopted (each `##` heading a section,
-its imported records linked) and rewritten in Imprimatur's form; an edit saved in
-the file is taken in, a change in Imprimatur written out. A section changed on both
-sides is a conflict and neither is written:
-`npm run docs -- sync [repo] [--dry-run] [--take file|db]`. Files that went away
-after an import come back from git: `npm run docs -- sync --rev <commit>`. It runs at
-session start, after `doc_section_upsert`, after an edit of the file, and in VS Code;
-`{"docs": {"sync": false}}` turns it off.
-
-Or by hand:
-
-1. Hook, in your project's `.claude/settings.json` (extensions after the
-   script name; default `md mdx`):
-
-   ```json
-   {
-     "hooks": {
-       "PreToolUse": [
-         {
-           "matcher": "Edit|Write|Bash",
-           "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/path/to/imprimatur/hooks/baseline.mjs md mdx" }]
-         }
-       ],
-       "PostToolUse": [
-         {
-           "matcher": "Bash",
-           "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/path/to/imprimatur/hooks/baseline.mjs md mdx" }]
-         }
-       ],
-       "PostToolUseFailure": [
-         {
-           "matcher": "Bash",
-           "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/path/to/imprimatur/hooks/baseline.mjs md mdx" }]
-         }
-       ]
-     }
-   }
-   ```
-
-   `PostToolUseFailure` records a Bash command that edited a file and then
-   failed (without it, that edit is lost).
-
-   For the **Waiting on you** tab, also run `hooks/waiting.mjs` (no
-   arguments) on `PreToolUse` and `PostToolUse` with matcher `AskUserQuestion`,
-   on `PermissionRequest`, `Stop` and `UserPromptSubmit`, and on `Notification`
-   with matcher `agent_needs_input|elicitation_dialog|elicitation_url_dialog`.
-
-   MCP server: `claude mcp add -s user imprimatur -- node /path/to/imprimatur/mcp/server.mjs`,
-   and `hooks/mcp-session.mjs` on `PreToolUse` with matcher
-   `mcp__imprimatur__.*` (it tells the server which session calls).
-
-2. Ignore the copies: add `.claude/imprimatur/` to `.gitignore` (or to your
-   global git ignore file).
-3. Extension: `npm run package`, then install `dist/imprimatur-<version>.vsix`
-   (`code --install-extension …`, or Extensions view → Install from VSIX).
-
-### Plugins
-
-Imprimatur loads optional plugins: `config.json` next to the database (`~/.local/share/imprimatur/` on Linux)
-names them in `"plugins": ["/absolute/path/to/plugin.js"]`. A plugin is told about every change to a repo, task,
-record or document section, and can add actions to **Imprimatur: Plugin Actions…**. The contract is in
-`vscode/db.js` (`loadPlugins`). Without plugins nothing changes.
-
-### Epics and the issue tracker
-
-A task set done or dropped closes its line in its epic in the same write: the
-epic's open records whose `links.issue` is the task, or whose title starts with
-its key (`#56 …`, `[#56 …](url)`, `PROJ-12 …`), become done with a note
-("#56 done (date)"); the epic's 👉 on such a line moves to its next open record.
-Reopening a task leaves those lines closed.
-
-VS Code also keeps task status in step with the issue tracker (on start, every
-5 minutes, a few seconds after a status change; **Imprimatur: Sync with Issue
-Tracker** to force it; not in an untrusted folder):
-
-- **GitHub** (`#N` tasks in a repo whose origin is github.com, with `gh` logged in):
-  a task done closes its issue as completed, dropped closes it as not planned,
-  reopened reopens it, each with a fixed comment ("Imprimatur: completed" …;
-  nothing of the task's text). An issue closed or reopened on GitHub sets the
-  task's status (the first sync of a repo only notes where issues stand); an open
-  issue without a task gets one (`imprimatur.tracker.createTasks`, at most 50 a run).
-  Network errors and rate limits are retried later; a push that keeps failing
-  otherwise is given up after 5 tries.
-- **Jira** (tasks keyed `PROJ-12`): `config.json` next to the database gets
-  `{"tracker": {"jira": {"baseUrl": "https://you.atlassian.net", "email": "you@…"}}}`
-  and the API token goes in `IMPRIMATUR_JIRA_TOKEN` (or `tracker.jira.token`, with
-  the file at mode 0600; `baseUrl` must be https). Status moves through the issue's
-  transitions (Done / Won't Do by name), its comment posted first.
-
-`npm run tracker` runs it from a terminal (`--all` for every repo, `--dry-run` to
-see what would change). `node scripts/stale-epic-lines.mjs` lists open epic lines
-of tasks already finished, changing nothing.
-
-### Limits
-
-- No marks in diff tabs (e.g. Working Tree): git already colors those.
-- Bash edits are seen only for files named in the command; a glob
-  (`sed -i *.md`) is missed.
-- Ordered list numbers are not compared: deleting an item does not mark the
-  renumbered items after it.
-- Changes inside fenced code blocks (``` or ~~~) are not marked; the edit
-  history still lists them.
-- The preview works per block (no word marks there); a deleted table row is not
-  shown in the preview.
-- Every difference between the copy and the file is marked, including your own
-  edits to the same file.
-- The history stores the full text before each edit: small for documents.
-- Plain O(n·m) LCS on the part between the common head and tail; fine for
-  documents, slow for files with thousands of changed lines.
-
-### Develop
-
-```sh
-npm install      # markdown-it, for the preview tests only
-npm test         # hook, diff and preview tests (node:test)
-npm run package  # builds dist/imprimatur-<version>.vsix
-```
-
-## Security
-
-Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
+- [Reference](docs/REFERENCE.md): every feature, setup option, hook, MCP tool and setting.
+- Design documents: [Architecture](docs/ARCHITECTURE.md), [Product](docs/PRODUCT.md),
+  [Glossary](docs/GLOSSARY.md).
+- [Changelog](vscode/CHANGELOG.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md): report vulnerabilities privately.
 
 ## License
 
-MIT
+[MIT](LICENSE) © 2026 Halil Ural

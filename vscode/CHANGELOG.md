@@ -4,6 +4,18 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.70.0] - 2026-10-23
+
+First release on the Visual Studio Marketplace and Open VSX.
+
+### Changed
+- The README is a store page: what Imprimatur does, one illustration per feature, install
+  and quick start. The full reference moved to `docs/REFERENCE.md`.
+- New illustrations for Waiting on you, Tasks, the living design documents, task analyses
+  with /study, and the Agent setup audit.
+- The answer-status check's default section word is now "Where we are" (`status.word` in
+  `.claude/imprimatur.json` keeps any other).
+
 ## [0.69.0] - 2026-10-23
 
 ### Added

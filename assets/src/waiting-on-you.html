@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Waiting on you</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .win { left: 80px; top: 214px; width: 990px; height: 648px; }
+  .body { padding: 18px 22px; display: flex; flex-direction: column; gap: 14px; }
+  .top h2 { margin: 0; font-size: 22px; font-weight: 800; color: var(--ink); }
+  .top .lead { margin: 2px 0 8px; font-size: 14px; font-weight: 700; color: var(--muted); }
+  .bar { height: 7px; border-radius: 4px; background: #f3e6d8; } .bar > div { width: 44%; height: 100%; border-radius: 4px; background: var(--acc); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1.15fr; gap: 14px; }
+  .card { border: 1.5px solid var(--line); border-radius: 11px; background: var(--card); padding: 13px 15px; display: flex; flex-direction: column; gap: 8px; }
+  .cap { margin: 0 0 2px; font-size: 15px; font-weight: 800; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+  .cap .n { margin-left: auto; color: var(--acc); font-weight: 800; }
+  .ptr { display: flex; flex-direction: column; gap: 1px; padding: 6px 8px; border-radius: 7px; background: #fff7ef; }
+  .ptr .pm { display: flex; gap: 8px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+  .ptr .pt { font-size: 14px; font-weight: 700; color: var(--text); }
+  .mine { color: var(--acc); font-weight: 800; }
+  .hask { display: flex; align-items: center; gap: 9px; padding: 5px 2px; font-size: 14px; font-weight: 700; border-bottom: 1px solid #f5eadf; }
+  .hask:last-child { border-bottom: 0; }
+  .hask .t { flex: 1; } .hask .key { font-size: 12.5px; }
+  .sec h3 { margin: 0 0 9px; font-size: 16px; font-weight: 800; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+  .odot { width: 9px; height: 9px; border-radius: 50%; background: var(--acc); }
+  .sec h3 .d { font-size: 13.5px; font-weight: 700; color: var(--muted); }
+  .ask { border: 1.5px solid var(--line); border-left: 4px solid var(--acc); border-radius: 10px; background: #fff; padding: 10px 14px; display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; align-items: center; margin-bottom: 9px; }
+  .ask.t2 { border-left-color: var(--amber); } .ask.t3 { border-left-color: var(--blue); }
+  .row1 { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 800; color: var(--text); }
+  .src { font-size: 11.5px; font-weight: 800; color: var(--muted); border: 1.5px dashed #dcc3aa; border-radius: 9px; padding: 1px 7px; }
+  .age { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+  .why { grid-column: 1; font-size: 13.5px; font-weight: 600; color: var(--muted); }
+  .ask .btn { grid-row: 1 / span 2; grid-column: 2; }
+  /* callouts */
+  .notes { left: 1120px; top: 236px; width: 430px; gap: 22px; }
+  .mini { word-spacing: 0; white-space: nowrap; margin-top: 9px; display: flex; align-items: center; gap: 9px; padding: 7px 11px; background: rgba(255,255,255,.75); border: 1.5px solid var(--line); border-radius: 9px; font-family: var(--mono); font-size: 13.5px; font-weight: 600; color: var(--text); }
+  .mini .x { text-decoration: line-through; text-decoration-thickness: 2px; color: #7d5a40; }
+  .mini .ok { width: 20px; height: 20px; border-radius: 50%; background: var(--green); color: #fff; display: flex; align-items: center; justify-content: center; flex: none; }
+  .mini .ok svg { width: 13px; height: 13px; stroke-width: 3.2; }
+  .mini .by { margin-left: auto; color: var(--green); font-weight: 700; font-size: 12.5px; white-space: nowrap; }
+  .mini .rep { margin-left: auto; color: var(--muted); font-family: "Plus Jakarta Sans"; font-weight: 800; font-size: 12px; border: 1.5px solid #cdb39a; border-radius: 9px; padding: 0 7px; }
+  .mini .ans { margin-left: auto; color: var(--violet); font-family: "Plus Jakarta Sans"; font-weight: 800; font-size: 12px; border: 1.5px solid var(--violet); border-radius: 9px; padding: 0 7px; white-space: nowrap; }
+  .stp { display: flex; flex-direction: column; gap: 5px; margin-top: 9px; padding: 8px 11px; background: rgba(255,255,255,.75); border: 1.5px solid var(--line); border-radius: 9px; font-size: 14px; font-weight: 700; }
+  .stp span { display: flex; align-items: center; gap: 9px; }
+  .box { width: 17px; height: 17px; border: 2px solid #b0896a; border-radius: 4px; flex: none; display: flex; align-items: center; justify-content: center; }
+  .box.on { background: var(--green); border-color: var(--green); color: #fff; } .box svg { width: 12px; height: 12px; stroke-width: 3.4; }
+  .stp .done { color: #6b4a33; }
+</style></head>
+<body>
+<i class="plus p1"></i><i class="plus p2"></i><i class="plus p3"></i><i class="plus p4"></i>
+<div class="head"><h1>Waiting on you</h1><div class="ul"></div><p>What the agent asked of you, kept honest.</p></div>
+<img class="mascot" src="../logo.svg" alt="">
+
+<div class="win">
+  <div class="appbar">
+    <span class="brand"><img src="../logo.svg" alt="">Imprimatur<span class="repo">web-app</span></span>
+    <nav class="tabs">
+      <span class="tab on"><svg class="ic" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Home <span class="badge">7</span></span>
+      <span class="tab"><svg class="ic" viewBox="0 0 24 24"><path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/></svg>Tasks</span>
+      <span class="tab">Analysis</span>
+      <span class="tab">Agent changes <span class="badge">4</span></span>
+    </nav>
+    <span class="tools">
+      <span class="tbtn"><svg class="ic" viewBox="0 0 24 24"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3"/></svg>Audit</span>
+      <span class="tbtn"><svg class="ic" viewBox="0 0 24 24"><path d="m8 11 2 2 4-4"/><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Scan history</span>
+    </span>
+  </div>
+  <div class="body">
+    <div class="top"><h2>web-app</h2><p class="lead">4 / 9 tasks done · 2 in progress · 3 open</p><div class="bar"><div></div></div></div>
+    <div class="grid2">
+      <section class="card">
+        <h4 class="cap"><svg class="ic" viewBox="0 0 24 24" style="color:var(--acc)"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>Where we left off</h4>
+        <div class="ptr"><span class="pm"><span class="key">#42</span>Background job queue</span><span class="pt">Pick the queue backend <span class="mine">(on you)</span></span></div>
+        <div class="ptr"><span class="pm"><span class="key">#38</span>Sign in with email links</span><span class="pt">Expire links after 15 minutes</span></div>
+        <div class="ptr"><span class="pm"><span class="key">#45</span>Retry failed payments</span><span class="pt">Show the error banner on retry</span></div>
+      </section>
+      <section class="card">
+        <h4 class="cap">Waiting on you<span class="n">4</span></h4>
+        <div class="hask"><span class="chip c-q">Question</span><span class="t">Postgres or Redis for the job queue?</span><span class="key">#42</span></div>
+        <div class="hask"><span class="chip c-test">Test</span><span class="t">Sign-in link works on Safari</span><span class="key">#38</span></div>
+        <div class="hask"><span class="chip c-todo">To-do</span><span class="t">Add the mail API key to .env</span><span class="key">#38</span></div>
+        <div class="hask"><span class="chip c-test">Test</span><span class="t">Retry shows the error banner</span><span class="key">#45</span></div>
+      </section>
+    </div>
+    <section class="sec">
+      <h3><span class="odot"></span>Waiting on you, no task <span class="d">· 3 · asked by the agent at the end of a turn, with no task</span></h3>
+      <article class="ask">
+        <div class="row1"><span class="chip c-q">Question</span>Keep the old /v1 routes for one more release?<span class="src">end of turn</span><span class="age">2 h</span></div>
+        <div class="why">Removing them breaks the mobile app still on 2.3.</div>
+        <span class="btn primary">Answered</span>
+      </article>
+      <article class="ask t2">
+        <div class="row1"><span class="chip c-test">Test</span>Open the pricing page on a phone<span class="src">end of turn</span><span class="age">today</span></div>
+        <div class="why">The plan cards were rebuilt as a grid; check that they wrap.</div>
+        <span class="btn primary">Passed</span>
+      </article>
+      <article class="ask t3">
+        <div class="row1"><span class="chip c-todo">To-do</span>Run the new migration on staging<span class="src">end of turn</span><span class="age">yesterday</span></div>
+        <div class="why">It adds the jobs table; the deploy waits for it.</div>
+        <span class="btn primary">Done it</span>
+      </article>
+    </section>
+  </div>
+</div>
+
+<div class="notes">
+  <div class="note"><h3>Answer it, or tick it</h3><p>questions, your to-dos and checks by eye, across sessions</p>
+    <div class="stp"><span><i class="box on"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></i><span class="done">Open the link from the email</span></span><span><i class="box"></i>Sign in on Safari, private window</span></div></div>
+  <div class="note"><h3>Closed by the audit</h3><p>after each turn Haiku ticks what was done</p>
+    <div class="mini"><span class="ok"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><span class="x">Log in on staging</span><span class="by">audit: "it works now"</span></div></div>
+  <div class="note"><h3>Replaced when asked again</h3><p>the old ask goes, the new one stays</p>
+    <div class="mini"><span class="x">Deploy the preview now?</span><span class="rep">replaced</span></div></div>
+  <div class="note"><h3>Answered</h3><p>your reply in the chat closes it</p>
+    <div class="mini"><span>Name the plan "Team" or "Pro"?</span><span class="ans">you: "Team"</span></div></div>
+</div>
+</body></html>
