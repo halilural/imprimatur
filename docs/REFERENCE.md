@@ -355,6 +355,8 @@ Options:
   machine settings; on a remote or WSL machine,
   `~/.vscode-server/data/Machine/settings.json`).
 - `--no-extension`: skip the extension.
+- `--vsix`: install this checkout's build of the extension even when VS Code already has it
+  from the Marketplace or Open VSX (otherwise that install is kept, and VS Code updates it).
 - `--dry-run`: show the changes only.
 
 The MCP server (`mcp/server.mjs`, Node 22.13+) is registered for Claude Code at user scope,

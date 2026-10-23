@@ -22,7 +22,10 @@
 // --plugin, an installed and enabled plugin means no hooks or Claude Code MCP
 // server are written (they would run twice).
 //
-//   npm run setup -- [--plugin] [--lang Turkish] [--show-in both] [--exts md,mdx] [--no-extension] [--dry-run]
+// The extension is packaged and installed from this checkout, unless VS Code already has it
+// from the Marketplace or Open VSX (it updates itself there): --vsix installs the local build anyway.
+//
+//   npm run setup -- [--plugin] [--lang Turkish] [--show-in both] [--exts md,mdx] [--no-extension] [--vsix] [--dry-run]
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -502,9 +505,32 @@ function options(argv) {
     showIn: get("--show-in"),
     exts: get("--exts")?.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
     extension: !argv.includes("--no-extension"),
+    vsix: argv.includes("--vsix"),
     dry: argv.includes("--dry-run"),
     plugin: argv.includes("--plugin"),
   };
+}
+
+/** VS Code's lists of installed extensions: WSL/remote, desktop, Insiders. @param {string} [home] */
+const extensionLists = (home = os.homedir()) =>
+  [".vscode-server", ".vscode", ".vscode-insiders", ".vscode-server-insiders"].map((d) => path.join(home, d, "extensions", "extensions.json"));
+
+/**
+ * Where VS Code installed Imprimatur from: "gallery" (the Marketplace or Open VSX, updated by
+ * VS Code), "vsix", or undefined when it is not installed. @param {string[]} [files]
+ */
+export function installedFrom(files = extensionLists()) {
+  for (const f of files) {
+    let list;
+    try {
+      list = JSON.parse(fs.readFileSync(f, "utf8"));
+    } catch {
+      continue;
+    }
+    const e = Array.isArray(list) && list.find((x) => String(x?.identifier?.id ?? "").toLowerCase() === "halilural.imprimatur");
+    if (e) return e.metadata?.source === "gallery" ? "gallery" : "vsix";
+  }
+  return undefined;
 }
 
 /** A claude command's JSON output; undefined when it fails. @param {string[]} args */
@@ -626,7 +652,9 @@ function main() {
     }
   }
 
-  if (opts.extension && !opts.dry) {
+  const fromStore = opts.extension && !opts.vsix && installedFrom() === "gallery";
+  if (fromStore) console.log("Extension: installed from the Marketplace / Open VSX; VS Code keeps it up to date (--vsix installs this checkout's build instead).");
+  if (opts.extension && !opts.dry && !fromStore) {
     console.log("Extension:");
     // Packaging bundles with esbuild (a dev dependency): a pulled checkout may not have it yet.
     if (!fs.existsSync(path.join(root, "node_modules", "esbuild"))) {
