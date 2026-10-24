@@ -22,8 +22,10 @@
 - [Pointer (👉)](#pointer)
 - [Process checks](#process-checks)
 - [Record](#record)
+- [Rules card](#rules-card)
 - [Section](#section)
 - [Session](#session)
+- [Social document](#social-document)
 - [Superseded](#superseded)
 - [Task](#task)
 - [Tracked change](#tracked-change)
@@ -138,6 +140,12 @@ Rules a repo turns on with `.claude/imprimatur.json`; the agent is reminded at t
 
 A row of a task. Kinds: `todo`, `question` (a question to the user), `answer` (the answer to a question), `decision`, `note`, `fixme`, `adr`, `pdr`, `test`. A record is never deleted, it becomes `dropped`; every change is kept as a version.
 
+<a id="rules-card"></a>
+
+## Rules card
+
+What `/social-post` writes down for a channel before writing its post: the date, where each rule was read (an official page, pasted by the user, or "not readable"), and only the rules that change the post: length, title format, self-promotion, where links go, flair, required parts, timing, what is forbidden.
+
 <a id="section"></a>
 
 ## Section
@@ -149,6 +157,12 @@ One part of a living document. Its key is a slug (`storage`), unique within the 
 ## Session
 
 One Claude Code session. The hooks write the session onto records and edits themselves (`_session`); the agent leaves that field empty.
+
+<a id="social-document"></a>
+
+## Social document
+
+A repo's living document of its social media posts (#109), one section per channel: the rules card read for it, the post, its status, results and what was learned. Off by default; a repo turns it on with `{"social": true}` in `.claude/imprimatur.json`. Kept in `docs/SOCIAL.md`. See also: rules card.
 
 <a id="superseded"></a>
 
