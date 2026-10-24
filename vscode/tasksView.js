@@ -11,9 +11,11 @@ const os = require("node:os");
 /** The user, as record versions name them. */
 const userActor = () => ({ kind: /** @type {"user"} */ ("user"), id: os.userInfo().username });
 
-const TABS = ["home", "tasks", "inbox", "architecture", "product", "glossary", "analysis", "exercises", "edits"];
+const TABS = ["home", "tasks", "inbox", "architecture", "product", "glossary", "social", "analysis", "exercises", "edits"];
 /** The Analysis tab's pages (TASK-ANALYSIS): the design documents, the glossary and the tasks' analyses. */
-const ANALYSIS_TABS = [["architecture", "Architecture"], ["product", "Product"], ["glossary", "Glossary"], ["analysis", "Task analyses"]];
+const ANALYSIS_TABS = [["architecture", "Architecture"], ["product", "Product"], ["glossary", "Glossary"], ["social", "Social"], ["analysis", "Task analyses"]];
+/** The Analysis tab's pages in a repo: Social only where it is on (#109). @param {string} root */
+const analysisTabs = (root) => ANALYSIS_TABS.filter(([t]) => t !== "social" || require("./docs-export.js").socialOn(root));
 const FILTERS = ["active", "open", "done"];
 const TASK_STATUSES = ["open", "active", "done", "dropped"];
 /** The tasks that hold recommendations (#87: RECS; AUDIT and BEST before it). */
@@ -664,7 +666,7 @@ function taskTabs(c, tabs) {
 function hubNav(db, root, cur) {
   const repo = repoOfRoot(db, root);
   const n = repo ? db.taskDocs(repo.id).filter((/** @type {any} */ d) => d.sections > 0).length : 0;
-  return `<nav class="hubnav" data-k="hubnav" aria-label="Analysis">${ANALYSIS_TABS.map(([t, label]) => `<button class="ttab${t === cur ? " on" : ""}" data-act="tab" data-tab="${t}"${t === cur ? ' aria-current="page"' : ""}>${icon(/** @type {any} */ (t), 14)} ${esc(label)}${t === "analysis" && n ? ` <span class="n">${n}</span>` : ""}</button>`).join("")}</nav>`;
+  return `<nav class="hubnav" data-k="hubnav" aria-label="Analysis">${analysisTabs(root).map(([t, label]) => `<button class="ttab${t === cur ? " on" : ""}" data-act="tab" data-tab="${t}"${t === cur ? ' aria-current="page"' : ""}>${icon(/** @type {any} */ (t), 14)} ${esc(label)}${t === "analysis" && n ? ` <span class="n">${n}</span>` : ""}</button>`).join("")}</nav>`;
 }
 
 /**
@@ -896,7 +898,10 @@ function paneHtml(db, root, view, o = {}) {
   if (view.tab === "home") return homeHtml(homeModel(db, root, o));
   if (view.tab === "tasks") return tasksHtml(tasksPage(db, root, view, o));
   if (view.tab === "inbox") return inboxHtml(inboxModel(db, root, { all: view.all, waiting: o.waiting, now: o.now, placeOf: o.placeOf }));
-  if (view.tab === "architecture" || view.tab === "product" || view.tab === "glossary") {
+  if (view.tab === "social" && !require("./docs-export.js").socialOn(root)) {
+    return hubNav(db, root, "social") + `<div class="card dempty emptyhero" data-k="social-off">${require("./mascot.js").mascot(56)}<div><p><b>Social media tracking is off in this repo.</b> Turn it on with the command <span class="mono">Imprimatur: Turn on social media tracking</span>: a Social page appears here, one section per channel, kept in docs/SOCIAL.md.</p></div></div>`;
+  }
+  if (view.tab === "architecture" || view.tab === "product" || view.tab === "glossary" || view.tab === "social") {
     const docs = require("./docsView.js");
     return hubNav(db, root, view.tab) + docs.docHtml(docs.docModel(db, root, view.tab, view));
   }
@@ -1199,6 +1204,6 @@ const TASKS_CSS = `
 `;
 
 module.exports = {
-  TABS, ANALYSIS_TABS, FILTERS, plainTitle, titleParts, subHeads, TASKS_CSS, analysisHub, analysisHubHtml, ICON, icon, KIND_LABEL, kindChip, bucketOf, userActor, parseQuickAdd, isAsk, repoOfRoot, scopeRepos, describeVersion,
+  TABS, ANALYSIS_TABS, analysisTabs, FILTERS, plainTitle, titleParts, subHeads, TASKS_CSS, analysisHub, analysisHubHtml, ICON, icon, KIND_LABEL, kindChip, bucketOf, userActor, parseQuickAdd, isAsk, repoOfRoot, scopeRepos, describeVersion,
   tasksPage, inboxModel, inboxCount, openTurn, splitText, TITLE_MAX, BODY_MAX, homeModel, unreadOf, unreadHtml, tasksHtml, inboxHtml, homeHtml, paneHtml, applyMessage, cleanView, esc,
 };

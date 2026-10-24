@@ -70,6 +70,13 @@ exercise: a few questions about why and your level, a "can do" goal, and 5 to 9 
 that each say what they are for and when they count as done. You tick them in the
 **Exercises** tab, and the agent coaches without giving the answers away.
 
+## /social-post: posts that follow each platform's current rules
+
+`/social-post` reads the platform's own rules before it writes (a subreddit's sidebar, X's
+character counting, the Show HN guidelines), fits the post to them and checks it. Turn on
+**social media tracking** for a repo (off by default) and the posts, the rules read and how
+each one did are kept on a **Social** page next to Architecture, Product and Glossary.
+
 ## Agent setup audit and recommendations
 
 ![The Agent setup tree of rules, settings, hooks, skills and MCP servers, and Recommendations with agnix findings and a sourced project fix marked Applied](assets/agent-setup.png)

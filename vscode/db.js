@@ -421,7 +421,7 @@ const FIELDS = {
   section: ["title", "body", "position", "status", "records", "source"],
 };
 /** Design documents (#72) and the project glossary: kind → the title a new one gets. */
-const DOC_KINDS = { architecture: "Architecture Design Document", product: "Product Design Document", glossary: "Project Glossary" };
+const DOC_KINDS = { architecture: "Architecture Design Document", product: "Product Design Document", glossary: "Project Glossary", social: "Social Media" };
 /** A task's analysis document (TASK-ANALYSIS): one per task, its scope the task's key. */
 const ANALYSIS = "analysis";
 /** The title a new analysis document gets. @param {string} taskKey */

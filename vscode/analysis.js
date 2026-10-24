@@ -26,7 +26,7 @@ const CONFIG = path.join(".claude", "imprimatur.json");
 /** Tasks that are not work items: their records are Imprimatur's own lists. */
 const SPECIAL = new Set(["ADR", "PDR", "TEST", "AUDIT", "BEST", "RECS"]);
 /** Files a repo keeps for its readers, or Imprimatur keeps already. */
-const NOT_ANALYSIS = /^(README|CHANGELOG|CHANGES|LICENSE|LICENCE|CONTRIBUTING|CODE_OF_CONDUCT|SECURITY|TODO|CLAUDE|AGENTS|GEMINI|SKILL|ARCHITECTURE|PRODUCT|GLOSSARY|THIRD_PARTY_NOTICES|NOTICE|TEMPLATE)\.mdx?$/i;
+const NOT_ANALYSIS = /^(README|CHANGELOG|CHANGES|LICENSE|LICENCE|CONTRIBUTING|CODE_OF_CONDUCT|SECURITY|TODO|CLAUDE|AGENTS|GEMINI|SKILL|ARCHITECTURE|PRODUCT|GLOSSARY|SOCIAL|THIRD_PARTY_NOTICES|NOTICE|TEMPLATE)\.mdx?$/i;
 /** Folders whose files are something else: Imprimatur's own, tools' and agent rules, agent memory, dependencies', the design documents', prompt templates, the sprint plans. */
 const NOT_UNDER = /(^|\/)(node_modules|\.git|\.claude\/(imprimatur|commands|agents|skills)|\.cursor|\.github|vendor|dist|build|\.claude\/(rules|hooks)|memory|docs\/(design|product|testing|prompts)|(docs\/)?todos\/sprints)(\/|$)/;
 /** Paths that say "analysis" by themselves. */

@@ -4,6 +4,21 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.72.0] - 2026-10-24
+
+### Added
+- Social media tracking (#109), off by default: **Imprimatur: Turn on social media tracking**
+  (`{"social": true}` in `.claude/imprimatur.json`) adds a **Social** page under Analysis, next to
+  Architecture, Product and Glossary, kept in `docs/SOCIAL.md`: one section per channel with the
+  rules read, the post, its status and link, results and what was learned. The MCP document tools
+  take the kind `social` where it is on.
+- The `/social-post` skill: reads the target platform's rules and docs at the time of writing,
+  keeps a dated rules card per channel, writes the post to fit it and checks the counts and facts.
+  Where a platform asks for text written by hand (Show HN), it gives the facts and an outline.
+
+### Changed
+- Database schema 10: the documents table takes the new kind.
+
 ## [0.71.0] - 2026-10-24
 
 ### Added

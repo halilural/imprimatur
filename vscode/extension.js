@@ -270,6 +270,27 @@ function showGraph(at) {
   openGraph(root, openEditDiff, currentText, acceptEditOf, goToEdit, renderEdit, undefined, at);
 }
 
+/**
+ * Social media tracking (#109) on or off in a repo: {"social": true} in its .claude/imprimatur.json.
+ * Off keeps the document and docs/SOCIAL.md; on again, they are there. @param {boolean} on
+ */
+async function toggleSocial(on) {
+  const { socialOn, setSocial } = require("./docs-export.js");
+  const list = [...new Set([...roots].map((r) => repoRoot(r) ?? r))].filter((r) => socialOn(r) !== on);
+  if (!list.length) return void vscode.window.showInformationMessage(`Imprimatur: social media tracking is already ${on ? "on" : "off"} here.`);
+  const root = list.length > 1 ? await vscode.window.showQuickPick(list, { title: `Turn social media tracking ${on ? "on" : "off"} in which repo?` }) : list[0];
+  if (!root) return;
+  try {
+    setSocial(root, on);
+  } catch (e) {
+    return void vscode.window.showErrorMessage(e instanceof Error ? e.message : String(e));
+  }
+  if (on) showGraph({ root, tab: "social" });
+  vscode.window.showInformationMessage(on
+    ? "Imprimatur: social media tracking is on for this repo: Analysis → Social, kept in docs/SOCIAL.md. Commit .claude/imprimatur.json to keep it on."
+    : "Imprimatur: social media tracking is off for this repo. Its document is kept; turning it on again brings it back.");
+}
+
 let bestRunning = false;
 /**
  * The project's best-practice review (#86, #87): code fetches the stack's documentation,
@@ -619,8 +640,12 @@ function activate(ctx) {
     vscode.commands.registerCommand("imprimatur.openArchitecture", () => showGraph({ tab: "architecture" })),
     vscode.commands.registerCommand("imprimatur.openProduct", () => showGraph({ tab: "product" })),
     vscode.commands.registerCommand("imprimatur.openGlossary", () => showGraph({ tab: "glossary" })),
+    // Social media (#109): off by default, per repo, in .claude/imprimatur.json.
+    vscode.commands.registerCommand("imprimatur.openSocial", () => showGraph({ tab: "social" })),
+    vscode.commands.registerCommand("imprimatur.social.on", () => toggleSocial(true)),
+    vscode.commands.registerCommand("imprimatur.social.off", () => toggleSocial(false)),
     vscode.commands.registerCommand("imprimatur.docs.reveal", (/** @type {{root?: string, kind?: string, section?: string}} */ at) => {
-      const kind = at?.kind === "product" || at?.kind === "glossary" ? at.kind : "architecture";
+      const kind = at?.kind === "product" || at?.kind === "glossary" || at?.kind === "social" ? at.kind : "architecture";
       return showGraph({ root: at?.root, tab: kind, ...(typeof at?.section === "string" && { section: at.section }) });
     }),
     vscode.commands.registerCommand("imprimatur.acceptRange", acceptRange),

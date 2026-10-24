@@ -14,6 +14,7 @@ The full reference. For an overview and install steps, see the [README](../READM
 - [Unread](#unread)
 - [/study](#study)
 - [/exercise](#exercise)
+- [Social media and /social-post](#social-media-and-social-post)
 - [Agent setup and recommendations](#agent-setup-and-recommendations)
 - [Archive](#archive)
 - [How it works](#how-it-works)
@@ -239,6 +240,24 @@ Exercises are yours, not a repo's or a task's: the same list in every project. T
 this machine (they are not synced). The skill writes them with the `exercise_save` and
 `exercise_get` MCP tools.
 
+## Social media and /social-post
+
+`/social-post` writes a post for a platform after reading that platform's rules **now**: the
+subreddit's rules, X's character counting, LinkedIn's limits, the Show HN guidelines,
+Product Hunt's launch page. It writes down a dated rules card for each channel, writes the post
+to fit it, counts characters with a script and checks every fact against its source. A rule it
+cannot read (Reddit blocks most fetches; Discord rules live in the server) is pasted by you or
+marked "rules not checked". When a platform asks for text written by hand (Show HN), it gives you
+the facts and an outline instead of a draft. It never posts for you.
+
+**Social media tracking** is off by default. Turn it on for a repo with **Imprimatur: Turn on
+social media tracking** (it writes `{"social": true}` to `.claude/imprimatur.json`; commit it).
+Then the **Analysis** tab has a **Social** page next to Architecture, Product and Glossary, kept in
+`docs/SOCIAL.md`: one section per channel with the rules read, the post, its status and link, the
+results over time and what was learned. `/social-post` writes there, and updates a channel when you
+say a post went out or bring its numbers. **Turn off** hides the page and stops the file; the
+document is kept.
+
 ## Agent setup and recommendations
 
 **Agent setup** (in the side bar) lists every file in the repo, and in your home folder,
@@ -347,7 +366,7 @@ claude plugin marketplace add halilural/imprimatur
 claude plugin install imprimatur@imprimatur
 ```
 
-The plugin brings the hooks, the MCP server and the `/study` and `/exercise` skills, and Claude Code keeps
+The plugin brings the hooks, the MCP server and the `/study`, `/exercise` and `/social-post` skills, and Claude Code keeps
 them up to date. It does not bring the VS Code extension or the status line. Plugin hooks
 take no arguments: they read the language and file extensions from `IMPRIMATUR_LANG`, the
 plugin's options (`/config`), or the `config.json` next to Imprimatur's database.
@@ -546,7 +565,8 @@ The command palette has, under **Imprimatur:**
 - Review: Accept Agent Change at Cursor, Accept All Agent Changes in File, Accept Agent
   Changes in Range, Show Agent Edit History, Open Agent Change Graph.
 - Panel: Open Home, Open Tasks, Open Waiting on You, Open Architecture Document, Open
-  Product Document, Open Project Glossary, Show a Design Document Section.
+  Product Document, Open Project Glossary, Open Social Media, Show a Design Document Section.
+- Social media: Turn on social media tracking, Turn off social media tracking.
 - Records: Search Records, Add Record…, Show Every Repo, Show This Window's Repos Only,
   Refresh Records.
 - Agent setup: Recommendations…, Audit Agent Setup (agnix), Review Project Best

@@ -23,7 +23,7 @@ const {
 const { repoRoot } = require("../vscode/review-state.js");
 const { originOf } = require("../vscode/import.js");
 const { syncDocs, health: docsHealth } = require("../vscode/docs-sync.js");
-const { syncOn: docsSyncOn } = require("../vscode/docs-export.js");
+const { syncOn: docsSyncOn, socialOn } = require("../vscode/docs-export.js");
 const { locateAgnix, auditRoot, describeSummary } = require("../vscode/setup-audit.js");
 const { studyMaterial, NOTE_KEY: STUDY_NOTE } = require("../vscode/study.js");
 
@@ -61,7 +61,7 @@ const MAX_TITLE = 300;
 const MAX_BODY = 20_000;
 /** A design document section's body (#72): longer than a record's, short enough to sync (db.js). */
 const MAX_SECTION_BODY = SECTION_BODY_MAX;
-const DOC_KIND = { type: "string", enum: [...Object.keys(DOC_KINDS), ANALYSIS], description: "architecture (how it is built), product (what the user gets), glossary (the project's terms, one section each) or analysis (a task's analysis, plan and research files; task needed)" };
+const DOC_KIND = { type: "string", enum: [...Object.keys(DOC_KINDS), ANALYSIS], description: "architecture (how it is built), product (what the user gets), glossary (the project's terms, one section each), social (the repo's social media posts, one section per channel; only where the repo turned it on) or analysis (a task's analysis, plan and research files; task needed)" };
 const DOC_TASK = { type: "string", description: "kind analysis: the task's key, e.g. \"#58\"" };
 const SECTION_KEY_ARG = { type: "string", maxLength: 64, description: "The section's slug, e.g. \"storage\" (a-z, 0-9, -); unique in the document" };
 const BODY_CUT = 500;
@@ -504,6 +504,7 @@ function taskRecords(db, task, a) {
 
 /** doc_get: the document's table of contents, with the asked bodies. @param {any} db @param {{id: number, root: string}} repo @param {any} a */
 function docGet(db, repo, a) {
+  socialGate(repo, a);
   const task = analysisTask(a);
   const found = task ? db.taskDocFind(repo.id, task) : db.docFind(repo.id, a.kind);
   // Not made by a read: an empty document until something is written.
@@ -521,6 +522,13 @@ function docGet(db, repo, a) {
   return out;
 }
 
+/** The social document only where the repo turned it on (#109). @param {{root: string}} repo @param {any} a */
+function socialGate(repo, a) {
+  if (a.kind === "social" && !socialOn(repo.root)) {
+    throw new ToolError('social media tracking is off in this repo (it is off by default): the user turns it on with the command "Imprimatur: Turn on social media tracking", or {"social": true} in .claude/imprimatur.json. Until then keep posts in a file.');
+  }
+}
+
 /** The task of an analysis call, or undefined for the repo's documents. @param {any} a */
 function analysisTask(a) {
   if (a.kind !== ANALYSIS) {
@@ -534,6 +542,7 @@ function analysisTask(a) {
 
 /** doc_section_upsert: records must be this repo's. @param {any} db @param {{id: number, root: string}} repo @param {any} a @param {any} actor */
 function docUpsert(db, repo, a, actor) {
+  socialGate(repo, a);
   for (const id of a.records ?? []) {
     const rec = recordOf(db, id, "records");
     if (db.taskById(rec.task_id)?.repo_id !== repo.id) {
