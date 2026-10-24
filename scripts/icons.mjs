@@ -13,13 +13,13 @@ const NAMES = {
   arrow: "arrow-right", check: "check", plus: "plus", search: "search", stamp: "stamp", external: "external-link",
   question: "message-circle-question", terminal: "square-terminal", eye: "eye", hand: "hand", file: "file-text",
   // tabs
-  home: "house", tasks: "list-checks", inbox: "inbox", architecture: "network", product: "package", glossary: "book-a", edits: "history", analysis: "library-big",
+  home: "house", tasks: "list-checks", inbox: "inbox", architecture: "network", product: "package", glossary: "book-a", edits: "history", analysis: "library-big", exercises: "dumbbell",
   // edit kinds (Agent changes)
   edit: "pencil", record: "list", agent: "bot", skill: "sparkles", mcp: "plug", web: "globe", read: "file-search", other: "dot",
   // actions and states
   audit: "wand-sparkles", scan: "search-check", zoomIn: "zoom-in", zoomOut: "zoom-out", fit: "scan", maximize: "maximize-2", close: "x",
   pin: "map-pin", todo: "list-todo", test: "flask-conical", doneAll: "check-check", note: "sticky-note", decision: "scale",
-  repo: "folder-git-2", clock: "clock", user: "user", review: "circle-dot", accepted: "circle-check-big", chevron: "chevron-right", sub: "corner-down-right",
+  repo: "folder-git-2", clock: "clock", user: "user", review: "circle-dot", accepted: "circle-check-big", chevron: "chevron-right", sub: "corner-down-right", skip: "skip-forward", copy: "copy", target: "target",
 };
 const dir = path.join(root, "node_modules", "lucide-static", "icons");
 const version = JSON.parse(fs.readFileSync(path.join(root, "node_modules", "lucide-static", "package.json"), "utf8")).version;

@@ -13,6 +13,7 @@
 - [Comprehension debt](#comprehension-debt)
 - [End-of-turn question](#end-of-turn-question)
 - [Epic](#epic)
+- [Exercise](#exercise)
 - [Hook](#hook)
 - [Imprimatur](#imprimatur)
 - [Living document](#living-document)
@@ -82,6 +83,12 @@ A question or request the agent leaves for the user at the end of a turn. It sho
 ## Epic
 
 A task that gathers other tasks. Its subtasks are linked to it; the panel and the tracker show them together.
+
+<a id="exercise"></a>
+
+## Exercise
+
+A topic the user practises, made by `/exercise` (#108): a "can do" goal, how it is checked, and 5 to 9 small steps (learn, example, predict, do, vary, explain, recall), each with why and done-when, that the user ticks in the panel's Exercises tab. The user's own, of no repo or task. A step too big is split into smaller steps under it.
 
 <a id="hook"></a>
 

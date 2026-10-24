@@ -18,6 +18,7 @@
 12. [A task's analysis](#task-analysis)
 13. [Unread: comprehension debt (#91, #92)](#unread)
 14. [/study: studying a topic (#95)](#study)
+15. [/exercise: practise any topic in small steps (#108)](#exercise)
 
 <a id="summary"></a>
 
@@ -335,3 +336,26 @@ To learn a design decision, a feature or a document the agent made well enough t
 3. **Mastery**: the score and weak points stay on the task as a note. The next `/study` asks the weak questions first and says what changed since then. A reason found missing in the document becomes a to-do for the agent.
 
 Why it is this way: in Anthropic's 2026 study, people who asked for explanations and asked questions kept 65–86% of the topic, those who only delegated kept 39%.
+
+<a id="exercise"></a>
+
+## 15. /exercise: practise any topic in small steps (#108)
+
+The user picks any topic (a language feature, a concept for an interview, a spoken language, a book chapter, a sport) and wants to practise it, not only read about it. `/exercise <topic>` in Claude Code turns it into an exercise they tick in the panel's **Exercises** tab.
+
+### What the user gets
+- **A few questions first:** why (understand, do, an exam or interview), their level, time and place; then two or three quick diagnostic questions, so what they know is skipped.
+- **A "can do" goal** with how it is checked at the end.
+- **5 to 9 steps of 10 to 25 minutes**, each with a kind (learn, example, predict, do, vary, explain, recall), what it is for, and when it counts as done: something they can show.
+- **Coaching without answers:** the agent reviews what they bring, gives a hint, then a narrower one; the solution only when they ask after trying.
+- **A closing recall** without notes; the weak points are kept for the next session.
+
+### The Exercises tab
+Progress, the step to do now, a box per step, **skip** (why goes in its note), a note per step, **split** (copies `/exercise split step … of exercise …` for Claude Code), drop and resume, finished exercises below.
+
+### Rules
+- Exercises are the user's, not a repo's or a task's: the same list in every project. They stay on this machine.
+- A split step is ticked when its smaller steps are; an exercise is done when its steps are.
+- Reading is at most a third of the steps; every exercise has a do step and a closing recall.
+
+Later: spaced recall of weak points (1, 3, 7 days, then FSRS-like) on Home; a quick create from the panel.

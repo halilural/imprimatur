@@ -297,6 +297,39 @@ const MIGRATIONS = [
   INSERT INTO section_reads (section_id, version_id, at)
     SELECT s.id, coalesce((SELECT max(v.id) FROM doc_versions v WHERE v.section_id = s.id), 0), CAST(strftime('%s', 'now') AS INTEGER) * 1000 FROM doc_sections s;
   `,
+  // Exercise mode (#108): a topic the user practises, broken into small steps they tick. The
+  // user's own, of no repo or task; device-local, not synced (like section_reads). A step split
+  // later keeps its place: its smaller steps hang under it (parent_id).
+  `
+  CREATE TABLE exercises (
+    id INTEGER PRIMARY KEY,
+    uid TEXT NOT NULL UNIQUE,
+    topic TEXT NOT NULL,
+    goal TEXT,
+    proof TEXT,
+    context TEXT,
+    weak TEXT,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'done', 'dropped')),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE exercise_steps (
+    id INTEGER PRIMARY KEY,
+    exercise_id INTEGER NOT NULL REFERENCES exercises(id),
+    parent_id INTEGER REFERENCES exercise_steps(id),
+    position REAL NOT NULL,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    why TEXT,
+    done_when TEXT,
+    minutes INTEGER,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'done', 'skipped')),
+    note TEXT,
+    done_at INTEGER,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX exercise_steps_of ON exercise_steps(exercise_id, position);
+  `,
 ];
 const VERSION = MIGRATIONS.length;
 
@@ -330,6 +363,41 @@ const SECTION_TITLE_MAX = 300;
 const SECTION_KEY = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const TASK_STATUSES = ["open", "active", "done", "dropped"];
 const RECORD_STATUSES = ["open", "done", "dropped"];
+const EXERCISE_STATUSES = ["active", "done", "dropped"];
+const STEP_STATUSES = ["open", "done", "skipped"];
+/**
+ * What a step asks of the user (#108), in the order a good exercise uses them: learn a little,
+ * study an example, predict, do it, vary or break it, explain it, recall it without notes.
+ */
+const EXERCISE_STEP_KINDS = ["learn", "example", "predict", "do", "vary", "explain", "recall"];
+const EXERCISE_TITLE_MAX = 300;
+const EXERCISE_TEXT_MAX = 4000;
+const EXERCISE_STEPS_MAX = 60;
+/** A text field of an exercise or step: trimmed, "" stored as nothing. @param {unknown} v @param {string} name @param {number} [max] */
+function exText(v, name, max = EXERCISE_TEXT_MAX) {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== "string") throw new Error(`Imprimatur: ${name} must be text`);
+  const t = v.trim();
+  if (t.length > max) throw new Error(`Imprimatur: ${name} is longer than ${max} characters`);
+  return t || undefined;
+}
+/** @param {unknown} v @param {string[]} allowed */
+function exStatus(v, allowed) {
+  if (typeof v !== "string" || !allowed.includes(v)) throw new Error(`Imprimatur: ${String(v)} is not one of ${allowed.join(", ")}`);
+  return v;
+}
+/** @param {unknown} v */
+function exMinutes(v) {
+  if (v === undefined || v === null) return null;
+  if (!Number.isInteger(v) || /** @type {number} */ (v) < 1 || /** @type {number} */ (v) > 600) throw new Error("Imprimatur: minutes must be a whole number from 1 to 600");
+  return v;
+}
+/** Weak points the closing recall found: a list of short lines. @param {unknown} v */
+function exWeak(v) {
+  if (v === undefined || v === null) return null;
+  if (!Array.isArray(v) || v.length > 30) throw new Error("Imprimatur: weak must be a list of at most 30 lines");
+  return v.map((x) => exText(x, "a weak point", EXERCISE_TITLE_MAX)).filter(Boolean);
+}
 
 /**
  * One spelling per remote: git@github.com:a/b.git and https://github.com/a/b are the same repo.
@@ -1343,6 +1411,155 @@ class Db {
                    WHERE s.doc_id = ? ORDER BY v.id DESC LIMIT 1`).get(docId);
   }
 
+  // ---- Exercises (#108): the user's own, of no repo ----
+
+  /**
+   * Creates an exercise (no id) or changes one, with its steps: a step with an id is changed, one
+   * without is added (after the last, or under parent_id when it splits a step). Steps are never
+   * deleted: a step not wanted is "skipped".
+   * @param {{id?: number, topic?: string, goal?: string, proof?: string, context?: string, weak?: string[], status?: string, steps?: any[]}} fields
+   */
+  saveExercise(fields) {
+    const now = Date.now();
+    return this.tx(() => {
+      let id = fields.id;
+      if (id === undefined) {
+        const topic = exText(fields.topic, "topic", EXERCISE_TITLE_MAX);
+        if (!topic) throw new Error("Imprimatur: an exercise needs a topic");
+        id = Number(this.q(`INSERT INTO exercises (uid, topic, goal, proof, context, weak, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(uid(), topic, exText(fields.goal, "goal") ?? null, exText(fields.proof, "proof") ?? null, exText(fields.context, "context") ?? null,
+            json(exWeak(fields.weak)), exStatus(fields.status ?? "active", EXERCISE_STATUSES), now, now).lastInsertRowid);
+      } else {
+        if (!this.q("SELECT 1 FROM exercises WHERE id = ?").get(id)) throw new Error(`Imprimatur: no exercise ${id}`);
+        const set = [];
+        const args = [];
+        for (const k of ["topic", "goal", "proof", "context"]) {
+          if (fields[/** @type {"topic"} */ (k)] === undefined) continue;
+          const v = exText(fields[/** @type {"topic"} */ (k)], k, k === "topic" ? EXERCISE_TITLE_MAX : undefined);
+          if (k === "topic" && !v) throw new Error("Imprimatur: an exercise needs a topic");
+          set.push(`${k} = ?`);
+          args.push(v ?? null);
+        }
+        if (fields.weak !== undefined) set.push("weak = ?"), args.push(json(exWeak(fields.weak)));
+        if (fields.status !== undefined) set.push("status = ?"), args.push(exStatus(fields.status, EXERCISE_STATUSES));
+        this.q(`UPDATE exercises SET ${[...set, "updated_at = ?"].join(", ")} WHERE id = ?`).run(...args, now, id);
+      }
+      const steps = fields.steps ?? [];
+      if (!Array.isArray(steps) || steps.length > EXERCISE_STEPS_MAX) throw new Error(`Imprimatur: steps must be a list of at most ${EXERCISE_STEPS_MAX}`);
+      for (const s of steps) this.saveStep(/** @type {number} */ (id), s, now);
+      // done/active follow the steps, whatever the call said; dropped stays.
+      this.settleExercise(/** @type {number} */ (id), now);
+      return this.exercise(/** @type {number} */ (id));
+    });
+  }
+
+  /** One step of an exercise, added or changed. @param {number} exerciseId @param {any} s @param {number} now */
+  saveStep(exerciseId, s, now) {
+    if (!s || typeof s !== "object") throw new Error("Imprimatur: a step must be an object");
+    if (s.id == null) {
+      const title = exText(s.title, "step title", EXERCISE_TITLE_MAX);
+      if (!title) throw new Error("Imprimatur: a step needs a title");
+      let position;
+      if (s.parent_id != null) {
+        if (!Number.isSafeInteger(s.parent_id)) throw new Error("Imprimatur: parent_id must be a step id");
+        const parent = this.q("SELECT * FROM exercise_steps WHERE id = ? AND exercise_id = ?").get(s.parent_id, exerciseId);
+        if (!parent) throw new Error(`Imprimatur: no step ${s.parent_id} in exercise ${exerciseId}`);
+        if (parent.parent_id) throw new Error("Imprimatur: a smaller step is not split again; add another step under the same one");
+        position = (this.q("SELECT max(position) AS p FROM exercise_steps WHERE parent_id = ?").get(s.parent_id).p ?? 0) + 1;
+      } else position = (this.q("SELECT max(position) AS p FROM exercise_steps WHERE exercise_id = ? AND parent_id IS NULL").get(exerciseId).p ?? 0) + 1;
+      if (s.position != null && (typeof s.position !== "number" || !Number.isFinite(s.position))) throw new Error("Imprimatur: position must be a number");
+      const status = exStatus(s.status ?? "open", STEP_STATUSES);
+      this.q(`INSERT INTO exercise_steps (exercise_id, parent_id, position, kind, title, why, done_when, minutes, status, note, done_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(exerciseId, s.parent_id ?? null, s.position ?? position, exStatus(s.kind ?? "do", EXERCISE_STEP_KINDS), title, exText(s.why, "why") ?? null,
+          exText(s.done_when, "done_when") ?? null, exMinutes(s.minutes), status, exText(s.note, "note") ?? null, status === "done" ? now : null, now);
+      return;
+    }
+    const step = this.q("SELECT * FROM exercise_steps WHERE id = ? AND exercise_id = ?").get(s.id, exerciseId);
+    if (!step) throw new Error(`Imprimatur: no step ${s.id} in exercise ${exerciseId}`);
+    this.updateStep(s.id, s, now);
+  }
+
+  /**
+   * A step changed: ticked, skipped, opened again, a note; its exercise's progress follows
+   * (settleExercise). @param {number} id @param {any} patch @param {number} [now]
+   */
+  updateStep(id, patch, now = Date.now()) {
+    return this.tx(() => {
+      const step = this.q("SELECT * FROM exercise_steps WHERE id = ?").get(id);
+      if (!step) throw new Error(`Imprimatur: no step ${id}`);
+      const set = [];
+      const args = [];
+      for (const k of ["title", "why", "done_when", "note"]) {
+        if (patch[k] === undefined) continue;
+        const v = exText(patch[k], k, k === "title" ? EXERCISE_TITLE_MAX : undefined);
+        if (k === "title" && !v) throw new Error("Imprimatur: a step needs a title");
+        set.push(`${k} = ?`);
+        args.push(v ?? null);
+      }
+      if (patch.kind !== undefined) set.push("kind = ?"), args.push(exStatus(patch.kind, EXERCISE_STEP_KINDS));
+      if (patch.minutes !== undefined) set.push("minutes = ?"), args.push(exMinutes(patch.minutes));
+      if (patch.position !== undefined) {
+        if (typeof patch.position !== "number" || !Number.isFinite(patch.position)) throw new Error("Imprimatur: position must be a number");
+        set.push("position = ?"), args.push(patch.position);
+      }
+      if (patch.status !== undefined) {
+        const status = exStatus(patch.status, STEP_STATUSES);
+        set.push("status = ?", "done_at = ?");
+        args.push(status, status === "done" ? (step.status === "done" ? step.done_at : now) : null);
+      }
+      this.q(`UPDATE exercise_steps SET ${[...set, "updated_at = ?"].join(", ")} WHERE id = ?`).run(...args, now, id);
+      if (patch.status !== undefined) this.settleExercise(step.exercise_id, now);
+      else this.q("UPDATE exercises SET updated_at = ? WHERE id = ?").run(now, step.exercise_id);
+      return this.q("SELECT * FROM exercise_steps WHERE id = ?").get(id);
+    });
+  }
+
+  /**
+   * A split step is done when its smaller steps all are (done or skipped), open again when one
+   * is; an exercise is done when its steps all are, active again when one opens.
+   * @param {number} exerciseId @param {number} now
+   */
+  settleExercise(exerciseId, now) {
+    const steps = this.q("SELECT id, parent_id, status FROM exercise_steps WHERE exercise_id = ?").all(exerciseId);
+    const closed = (/** @type {any} */ s) => s.status !== "open";
+    for (const p of steps.filter((/** @type {any} */ s) => !s.parent_id)) {
+      const kids = steps.filter((/** @type {any} */ s) => s.parent_id === p.id);
+      if (!kids.length || p.status === "skipped") continue;
+      const want = kids.every(closed) ? "done" : "open";
+      if (p.status !== want) {
+        this.q("UPDATE exercise_steps SET status = ?, done_at = ?, updated_at = ? WHERE id = ?").run(want, want === "done" ? now : null, now, p.id);
+        p.status = want;
+      }
+    }
+    const ex = this.q("SELECT status FROM exercises WHERE id = ?").get(exerciseId);
+    const top = steps.filter((/** @type {any} */ s) => !s.parent_id);
+    const want = ex.status === "dropped" ? "dropped" : top.length && top.every(closed) ? "done" : "active";
+    this.q("UPDATE exercises SET status = ?, updated_at = ? WHERE id = ?").run(want, now, exerciseId);
+  }
+
+  /** An exercise with its steps in order (a split step's smaller steps right under it). @param {number} id */
+  exercise(id) {
+    const ex = this.q("SELECT * FROM exercises WHERE id = ?").get(id);
+    if (!ex) return undefined;
+    const all = this.q("SELECT * FROM exercise_steps WHERE exercise_id = ? ORDER BY position, id").all(id);
+    const top = all.filter((/** @type {any} */ s) => !s.parent_id);
+    const steps = top.flatMap((/** @type {any} */ s) => [s, ...all.filter((/** @type {any} */ k) => k.parent_id === s.id)]);
+    return { ...ex, weak: ex.weak ? JSON.parse(ex.weak) : [], steps };
+  }
+
+  /**
+   * Exercises, newest change first, with their progress (top-level steps: a split step counts once).
+   * @param {{status?: string, limit?: number}} [o] status "all" for every one
+   */
+  exercises({ status = "active", limit = 100 } = {}) {
+    const rows = this.q(`SELECT e.*,
+        (SELECT count(*) FROM exercise_steps s WHERE s.exercise_id = e.id AND s.parent_id IS NULL) AS step_count,
+        (SELECT count(*) FROM exercise_steps s WHERE s.exercise_id = e.id AND s.parent_id IS NULL AND s.status != 'open') AS closed
+      FROM exercises e WHERE (? = 'all' OR e.status = ?) ORDER BY e.updated_at DESC, e.id DESC LIMIT ?`).all(status, status, limit);
+    return rows.map((/** @type {any} */ e) => ({ ...e, weak: e.weak ? JSON.parse(e.weak) : [] }));
+  }
+
   // ---- Sync between machines (#61) ----
 
   /** @param {string} k @returns {string | undefined} */
@@ -1494,5 +1711,5 @@ function openDb({ path: file = dbPath(), busyMs = 5000, plugins } = {}) {
 
 module.exports = {
   openDb, dbPath, onWindowsDrive, normOrigin, refersTo, recordOf, analysisTitle, KINDS, ACTORS, VERSION, MIGRATIONS, FIELDS,
-  TRACKER_KEY, TASK_STATUSES, RECORD_STATUSES, DOC_KINDS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, SECTION_TITLE_MAX, SOURCE_MAX,
+  TRACKER_KEY, TASK_STATUSES, RECORD_STATUSES, EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, DOC_KINDS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, SECTION_TITLE_MAX, SOURCE_MAX,
 };

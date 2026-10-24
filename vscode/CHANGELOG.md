@@ -4,6 +4,19 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.71.0] - 2026-10-24
+
+### Added
+- Exercise mode (#108): `/exercise <topic>` turns any topic into an exercise. The agent asks
+  why, your level and your time, runs a short diagnostic, then writes a "can do" goal and 5 to 9
+  steps of 10 to 25 minutes (learn, example, predict, do, vary, explain, recall), each with what
+  it is for and when it counts as done. It coaches without giving the answer first and closes
+  with a recall without notes that keeps your weak points.
+- The panel's **Exercises** tab: progress, the step to do now, ticks, skip, a note per step,
+  and **split** to ask the agent for smaller steps. Exercises are yours, of no repo or task,
+  and stay on this machine.
+- MCP tools `exercise_save` and `exercise_get`.
+
 ## [0.70.2] - 2026-10-23
 
 ### Changed

@@ -16,7 +16,10 @@ import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-const { openDb, KINDS, DOC_KINDS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, analysisTitle } = require("../vscode/db.js");
+const {
+  openDb, KINDS, DOC_KINDS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, analysisTitle,
+  EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX,
+} = require("../vscode/db.js");
 const { repoRoot } = require("../vscode/review-state.js");
 const { originOf } = require("../vscode/import.js");
 const { syncDocs, health: docsHealth } = require("../vscode/docs-sync.js");
@@ -102,6 +105,17 @@ const TASK = {
     epic_id: orNull("integer"), summary: orNull("string"), created_at: int, updated_at: int,
   },
   required: ["id", "key", "title", "status", "created_at", "updated_at"],
+};
+const EXERCISE = {
+  type: "object",
+  properties: {
+    id: int, uid: str, topic: str, goal: orNull("string"), proof: orNull("string"), context: orNull("string"), weak: { type: "array", items: str },
+    status: { type: "string", enum: EXERCISE_STATUSES }, created_at: int, updated_at: int,
+    steps: { type: "array", items: { type: "object" }, description: "One exercise: its steps, in order" },
+    step_count: { type: "integer", description: "The list: top-level steps (a split step counts once)" },
+    closed: { type: "integer", description: "The list: top-level steps done or skipped" },
+  },
+  required: ["id", "topic", "status", "created_at", "updated_at"],
 };
 const LEFT_OFF = {
   type: "object",
@@ -284,6 +298,50 @@ const TOOLS = [
       sections: { type: "array" }, analysis: { type: "array" }, terms: { type: "array" }, commits: { type: "array" }, files: { type: "array" },
       epic: { type: "object" }, note: { type: "object" }, mastery: { type: "object" },
     }, ["task", "tasks", "decisions", "notes", "todos", "sections", "analysis", "terms", "commits", "files"]),
+    readOnly: true,
+  },
+  {
+    name: "exercise_save",
+    title: "Save an exercise",
+    description: `Creates an exercise (no id) or changes one (id) for the /exercise skill (#108): any topic the user practises, broken into small steps they tick in the panel's Exercises tab. The user's own, in every repo; of no task. A step with an id is changed (status ${STEP_STATUSES.join("|")}, note, text); one without is added at the end, or under parent_id to split that step into smaller ones. Steps are never deleted: one not wanted is "skipped". An exercise is done by itself when its steps all are.`,
+    inputSchema: input({
+      id: { type: "integer", description: "The exercise to change; leave out to create one" },
+      topic: { type: "string", maxLength: EXERCISE_TITLE_MAX, description: "What is practised, short: \"Java virtual threads\", \"Polish greetings\", \"pull-ups\"" },
+      goal: { type: "string", maxLength: EXERCISE_TEXT_MAX, description: "What the user can do at the end, one \"can do\" sentence" },
+      proof: { type: "string", maxLength: EXERCISE_TEXT_MAX, description: "How the goal is checked at the end, without notes" },
+      context: { type: "string", maxLength: EXERCISE_TEXT_MAX, description: "What the clarifying questions found: why, level, time a day, where (IDE, paper, gym), what is already known" },
+      weak: { type: "array", items: { type: "string" }, description: "Weak points the closing recall found, one short line each (the list replaces the old one)" },
+      status: { type: "string", enum: EXERCISE_STATUSES, description: "dropped: given up; done/active follow the steps by themselves" },
+      steps: {
+        type: "array", maxItems: EXERCISE_STEPS_MAX, description: "Steps to add (no id) or change (id), in order",
+        items: {
+          type: "object", additionalProperties: false,
+          properties: {
+            id: int,
+            parent_id: { type: "integer", description: "Splits that step: this one goes under it" },
+            kind: { type: "string", enum: EXERCISE_STEP_KINDS, description: "learn (a little reading or watching), example (study a worked one), predict (guess before running or trying), do, vary (change or break it), explain (in your own words), recall (without notes)" },
+            title: { type: "string", maxLength: EXERCISE_TITLE_MAX, description: "Starts with a verb; one thing to do" },
+            why: { type: "string", maxLength: EXERCISE_TEXT_MAX, description: "What the step is for (its subgoal)" },
+            done_when: { type: "string", maxLength: EXERCISE_TEXT_MAX, description: "What the user can show when it is done" },
+            minutes: { type: "integer", minimum: 1, maximum: 600 },
+            status: { type: "string", enum: STEP_STATUSES },
+            note: { type: "string", maxLength: EXERCISE_TEXT_MAX, description: "The user's note, or why a step was skipped" },
+            position: { type: "number" },
+          },
+        },
+      },
+    }),
+    outputSchema: output({ exercise: EXERCISE }),
+  },
+  {
+    name: "exercise_get",
+    title: "Read exercises",
+    description: "The exercises with their progress, newest change first (status active by default); with id also that one exercise with its steps (a split step's smaller steps right under it), what the user ticked and noted, and its weak points.",
+    inputSchema: input({
+      id: { type: "integer", description: "The exercise; leave out for the list" },
+      status: { type: "string", enum: [...EXERCISE_STATUSES, "all"], default: "active" },
+    }),
+    outputSchema: output({ exercises: { type: "array", items: EXERCISE }, exercise: EXERCISE }, ["exercises"]),
     readOnly: true,
   },
   {
@@ -576,6 +634,19 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
       const repo = repoOf(db, a.repo);
       return studyMaterial(db, repo, taskOf(db, repo, a.key));
     }
+    case "exercise_save":
+      try {
+        return { exercise: db.saveExercise(pick(a, ["id", "topic", "goal", "proof", "context", "weak", "status", "steps"])) };
+      } catch (e) {
+        throw new ToolError(String(/** @type {Error} */ (e).message).replace(/^Imprimatur: /, ""));
+      }
+    case "exercise_get": {
+      const exercises = db.exercises({ status: a.status ?? "active" });
+      if (a.id === undefined) return { exercises };
+      const exercise = db.exercise(a.id);
+      if (!exercise) throw new ToolError(`no exercise ${a.id}; exercise_get without id lists them (status "all" for every one)`);
+      return { exercises, exercise };
+    }
     case "search":
       return { records: db.search(a.text, { repoId: a.repo === "*" ? undefined : repoOf(db, a.repo).id, kind: a.kind, limit: a.limit }) };
     default:
@@ -656,6 +727,12 @@ export function digest(name, out, a = {}) {
       return [...out.audits.map(describeSummary), a.dry_run ? "Dry run: nothing written." : 'Open findings: task_get key "RECS" (repo for the home: its path).'].join("\n");
     case "study_material":
       return studyDigest(out);
+    case "exercise_save":
+      return `Saved ${exerciseDigest(out.exercise)}`;
+    case "exercise_get":
+      if (out.exercise) return exerciseDigest(out.exercise);
+      if (!out.exercises.length) return `No ${a.status && a.status !== "all" ? `${a.status} ` : a.status ? "" : "active "}exercises.`;
+      return [`${plural(out.exercises.length, "exercise")}:`, ...out.exercises.map((e) => `- [${e.id}] ${e.topic} [${e.status}] ${e.closed}/${e.step_count} steps${e.goal ? ` — ${oneLine(e.goal, 160)}` : ""}`)].join("\n");
     case "search":
       if (!out.records.length) return `No records match ${JSON.stringify(a.text ?? "")}.`;
       return [`${plural(out.records.length, "record")}:`, ...out.records.map((r) =>
@@ -663,6 +740,26 @@ export function digest(name, out, a = {}) {
     default:
       return JSON.stringify(out);
   }
+}
+
+/** An exercise as text (#108): its goal, then each step with its box, the user's note under it. @param {any} e */
+function exerciseDigest(e) {
+  const top = e.steps.filter((s) => !s.parent_id);
+  const L = [`exercise [${e.id}] ${e.topic} [${e.status}] ${top.filter((s) => s.status !== "open").length}/${top.length} steps`];
+  if (e.goal) L.push(`Goal: ${e.goal}`);
+  if (e.proof) L.push(`Checked by: ${e.proof}`);
+  if (e.context) L.push(`Context: ${oneLine(e.context, 400)}`);
+  const box = { open: "[ ]", done: "[x]", skipped: "[-]" };
+  const now = e.steps.find((s) => s.status === "open" && !e.steps.some((k) => k.parent_id === s.id));
+  for (const s of e.steps) {
+    L.push(`${s.parent_id ? "    " : ""}${box[s.status]} [${s.id}] ${s.kind}: ${s.title}${s.minutes ? ` (${s.minutes} min)` : ""}${s === now ? " ← now" : ""}`);
+    const pad = s.parent_id ? "        " : "    ";
+    if (s.why) L.push(`${pad}why: ${oneLine(s.why, 300)}`);
+    if (s.done_when) L.push(`${pad}done when: ${oneLine(s.done_when, 300)}`);
+    if (s.note) L.push(`${pad}note: ${oneLine(s.note, 400)}`);
+  }
+  if (e.weak.length) L.push("Weak points:", ...e.weak.map((w) => `- ${w}`));
+  return L.join("\n");
 }
 
 /** A section-sized text, cut so one study read stays readable. @param {string} s */

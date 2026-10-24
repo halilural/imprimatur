@@ -29,6 +29,7 @@
 23. [Task analyses](#task-analysis)
 24. [Understanding debt: read marks and the unread count (#92)](#unread)
 25. [/study: study mode (#95)](#study)
+26. [/exercise: exercise mode (#108)](#exercise)
 
 <a id="overview"></a>
 
@@ -711,3 +712,51 @@ Edits not yet accepted are not in the database: they are counted per task strip 
 ### Finding commits
 
 `git log --no-merges -E --grep=(^|[^A-Za-z0-9_#-])KEY([^0-9]|$) --numstat`: the boundary is in git's search, so `-n` is not filled with wrong matches (`#1` → `#10`…); `keyPattern` looks again over the whole message (title + body, "Closes #n"). If the repo is not on this machine (placeholder) or git is missing, there are no commits.
+
+<a id="exercise"></a>
+
+## 26. /exercise: exercise mode (#108)
+
+Exercises are the user's own data, of no repo or task, in the same device database as everything else (`vscode/db.js`, migration 10).
+
+### Data
+- `exercises`: topic, goal, proof (how the goal is checked), context (what the clarifying questions found), weak (JSON list of short lines from the closing recall), status active | done | dropped.
+- `exercise_steps`: exercise_id, parent_id (a split step's smaller steps; one level), position, kind (learn, example, predict, do, vary, explain, recall), title, why, done_when, minutes, status open | done | skipped, note, done_at.
+- Steps are never deleted (skipped instead). `settleExercise` keeps progress true after every status change: a split step is done when its smaller steps are all done or skipped, open when one opens; an exercise is done when all its top-level steps are closed, active when one opens, and a dropped one stays dropped.
+- Device-local and not reported to plugins: not synced between machines (like `section_reads`).
+
+### Flow
+```mermaid
+sequenceDiagram
+autonumber
+actor U as User
+participant S as /exercise skill (Claude Code)
+participant M as MCP server
+participant D as db.js
+participant P as Exercises tab
+U->>S: /exercise <topic>
+S->>U: clarifying + diagnostic questions
+S->>M: exercise_save {topic, goal, proof, context, steps}
+M->>D: saveExercise (one transaction)
+P->>D: exerciseModel (on the database watcher's redraw)
+U->>P: tick / skip / note
+P->>D: applyExerciseMessage → updateStep → settleExercise
+S->>M: exercise_get {id} before each step
+```
+1. The user names the topic in Claude Code.
+2. The skill asks why, level and time, then two or three diagnostic questions.
+3. It saves the goal and 5 to 9 checked steps with `exercise_save`.
+4. The MCP server writes the exercise and its steps in one transaction; a bad step rolls back the whole save.
+5. The panel's Exercises tab reads the active exercises when the database changes.
+6. The user ticks, skips or notes a step in the tab.
+7. The page posts `exStep`/`exNote`/`exDrop`/`exResume`; `tasksView.applyMessage` hands them to `exerciseView.applyExerciseMessage`, which writes through `updateStep` and settles the progress.
+8. Before coaching each step the skill reads the exercise again, so it sees the user's ticks and notes.
+
+### Code
+- `vscode/db.js`: `saveExercise`, `saveStep`, `updateStep`, `settleExercise`, `exercise`, `exercises`.
+- `mcp/server.mjs`: `exercise_save` (not idempotent: steps without id are added), `exercise_get` (read-only; always the list, plus one exercise with id); `exerciseDigest` is the text the agent reads.
+- `vscode/exerciseView.js`: the tab's model, HTML, CSS and writes; `split` copies a command through the host (`exCopy` → clipboard).
+- `skills/exercise/SKILL.md`: the pipeline (clarify → diagnose → goal → steps → check → coach → recall); setup links it into `~/.claude/skills`.
+
+### Why generation lives in the skill
+Not a model call from the panel: the Claude Code session can research the topic's sources, ask questions, and coach in the same conversation. The panel only tracks.
