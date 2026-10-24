@@ -472,7 +472,7 @@ function turnAsks(db, root, o) {
 /** @param {any} db @param {string} root @param {{now?: number, waiting?: any[], placeOf?: (w: any) => any, openEdits?: Map<string, number>}} [o] */
 function homeModel(db, root, { now = Date.now(), waiting, placeOf, openEdits } = {}) {
   const repo = repoOfRoot(db, root);
-  if (!repo) return { repoName: root.split(/[\\/]/).pop(), total: 0, done: 0, active: 0, open: 0, pointers: [], asks: [], askCount: 0, rows: [], loose: [], unread: { edits: 0, sections: [] } };
+  if (!repo) return { repoName: root.split(/[\\/]/).pop(), total: 0, done: 0, active: 0, open: 0, pointers: [], asks: [], askCount: 0, rows: [], loose: [], unread: { edits: 0, sections: [] }, recalls: db.reviewCounts(now).due };
   const unread = unreadOf(db, repo, openEdits);
   const tasks = taskSummaries(db, repo);
   const done = tasks.filter((t) => t.status === "done").length;
@@ -496,6 +496,8 @@ function homeModel(db, root, { now = Date.now(), waiting, placeOf, openEdits } =
     loose: turnAsks(db, root, { now, waiting, placeOf }).get(0) ?? [],
     // Not read yet (#92): the repo's edits not accepted and its changed sections.
     unread: { edits: unread.edits, sections: unread.sections.map(sectionPlace) },
+    // Exercise recalls due today (#108 v2): the user's, in every repo.
+    recalls: db.reviewCounts(now).due,
     rows: [...tasks].sort((a, b) => box(a) - box(b) || (order[/** @type {keyof typeof order} */ (a.status)] - order[/** @type {keyof typeof order} */ (b.status)]) || b.updated_at - a.updated_at)
       .map((t) => ({ ...t, when: day(t.updated_at), age: age(t.updated_at, now) })),
   };
@@ -885,7 +887,8 @@ function homeHtml(m) {
   const loose = m.loose.length
     ? `<section class="blk" data-k="loose" data-navgroup="loose" aria-label="Waiting on you, no task"><h2><span class="odot" aria-hidden="true"></span>Waiting on you, no task <span class="dim">· ${m.loose.length} · asked by the agent at the end of a turn, with no task</span></h2>${m.loose.map((r) => askCard(r)).join("")}</section>`
     : "";
-  return `<div class="home" data-k="home">${top}${unreadHtml(m.unread)}<div class="grid2" data-k="cards">${pointers}${asks}</div>${loose}${table}</div>`;
+  const recalls = m.recalls ? `<a href="#" class="callout" data-k="recalls-${m.recalls}" data-act="tab" data-tab="exercises">${icon("clock", 18)}<div><span class="lbl">Exercises</span><span class="ptitle">${m.recalls} recall${m.recalls === 1 ? "" : "s"} due today</span></div></a>` : "";
+  return `<div class="home" data-k="home">${top}${recalls}${unreadHtml(m.unread)}<div class="grid2" data-k="cards">${pointers}${asks}</div>${loose}${table}</div>`;
 }
 
 /**
@@ -938,6 +941,7 @@ function applyMessage(db, m, actor, root) {
     case "exNote":
     case "exDrop":
     case "exResume":
+    case "exReview":
       // The user's exercises (#108): of no repo.
       return require("./exerciseView.js").applyExerciseMessage(db, m);
     case "read":

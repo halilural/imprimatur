@@ -23,15 +23,15 @@ const rendered = new Map();
  * http(s), mailto and in-page anchors (markdown-it's own check drops javascript: and data:).
  * @param {string | null | undefined} text
  */
-function renderMarkdown(text, { steps = false } = {}) {
+function renderMarkdown(text, { steps = false, anyPath = false } = {}) {
   const src = String(text ?? "");
   if (!src.trim()) return "";
-  const key = (steps ? "S" : "-") + src;
+  const key = (steps ? "S" : "-") + (anyPath ? "A" : "-") + src;
   const hit = rendered.get(key);
   if (hit !== undefined) return hit;
   let out;
   try {
-    out = markdown().render(src, { steps });
+    out = markdown().render(src, { steps, anyPath });
   } catch {
     md = null;
     out = `<pre>${esc(src)}</pre>`;
@@ -50,7 +50,8 @@ function renderMarkdown(text, { steps = false } = {}) {
  * @returns {{file: string, line?: number} | undefined}
  */
 function fileRef(text, env = {}) {
-  const m = /^((?:[\w@.-]+\/)*[\w@-][\w@.-]*\.[A-Za-z][A-Za-z0-9]{0,7})(?::(\d+)(?:-\d+)?)?$/.exec(text.trim());
+  // anyPath (the Exercises tab, of no repo): a path from the home (~/) or the root (/) too.
+  const m = (env.anyPath ? /^((?:~\/|\/)?(?:[\w@.-]+\/)*[\w@-][\w@.-]*\.[A-Za-z][A-Za-z0-9]{0,7})(?::(\d+)(?:-\d+)?)?$/ : /^((?:[\w@.-]+\/)*[\w@-][\w@.-]*\.[A-Za-z][A-Za-z0-9]{0,7})(?::(\d+)(?:-\d+)?)?$/).exec(text.trim());
   if (m && !m[1].split("/").includes("..") && (m[2] || m[1].includes("/"))) {
     env.lastFile = m[1];
     return { file: m[1], ...(m[2] && { line: Number(m[2]) }) };
@@ -77,7 +78,7 @@ function markdown() {
     md.renderer.rules.code_inline = (tokens, idx, options, env, self) => {
       const html = /** @type {any} */ (code)(tokens, idx, options, env, self);
       const ref = fileRef(tokens[idx].content, env);
-      return ref ? `<a href="#" class="fref" data-act="openFile" data-file="${esc(ref.file)}" data-line="${ref.line ?? ""}" title="Open in the editor">${html}</a>` : html;
+      return ref ? `<a href="#" class="fref" data-act="${env.anyPath ? "exOpen" : "openFile"}" data-file="${esc(ref.file)}" data-line="${ref.line ?? ""}" title="Open in the editor">${html}</a>` : html;
     };
     // A relative path: an image is a file next to the design documents (the panel turns
     // DOC_IMG into its webview URI); a link to one goes nowhere in the panel, its text stays.

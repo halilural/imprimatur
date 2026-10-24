@@ -4,6 +4,20 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.73.0] - 2026-10-24
+
+### Added
+- Spaced recall of exercises (#108): each weak point the closing recall finds comes back the next
+  day, and a finished exercise is recalled as a whole. Got it moves a recall to 3, 7, 14, 30, then
+  60 days, after which it is learned; partly keeps the interval; missed brings it back tomorrow.
+  Home shows "N recalls due today"; the Exercises tab has a **Recall today** card; `/exercise`
+  asks the due ones first. MCP tool `exercise_review`.
+- Links in an exercise are clickable, and a file path in backticks opens in the editor at its line,
+  also a path from the home (`~/…`) or an absolute one, since exercises belong to no repo.
+
+### Changed
+- Database schema 11: the `exercise_reviews` table.
+
 ## [0.72.0] - 2026-10-24
 
 ### Added

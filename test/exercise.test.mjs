@@ -148,3 +148,60 @@ test("the /exercise skill: its name, the tools it names, and the rules that make
   assert.match(md, /Do not do it for them/);
   assert.ok(md.length < 20_000, "short enough to load at once");
 });
+
+test("v2 recalls: weak points and a finished exercise come back; right, partly and missed reschedule them", () => {
+  const db = openDb({ path: path.join(tmp(), "i.db") });
+  const day = 24 * 60 * 60 * 1000;
+  const e = db.saveExercise({ topic: "Virtual threads", steps: [{ title: "Read" }], weak: ["pinning"] });
+  assert.deepEqual(db.reviews(), [], "a new recall is due tomorrow, not today");
+  const t1 = Date.now() + day;
+  assert.deepEqual(db.reviews({ now: t1 }).map((r) => [r.prompt, r.topic, r.whole]), [["pinning", "Virtual threads", 0]]);
+  db.updateStep(e.steps[0].id, { status: "done" });
+  assert.deepEqual(db.reviews({ now: t1 }).map((r) => r.whole), [0, 1], "done: the whole exercise is recalled too");
+  db.updateStep(e.steps[0].id, { status: "open" });
+  db.updateStep(e.steps[0].id, { status: "done" });
+  assert.equal(db.reviews({ upcoming: true }).filter((r) => r.whole).length, 1, "only once");
+
+  const [pin] = db.reviews({ now: t1 });
+  let r = db.answerReview(pin.id, "right", { now: t1, note: "explained it" });
+  assert.deepEqual([r.stage, Math.round((r.due_at - t1) / day), r.reps, r.note], [1, 3, 1, "explained it"]);
+  r = db.answerReview(pin.id, "partly", { now: t1 });
+  assert.deepEqual([r.stage, Math.round((r.due_at - t1) / day)], [1, 3], "partly keeps the interval");
+  r = db.answerReview(pin.id, "missed", { now: t1 });
+  assert.deepEqual([r.stage, r.lapses, Math.round((r.due_at - t1) / day)], [0, 1, 1], "missed starts over");
+  for (let i = 0; i < 6; i++) r = db.answerReview(pin.id, "right", { now: t1 });
+  assert.equal(r.status, "retired", "past the last stage: learned");
+  assert.throws(() => db.answerReview(pin.id, "right"), /retired/);
+  assert.throws(() => db.answerReview(999, "right"), /no recall/);
+
+  const f = db.saveExercise({ topic: "Polish", weak: ["ś vs sz", "cases"] });
+  db.saveExercise({ id: f.id, weak: ["cases"] });
+  assert.deepEqual(db.reviews({ upcoming: true }).filter((x) => x.exercise_id === f.id).map((x) => x.prompt), ["cases"], "a weak point taken out of the list is dropped");
+  db.saveExercise({ id: f.id, status: "dropped" });
+  assert.ok(!db.reviews({ upcoming: true }).some((x) => x.exercise_id === f.id), "a dropped exercise's recalls are not asked");
+  assert.deepEqual(db.reviewCounts(t1), { due: 1, next: null });
+});
+
+test("v2 MCP and panel: exercise_review lists and records; the tab and Home show today's recalls; links open", () => {
+  const db = openDb({ path: path.join(tmp(), "i.db") });
+  const e = db.saveExercise({ topic: "VT", goal: "Read [JEP 444](https://openjdk.org/jeps/444) and run `~/vt/Demo.java:12`", weak: ["carrier `src/Main.java:3`"] });
+  db.sqlite.prepare("UPDATE exercise_reviews SET due_at = ?").run(Date.now() - 1000);
+  const list = callTool(db, "exercise_review", {});
+  assert.match(digest("exercise_review", list, {}), /^1 recall due today[\s\S]*- \[\d+\] VT: carrier/);
+  const rec = callTool(db, "exercise_review", { id: list.reviews[0].id, result: "right", note: "ok" });
+  assert.match(digest("exercise_review", rec, {}), /^Recorded \[\d+\] right: next \d{4}-\d\d-\d\d\nNo recalls due today; next/);
+  assert.throws(() => callTool(db, "exercise_review", { id: 1 }), /id and result together/);
+  assert.throws(() => callTool(db, "exercise_review", { id: 1, result: "nah" }), /must be one of/);
+
+  db.sqlite.prepare("UPDATE exercise_reviews SET due_at = ?").run(Date.now() - 1000);
+  const html = tasksView.paneHtml(db, "/any/repo", { tab: "exercises" });
+  assert.match(html, /Recall today <span class="dim">· 1<\/span>[\s\S]*data-act="exReview"[^>]*data-result="missed"/);
+  assert.match(html, /<a href="https:\/\/openjdk.org\/jeps\/444">JEP 444<\/a>/, "a link in the goal is clickable");
+  assert.match(html, /data-act="exOpen" data-file="~\/vt\/Demo.java" data-line="12"/, "a path from the home opens");
+  assert.match(html, /data-act="exOpen" data-file="src\/Main.java" data-line="3"/);
+  assert.match(tasksView.homeHtml(tasksView.homeModel(db, "/any/repo")), /1 recall due today/);
+  tasksView.applyMessage(db, { type: "exReview", id: list.reviews[0].id, result: "missed" }, user);
+  assert.equal(db.reviews({ upcoming: true })[0].lapses, 1);
+  assert.throws(() => tasksView.applyMessage(db, { type: "exReview", id: 1, result: "maybe" }, user), /bad recall result/);
+  assert.ok(e.id);
+});

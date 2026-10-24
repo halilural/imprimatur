@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const {
   openDb, KINDS, DOC_KINDS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, analysisTitle,
-  EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX,
+  EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, REVIEW_DAYS, REVIEW_RESULTS,
 } = require("../vscode/db.js");
 const { repoRoot } = require("../vscode/review-state.js");
 const { originOf } = require("../vscode/import.js");
@@ -345,6 +345,18 @@ const TOOLS = [
     readOnly: true,
   },
   {
+    name: "exercise_review",
+    title: "Exercise recalls",
+    description: `Spaced recall of exercises (#108 v2). Without id: the recalls due today (each a weak point the closing recall found, or a whole finished exercise), soonest first, with the next later date. With id and result: record how the user did (asked without notes): right moves it to the next interval (${REVIEW_DAYS.join(", ")} days, then retired), partly keeps the interval, missed brings it back tomorrow. Weak points saved with exercise_save become recalls by themselves.`,
+    inputSchema: input({
+      id: { type: "integer", description: "The recall answered; leave out for the due list" },
+      result: { type: "string", enum: REVIEW_RESULTS, description: "How the user did, asked without notes" },
+      note: { type: "string", maxLength: EXERCISE_TEXT_MAX, description: "One line: what they got or missed" },
+      upcoming: { type: "boolean", default: false, description: "The list: every active recall, not only today's" },
+    }),
+    outputSchema: output({ reviews: { type: "array", items: { type: "object" } }, next: orNull("integer"), review: { type: "object" } }, ["reviews"]),
+  },
+  {
     name: "setup_audit",
     title: "Audit the agent setup",
     description: "Lints the repo's agent setup (CLAUDE.md, AGENTS.md, .claude/ settings, hooks, skills, subagents, MCP, plugins, Cursor/Codex/Copilot files) with agnix, whose rules cite the tools' docs; global: true also audits the home's agent folders (~/.claude with its plugins, ~/.cursor, ~/.codex, ...). Every finding is a fixme record of the Recommendations task (key \"RECS\", shared with the project best-practice review): new ones open, gone ones done (applied), dismissed (dropped) ones stay dropped. Read them with task_get key \"RECS\"; dismiss one with record_update status \"dropped\", the note in body and links.audit kept with reason added (false, plugin, synced, local, accepted-risk, decided, other).",
@@ -656,6 +668,18 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
       if (!exercise) throw new ToolError(`no exercise ${a.id}; exercise_get without id lists them (status "all" for every one)`);
       return { exercises, exercise };
     }
+    case "exercise_review": {
+      if ((a.id === undefined) !== (a.result === undefined)) throw new ToolError("give id and result together to record a recall, or neither for the due list");
+      const run = (/** @type {() => any} */ fn) => {
+        try {
+          return fn();
+        } catch (e) {
+          throw new ToolError(String(/** @type {Error} */ (e).message).replace(/^Imprimatur: /, ""));
+        }
+      };
+      const review = a.id === undefined ? undefined : run(() => db.answerReview(a.id, a.result, { note: a.note }));
+      return { ...(review && { review }), reviews: db.reviews({ upcoming: Boolean(a.upcoming) }), next: db.reviewCounts().next };
+    }
     case "search":
       return { records: db.search(a.text, { repoId: a.repo === "*" ? undefined : repoOf(db, a.repo).id, kind: a.kind, limit: a.limit }) };
     default:
@@ -738,6 +762,14 @@ export function digest(name, out, a = {}) {
       return studyDigest(out);
     case "exercise_save":
       return `Saved ${exerciseDigest(out.exercise)}`;
+    case "exercise_review": {
+      const day = (/** @type {number} */ t) => new Date(t).toISOString().slice(0, 10);
+      const L = [];
+      if (out.review) L.push(`Recorded [${out.review.id}] ${out.review.last_result}: ${out.review.status === "retired" ? "retired (learned)" : `next ${day(out.review.due_at)}`}`);
+      L.push(out.reviews.length ? `${plural(out.reviews.length, "recall")} ${a.upcoming ? "active" : "due today"} (ask each without notes, then exercise_review {id, result}):` : `No recalls ${a.upcoming ? "active" : "due today"}${out.next ? `; next ${day(out.next)}` : ""}.`);
+      for (const r of out.reviews) L.push(`- [${r.id}] ${r.topic}: ${r.prompt}${a.upcoming ? ` (due ${day(r.due_at)})` : ""}${r.reps ? ` — recalled ${r.reps}×, last ${r.last_result}` : ""}`);
+      return L.join("\n");
+    }
     case "exercise_get":
       if (out.exercise) return exerciseDigest(out.exercise);
       if (!out.exercises.length) return `No ${a.status && a.status !== "all" ? `${a.status} ` : a.status ? "" : "active "}exercises.`;

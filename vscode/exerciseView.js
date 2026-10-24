@@ -1,7 +1,8 @@
 // @ts-check
 // The panel's Exercises tab (#108): the user's exercises, of no repo or task. /exercise in Claude
 // Code turns a topic into small steps (exercise_save); here the user ticks them, skips one with
-// why, keeps a note on each, and copies a command to ask the agent to split a step.
+// why, keeps a note on each, and copies a command to ask the agent to split a step. Recalls due
+// today (v2) come first. Text is Markdown: links open in the browser, `path:line` in the editor.
 "use strict";
 const { icon } = require("./tasksView.js");
 const { mascot } = require("./mascot.js");
@@ -10,16 +11,30 @@ const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").
 const KIND_LABEL = { learn: "Learn", example: "Example", predict: "Predict", do: "Do", vary: "Vary", explain: "Explain", recall: "Recall" };
 const STATUS_LABEL = { active: "In progress", done: "Done", dropped: "Dropped" };
 const NOTE_MAX = 4000;
+const RESULT_LABEL = { right: "Got it", partly: "Partly", missed: "Missed" };
+
+/**
+ * A text of an exercise as Markdown on one line where it is one paragraph: links clickable, a
+ * `path:line` in backticks opened in the editor, from the repo, the home (~/) or the root (/).
+ * @param {string | null | undefined} text
+ */
+const md = (text) => {
+  const html = require("./docsView.js").renderMarkdown(text, { anyPath: true }).trim();
+  const one = /^<p>([\s\S]*)<\/p>$/.exec(html);
+  return one && !one[1].includes("<p>") ? one[1] : html;
+};
 
 /**
  * The tab's model: the active exercises with their steps, and the finished ones by name.
  * @param {any} db
  */
-function exerciseModel(db) {
+function exerciseModel(db, now = Date.now()) {
+  const reviews = db.reviews({ now });
+  const counts = db.reviewCounts(now);
   const active = db.exercises({ status: "active" }).map((/** @type {any} */ e) => withNow(db.exercise(e.id)));
   const finished = [...db.exercises({ status: "done", limit: 50 }), ...db.exercises({ status: "dropped", limit: 50 })]
     .sort((a, b) => b.updated_at - a.updated_at).slice(0, 50);
-  return { active, finished };
+  return { active, finished, reviews, next: counts.next };
 }
 
 /** The step to do now: the first open one that is not split (a split step is done through its smaller steps). @param {any} e */
@@ -49,9 +64,9 @@ function stepHtml(e, s) {
     skipped ? `<button class="mini show" data-act="exStep" data-id="${s.id}" data-status="open">undo skip</button>` : "",
     !s.parent_id && !isSplit && s.status === "open" ? `<button class="mini" data-act="exCopy" data-text="${esc(`/exercise split step ${s.id} of exercise ${e.id}`)}" title="Copies a command: paste it in Claude Code and the agent splits this step">${icon("copy", 12)} split</button>` : "",
   ].join("");
-  const note = `<details class="xnote"${s.note ? " open" : ""}><summary>${s.note ? "Note" : "Add a note"}</summary><div class="xnrow"><textarea data-draft="exnote-${s.id}" rows="2" maxlength="${NOTE_MAX}" placeholder="What you found, where you got stuck, why you skipped it">${esc(s.note ?? "")}</textarea><button class="ghost" data-act="exNote" data-id="${s.id}">Save</button></div></details>`;
+  const note = `<details class="xnote"><summary>${s.note ? "Edit the note" : "Add a note"}</summary><div class="xnrow"><textarea data-draft="exnote-${s.id}" rows="2" maxlength="${NOTE_MAX}" placeholder="What you found, where you got stuck, why you skipped it">${esc(s.note ?? "")}</textarea><button class="ghost" data-act="exNote" data-id="${s.id}">Save</button></div></details>`;
   // Keyed by its own change and whether it is now: a tick redraws that step and the next, not the card.
-  return `<li class="xstep${done ? " done" : ""}${skipped ? " skipped" : ""}${s.parent_id ? " sub" : ""}${e.now?.id === s.id ? " now" : ""}" data-k="s${s.id}-${s.updated_at}${e.now?.id === s.id ? "n" : ""}" id="xs-${s.id}">${box}<div class="xcol"><div class="xhead"><span class="ttl">${esc(s.title)}</span>${meta}<span class="xacts">${acts}</span></div>${s.why ? `<p class="xwhy"><span class="lbl">Why</span> ${esc(s.why)}</p>` : ""}${s.done_when ? `<p class="xwhy"><span class="lbl">Done when</span> ${esc(s.done_when)}</p>` : ""}${note}</div></li>`;
+  return `<li class="xstep${done ? " done" : ""}${skipped ? " skipped" : ""}${s.parent_id ? " sub" : ""}${e.now?.id === s.id ? " now" : ""}" data-k="s${s.id}-${s.updated_at}${e.now?.id === s.id ? "n" : ""}" id="xs-${s.id}">${box}<div class="xcol"><div class="xhead"><span class="ttl">${md(s.title)}</span>${meta}<span class="xacts">${acts}</span></div>${s.why ? `<div class="xwhy"><span class="lbl">Why</span> ${md(s.why)}</div>` : ""}${s.done_when ? `<div class="xwhy"><span class="lbl">Done when</span> ${md(s.done_when)}</div>` : ""}${s.note ? `<div class="xwhy xnotev"><span class="lbl">Note</span> ${md(s.note)}</div>` : ""}${note}</div></li>`;
 }
 
 /** An active exercise as a card. @param {ReturnType<typeof withNow>} e */
@@ -59,9 +74,9 @@ function exerciseCard(e) {
   const pct = e.total ? Math.round((e.closed / e.total) * 100) : 0;
   const head = `<div class="xhd" data-k="h${e.updated_at}"><div class="xtop"><h2>${icon("target", 18)}${esc(e.topic)}</h2><span class="dim">${e.closed} / ${e.total} steps</span><button class="mini show" data-act="exDrop" data-id="${e.id}" title="Give up on this exercise; it stays under Finished">drop</button></div>
 <div class="progress" role="progressbar" aria-label="${esc(e.topic)} progress" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div style="width: ${pct}%"></div></div></div>`;
-  const goal = e.goal || e.proof ? `<div class="xgoal" data-k="g${e.updated_at}">${e.goal ? `<p><span class="lbl">Goal</span> ${esc(e.goal)}</p>` : ""}${e.proof ? `<p><span class="lbl">Checked by</span> ${esc(e.proof)}</p>` : ""}</div>` : "";
-  const now = e.now ? `<a href="#" class="callout xnow" data-k="n${e.now.id}" data-act="exGo" data-id="${e.now.id}">${icon("arrow", 18)}<div><span class="lbl">Now</span><span class="ptitle">${esc(e.now.title)}</span></div></a>` : "";
-  const weak = e.weak.length ? `<div class="xweak" data-k="w${e.updated_at}"><span class="lbl">Weak points</span><ul>${e.weak.map((/** @type {string} */ w) => `<li>${esc(w)}</li>`).join("")}</ul></div>` : "";
+  const goal = e.goal || e.proof ? `<div class="xgoal" data-k="g${e.updated_at}">${e.goal ? `<div><span class="lbl">Goal</span> ${md(e.goal)}</div>` : ""}${e.proof ? `<div><span class="lbl">Checked by</span> ${md(e.proof)}</div>` : ""}</div>` : "";
+  const now = e.now ? `<a href="#" class="callout xnow" data-k="n${e.now.id}" data-act="exGo" data-id="${e.now.id}">${icon("arrow", 18)}<div><span class="lbl">Now</span><span class="ptitle">${md(e.now.title)}</span></div></a>` : "";
+  const weak = e.weak.length ? `<div class="xweak" data-k="w${e.updated_at}"><span class="lbl">Weak points</span><ul>${e.weak.map((/** @type {string} */ w) => `<li>${md(w)}</li>`).join("")}</ul></div>` : "";
   // A stable key with keyed children: the page swaps only what changed, so a half-typed note stays.
   return `<section class="card xcard" data-k="x${e.id}" aria-label="${esc(e.topic)}">${head}${goal}${now}<ol class="xsteps" data-k="steps">${e.steps.map((/** @type {any} */ s) => stepHtml(e, s)).join("")}</ol>${weak}</section>`;
 }
@@ -76,7 +91,19 @@ function exerciseHtml(m) {
   const finished = m.finished.length
     ? `<details class="blk xdone" data-k="xdone-${m.finished.map((/** @type {any} */ e) => `${e.id}.${e.updated_at}`).join("_")}"><summary><h2>Finished <span class="dim">· ${m.finished.length}</span></h2></summary>${m.finished.map((/** @type {any} */ e) => `<div class="xrow"><span class="st st-${e.status}">${STATUS_LABEL[/** @type {keyof typeof STATUS_LABEL} */ (e.status)] ?? esc(e.status)}</span><b>${esc(e.topic)}</b><span class="dim">${e.closed} / ${e.step_count} steps</span>${e.status === "dropped" ? `<button class="mini show" data-act="exResume" data-id="${e.id}">resume</button>` : ""}</div>`).join("")}</details>`
     : "";
-  return `<div class="exercises" data-k="exercises">${top}<div class="xcards" data-k="xcards" data-navgroup="exercises">${cards}</div>${finished}</div>`;
+  const recalls = m.reviews.length ? recallHtml(m.reviews) : "";
+  const later = !m.reviews.length && m.next ? `<p class="dim" data-k="xnext">${icon("clock", 13)} Next recall: ${esc(new Date(m.next).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }))}</p>` : "";
+  return `<div class="exercises" data-k="exercises">${top}${recalls}${later}<div class="xcards" data-k="xcards" data-navgroup="exercises">${cards}</div>${finished}</div>`;
+}
+
+/**
+ * Recalls due today (#108 v2): each one answered without notes, then graded here (or with the
+ * agent, /exercise): got it moves it later, partly keeps its gap, missed brings it back tomorrow.
+ * @param {any[]} reviews
+ */
+function recallHtml(reviews) {
+  const rows = reviews.map((r) => `<li class="xrev" data-k="r${r.id}-${r.reps}"><div class="xcol"><div class="xhead"><span class="ttl">${md(r.prompt)}</span><span class="dim">${esc(r.topic)}${r.reps ? ` · recalled ${r.reps}×` : ""}</span></div></div><span class="xacts">${Object.entries(RESULT_LABEL).map(([k, label]) => `<button class="mini show r-${k}" data-act="exReview" data-id="${r.id}" data-result="${k}">${label}</button>`).join("")}</span></li>`).join("");
+  return `<section class="card xrecall" data-k="xrecall" aria-label="Recall today"><h2>${icon("clock", 18)}Recall today <span class="dim">· ${reviews.length}</span></h2><p class="dim">Say or write each one without looking at your notes, then mark how it went. Or type <span class="mono">/exercise</span> and the agent asks them and grades.</p><ul class="xrevs" data-k="list">${rows}</ul></section>`;
 }
 
 const id = (/** @type {any} */ v) => {
@@ -102,12 +129,15 @@ function applyExerciseMessage(db, m) {
     case "exResume":
       // Back to active; done again at once when every step already is (saveExercise settles).
       return db.saveExercise({ id: id(m.id), status: "active" });
+    case "exReview":
+      if (!Object.hasOwn(RESULT_LABEL, m.result)) throw new Error(`Imprimatur: bad recall result ${m.result}`);
+      return db.answerReview(id(m.id), m.result);
     default:
       throw new Error(`Imprimatur: unknown exercise message ${m?.type}`);
   }
 }
 
-const EXERCISE_MESSAGES = ["exStep", "exNote", "exDrop", "exResume"];
+const EXERCISE_MESSAGES = ["exStep", "exNote", "exDrop", "exResume", "exReview"];
 
 const EXERCISE_CSS = `
   .exercises { display: flex; flex-direction: column; gap: 18px; max-width: 980px; }
@@ -142,6 +172,14 @@ const EXERCISE_CSS = `
   .xweak ul { margin: 4px 0 0; padding-left: 20px; }
   .xdone summary { cursor: pointer; list-style: none; } .xdone summary::-webkit-details-marker { display: none; }
   .xrow { display: flex; align-items: center; gap: 10px; padding: 6px 4px; }
+  .xwhy p, .xgoal p { margin: 2px 0; } .xwhy ul, .xwhy ol { margin: 2px 0; padding-left: 20px; }
+  .xcol a.fref code, .xgoal a.fref code { color: var(--vscode-textLink-foreground); }
+  .xnotev { color: var(--vscode-foreground); }
+  .xrecall { display: flex; flex-direction: column; gap: 8px; padding: 16px 20px; border-color: var(--acc); background: color-mix(in srgb, var(--acc) 8%, var(--card)); }
+  .xrecall p { margin: 0; }
+  .xrevs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  .xrev { display: flex; align-items: center; gap: 12px; padding: 6px 10px; border-radius: 8px; } .xrev:hover { background: var(--vscode-list-hoverBackground); }
+  .mini.r-right { border-color: var(--vscode-testing-iconPassed); } .mini.r-missed { border-color: var(--vscode-charts-red); }
 `;
 
-module.exports = { exerciseModel, exerciseHtml, applyExerciseMessage, EXERCISE_MESSAGES, EXERCISE_CSS, withNow };
+module.exports = { exerciseModel, exerciseHtml, applyExerciseMessage, EXERCISE_MESSAGES, EXERCISE_CSS, withNow, md };

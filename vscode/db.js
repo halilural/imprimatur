@@ -406,6 +406,28 @@ const MIGRATIONS = [
   CREATE INDEX doc_section_records_record ON doc_section_records(record_id);
   CREATE INDEX doc_versions_section ON doc_versions(section_id, at);
   `,
+  // Spaced recall of exercises (#108 v2): a card per weak point the closing recall found, and one
+  // for the whole exercise once it is done. stage indexes REVIEW_DAYS; a card past the last stage
+  // is retired. Device-local like the exercises.
+  `
+  CREATE TABLE exercise_reviews (
+    id INTEGER PRIMARY KEY,
+    exercise_id INTEGER NOT NULL REFERENCES exercises(id),
+    prompt TEXT NOT NULL,
+    whole INTEGER NOT NULL DEFAULT 0,
+    stage INTEGER NOT NULL DEFAULT 0,
+    due_at INTEGER NOT NULL,
+    reps INTEGER NOT NULL DEFAULT 0,
+    lapses INTEGER NOT NULL DEFAULT 0,
+    last_result TEXT CHECK (last_result IN ('right', 'partly', 'missed')),
+    last_at INTEGER,
+    note TEXT,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'retired', 'dropped')),
+    created_at INTEGER NOT NULL,
+    UNIQUE (exercise_id, prompt)
+  );
+  CREATE INDEX exercise_reviews_due ON exercise_reviews(status, due_at);
+  `,
 ];
 const VERSION = MIGRATIONS.length;
 
@@ -449,6 +471,16 @@ const EXERCISE_STEP_KINDS = ["learn", "example", "predict", "do", "vary", "expla
 const EXERCISE_TITLE_MAX = 300;
 const EXERCISE_TEXT_MAX = 4000;
 const EXERCISE_STEPS_MAX = 60;
+/** Days to the next recall at each stage (#108 v2): right moves a card one stage on, past the last it retires. */
+const REVIEW_DAYS = [1, 3, 7, 14, 30, 60];
+const REVIEW_RESULTS = ["right", "partly", "missed"];
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** The end of the local day of a time: a recall due today is due all day. @param {number} at */
+const endOfDay = (at) => {
+  const d = new Date(at);
+  d.setHours(23, 59, 59, 999);
+  return d.getTime();
+};
 /** A text field of an exercise or step: trimmed, "" stored as nothing. @param {unknown} v @param {string} name @param {number} [max] */
 function exText(v, name, max = EXERCISE_TEXT_MAX) {
   if (v === undefined || v === null) return undefined;
@@ -1505,6 +1537,7 @@ class Db {
         id = Number(this.q(`INSERT INTO exercises (uid, topic, goal, proof, context, weak, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
           .run(uid(), topic, exText(fields.goal, "goal") ?? null, exText(fields.proof, "proof") ?? null, exText(fields.context, "context") ?? null,
             json(exWeak(fields.weak)), exStatus(fields.status ?? "active", EXERCISE_STATUSES), now, now).lastInsertRowid);
+        if (fields.weak) this.syncWeakReviews(id, exWeak(fields.weak) ?? [], now);
       } else {
         if (!this.q("SELECT 1 FROM exercises WHERE id = ?").get(id)) throw new Error(`Imprimatur: no exercise ${id}`);
         const set = [];
@@ -1517,6 +1550,7 @@ class Db {
           args.push(v ?? null);
         }
         if (fields.weak !== undefined) set.push("weak = ?"), args.push(json(exWeak(fields.weak)));
+        if (fields.weak !== undefined) this.syncWeakReviews(id, exWeak(fields.weak) ?? [], now);
         if (fields.status !== undefined) set.push("status = ?"), args.push(exStatus(fields.status, EXERCISE_STATUSES));
         this.q(`UPDATE exercises SET ${[...set, "updated_at = ?"].join(", ")} WHERE id = ?`).run(...args, now, id);
       }
@@ -1608,10 +1642,68 @@ class Db {
         p.status = want;
       }
     }
-    const ex = this.q("SELECT status FROM exercises WHERE id = ?").get(exerciseId);
+    const ex = this.q("SELECT status, topic FROM exercises WHERE id = ?").get(exerciseId);
     const top = steps.filter((/** @type {any} */ s) => !s.parent_id);
     const want = ex.status === "dropped" ? "dropped" : top.length && top.every(closed) ? "done" : "active";
     this.q("UPDATE exercises SET status = ?, updated_at = ? WHERE id = ?").run(want, now, exerciseId);
+    // Done: the whole exercise comes back for recall, tomorrow first (once; kept if it reopens).
+    if (want === "done" && ex.status !== "done") {
+      this.q(`INSERT OR IGNORE INTO exercise_reviews (exercise_id, prompt, whole, due_at, created_at) VALUES (?, ?, 1, ?, ?)`)
+        .run(exerciseId, `Recall the whole exercise without notes: ${ex.topic}`, now + REVIEW_DAYS[0] * DAY_MS, now);
+    }
+  }
+
+  /**
+   * The weak points as recall cards (#108 v2): a new one is due tomorrow; one no longer in the list
+   * is dropped (a card already answered keeps its history). @param {number} exerciseId @param {string[]} weak @param {number} now
+   */
+  syncWeakReviews(exerciseId, weak, now) {
+    for (const w of weak) {
+      this.q(`INSERT INTO exercise_reviews (exercise_id, prompt, due_at, created_at) VALUES (?, ?, ?, ?)
+              ON CONFLICT (exercise_id, prompt) DO UPDATE SET status = 'active' WHERE status = 'dropped'`).run(exerciseId, w, now + REVIEW_DAYS[0] * DAY_MS, now);
+    }
+    const keep = new Set(weak);
+    for (const r of this.q("SELECT id, prompt FROM exercise_reviews WHERE exercise_id = ? AND whole = 0 AND status = 'active'").all(exerciseId)) {
+      if (!keep.has(r.prompt)) this.q("UPDATE exercise_reviews SET status = 'dropped' WHERE id = ?").run(r.id);
+    }
+  }
+
+  /**
+   * Recall cards, soonest first, with their exercise's topic: due ones (by the end of today) or,
+   * with upcoming, every active one. A dropped exercise's cards are left out.
+   * @param {{upcoming?: boolean, now?: number, limit?: number}} [o]
+   */
+  reviews({ upcoming = false, now = Date.now(), limit = 50 } = {}) {
+    return this.q(`SELECT r.*, e.topic FROM exercise_reviews r JOIN exercises e ON e.id = r.exercise_id
+      WHERE r.status = 'active' AND e.status != 'dropped' AND (? OR r.due_at <= ?)
+      ORDER BY r.due_at, r.id LIMIT ?`).all(upcoming ? 1 : 0, endOfDay(now), limit);
+  }
+
+  /** How many recalls are due today, and when the next later one is. @param {number} [now] */
+  reviewCounts(now = Date.now()) {
+    const end = endOfDay(now);
+    const row = this.q(`SELECT sum(r.due_at <= ?) AS due, min(CASE WHEN r.due_at > ? THEN r.due_at END) AS next FROM exercise_reviews r
+      JOIN exercises e ON e.id = r.exercise_id WHERE r.status = 'active' AND e.status != 'dropped'`).get(end, end);
+    return { due: Number(row.due ?? 0), next: row.next ?? null };
+  }
+
+  /**
+   * A recall answered: right moves the card a stage on (retired past the last), partly keeps its
+   * stage, missed starts it over from one day. @param {number} id @param {string} result @param {{note?: string, now?: number}} [o]
+   */
+  answerReview(id, result, { note, now = Date.now() } = {}) {
+    return this.tx(() => {
+      const r = this.q("SELECT * FROM exercise_reviews WHERE id = ?").get(id);
+      if (!r) throw new Error(`Imprimatur: no recall ${id}`);
+      if (r.status !== "active") throw new Error(`Imprimatur: recall ${id} is ${r.status}`);
+      exStatus(result, REVIEW_RESULTS);
+      const stage = result === "right" ? r.stage + 1 : result === "missed" ? 0 : r.stage;
+      const retired = stage >= REVIEW_DAYS.length;
+      this.q(`UPDATE exercise_reviews SET stage = ?, due_at = ?, reps = reps + 1, lapses = lapses + ?, last_result = ?, last_at = ?, note = coalesce(?, note), status = ? WHERE id = ?`)
+        .run(Math.min(stage, REVIEW_DAYS.length - 1), now + (retired ? 0 : REVIEW_DAYS[stage]) * DAY_MS, result === "missed" ? 1 : 0, result, now,
+          exText(note, "note") ?? null, retired ? "retired" : "active", id);
+      return this.q("SELECT r.*, e.topic FROM exercise_reviews r JOIN exercises e ON e.id = r.exercise_id WHERE r.id = ?").get(id);
+    });
   }
 
   /** An exercise with its steps in order (a split step's smaller steps right under it). @param {number} id */
@@ -1787,5 +1879,5 @@ function openDb({ path: file = dbPath(), busyMs = 5000, plugins } = {}) {
 
 module.exports = {
   openDb, dbPath, onWindowsDrive, normOrigin, refersTo, recordOf, analysisTitle, KINDS, ACTORS, VERSION, MIGRATIONS, FIELDS,
-  TRACKER_KEY, TASK_STATUSES, RECORD_STATUSES, EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, DOC_KINDS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, SECTION_TITLE_MAX, SOURCE_MAX,
+  TRACKER_KEY, TASK_STATUSES, RECORD_STATUSES, EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, REVIEW_DAYS, REVIEW_RESULTS, DOC_KINDS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, SECTION_TITLE_MAX, SOURCE_MAX,
 };

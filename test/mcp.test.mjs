@@ -80,7 +80,7 @@ test("legacy handshake: initialize, initialized, tools/list", async () => {
   assert.equal(list.result.resultType, undefined);
   assert.equal(list.result.ttlMs, undefined, "legacy results stay as they were");
   const names = list.result.tools.map((t) => t.name);
-  assert.deepEqual(names.sort(), ["doc_get", "doc_section_upsert", "exercise_get", "exercise_save", "pointer_set", "record_add", "record_update", "search", "setup_audit", "study_material", "task_get", "task_list", "task_upsert", "where_we_left_off"]);
+  assert.deepEqual(names.sort(), ["doc_get", "doc_section_upsert", "exercise_get", "exercise_review", "exercise_save", "pointer_set", "record_add", "record_update", "search", "setup_audit", "study_material", "task_get", "task_list", "task_upsert", "where_we_left_off"]);
   for (const t of list.result.tools) {
     assert.equal(t.inputSchema.type, "object");
     assert.equal(typeof t.annotations.readOnlyHint, "boolean");
@@ -305,7 +305,7 @@ test("discover and initialize carry the instructions; discover has caching hints
 test("tools: title, annotations, closed input schemas that still take _session, output schemas", async () => {
   const s = session({ cwd: gitRepo() });
   const { tools } = (await s.send("tools/list", modern())).result;
-  const idempotent = { record_add: false, exercise_save: false };
+  const idempotent = { record_add: false, exercise_save: false, exercise_review: false };
   for (const t of tools) {
     assert.equal(typeof t.title, "string", t.name);
     assert.ok(t.title.length > 0);
@@ -321,7 +321,7 @@ test("tools: title, annotations, closed input schemas that still take _session, 
   assert.deepEqual(ro, {
     where_we_left_off: true, task_list: true, task_get: true, search: true,
     task_upsert: false, record_add: false, record_update: false, pointer_set: false, doc_get: true, doc_section_upsert: false, setup_audit: false, study_material: true,
-    exercise_save: false, exercise_get: true,
+    exercise_save: false, exercise_get: true, exercise_review: false,
   });
   // The hook's _session passes the closed schema.
   assert.equal((await call(s, "task_list", { _session: "S1" })).isError, undefined);
@@ -384,6 +384,8 @@ test("every tool's structuredContent matches its outputSchema", async () => {
   await ok("exercise_save", { id: ex.id, weak: ["grip"], steps: [{ id: ex.steps[0].id, status: "done", note: "ok" }, { parent_id: ex.steps[0].id, title: "Scapular pulls" }] });
   await ok("exercise_get", {});
   await ok("exercise_get", { id: ex.id, status: "all" });
+  await ok("exercise_review", {});
+  await ok("exercise_review", { upcoming: true });
   assert.equal(seen.size, Object.keys(schemas).length, "every tool was checked");
   await s.close();
 });
