@@ -330,6 +330,82 @@ const MIGRATIONS = [
   );
   CREATE INDEX exercise_steps_of ON exercise_steps(exercise_id, position);
   `,
+  // Social media (#109): a fifth document kind, a repo's posts per channel with the rules read
+  // for each and how they went. Shown only in a repo that turns it on (.claude/imprimatur.json
+  // {"social": true}). The CHECK is rebuilt as in the analysis migration; doc_sources and
+  // section_reads point into these tables now, so they are rebuilt too, children dropped first.
+  `
+  CREATE TABLE documents_new (
+    id INTEGER PRIMARY KEY,
+    uid TEXT NOT NULL UNIQUE,
+    repo_id INTEGER NOT NULL REFERENCES repos(id),
+    kind TEXT NOT NULL CHECK (kind IN ('architecture', 'product', 'glossary', 'analysis', 'social')),
+    scope TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE (repo_id, kind, scope),
+    CHECK ((kind = 'analysis') = (scope <> ''))
+  );
+  CREATE TABLE doc_sections_new (
+    id INTEGER PRIMARY KEY,
+    uid TEXT NOT NULL UNIQUE,
+    doc_id INTEGER NOT NULL REFERENCES documents_new(id),
+    key TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    position REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'current' CHECK (status IN ('current', 'superseded')),
+    source TEXT,
+    updated_at INTEGER NOT NULL,
+    UNIQUE (doc_id, key)
+  );
+  CREATE TABLE doc_section_records_new (
+    section_id INTEGER NOT NULL REFERENCES doc_sections_new(id),
+    record_id INTEGER NOT NULL REFERENCES records(id),
+    PRIMARY KEY (section_id, record_id)
+  ) WITHOUT ROWID;
+  CREATE TABLE doc_versions_new (
+    id INTEGER PRIMARY KEY,
+    section_id INTEGER NOT NULL REFERENCES doc_sections_new(id),
+    at INTEGER NOT NULL,
+    actor_kind TEXT NOT NULL CHECK (actor_kind IN (${ACTORS.map((k) => `'${k}'`).join(", ")})),
+    actor TEXT,
+    before TEXT,
+    after TEXT
+  );
+  CREATE TABLE doc_sources_new (
+    doc_id INTEGER NOT NULL REFERENCES documents_new(id),
+    path TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    PRIMARY KEY (doc_id, path)
+  ) WITHOUT ROWID;
+  CREATE TABLE section_reads_new (
+    section_id INTEGER PRIMARY KEY REFERENCES doc_sections_new(id),
+    version_id INTEGER NOT NULL,
+    at INTEGER NOT NULL
+  );
+  INSERT INTO documents_new SELECT id, uid, repo_id, kind, scope, title, updated_at FROM documents;
+  INSERT INTO doc_sections_new SELECT id, uid, doc_id, key, title, body, position, status, source, updated_at FROM doc_sections;
+  INSERT INTO doc_section_records_new SELECT section_id, record_id FROM doc_section_records;
+  INSERT INTO doc_versions_new SELECT id, section_id, at, actor_kind, actor, before, after FROM doc_versions;
+  INSERT INTO doc_sources_new SELECT doc_id, path, hash, at FROM doc_sources;
+  INSERT INTO section_reads_new SELECT section_id, version_id, at FROM section_reads;
+  DROP TABLE section_reads;
+  DROP TABLE doc_sources;
+  DROP TABLE doc_versions;
+  DROP TABLE doc_section_records;
+  DROP TABLE doc_sections;
+  DROP TABLE documents;
+  ALTER TABLE documents_new RENAME TO documents;
+  ALTER TABLE doc_sections_new RENAME TO doc_sections;
+  ALTER TABLE doc_section_records_new RENAME TO doc_section_records;
+  ALTER TABLE doc_versions_new RENAME TO doc_versions;
+  ALTER TABLE doc_sources_new RENAME TO doc_sources;
+  ALTER TABLE section_reads_new RENAME TO section_reads;
+  CREATE INDEX doc_section_records_record ON doc_section_records(record_id);
+  CREATE INDEX doc_versions_section ON doc_versions(section_id, at);
+  `,
 ];
 const VERSION = MIGRATIONS.length;
 
