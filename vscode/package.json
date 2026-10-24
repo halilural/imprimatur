@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.71.0",
+  "version": "0.72.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -121,6 +121,22 @@
         "title": "Open Project Glossary",
         "category": "Imprimatur",
         "icon": "$(book)"
+      },
+      {
+        "command": "imprimatur.openSocial",
+        "title": "Open Social Media",
+        "category": "Imprimatur",
+        "icon": "$(megaphone)"
+      },
+      {
+        "command": "imprimatur.social.on",
+        "title": "Turn on social media tracking",
+        "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.social.off",
+        "title": "Turn off social media tracking",
+        "category": "Imprimatur"
       },
       {
         "command": "imprimatur.docs.reveal",

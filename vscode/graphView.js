@@ -89,7 +89,7 @@ const { mascot } = require("./mascot.js");
 // No Waiting on you tab: a task's asks are on its page, the ones with no task on Home (its badge counts them all).
 const TAB_BUTTONS = [["home", "Home"], ["tasks", "Tasks"], ["analysis", "Analysis"], ["exercises", "Exercises"], ["edits", "Agent changes"]];
 /** The pages under the Analysis tab (TASK-ANALYSIS): its button is on for each. */
-const HUB_TABS = ["architecture", "product", "glossary", "analysis"];
+const HUB_TABS = ["architecture", "product", "glossary", "social", "analysis"];
 
 /** Row kinds of the graph's filter (#55): badge and label. */
 const ACTIVITY = {
@@ -1281,7 +1281,7 @@ function onMessage(m) {
   if (m.type === "openUrl" && /^https?:\/\//.test(m.url)) return vscode.env.openExternal(vscode.Uri.parse(m.url));
   if (m.type === "showRecord" && shown) return showIn({ root: shown, record: Number(m.id) });
   if (m.type === "showTask" && shown) return showIn({ root: shown, task: String(m.task) });
-  if (m.type === "showSection" && ["architecture", "product", "glossary"].includes(m.tab)) {
+  if (m.type === "showSection" && ["architecture", "product", "glossary", "social"].includes(m.tab)) {
     moveView({ tab: m.tab, section: String(m.key ?? "") });
     panel?.webview.postMessage({ type: "view", view: pageView() });
     return refresh?.(true);

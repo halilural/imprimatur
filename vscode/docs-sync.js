@@ -22,7 +22,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
-const { docMarkdown, fileOf, inside, docsSettings, FILES, isHeader } = require("./docs-export.js");
+const { docMarkdown, fileOf, inside, docsSettings, kindsOf, FILES, isHeader } = require("./docs-export.js");
 const { fenceTracker, filesAt, importRepo, originOf } = require("./import.js");
 const { slugify } = require("./docsView.js");
 
@@ -377,10 +377,11 @@ function syncKind(db, repo, root, kind, { dryRun = false, take, adopt, adoptFile
 function syncDocs(db, root, { dryRun = false, take, rev, adopt } = {}) {
   const repo = repoFor(db, root, dryRun);
   const out = [];
-  for (const kind of Object.keys(FILES)) out.push(syncKind(db, repo, root, kind, { dryRun, take, adoptFiles: adopt ?? optedIn(root), asked: adopt === true }));
+  // Social (#109) only in a repo that turned it on: off, its file is neither written nor read.
+  for (const kind of kindsOf(root)) out.push(syncKind(db, repo, root, kind, { dryRun, take, adoptFiles: adopt ?? optedIn(root), asked: adopt === true }));
   if (!rev || out.some((r) => r.conflicts.length || r.unreadable)) return out;
   if (!dryRun) importRepo(db, root, { rev, only: ["design", "product"] });
-  return Object.keys(FILES).map((kind) => {
+  return kindsOf(root).map((kind) => {
     const from = atRevision(root, rev, kind);
     return from ? syncKind(db, repo, root, kind, { dryRun, take, adopt: from }) : /** @type {SyncReport} */ (out.find((r) => r.kind === kind));
   });

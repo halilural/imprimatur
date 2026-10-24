@@ -8,8 +8,8 @@
 "use strict";
 const { DOC_KINDS, SECTION_BODY_MAX } = require("./db.js");
 
-const DOC_TABS = /** @type {const} */ (["architecture", "product", "glossary"]);
-const TAB_LABEL = { architecture: "Architecture", product: "Product", glossary: "Glossary" };
+const DOC_TABS = /** @type {const} */ (["architecture", "product", "glossary", "social"]);
+const TAB_LABEL = { architecture: "Architecture", product: "Product", glossary: "Glossary", social: "Social" };
 const WHO_TR = { user: "You", agent: "Agent", hook: "Hook", import: "Import" };
 const FIELD_TR = { title: "title", body: "text", position: "order", status: "status", records: "contributing records" };
 
@@ -297,6 +297,8 @@ function docHtml(m) {
   const head = `<section class="dhead" data-k="head"><span class="lbl">${esc(m.label)} · ${esc(m.repoName)}</span><h1>${esc(m.title)}</h1><p class="lead">${m.last ? `Last updated · ${esc(when(m.last.at))} · ${esc(m.last.who)}` : "Not updated yet"}</p>${m.manual ? `<p class="dnote">${esc(m.manual)} was written by hand and was not overwritten</p>` : ""}${m.unread?.length ? `<p class="dunread"><span class="upill">${m.unread.length} unread</span><button class="link" data-act="read" data-ids="${m.unread.join(",")}">Mark all as read</button></p>` : ""}</section>`;
   const empty = m.empty && !m.adding && g
     ? `<div class="card dempty emptyhero" data-k="empty">${require("./mascot.js").mascot(56)}<div><p>The glossary is empty. When a new term appears in the project, or a term changes meaning, the agent writes it here with <span class="mono">doc_section_upsert</span>.</p><p class="dim">You can add one too with "New term" on the left. The glossary is also written to the repo as docs/GLOSSARY.md.</p></div></div>`
+    : m.empty && !m.adding && m.kind === "social"
+    ? `<div class="card dempty emptyhero" data-k="empty">${require("./mascot.js").mascot(56)}<div><p>No posts yet. Ask the agent for one with <span class="mono">/social-post</span>: it reads the channel's rules first, then writes a section per channel with the rules it read, the post, where it went and how it did.</p><p class="dim">You can add a channel too with "New section" on the left. The document is also written to the repo as docs/SOCIAL.md.</p></div></div>`
     : m.empty && !m.adding
     ? `<div class="card dempty emptyhero" data-k="empty">${require("./mascot.js").mascot(56)}<div><p>This document is empty. When the agent adds ${m.kind === "architecture" ? "an ADR" : "a PDR"} or a decision, it writes the matching section here with <span class="mono">doc_section_upsert</span> and links the record.</p><p class="dim">You can add a section too with "New section" on the left. The document is also written to the repo as docs/${m.kind === "architecture" ? "ARCHITECTURE" : "PRODUCT"}.md.</p></div></div>`
     : "";
@@ -326,6 +328,7 @@ function applyDocMessage(db, m, actor, root) {
     }
     case "docNew": {
       if (!DOC_TABS.includes(m.kind)) throw new Error(`Imprimatur: bad document kind ${m.kind}`);
+      if (m.kind === "social" && !(root && require("./docs-export.js").socialOn(root))) throw new Error("Imprimatur: social media tracking is off in this repo (Imprimatur: Turn on social media tracking)");
       if (!title) throw new Error("Imprimatur: a new section needs a title");
       if (!root) throw new Error("Imprimatur: no repo open");
       const repo = repoOf(db, root) ?? db.repoOf(root);
