@@ -30,6 +30,7 @@
 24. [Understanding debt: read marks and the unread count (#92)](#unread)
 25. [/study: study mode (#95)](#study)
 26. [/exercise: exercise mode (#108)](#exercise)
+27. [Social document: a per-repo opt-in document kind (#109)](#social)
 
 <a id="overview"></a>
 
@@ -717,7 +718,7 @@ Edits not yet accepted are not in the database: they are counted per task strip 
 
 ## 26. /exercise: exercise mode (#108)
 
-Exercises are the user's own data, of no repo or task, in the same device database as everything else (`vscode/db.js`, migration 10).
+Exercises are the user's own data, of no repo or task, in the same device database as everything else (`vscode/db.js`, schema 9).
 
 ### Data
 - `exercises`: topic, goal, proof (how the goal is checked), context (what the clarifying questions found), weak (JSON list of short lines from the closing recall), status active | done | dropped.
@@ -760,3 +761,23 @@ S->>M: exercise_get {id} before each step
 
 ### Why generation lives in the skill
 Not a model call from the panel: the Claude Code session can research the topic's sources, ask questions, and coach in the same conversation. The panel only tracks.
+
+<a id="social"></a>
+
+## 27. Social document: a per-repo opt-in document kind (#109)
+
+A fifth document kind, `social` ("Social Media"), stored like the design documents (`documents`, `doc_sections`, versions, read marks) and synced with `docs/SOCIAL.md`.
+
+### The switch
+- Off by default, per repo: `.claude/imprimatur.json` `{"social": true}`. `docs-export.js` `socialOn(root)` reads it, `setSocial(root, on)` writes it keeping the file's other keys (and refuses a file that is not valid JSON), `kindsOf(root)` lists the kinds kept in files (social only when on).
+- Chosen over a VS Code setting or a database flag: the hooks, the MCP server and the extension all read the repo file already (process checks, docs settings), and committing it keeps the choice with the repo.
+- Off: `exportDocs` and `syncDocs` skip the kind (the file is neither written nor read back); the MCP `doc_get` / `doc_section_upsert` refuse it with how to turn it on (`socialGate`); the panel leaves Social out of the Analysis tabs (`analysisTabs(root)`) and its page says how to turn it on; a new section from the panel is refused. The document itself is kept.
+
+### Schema 10
+The `documents.kind` CHECK takes `social`. SQLite cannot alter a CHECK, so the migration rebuilds `documents` and every table that points into it (`doc_sections`, `doc_section_records`, `doc_versions`, `doc_sources`, `section_reads`): new tables, rows copied, children dropped first, renamed back, indexes recreated. It was tried on a copy of the live database (row counts equal, `integrity_check` ok, `foreign_key_check` empty) before it ran there.
+
+### The skill
+`skills/social-post/SKILL.md`, linked by setup and shipped by the plugin: rules fetched at writing time (WebFetch → curl → a browser MCP → WebSearch for the official page → the user pastes), a dated rules card per channel, counts by script (X weighted: URL 23, emoji 2), facts re-checked; with tracking on it writes one section per channel (`### Rules read`, `### Post`, `### Status`, `### Results`, `### Learned`).
+
+### Lesson from building it
+The migration was first saved in the live main checkout: a hook opened the database with the new code and migrated it at once, and processes on the old code (the installed extension, a running MCP server) saw a newer schema and went read-only until rebuilt. Schema changes are made in a worktree or branch and land together with the install.

@@ -19,6 +19,7 @@
 13. [Unread: comprehension debt (#91, #92)](#unread)
 14. [/study: studying a topic (#95)](#study)
 15. [/exercise: practise any topic in small steps (#108)](#exercise)
+16. [Social media: /social-post and the Social document (#109)](#social)
 
 <a id="summary"></a>
 
@@ -359,3 +360,21 @@ Progress, the step to do now, a box per step, **skip** (why goes in its note), a
 - Reading is at most a third of the steps; every exercise has a do step and a closing recall.
 
 Later: spaced recall of weak points (1, 3, 7 days, then FSRS-like) on Home; a quick create from the panel.
+
+<a id="social"></a>
+
+## 16. Social media: /social-post and the Social document (#109)
+
+Announcing a project means a different post for each channel, and each channel has its own rules: a subreddit's sidebar, X's character counting, Show HN's guidelines, Product Hunt's launch page. Rules change, and a post that breaks one is removed or ignored.
+
+### /social-post
+- Reads the target platform's own rules and docs **when it writes**, not from memory. When a page cannot be fetched (Reddit blocks most fetches; Discord rules live in the server), the user pastes it, or the post is marked "rules not checked".
+- Keeps a dated **rules card** per channel: length, title format, self-promotion, where links go, flair, required parts, timing, what is forbidden.
+- Writes the post to fit the card and that community's way of reading, counts characters with a script, and checks every fact against its source.
+- Where a platform asks for text written by hand (Show HN), it gives the facts and an outline instead of a draft.
+- Never posts, schedules or logs in for the user.
+
+### The Social document (off by default)
+- **Imprimatur: Turn on social media tracking** for a repo adds a **Social** page under Analysis, next to Architecture, Product and Glossary, kept in `docs/SOCIAL.md`.
+- One section per channel: the rules read, the post, its status (planned, posted, link), results over time, what was learned. /social-post writes it and updates a channel when the user says a post went out or brings its numbers.
+- **Turn off** hides the page and stops the file; the document is kept for when it is turned on again.
