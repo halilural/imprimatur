@@ -63,6 +63,13 @@ Every analysis, plan or research note the agent writes for a task is kept on the
 one version per change. `/study #92` writes a study note on a topic, then quizzes you
 and keeps a mastery score, so the next study asks the weak questions first.
 
+## /exercise: practise anything in small steps
+
+`/exercise <topic>` turns any topic (code, a concept, a spoken language, a sport) into an
+exercise: a few questions about why and your level, a "can do" goal, and 5 to 9 short steps
+that each say what they are for and when they count as done. You tick them in the
+**Exercises** tab, and the agent coaches without giving the answers away.
+
 ## Agent setup audit and recommendations
 
 ![The Agent setup tree of rules, settings, hooks, skills and MCP servers, and Recommendations with agnix findings and a sourced project fix marked Applied](assets/agent-setup.png)

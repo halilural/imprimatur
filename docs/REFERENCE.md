@@ -13,6 +13,7 @@ The full reference. For an overview and install steps, see the [README](../READM
 - [Task analyses](#task-analyses)
 - [Unread](#unread)
 - [/study](#study)
+- [/exercise](#exercise)
 - [Agent setup and recommendations](#agent-setup-and-recommendations)
 - [Archive](#archive)
 - [How it works](#how-it-works)
@@ -217,6 +218,27 @@ decision, a feature, a document or an epic: `/study #92`.
 The skill reads everything with the `study_material` MCP tool. Setup links it into
 `~/.claude/skills`; the plugin brings it by itself.
 
+## /exercise
+
+Practise any topic in small steps you tick: a language feature, a concept for an interview,
+a spoken language, a book chapter, a sport. `/exercise Java virtual threads`, or paste a study
+item after `/exercise`.
+
+1. The agent asks one to three questions (why, your level, time and place) and two or three
+   quick diagnostic questions, so it skips what you already know.
+2. It writes a "can do" goal with how it is checked, and 5 to 9 steps of 10 to 25 minutes:
+   learn a little, study an example, predict, do it, vary or break it, explain it, recall it.
+   Each step says what it is for and when it counts as done.
+3. It coaches you through them without giving the answer first: hints, then narrower
+   hints, and the solution only when you ask after trying.
+4. The last step is a recall without notes. The weak points are kept for the next session.
+
+The **Exercises** tab of the panel shows the steps: tick one, skip one with why in its note,
+or press **split** to copy a command that asks the agent to break a step into smaller ones.
+Exercises are yours, not a repo's or a task's: the same list in every project. They stay on
+this machine (they are not synced). The skill writes them with the `exercise_save` and
+`exercise_get` MCP tools.
+
 ## Agent setup and recommendations
 
 **Agent setup** (in the side bar) lists every file in the repo, and in your home folder,
@@ -325,7 +347,7 @@ claude plugin marketplace add halilural/imprimatur
 claude plugin install imprimatur@imprimatur
 ```
 
-The plugin brings the hooks, the MCP server and the `/study` skill, and Claude Code keeps
+The plugin brings the hooks, the MCP server and the `/study` and `/exercise` skills, and Claude Code keeps
 them up to date. It does not bring the VS Code extension or the status line. Plugin hooks
 take no arguments: they read the language and file extensions from `IMPRIMATUR_LANG`, the
 plugin's options (`/config`), or the `config.json` next to Imprimatur's database.
@@ -438,6 +460,7 @@ The MCP server ([mcp/server.mjs](../mcp/server.mjs)) gives every agent the same 
 | `search` | Search records, in this repo or every repo |
 | `doc_get`, `doc_section_upsert` | Read the design documents and glossary, write a section |
 | `study_material` | Everything `/study` reads on a topic |
+| `exercise_save`, `exercise_get` | Create, change and read the exercises of `/exercise` |
 | `setup_audit` | Run the agent setup audit |
 
 ## Settings

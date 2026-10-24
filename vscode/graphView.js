@@ -87,7 +87,7 @@ const { THEME_CSS } = require("./theme.js");
 const { mascot } = require("./mascot.js");
 /** The panel's tabs: key (also its icon) and label. */
 // No Waiting on you tab: a task's asks are on its page, the ones with no task on Home (its badge counts them all).
-const TAB_BUTTONS = [["home", "Home"], ["tasks", "Tasks"], ["analysis", "Analysis"], ["edits", "Agent changes"]];
+const TAB_BUTTONS = [["home", "Home"], ["tasks", "Tasks"], ["analysis", "Analysis"], ["exercises", "Exercises"], ["edits", "Agent changes"]];
 /** The pages under the Analysis tab (TASK-ANALYSIS): its button is on for each. */
 const HUB_TABS = ["architecture", "product", "glossary", "analysis"];
 
@@ -304,6 +304,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   .chip:focus-visible, button.acc:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 1px; }
   ${tasksView.TASKS_CSS}
   ${docsView.DOCS_CSS}
+  ${require("./exerciseView.js").EXERCISE_CSS}
   .badge { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); border-radius: var(--r-pill); padding: 0 6px; font-size: var(--fs-xs); font-weight: 700; }
   section[hidden] { display: none; }
   tr.w { cursor: pointer; } tr.w.done td { color: var(--muted); }
@@ -801,6 +802,17 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       case "anaAssign": el.closest(".orow")?.classList.add("sent"); return vscode.postMessage({ type: "anaAssign", file: d.file, task: Number(d.task) });
       case "bestRun": return vscode.postMessage({ type: "bestRun" });
       case "answer": return sendAnswer(d.id);
+      case "exStep": el.closest(".xstep")?.classList.add("sent"); return vscode.postMessage({ type: "exStep", id: Number(d.id), status: d.status });
+      case "exNote": {
+        const box = document.querySelector('#pane textarea[data-draft="exnote-' + d.id + '"]');
+        if (!box) return;
+        delete state.drafts["exnote-" + d.id];
+        vscode.setState(state);
+        return vscode.postMessage({ type: "exNote", id: Number(d.id), text: box.value });
+      }
+      case "exDrop": case "exResume": return vscode.postMessage({ type: d.act, id: Number(d.id) });
+      case "exCopy": return vscode.postMessage({ type: "exCopy", text: d.text });
+      case "exGo": { const step = document.getElementById("xs-" + d.id); step?.scrollIntoView({ block: "center" }); return step?.classList.add("flash"); }
       case "docEdit": return setView({ edit: d.kind + ":" + d.id });
       case "docCancel": for (const k of docKeys(d.kind, d.id)) delete state.drafts[k]; return setView({ edit: null });
       case "docSave": return saveDoc(d.kind, d.id);
@@ -1283,7 +1295,10 @@ function onMessage(m) {
   if (m.type === "newTask") return newTask();
   if (m.type === "bestRun") return vscode.commands.executeCommand("imprimatur.bestPractices.run");
   if (m.type === "recDismiss") return recDismiss(Number(m.id));
-  if (["rec", "recStep", "answer", "add", "taskStatus", "docSave", "docNew", "docStatus", "anaAssign", "read"].includes(m.type)) return writeFromPanel(m);
+  if (["rec", "recStep", "answer", "add", "taskStatus", "docSave", "docNew", "docStatus", "anaAssign", "read", "exStep", "exNote", "exDrop", "exResume"].includes(m.type)) return writeFromPanel(m);
+  if (m.type === "exCopy" && typeof m.text === "string" && m.text.length < 300) {
+    return vscode.env.clipboard.writeText(m.text).then(() => vscode.window.showInformationMessage(`Imprimatur: copied "${m.text.trim()}". Paste it in Claude Code${m.text.endsWith(" ") ? " with your topic" : ""}.`));
+  }
   if (m.type === "anaOpen") return openAnalysisFile(String(m.file ?? ""), Number(m.repo));
   if (m.type === "openFile" && shown) return openRepoFile(shown, String(m.file ?? ""), Number(m.line) || 0);
   if (m.type === "preview" && shown) {

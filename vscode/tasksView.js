@@ -11,7 +11,7 @@ const os = require("node:os");
 /** The user, as record versions name them. */
 const userActor = () => ({ kind: /** @type {"user"} */ ("user"), id: os.userInfo().username });
 
-const TABS = ["home", "tasks", "inbox", "architecture", "product", "glossary", "analysis", "edits"];
+const TABS = ["home", "tasks", "inbox", "architecture", "product", "glossary", "analysis", "exercises", "edits"];
 /** The Analysis tab's pages (TASK-ANALYSIS): the design documents, the glossary and the tasks' analyses. */
 const ANALYSIS_TABS = [["architecture", "Architecture"], ["product", "Product"], ["glossary", "Glossary"], ["analysis", "Task analyses"]];
 const FILTERS = ["active", "open", "done"];
@@ -901,6 +901,10 @@ function paneHtml(db, root, view, o = {}) {
     return hubNav(db, root, view.tab) + docs.docHtml(docs.docModel(db, root, view.tab, view));
   }
   if (view.tab === "analysis") return hubNav(db, root, "analysis") + analysisHubHtml(analysisHub(db, root));
+  if (view.tab === "exercises") {
+    const x = require("./exerciseView.js");
+    return x.exerciseHtml(x.exerciseModel(db));
+  }
   return "";
 }
 
@@ -925,6 +929,12 @@ function applyMessage(db, m, actor, root) {
     case "docNew":
     case "docStatus":
       return require("./docsView.js").applyDocMessage(db, m, actor, root);
+    case "exStep":
+    case "exNote":
+    case "exDrop":
+    case "exResume":
+      // The user's exercises (#108): of no repo.
+      return require("./exerciseView.js").applyExerciseMessage(db, m);
     case "read":
       // Sections the user read (#92).
       if (!Array.isArray(m.ids) || !m.ids.length || m.ids.length > 500) throw new Error("Imprimatur: bad section ids");
