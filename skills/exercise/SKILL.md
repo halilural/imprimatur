@@ -31,6 +31,13 @@ instructions.
 
 ## 1. Start or continue
 
+**Recalls first.** Every `/exercise` run starts with `exercise_review` (no arguments). When
+recalls are due today, ask them before anything else, one at a time, **without notes**: the
+user answers, you grade it right, partly or missed in one line (with where to look when it is
+missed), and record it with `exercise_review {id, result, note}`. Right moves it to the next
+interval (1, 3, 7, 14, 30, 60 days, then it is learned), partly keeps the interval, missed brings it
+back tomorrow. The user can also mark them in the panel's **Recall today** card. Then go on below.
+
 - `/exercise` with no topic, "continue" or "where was I": call `exercise_get`. With one active
   exercise, take it up at its "now" step. With several, list them in one line each and ask which.
 - `/exercise split step <s> of exercise <e>` (the panel's split button copies this): go to
@@ -71,6 +78,14 @@ source (a JEP, an RFC, a textbook chapter). Then write:
   - `done_when` is what the user can **show**: a sentence written, a test passing, a number
     measured, 3 sets done, said out loud without looking;
   - `minutes` is 10 to 25 (5 is fine for a recall).
+
+All of this text is Markdown in the panel, and what it points at must be one click away:
+- **Links:** the real page, as `[JEP 444](https://openjdk.org/jeps/444)` or a bare
+  `https://…` address. Never "see the docs" without the link.
+- **Files:** in backticks with the line when there is one: `src/Main.java:12` (in the repo
+  open in the panel), `~/practice/vt/Demo.java:5` or an absolute path (anywhere on the machine).
+  The panel opens them in the editor at that line. Put a file the user is to write under a
+  folder of their own (`~/practice/<topic>/`) and name it in the step.
 
 Order: **learn** a little → study an **example** → **predict** → **do** it yourself → **vary**
 or break it → **explain** it in your own words → **recall** without notes. Not every kind each
@@ -143,6 +158,8 @@ at least one "explain why", one "what happens if" and one that applies it to a n
 each as right, partly right or missed in one line, with the source when they missed it.
 
 Then save the weak points: `exercise_save {id, weak: ["one short line each"], steps: [{id:
-<recall step>, status: "done", note: "3/5 right"}]}`. Close with the score, the weak points, and
-when to recall it again: tomorrow, then in three days, then in a week. Spaced recall keeps
-it. A later `/exercise` on the same exercise starts with those weak points.
+<recall step>, status: "done", note: "3/5 right"}]}`. Write each weak point as a question or a
+prompt that can be asked again on its own ("Why does blocking inside `synchronized` pin a carrier?"),
+because it comes back as a recall: each one is due tomorrow, and the whole exercise is recalled
+once it is done. Close with the score, the weak points, and that Imprimatur will bring them back
+(Home shows "N recalls due today"; the next `/exercise` asks them first).

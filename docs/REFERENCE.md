@@ -233,6 +233,14 @@ item after `/exercise`.
 3. It coaches you through them without giving the answer first: hints, then narrower
    hints, and the solution only when you ask after trying.
 4. The last step is a recall without notes. The weak points are kept for the next session.
+5. **Spaced recall:** each weak point comes back as a recall the next day, and a finished
+   exercise is recalled as a whole. Got it moves it to 3, 7, 14, 30, then 60 days, after which it
+   is learned; partly keeps the interval; missed brings it back tomorrow. Home shows "N recalls
+   due today", the Exercises tab lists them with Got it / Partly / Missed, and `/exercise` asks
+   them first.
+
+Links in an exercise open in the browser, and a file path in backticks (`src/Main.java:12`,
+`~/practice/vt/Demo.java:5` or an absolute path) opens in the editor at that line.
 
 The **Exercises** tab of the panel shows the steps: tick one, skip one with why in its note,
 or press **split** to copy a command that asks the agent to break a step into smaller ones.
@@ -480,6 +488,7 @@ The MCP server ([mcp/server.mjs](../mcp/server.mjs)) gives every agent the same 
 | `doc_get`, `doc_section_upsert` | Read the design documents and glossary, write a section |
 | `study_material` | Everything `/study` reads on a topic |
 | `exercise_save`, `exercise_get` | Create, change and read the exercises of `/exercise` |
+| `exercise_review` | The exercise recalls due today, and how each one went |
 | `setup_audit` | Run the agent setup audit |
 
 ## Settings

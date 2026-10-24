@@ -811,6 +811,8 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
         return vscode.postMessage({ type: "exNote", id: Number(d.id), text: box.value });
       }
       case "exDrop": case "exResume": return vscode.postMessage({ type: d.act, id: Number(d.id) });
+      case "exReview": el.closest(".xrev")?.classList.add("sent"); return vscode.postMessage({ type: "exReview", id: Number(d.id), result: d.result });
+      case "exOpen": return vscode.postMessage({ type: "exOpen", file: d.file, line: Number(d.line) || 0 });
       case "exCopy": return vscode.postMessage({ type: "exCopy", text: d.text });
       case "exGo": { const step = document.getElementById("xs-" + d.id); step?.scrollIntoView({ block: "center" }); return step?.classList.add("flash"); }
       case "docEdit": return setView({ edit: d.kind + ":" + d.id });
@@ -1295,7 +1297,8 @@ function onMessage(m) {
   if (m.type === "newTask") return newTask();
   if (m.type === "bestRun") return vscode.commands.executeCommand("imprimatur.bestPractices.run");
   if (m.type === "recDismiss") return recDismiss(Number(m.id));
-  if (["rec", "recStep", "answer", "add", "taskStatus", "docSave", "docNew", "docStatus", "anaAssign", "read", "exStep", "exNote", "exDrop", "exResume"].includes(m.type)) return writeFromPanel(m);
+  if (["rec", "recStep", "answer", "add", "taskStatus", "docSave", "docNew", "docStatus", "anaAssign", "read", "exStep", "exNote", "exDrop", "exResume", "exReview"].includes(m.type)) return writeFromPanel(m);
+  if (m.type === "exOpen") return openExerciseFile(String(m.file ?? ""), Number(m.line) || 0);
   if (m.type === "exCopy" && typeof m.text === "string" && m.text.length < 300) {
     return vscode.env.clipboard.writeText(m.text).then(() => vscode.window.showInformationMessage(`Imprimatur: copied "${m.text.trim()}". Paste it in Claude Code${m.text.endsWith(" ") ? " with your topic" : ""}.`));
   }
@@ -1326,6 +1329,23 @@ async function openRepoFile(root, rel, line) {
   return vscode.window.showTextDocument(vscode.Uri.file(target), { preview: true, viewColumn: vscode.ViewColumn.Beside, selection: new vscode.Range(at, at) });
 }
 
+
+/**
+ * A `path:line` in an exercise (#108): exercises belong to no repo, so a path from the home (~/)
+ * or the root (/) opens too, when it is a file; a relative one is the open repo's (openRepoFile).
+ * @param {string} rel @param {number} line 1-based, 0: the top
+ */
+function openExerciseFile(rel, line) {
+  const abs = rel.startsWith("~/") ? path.join(os.homedir(), rel.slice(2)) : path.isAbsolute(rel) ? rel : undefined;
+  if (!abs) return shown ? openRepoFile(shown, rel, line) : undefined;
+  let file;
+  try {
+    file = fs.statSync(abs).isFile() ? abs : undefined;
+  } catch {}
+  if (!file) return void vscode.window.showInformationMessage(`Imprimatur: ${rel} is not a file on this machine.`);
+  const at = new vscode.Position(Math.max(0, line - 1), 0);
+  return vscode.window.showTextDocument(vscode.Uri.file(file), { preview: true, viewColumn: vscode.ViewColumn.Beside, selection: new vscode.Range(at, at) });
+}
 
 /**
  * Opens a task's analysis file (TASK-ANALYSIS): only a path some analysis of the task's repo
