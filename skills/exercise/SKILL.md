@@ -72,7 +72,9 @@ source (a JEP, an RFC, a textbook chapter). Then write:
 - **proof:** how that is checked at the end (the last step does it).
 - **context:** what sections 2 and 3 found: why, level, time, place, what they knew.
 - **steps:** 5 to 9. Each step:
-  - `title` starts with a verb and asks for **one** thing;
+  - `title` starts with its number and then a verb, and asks for **one** thing: `1. Read…`,
+    `2. Predict…`. A smaller step carries its parent's number: `6.1 Run…`, `6.2 Change…`. The
+    panel shows titles without numbers, and the user and you refer to steps by number;
   - `kind` is one of: learn, example, predict, do, vary, explain, recall;
   - `why` is what it is for (its subgoal) in one sentence;
   - `done_when` is what the user can **show**: a sentence written, a test passing, a number
@@ -101,6 +103,34 @@ Fit the steps to the topic:
 | reading | skim the headings, predict what the chapter claims, read one part, summarise it in three sentences, argue with it |
 | physical skill | warm up, practise a form cue, do sets with reps written down, film or check form, make it a bit harder next time |
 
+### Code steps: guided, then on their own
+
+When the user writes code in a language or library that is new to them, "here are the API
+calls, put them together" fails: they cannot assemble what they cannot yet read. Lead them in
+with support that fades quickly:
+
+1. **Worked example (PRIMM).** A short, complete, working program that solves a *neighbouring*
+   problem with the same patterns (not the step's own task). Run it yourself before you give it.
+   The user **predicts** its output before running it, **runs** it, then **investigates** it by
+   answering two or three questions about specific lines (Sentance and Waite's PRIMM:
+   https://static.teachcomputing.org/pedagogy/QR11-PRIMM.pdf).
+2. **Modify.** They change a few lines of the example toward their task.
+3. **Complete (faded example).** You give the function with one or two lines left blank, the
+   lines that carry the new idea; they fill them in. Each later step leaves more blank
+   (Renkl and Atkinson's fading: https://faculty.engineering.asu.edu/mre/wp-content/uploads/sites/31/2020/02/MoRO09.pdf).
+4. **Parsons.** You give the right lines in shuffled order; they put them in order and indent
+   them. No distractor lines: they cost time and add no learning
+   (https://profiles.wustl.edu/en/publications/distractors-in-parsons-problems-decrease-learning-efficiency-for-/).
+5. **Make.** A small new variation written without the example open.
+
+An experienced programmer new to the language needs this support for less time than a beginner
+(the expertise reversal effect), so fade it after one or two steps. The example and the partly
+blank code are yours to write; the step's own solution stays the user's.
+
+**Teach it in its own terms.** Show the language or tool directly, with a short example of its
+own. Do not explain it through another language the user knows ("in Java this is…") unless
+they ask for that comparison.
+
 Example: for "Read JEP 444: platform vs virtual threads, carrier threads", these steps
 replace a single step that only said "read it":
 1. learn: Read JEP 444's Motivation and Description. *Why: to see the problem it solves.*
@@ -123,6 +153,12 @@ Go through each step and fix any that fails:
 - Does its text give away the answer it asks for?
 - Is reading or watching more than a third of the steps?
 - Is the first step easy enough to start right now?
+- Is the setup ready for it? Check what the steps need yourself before saving (tools and
+  libraries installed, logged in, access granted, the files there) and write what you found
+  in `context`, so no step stalls on setup.
+- Can a `predict` step be reasoned from what is in front of the user? Predicting trivia they
+  could only have memorised (which release deprecated which method) teaches nothing.
+- Does every title start with its number?
 - Do it, and the closing recall, exist?
 
 Then save it with `exercise_save {topic, goal, proof, context, steps}`. Tell the user in two or
@@ -141,6 +177,8 @@ three lines: the goal, how many steps and about how long, and that the steps are
   practises the same thing again in a slightly different form (`vary`).
 - **Too big:** split it (section 6). **Not useful for them:** mark it `skipped` with why in its
   note.
+- **They ask you to do it** (summarise the reading, write the code): do it, say in the step's
+  note that you did, and ask that part again in the closing recall.
 - Before each step, read the exercise with `exercise_get {id}`. The user may have ticked steps
   or written notes in the panel, and their notes tell you where they got stuck.
 
@@ -149,7 +187,9 @@ three lines: the goal, how many steps and about how long, and that the steps are
 Read the exercise (`exercise_get {id}`), then add 2 to 4 smaller steps under the step with
 `exercise_save {id, steps: [{parent_id: <step>, kind, title, why, done_when, minutes}, ...]}`.
 The step itself is ticked when its smaller steps all are. A smaller step is not split again.
-Each smaller step follows the same rules as in section 4.
+Each smaller step follows the same rules as in section 4, and is numbered under its parent
+(`6.1`, `6.2`). When the split is a code step for someone new to the language, use the order in
+"Code steps: guided, then on their own".
 
 ## 7. Close
 
