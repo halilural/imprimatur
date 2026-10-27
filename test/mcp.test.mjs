@@ -381,7 +381,7 @@ test("every tool's structuredContent matches its outputSchema", async () => {
   await ok("study_material", { key: "#1" });
   await ok("study_material", { key: "#0" });
   const { exercise: ex } = await ok("exercise_save", { topic: "Pull-ups", goal: "5 in a row", steps: [{ kind: "do", title: "Hang 20 s", why: "grip", done_when: "3 hangs", minutes: 10 }] });
-  await ok("exercise_save", { id: ex.id, weak: ["grip"], steps: [{ id: ex.steps[0].id, status: "done", note: "ok" }, { parent_id: ex.steps[0].id, title: "Scapular pulls" }] });
+  await ok("exercise_save", { id: ex.id, weak: ["grip", { front: "Dead hang or active?", back: "Active: shoulders down", deck: "Calisthenics" }], steps: [{ id: ex.steps[0].id, status: "done", note: "ok" }, { parent_id: ex.steps[0].id, title: "Scapular pulls" }] });
   await ok("exercise_get", {});
   await ok("exercise_get", { id: ex.id, status: "all" });
   await ok("exercise_review", {});

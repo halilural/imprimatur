@@ -85,6 +85,8 @@ const input = (properties, required) => ({
 
 // Output schemas describe structuredContent; the records and tasks are the database's rows.
 const str = { type: "string" };
+/** A weak point: a line, or a card for a flashcard plugin. */
+const WEAK = { anyOf: [str, { type: "object", additionalProperties: false, required: ["front"], properties: { front: str, back: str, deck: str } }] };
 const int = { type: "integer" };
 const orNull = (type) => ({ type: [type, "null"] });
 const RECORD = {
@@ -109,7 +111,7 @@ const TASK = {
 const EXERCISE = {
   type: "object",
   properties: {
-    id: int, uid: str, topic: str, goal: orNull("string"), proof: orNull("string"), context: orNull("string"), weak: { type: "array", items: str },
+    id: int, uid: str, topic: str, goal: orNull("string"), proof: orNull("string"), context: orNull("string"), weak: { type: "array", items: WEAK },
     status: { type: "string", enum: EXERCISE_STATUSES }, created_at: int, updated_at: int,
     steps: { type: "array", items: { type: "object" }, description: "One exercise: its steps, in order" },
     step_count: { type: "integer", description: "The list: top-level steps (a split step counts once)" },
@@ -312,7 +314,7 @@ const TOOLS = [
       context: { type: "string", maxLength: EXERCISE_TEXT_MAX, description: "What the clarifying questions found: why, level, time a day, where (IDE, paper, gym), what is already known" },
       weak: {
         type: "array", description: "Weak points the closing recall found (the list replaces the old one): one short line each, or a card {front: a question that tests it, back: the answer and why, deck: its group, e.g. a roadmap} a flashcard plugin can take",
-        items: { anyOf: [{ type: "string" }, { type: "object", additionalProperties: false, required: ["front"], properties: { front: str, back: str, deck: str } }] },
+        items: WEAK,
       },
       status: { type: "string", enum: EXERCISE_STATUSES, description: "dropped: given up; done/active follow the steps by themselves" },
       steps: {
