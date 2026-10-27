@@ -500,12 +500,24 @@ function exMinutes(v) {
   if (!Number.isInteger(v) || /** @type {number} */ (v) < 1 || /** @type {number} */ (v) > 600) throw new Error("Imprimatur: minutes must be a whole number from 1 to 600");
   return v;
 }
-/** Weak points the closing recall found: a list of short lines. @param {unknown} v */
+/**
+ * Weak points the closing recall found: short lines, or cards {front, back, deck} a flashcard
+ * plugin can take (deck: the group it goes in, e.g. a roadmap). @param {unknown} v
+ */
 function exWeak(v) {
   if (v === undefined || v === null) return null;
   if (!Array.isArray(v) || v.length > 30) throw new Error("Imprimatur: weak must be a list of at most 30 lines");
-  return v.map((x) => exText(x, "a weak point", EXERCISE_TITLE_MAX)).filter(Boolean);
+  return v.map((x) => {
+    if (x === null || typeof x !== "object" || Array.isArray(x)) return exText(x, "a weak point", EXERCISE_TITLE_MAX);
+    const front = exText(x.front, "a weak point's front", EXERCISE_TITLE_MAX);
+    if (!front) return undefined;
+    const back = exText(x.back, "a weak point's back");
+    const deck = exText(x.deck, "a weak point's deck", EXERCISE_TITLE_MAX);
+    return { front, ...(back && { back }), ...(deck && { deck }) };
+  }).filter(Boolean);
 }
+/** A weak point's line: the card's front. @param {string | {front: string}} w */
+const weakText = (w) => (typeof w === "string" ? w : w.front);
 
 /**
  * One spelling per remote: git@github.com:a/b.git and https://github.com/a/b are the same repo.
@@ -1554,6 +1566,8 @@ class Db {
         if (fields.status !== undefined) set.push("status = ?"), args.push(exStatus(fields.status, EXERCISE_STATUSES));
         this.q(`UPDATE exercises SET ${[...set, "updated_at = ?"].join(", ")} WHERE id = ?`).run(...args, now, id);
       }
+      // A plugin hears of new weak points (flashcards), after the recall cards above.
+      if (fields.weak !== undefined && fields.weak !== null) this.changed_("exercise", id, ["weak"], now);
       const steps = fields.steps ?? [];
       if (!Array.isArray(steps) || steps.length > EXERCISE_STEPS_MAX) throw new Error(`Imprimatur: steps must be a list of at most ${EXERCISE_STEPS_MAX}`);
       for (const s of steps) this.saveStep(/** @type {number} */ (id), s, now);
@@ -1655,9 +1669,11 @@ class Db {
 
   /**
    * The weak points as recall cards (#108 v2): a new one is due tomorrow; one no longer in the list
-   * is dropped (a card already answered keeps its history). @param {number} exerciseId @param {string[]} weak @param {number} now
+   * is dropped (a card already answered keeps its history). A card's front is its prompt.
+   * @param {number} exerciseId @param {(string | {front: string})[]} weak @param {number} now
    */
-  syncWeakReviews(exerciseId, weak, now) {
+  syncWeakReviews(exerciseId, cards, now) {
+    const weak = cards.map(weakText);
     for (const w of weak) {
       this.q(`INSERT INTO exercise_reviews (exercise_id, prompt, due_at, created_at) VALUES (?, ?, ?, ?)
               ON CONFLICT (exercise_id, prompt) DO UPDATE SET status = 'active' WHERE status = 'dropped'`).run(exerciseId, w, now + REVIEW_DAYS[0] * DAY_MS, now);
@@ -1752,8 +1768,8 @@ class Db {
   /**
    * Tells each plugin (#106) what a write changed, in the write's transaction. A plugin that
    * throws is logged and skipped: its failure never undoes the user's write.
-   * @param {"repo" | "task" | "record" | "section"} entity
-   * @param {any} target the row (repo, task) or its id (record, section)
+   * @param {"repo" | "task" | "record" | "section" | "exercise"} entity
+   * @param {any} target the row (repo, task) or its id (record, section, exercise)
    * @param {string[]} fields names from FIELDS @param {number} at
    */
   changed_(entity, target, fields, at) {
@@ -1879,5 +1895,5 @@ function openDb({ path: file = dbPath(), busyMs = 5000, plugins } = {}) {
 
 module.exports = {
   openDb, dbPath, onWindowsDrive, normOrigin, refersTo, recordOf, analysisTitle, KINDS, ACTORS, VERSION, MIGRATIONS, FIELDS,
-  TRACKER_KEY, TASK_STATUSES, RECORD_STATUSES, EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, REVIEW_DAYS, REVIEW_RESULTS, DOC_KINDS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, SECTION_TITLE_MAX, SOURCE_MAX,
+  TRACKER_KEY, TASK_STATUSES, RECORD_STATUSES, EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, weakText, REVIEW_DAYS, REVIEW_RESULTS, DOC_KINDS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, SECTION_TITLE_MAX, SOURCE_MAX,
 };

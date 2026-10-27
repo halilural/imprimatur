@@ -563,7 +563,8 @@ finished, changing nothing.
 Imprimatur loads optional plugins. `config.json` next to the database
 (`~/.local/share/imprimatur/` on Linux) names them in
 `"plugins": ["/absolute/path/to/plugin.js"]`. A plugin is told about every change to a
-repo, task, record or document section, and can add actions to **Imprimatur: Plugin
+repo, task, record or document section, and when an exercise's weak points are saved
+(a weak point can be a card `{front, back, deck}` for a flashcard plugin), and can add actions to **Imprimatur: Plugin
 Actions…**. The contract is in [vscode/db.js](../vscode/db.js) (`loadPlugins`). Without
 plugins nothing changes.
 

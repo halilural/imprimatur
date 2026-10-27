@@ -76,7 +76,7 @@ function exerciseCard(e) {
 <div class="progress" role="progressbar" aria-label="${esc(e.topic)} progress" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div style="width: ${pct}%"></div></div></div>`;
   const goal = e.goal || e.proof ? `<div class="xgoal" data-k="g${e.updated_at}">${e.goal ? `<div><span class="lbl">Goal</span> ${md(e.goal)}</div>` : ""}${e.proof ? `<div><span class="lbl">Checked by</span> ${md(e.proof)}</div>` : ""}</div>` : "";
   const now = e.now ? `<a href="#" class="callout xnow" data-k="n${e.now.id}" data-act="exGo" data-id="${e.now.id}">${icon("arrow", 18)}<div><span class="lbl">Now</span><span class="ptitle">${md(e.now.title)}</span></div></a>` : "";
-  const weak = e.weak.length ? `<div class="xweak" data-k="w${e.updated_at}"><span class="lbl">Weak points</span><ul>${e.weak.map((/** @type {string} */ w) => `<li>${md(w)}</li>`).join("")}</ul></div>` : "";
+  const weak = e.weak.length ? `<div class="xweak" data-k="w${e.updated_at}"><span class="lbl">Weak points</span><ul>${e.weak.map((/** @type {any} */ w) => `<li>${md(typeof w === "string" ? w : w.front)}</li>`).join("")}</ul></div>` : "";
   // A stable key with keyed children: the page swaps only what changed, so a half-typed note stays.
   return `<section class="card xcard" data-k="x${e.id}" aria-label="${esc(e.topic)}">${head}${goal}${now}<ol class="xsteps" data-k="steps">${e.steps.map((/** @type {any} */ s) => stepHtml(e, s)).join("")}</ol>${weak}</section>`;
 }

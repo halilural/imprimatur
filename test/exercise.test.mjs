@@ -87,10 +87,15 @@ test("ticks drive progress: a split step is done through its smaller steps, the 
   assert.equal(db.saveExercise({ id: e.id, steps: [{ title: "no parent", parent_id: null }] }).steps.at(-1).parent_id, null, "parent_id null: a top-level step");
   db.saveExercise({ id: e.id, weak: [" carrier vs virtual ", ""] });
   assert.deepEqual(db.exercise(e.id).weak, ["carrier vs virtual"]);
+  db.saveExercise({ id: e.id, weak: [{ front: " Who runs the virtual thread? ", back: "A carrier thread", deck: "Java" }, { front: "Only a front" }, { front: " " }] });
+  assert.deepEqual(db.exercise(e.id).weak, [{ front: "Who runs the virtual thread?", back: "A carrier thread", deck: "Java" }, { front: "Only a front" }], "a card keeps front, back and deck; one without a front is left out");
+  assert.throws(() => db.saveExercise({ id: e.id, weak: [{ front: "q", back: 3 }] }), /back must be text/);
 });
 
 test("MCP: exercise_save and exercise_get, with the text the agent reads", () => {
   const db = openDb({ path: path.join(tmp(), "i.db") });
+  const card = callTool(openDb({ path: path.join(tmp(), "c.db") }), "exercise_save", { topic: "Bedrock", weak: ["a line", { front: "Which error stays on the client?", back: "ParamValidationError", deck: "Cloud GenAI" }] });
+  assert.match(digest("exercise_save", card), /Weak points:\n- a line\n- Which error stays on the client\? → ParamValidationError \[Cloud GenAI\]$/);
   const saved = callTool(db, "exercise_save", { topic: "Polish greetings", goal: "Greet and introduce yourself", steps: steps.slice(0, 2) });
   const e = saved.exercise;
   const text = digest("exercise_save", saved);

@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const {
   openDb, KINDS, DOC_KINDS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, analysisTitle,
-  EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, REVIEW_DAYS, REVIEW_RESULTS,
+  EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, REVIEW_DAYS, REVIEW_RESULTS, weakText,
 } = require("../vscode/db.js");
 const { repoRoot } = require("../vscode/review-state.js");
 const { originOf } = require("../vscode/import.js");
@@ -310,7 +310,10 @@ const TOOLS = [
       goal: { type: "string", maxLength: EXERCISE_TEXT_MAX, description: "What the user can do at the end, one \"can do\" sentence" },
       proof: { type: "string", maxLength: EXERCISE_TEXT_MAX, description: "How the goal is checked at the end, without notes" },
       context: { type: "string", maxLength: EXERCISE_TEXT_MAX, description: "What the clarifying questions found: why, level, time a day, where (IDE, paper, gym), what is already known" },
-      weak: { type: "array", items: { type: "string" }, description: "Weak points the closing recall found, one short line each (the list replaces the old one)" },
+      weak: {
+        type: "array", description: "Weak points the closing recall found (the list replaces the old one): one short line each, or a card {front: a question that tests it, back: the answer and why, deck: its group, e.g. a roadmap} a flashcard plugin can take",
+        items: { anyOf: [{ type: "string" }, { type: "object", additionalProperties: false, required: ["front"], properties: { front: str, back: str, deck: str } }] },
+      },
       status: { type: "string", enum: EXERCISE_STATUSES, description: "dropped: given up; done/active follow the steps by themselves" },
       steps: {
         type: "array", maxItems: EXERCISE_STEPS_MAX, description: "Steps to add (no id) or change (id), in order",
@@ -799,7 +802,7 @@ function exerciseDigest(e) {
     if (s.done_when) L.push(`${pad}done when: ${oneLine(s.done_when, 300)}`);
     if (s.note) L.push(`${pad}note: ${oneLine(s.note, 400)}`);
   }
-  if (e.weak.length) L.push("Weak points:", ...e.weak.map((w) => `- ${w}`));
+  if (e.weak.length) L.push("Weak points:", ...e.weak.map((/** @type {any} */ w) => `- ${weakText(w)}${w.back ? ` → ${oneLine(w.back, 300)}` : ""}${w.deck ? ` [${w.deck}]` : ""}`));
   return L.join("\n");
 }
 

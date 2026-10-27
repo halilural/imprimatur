@@ -161,3 +161,22 @@ test("plugins: one that does not load leaves meta plugin:missed:<path>, kept fro
     console.error = orig;
   }
 });
+
+test("plugins: an exercise's weak points are reported once they are saved, recall cards first", () => {
+  const { dir, file } = pluginDir("p7");
+  // The plugin reads the recall cards in onChange: they are already there.
+  fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("seen.push([entity,", "if (entity === 'exercise') seen.push(['reviews', db.q('SELECT prompt FROM exercise_reviews WHERE exercise_id = ? ORDER BY id').all(target).map((r) => r.prompt)]);\n    seen.push([entity,"));
+  const db = openDb({ path: path.join(dir, "i.db"), plugins: [file] });
+  try {
+    const e = db.saveExercise({ topic: "Bedrock", steps: [{ title: "Call it" }] });
+    db.saveExercise({ id: e.id, steps: [{ id: e.steps[0].id, note: "ok" }] });
+    assert.deepEqual(globalThis.p7.slice(1), [], "no weak points: nothing to tell");
+    db.saveExercise({ id: e.id, weak: ["line", { front: "Which error never leaves the client?", back: "ParamValidationError", deck: "Cloud GenAI" }] });
+    assert.deepEqual(globalThis.p7.slice(1), [
+      ["reviews", ["line", "Which error never leaves the client?"]],
+      ["exercise", e.id, ["weak"], "number"],
+    ]);
+  } finally {
+    db.close();
+  }
+});
