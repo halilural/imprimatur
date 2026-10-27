@@ -162,7 +162,7 @@ test("plugins: one that does not load leaves meta plugin:missed:<path>, kept fro
   }
 });
 
-test("plugins: an exercise's weak points are reported once they are saved, recall cards first", () => {
+test("plugins: an exercise's weak points and its status are reported once saved, recall cards first", () => {
   const { dir, file } = pluginDir("p7");
   // The plugin reads the recall cards in onChange: they are already there.
   fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("seen.push([entity,", "if (entity === 'exercise') seen.push(['reviews', db.q('SELECT prompt FROM exercise_reviews WHERE exercise_id = ? ORDER BY id').all(target).map((r) => r.prompt)]);\n    seen.push([entity,"));
@@ -176,6 +176,13 @@ test("plugins: an exercise's weak points are reported once they are saved, recal
       ["reviews", ["line", "Which error never leaves the client?"]],
       ["exercise", e.id, ["weak"], "number"],
     ]);
+    db.saveExercise({ id: e.id, steps: [{ id: e.steps[0].id, status: "done" }] });
+    assert.deepEqual(globalThis.p7.slice(3), [
+      ["reviews", ["line", "Which error never leaves the client?", "Recall the whole exercise without notes: Bedrock"]],
+      ["exercise", e.id, ["status"], "number"],
+    ], "done: told after the whole recall is written");
+    db.saveExercise({ id: e.id, steps: [{ id: e.steps[0].id, note: "again" }] });
+    assert.equal(globalThis.p7.length, 5, "still done: nothing new");
   } finally {
     db.close();
   }

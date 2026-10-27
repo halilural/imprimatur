@@ -1665,6 +1665,8 @@ class Db {
       this.q(`INSERT OR IGNORE INTO exercise_reviews (exercise_id, prompt, whole, due_at, created_at) VALUES (?, ?, 1, ?, ?)`)
         .run(exerciseId, `Recall the whole exercise without notes: ${ex.topic}`, now + REVIEW_DAYS[0] * DAY_MS, now);
     }
+    // A plugin hears the status change (a flashcard plugin turns the whole recall into a card).
+    if (want !== ex.status) this.changed_("exercise", exerciseId, ["status"], now);
   }
 
   /**
