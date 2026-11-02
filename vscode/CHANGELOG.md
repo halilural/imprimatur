@@ -4,6 +4,19 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.74.0] - 2026-11-02
+
+### Removed
+- Unread tracking of the design documents (#111): the Home "Unread" strip, the unread count on
+  task rows and pages, the per-section Unread marks and every "Mark as read" button, and the
+  unread part of the status line. It made the panes sluggish: with no read marks, every render
+  parsed the repo's whole document history. The `section_reads` table stays so older databases
+  open unchanged; nothing reads or writes it.
+
+### Changed
+- Task rows and the status line count agent edits waiting to be accepted ("N to accept",
+  "N edits to accept") instead of unread sections.
+
 ## [0.73.0] - 2026-10-24
 
 ### Added

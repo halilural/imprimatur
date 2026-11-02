@@ -819,11 +819,6 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       case "docCancel": for (const k of docKeys(d.kind, d.id)) delete state.drafts[k]; return setView({ edit: null });
       case "docSave": return saveDoc(d.kind, d.id);
       case "docStatus": return vscode.postMessage({ type: "docStatus", id: Number(d.id), status: d.status });
-      case "read": el.closest(".urow")?.classList.add("sent"); return vscode.postMessage({ type: "read", ids: String(d.ids).split(",").map(Number) });
-      case "readGo":
-        if (d.tab === "analysis") { state.asel = d.key; return go({ tab: "analysis" }); }
-        state.back = [...state.back, { tab: state.tab, sel: state.sel ?? null, filter: state.filter }].slice(-20);
-        return vscode.postMessage({ type: "showSection", tab: d.tab, key: d.key });
       case "docGo": {
         // A tree node with children (#99): clicked again it folds them; once more, it opens and goes there.
         const li = el.closest(".atoc li[data-k]");
@@ -1283,11 +1278,6 @@ function onMessage(m) {
   if (m.type === "openUrl" && /^https?:\/\//.test(m.url)) return vscode.env.openExternal(vscode.Uri.parse(m.url));
   if (m.type === "showRecord" && shown) return showIn({ root: shown, record: Number(m.id) });
   if (m.type === "showTask" && shown) return showIn({ root: shown, task: String(m.task) });
-  if (m.type === "showSection" && ["architecture", "product", "glossary", "social"].includes(m.tab)) {
-    moveView({ tab: m.tab, section: String(m.key ?? "") });
-    panel?.webview.postMessage({ type: "view", view: pageView() });
-    return refresh?.(true);
-  }
   if (m.type === "scan") return scanAll();
   if (m.type === "view") {
     const toEdits = m.view?.tab === "edits" && view.tab !== "edits";
@@ -1297,7 +1287,7 @@ function onMessage(m) {
   if (m.type === "newTask") return newTask();
   if (m.type === "bestRun") return vscode.commands.executeCommand("imprimatur.bestPractices.run");
   if (m.type === "recDismiss") return recDismiss(Number(m.id));
-  if (["rec", "recStep", "answer", "add", "taskStatus", "docSave", "docNew", "docStatus", "anaAssign", "read", "exStep", "exNote", "exDrop", "exResume", "exReview"].includes(m.type)) return writeFromPanel(m);
+  if (["rec", "recStep", "answer", "add", "taskStatus", "docSave", "docNew", "docStatus", "anaAssign", "exStep", "exNote", "exDrop", "exResume", "exReview"].includes(m.type)) return writeFromPanel(m);
   if (m.type === "exOpen") return openExerciseFile(String(m.file ?? ""), Number(m.line) || 0);
   if (m.type === "exCopy" && typeof m.text === "string" && m.text.length < 300) {
     return vscode.env.clipboard.writeText(m.text).then(() => vscode.window.showInformationMessage(`Imprimatur: copied "${m.text.trim()}". Paste it in Claude Code${m.text.endsWith(" ") ? " with your topic" : ""}.`));

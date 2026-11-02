@@ -8,14 +8,14 @@ const path = require("node:path");
 const BASELINE_DIR = path.join(".claude", "imprimatur", "baseline");
 const HISTORY_DIR = path.join(".claude", "imprimatur", "history");
 /** The extension's last count of edits not accepted, for the status line (#92): it draws no graph. */
-const UNREAD_FILE = path.join(".claude", "imprimatur", "unread.json");
+const OPEN_EDITS_FILE = path.join(".claude", "imprimatur", "open-edits.json");
 
 /** Older than this, the extension is not running: the count is not trusted. */
-const UNREAD_STALE_MS = 15 * 60 * 1000;
+const OPEN_EDITS_STALE_MS = 15 * 60 * 1000;
 
 /** Writes the count when it changed, or every 5 minutes to show it is fresh. @param {string} root @param {number} edits */
-function writeUnread(root, edits) {
-  const file = path.join(root, UNREAD_FILE);
+function writeOpenEdits(root, edits) {
+  const file = path.join(root, OPEN_EDITS_FILE);
   try {
     const old = JSON.parse(fs.readFileSync(file, "utf8"));
     if (old.edits === edits && Date.now() - old.at < 5 * 60 * 1000) return;
@@ -27,10 +27,10 @@ function writeUnread(root, edits) {
 }
 
 /** The last count written, 0 when none or stale. @param {string} root @param {number} [now] */
-function readUnread(root, now = Date.now()) {
+function readOpenEdits(root, now = Date.now()) {
   try {
-    const { edits: n, at } = JSON.parse(fs.readFileSync(path.join(root, UNREAD_FILE), "utf8"));
-    return Number.isInteger(n) && n > 0 && now - at < UNREAD_STALE_MS ? n : 0;
+    const { edits: n, at } = JSON.parse(fs.readFileSync(path.join(root, OPEN_EDITS_FILE), "utf8"));
+    return Number.isInteger(n) && n > 0 && now - at < OPEN_EDITS_STALE_MS ? n : 0;
   } catch {
     return 0;
   }
@@ -202,4 +202,4 @@ function repoFileOf(root, rel) {
   return hits.length === 1 ? path.join(root, hits[0]) : undefined;
 }
 
-module.exports = { repoFileOf, BASELINE_DIR, HISTORY_DIR, UNREAD_FILE, writeUnread, readUnread, repoRoot, latestBefore, historyEdits, editBranch };
+module.exports = { repoFileOf, BASELINE_DIR, HISTORY_DIR, OPEN_EDITS_FILE, writeOpenEdits, readOpenEdits, repoRoot, latestBefore, historyEdits, editBranch };

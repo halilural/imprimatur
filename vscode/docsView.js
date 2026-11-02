@@ -229,8 +229,6 @@ function docModel(db, root, kind, view = {}) {
   const doc = repo ? db.docFind(repo.id, kind) : undefined;
   const sections = doc ? db.docSections(doc.id) : [];
   const last = doc ? db.docLastChange(doc.id) : undefined;
-  // Changed by someone else since the user last read it (#92).
-  const unread = new Set(doc ? db.unreadSections(repo.id).filter((/** @type {any} */ s) => s.doc_id === doc.id).map((/** @type {any} */ s) => s.id) : []);
   const edit = editOf(view.edit, kind);
   let n = 0;
   const shape = (/** @type {any} */ s) => {
@@ -246,7 +244,6 @@ function docModel(db, root, kind, view = {}) {
       versions: db.sectionVersions(s.id).map(describeSectionVersion),
       editing: edit === s.id,
       flash: !!view.docFlash && view.docFlash === s.key,
-      unread: unread.has(s.id),
     };
   };
   const current = sections.filter((/** @type {any} */ s) => s.status === "current").map(shape);
@@ -255,7 +252,7 @@ function docModel(db, root, kind, view = {}) {
     kind, label: /** @type {any} */ (TAB_LABEL)[kind], title: doc?.title ?? /** @type {any} */ (DOC_KINDS)[kind],
     repoName: repo?.name ?? root.split(/[\\/]/).pop(),
     last: last ? { at: last.at, who: /** @type {any} */ (WHO_TR)[last.actor_kind] ?? last.actor_kind, actor: last.actor } : undefined,
-    current, superseded, adding: edit === "new", empty: !sections.length, unread: [...unread],
+    current, superseded, adding: edit === "new", empty: !sections.length,
     // The repo's docs/ file someone wrote by hand: the export leaves it alone (#72).
     manual: require("./docs-export.js").fileState(root, kind) === "manual"
       ? `docs/${/** @type {any} */ (require("./docs-export.js").FILES)[kind]}` : undefined,
@@ -277,7 +274,7 @@ function editorHtml(m, s) {
 function sectionHtml(m, s) {
   const { kindChip, icon } = require("./tasksView.js");
   const q = esc([s.title, s.body, ...s.contributors.map((/** @type {any} */ r) => `${r.title} ${r.task}`)].join(" "));
-  const acts = s.editing ? "" : `<div class="dacts">${s.unread ? `<button class="primary" data-act="read" data-ids="${s.id}">Mark as read</button>` : ""}<button class="ghost" data-act="docEdit" data-kind="${m.kind}" data-id="${s.id}">Edit</button><button class="link" data-act="docStatus" data-id="${s.id}" data-status="${s.status === "current" ? "superseded" : "current"}">${s.status === "current" ? "Mark superseded" : "Make current"}</button></div>`;
+  const acts = s.editing ? "" : `<div class="dacts"><button class="ghost" data-act="docEdit" data-kind="${m.kind}" data-id="${s.id}">Edit</button><button class="link" data-act="docStatus" data-id="${s.id}" data-status="${s.status === "current" ? "superseded" : "current"}">${s.status === "current" ? "Mark superseded" : "Make current"}</button></div>`;
   const body = s.editing ? editorHtml(m, s) : s.html ? `<div class="md">${s.html}</div>` : `<p class="empty">${m.kind === "glossary" ? "The definition is not written yet." : "This section is still empty."}</p>`;
   // Folded by default: the section text is the point, the records are its trail.
   const contrib = s.contributors.length
@@ -286,16 +283,16 @@ function sectionHtml(m, s) {
   const hist = s.versions.length
     ? `<details class="hist"><summary>History · ${s.versions.length}</summary>${s.versions.map((/** @type {any} */ v) => `<div class="ev"><span class="when">${esc(when(v.at))}</span><span class="who w-${esc(v.kind)}">${esc(v.who)}</span><span class="what">${esc(v.what)}</span></div>`).join("")}</details>`
     : "";
-  return `<article class="dsec${s.status !== "current" ? " old" : ""}${s.flash ? " flash" : ""}${s.unread ? " unread" : ""}" id="sec-${esc(s.key)}" data-k="s${s.id}" data-nav tabindex="0" data-q="${q}">
-<div class="dsec-h"><h2>${s.n ? `<span class="num">${s.n}.</span>` : s.status === "current" ? "" : `${icon("file", 14)}`}${esc(s.title)}${s.unread ? ' <span class="upill">Unread</span>' : ""}</h2>${acts}</div>${body}${contrib}${hist}</article>`;
+  return `<article class="dsec${s.status !== "current" ? " old" : ""}${s.flash ? " flash" : ""}" id="sec-${esc(s.key)}" data-k="s${s.id}" data-nav tabindex="0" data-q="${q}">
+<div class="dsec-h"><h2>${s.n ? `<span class="num">${s.n}.</span>` : s.status === "current" ? "" : `${icon("file", 14)}`}${esc(s.title)}</h2>${acts}</div>${body}${contrib}${hist}</article>`;
 }
 
 /** @param {ReturnType<typeof docModel>} m */
 function docHtml(m) {
   const { icon } = require("./tasksView.js");
   const g = m.kind === "glossary";
-  const toc = `<aside class="dtoc" data-k="toc" data-scroll="dtoc" aria-label="${g ? "Terms" : "Contents"}"><div class="lbl" data-k="h">${g ? `Terms · ${m.current.length}` : "Contents"}</div><ol data-k="list">${m.current.map((s) => `<li data-k="t${s.id}" data-q="${esc(`${s.title} ${s.body}`)}"><a href="#sec-${esc(s.key)}" data-act="docGo" data-key="${esc(s.key)}">${s.n ? `<span class="num">${s.n}</span>` : ""}<span>${esc(s.title)}</span>${s.unread ? '<span class="udot" title="Unread" aria-label="Unread"></span>' : ""}</a></li>`).join("") || `<li data-k="none" class="dim">${g ? "No terms" : "No sections"}</li>`}</ol>${m.superseded.length ? `<a href="#sec-__old" class="dold" data-k="old" data-act="docGo" data-key="__old">${g ? "Superseded terms" : "Superseded sections"} · ${m.superseded.length}</a>` : ""}<button class="dashed" data-k="new" data-act="docEdit" data-kind="${m.kind}" data-id="new">${icon("plus")} ${g ? "New term" : "New section"}</button></aside>`;
-  const head = `<section class="dhead" data-k="head"><span class="lbl">${esc(m.label)} · ${esc(m.repoName)}</span><h1>${esc(m.title)}</h1><p class="lead">${m.last ? `Last updated · ${esc(when(m.last.at))} · ${esc(m.last.who)}` : "Not updated yet"}</p>${m.manual ? `<p class="dnote">${esc(m.manual)} was written by hand and was not overwritten</p>` : ""}${m.unread?.length ? `<p class="dunread"><span class="upill">${m.unread.length} unread</span><button class="link" data-act="read" data-ids="${m.unread.join(",")}">Mark all as read</button></p>` : ""}</section>`;
+  const toc = `<aside class="dtoc" data-k="toc" data-scroll="dtoc" aria-label="${g ? "Terms" : "Contents"}"><div class="lbl" data-k="h">${g ? `Terms · ${m.current.length}` : "Contents"}</div><ol data-k="list">${m.current.map((s) => `<li data-k="t${s.id}" data-q="${esc(`${s.title} ${s.body}`)}"><a href="#sec-${esc(s.key)}" data-act="docGo" data-key="${esc(s.key)}">${s.n ? `<span class="num">${s.n}</span>` : ""}<span>${esc(s.title)}</span></a></li>`).join("") || `<li data-k="none" class="dim">${g ? "No terms" : "No sections"}</li>`}</ol>${m.superseded.length ? `<a href="#sec-__old" class="dold" data-k="old" data-act="docGo" data-key="__old">${g ? "Superseded terms" : "Superseded sections"} · ${m.superseded.length}</a>` : ""}<button class="dashed" data-k="new" data-act="docEdit" data-kind="${m.kind}" data-id="new">${icon("plus")} ${g ? "New term" : "New section"}</button></aside>`;
+  const head = `<section class="dhead" data-k="head"><span class="lbl">${esc(m.label)} · ${esc(m.repoName)}</span><h1>${esc(m.title)}</h1><p class="lead">${m.last ? `Last updated · ${esc(when(m.last.at))} · ${esc(m.last.who)}` : "Not updated yet"}</p>${m.manual ? `<p class="dnote">${esc(m.manual)} was written by hand and was not overwritten</p>` : ""}</section>`;
   const empty = m.empty && !m.adding && g
     ? `<div class="card dempty emptyhero" data-k="empty">${require("./mascot.js").mascot(56)}<div><p>The glossary is empty. When a new term appears in the project, or a term changes meaning, the agent writes it here with <span class="mono">doc_section_upsert</span>.</p><p class="dim">You can add one too with "New term" on the left. The glossary is also written to the repo as docs/GLOSSARY.md.</p></div></div>`
     : m.empty && !m.adding && m.kind === "social"
@@ -373,10 +370,6 @@ const DOCS_CSS = `
   .dsec { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 18px 22px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--card); box-shadow: var(--shadow); scroll-margin-top: calc(var(--appbar-h, 52px) + 12px); }
   body.vscode-high-contrast .dsec, body.vscode-high-contrast-light .dsec { border-color: var(--vscode-contrastBorder); }
   .dsec.old { opacity: .85; } .dsec.adding { border-color: var(--acc); }
-  .dsec.unread { border-left: 4px solid var(--vscode-editorInfo-foreground, var(--acc)); }
-  .upill { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; vertical-align: 2px; color: var(--vscode-editorInfo-foreground, var(--acc)); border: 1px solid currentColor; }
-  .udot { flex: none; width: 8px; height: 8px; margin: 6px 0 0 auto; border-radius: 50%; background: var(--vscode-editorInfo-foreground, var(--acc)); }
-  .dunread { display: flex; align-items: center; gap: 10px; margin: 4px 0 0; } .dunread .upill { margin-left: 0; }
   .dsec-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .dsec-h h2 { font-size: 17px !important; } .dsec-h .num { color: var(--acc); }
   .dacts { display: flex; gap: 6px; align-items: center; }
