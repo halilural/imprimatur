@@ -1512,7 +1512,8 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
     let pane = "";
     let inbox;
     try {
-      inbox = tasksView.inboxCount(db, root, waiting, { all: view.all });
+      // The badges count this repo's asks only, whatever scope the page shows.
+      inbox = tasksView.inboxCount(db, root, waiting);
       // Only the visible tab is drawn.
       // A turn-end ask's task, as the edits' lanes find it; one lookup per draw.
       const sessions = records.sessionTasks(root);
@@ -1556,7 +1557,7 @@ const panelState = () => ({ open: !!panel, visible: !!panel?.visible, root: show
 /**
  * What waits on the user, counted once for every place that shows it (the launcher's
  * badge, the status bar, the panel's tab badge, Waiting on you): the open panel's
- * repo and scope, else this root's repo.
+ * repo, else this root's repo. Always that repo alone, even with every repo shown.
  * @param {string | undefined} root the window's repo when no panel is open
  */
 function inboxNow(root) {
@@ -1564,7 +1565,7 @@ function inboxNow(root) {
   if (!where) return 0;
   const waiting = waitingSteps(where);
   try {
-    return tasksView.inboxCount(records.dbOf(), where, waiting, { all: shown ? view.all : !!scopeStore.get() });
+    return tasksView.inboxCount(records.dbOf(), where, waiting);
   } catch {
     return tasksView.openTurn(waiting).length;
   }
