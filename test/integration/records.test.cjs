@@ -113,6 +113,9 @@ suite("Records on the Imprimatur panel (#60, #69, MT-AR-060…064)", () => {
       assert.equal(panelState().view.all, true);
       // Home draws this repo only (the all-repos Waiting on you page is gone, #69), so the other repo's ask is checked on the model above, not on the page.
       assert.equal(panelState().view.tab, "home");
+      // The badges stay on this repo with every repo shown: 629 across repos said nothing about this one.
+      launcher.refresh();
+      assert.equal(launcher.view.badge?.value, count, "every repo shown: the badge still counts this repo only");
     } finally {
       await vscode.commands.executeCommand("imprimatur.records.thisWindow");
     }
