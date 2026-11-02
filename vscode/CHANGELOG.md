@@ -4,6 +4,18 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.75.0] - 2026-11-02
+
+### Added
+- Home in the side bar lists what waits on you, item by item: Questions, To-dos, Manual tests,
+  Turn-end asks, and On done tasks (asks a finished task left open), each with its count; a
+  record opens its page.
+- The running version next to the side bar's Imprimatur title.
+
+### Fixed
+- The launcher badge, the status bar's Agent Graph count and the panel's Home tab count this
+  repo's asks only, even with every repo shown; they used to add up every repo's.
+
 ## [0.74.0] - 2026-11-02
 
 ### Removed

@@ -97,6 +97,7 @@ suite("Records on the Imprimatur panel (#60, #69, MT-AR-060…064)", () => {
     launcher.refresh();
     const count = withDb((db) => tv.inboxCount(db, ROOT, waitingSteps(ROOT)));
     assert.equal(launcher.view.badge?.value, count, "the launcher's badge = what waits on you");
+    assert.match(launcher.view.description, /^v\d+\.\d+\.\d+/, "the running version next to the title");
     const home = launcher.getChildren().find((r) => r.id === "home");
     assert.equal(launcher.getTreeItem(home).label, `Home (${count})`);
     // Under Home, item by item: the kinds add up to the count; a record opens its page.
