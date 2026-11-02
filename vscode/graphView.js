@@ -1571,6 +1571,35 @@ function inboxNow(root) {
   }
 }
 
+/**
+ * What makes up inboxNow, item by item, for the side bar's Home row: by kind, and
+ * the ones on tasks already done (asks left behind). Same repo as inboxNow.
+ * @param {string | undefined} root
+ * @returns {Record<"question" | "todo" | "test" | "turn" | "doneTasks", Array<{id?: number, title: string, task?: string}>> | undefined}
+ */
+function inboxParts(root) {
+  const where = shown ?? root;
+  if (!where) return undefined;
+  const waiting = waitingSteps(where);
+  try {
+    const m = tasksView.inboxModel(records.dbOf(), where, { waiting });
+    /** @type {any} */
+    const out = { question: [], todo: [], test: [], turn: [], doneTasks: [] };
+    for (const g of m.groups) {
+      for (const i of g.items) {
+        if (i.done) continue;
+        const item = { id: i.turn ? undefined : i.id, title: i.title, task: g.task?.key };
+        // A turn-end ask is a turn-end ask whatever card kind it shows as.
+        out[i.turn ? "turn" : i.kind]?.push(item);
+        if (g.task?.status === "done") out.doneTasks.push(item);
+      }
+    }
+    return out;
+  } catch {
+    return undefined;
+  }
+}
+
 /** The folder was trusted: describe what is shown, run the first scan if it never ran. */
 function graphTrusted() {
   if (!shown) return;
@@ -1751,4 +1780,4 @@ const graphCommands = {
   "imprimatur.graph.copyAsk": (c) => vscode.env.clipboard.writeText(c.text ?? ""),
 };
 
-module.exports = { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setPanelScope, setPanelHooks, panelState, inboxNow, panelMessage: onMessage, laneSvg, html, cssPaths, webviewOptions, setGraphExtensionUri };
+module.exports = { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setPanelScope, setPanelHooks, panelState, inboxNow, inboxParts, panelMessage: onMessage, laneSvg, html, cssPaths, webviewOptions, setGraphExtensionUri };

@@ -97,7 +97,16 @@ suite("Records on the Imprimatur panel (#60, #69, MT-AR-060…064)", () => {
     launcher.refresh();
     const count = withDb((db) => tv.inboxCount(db, ROOT, waitingSteps(ROOT)));
     assert.equal(launcher.view.badge?.value, count, "the launcher's badge = what waits on you");
-    assert.equal(launcher.getTreeItem(launcher.getChildren().find((r) => r.id === "home")).label, `Home (${count})`);
+    const home = launcher.getChildren().find((r) => r.id === "home");
+    assert.equal(launcher.getTreeItem(home).label, `Home (${count})`);
+    // Under Home, item by item: the kinds add up to the count; a record opens its page.
+    const parts = launcher.getChildren(home);
+    const sum = parts.filter((p) => p.key !== "doneTasks").reduce((n, p) => n + launcher.getChildren(p).length, 0);
+    assert.equal(sum, count, "the parts under Home add up to its count");
+    const todos = launcher.getChildren(parts.find((p) => p.key === "todo"));
+    const mineItem = todos.find((i) => i.rec === todo.id);
+    assert.ok(mineItem, "the user's todo listed under To-dos");
+    assert.equal(launcher.getTreeItem(mineItem).command.command, "imprimatur.records.show");
 
     const g = model(true).groups.find((x) => x.items.some((r) => r.title === otherTitle));
     assert.ok(g, "another repo's ask with every repo");

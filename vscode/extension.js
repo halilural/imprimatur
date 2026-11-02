@@ -8,7 +8,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { review, acceptHunk, acceptLines, acceptGroups } = require("./diff.js");
 const { markdownItPlugin, markdownBlocks, reviewHtml } = require("./preview.js");
-const { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setGraphExtensionUri, setPanelScope, setPanelHooks, panelState, panelMessage, inboxNow: panelInbox } = require("./graphView.js");
+const { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setGraphExtensionUri, setPanelScope, setPanelHooks, panelState, panelMessage, inboxNow: panelInbox, inboxParts } = require("./graphView.js");
 const { WAITING_DIR, waitingSteps } = require("./waiting.js");
 const { acceptEdit, spotsOf, graphRows } = require("./graph.js");
 const { registerSetupView } = require("./setupView.js");
@@ -969,7 +969,7 @@ function activate(ctx) {
     const edits = graphRows(root, currentText).rows.filter((r) => !r.accepted && !r.gone).length;
     // The status line shows them (#92); it draws no graph.
     require("./review-state.js").writeOpenEdits(root, edits);
-    return { edits, inbox: inboxNow() };
+    return { edits, inbox: inboxNow(), parts: inboxParts(root) };
   });
   // Its graph row moved to the launcher (#69): no counts to keep.
   setupView = registerSetupView(ctx, () => [...roots], () => ({ edits: 0, waiting: 0 }));

@@ -6,7 +6,19 @@
 "use strict";
 const vscode = require("vscode");
 
-/** @typedef {{edits: number, inbox: number}} Counts */
+/** @typedef {Record<"question" | "todo" | "test" | "turn" | "doneTasks", Array<{id?: number, title: string, task?: string}>>} Parts */
+/** @typedef {{edits: number, inbox: number, parts?: Parts}} Counts */
+
+// Under Home: what its count is made of, item by item, so the number reads without
+// opening the panel. The first four add up to it; "on done tasks" is part of them,
+// asks a finished task left behind.
+const PARTS = [
+  { key: "question", label: "Questions", icon: "comment-discussion", tooltip: "The agent is stopped on a decision" },
+  { key: "todo", label: "To-dos", icon: "checklist", tooltip: "Steps for you to do" },
+  { key: "test", label: "Manual tests", icon: "eye", tooltip: "Things to check by eye" },
+  { key: "turn", label: "Turn-end asks", icon: "bell", tooltip: "Asks left at the end of an agent turn, not yet saved as records" },
+  { key: "doneTasks", label: "On done tasks", icon: "archive", tooltip: "Of the above: asks still open on tasks already done; close or drop them" },
+];
 
 const ROWS = [
   { id: "home", label: "Home", icon: "home", command: "imprimatur.openHome", tooltip: "Where we left off, what is waiting on you, tasks" },
@@ -41,15 +53,40 @@ class LauncherView {
     this.changed.fire(undefined);
   }
 
-  getChildren() {
-    return ROWS;
+  /** @param {any} [row] */
+  getChildren(row) {
+    if (!row) return ROWS;
+    const parts = this.now.parts;
+    if (!parts) return [];
+    if (row.id === "home") return PARTS.filter((p) => parts[/** @type {keyof Parts} */ (p.key)].length).map((p) => ({ ...p, id: `home.${p.key}`, items: parts[/** @type {keyof Parts} */ (p.key)] }));
+    if (row.items) return row.items.map((/** @type {any} */ i, /** @type {number} */ k) => ({ title: i.title, task: i.task, rec: i.id, item: true, id: `${row.id}.${i.id ?? `t${k}`}` }));
+    return [];
   }
 
-  /** @param {typeof ROWS[number]} row */
+  /** @param {any} row */
   getTreeItem(row) {
-    // What waits on the user counts on Home (no Waiting on you row): asks are on their task pages.
+    if (row.item) {
+      const one = new vscode.TreeItem(row.title, vscode.TreeItemCollapsibleState.None);
+      one.id = row.id;
+      one.description = row.task;
+      one.tooltip = row.task ? `${row.task}: ${row.title}` : row.title;
+      // A record opens its page; a turn-end ask has none, Home shows it.
+      one.command = row.rec
+        ? { command: "imprimatur.records.show", title: "Open", arguments: [{ record: { id: row.rec } }] }
+        : { command: "imprimatur.openHome", title: "Home" };
+      return one;
+    }
+    if (row.items) {
+      const part = new vscode.TreeItem(row.label, vscode.TreeItemCollapsibleState.Collapsed);
+      part.id = row.id;
+      part.description = String(row.items.length);
+      part.iconPath = new vscode.ThemeIcon(row.icon);
+      part.tooltip = row.tooltip;
+      return part;
+    }
     const label = row.id === "home" && this.now.inbox ? `${row.label} (${this.now.inbox})` : row.label;
-    const it = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
+    const open = row.id === "home" && this.now.inbox > 0;
+    const it = new vscode.TreeItem(label, open ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None);
     it.id = row.id;
     it.iconPath = new vscode.ThemeIcon(row.icon, row.id === "home" && this.now.inbox ? new vscode.ThemeColor("charts.orange") : undefined);
     it.tooltip = row.tooltip;
@@ -68,4 +105,4 @@ function registerLauncher(ctx, counts) {
   return provider;
 }
 
-module.exports = { registerLauncher, LauncherView, ROWS };
+module.exports = { registerLauncher, LauncherView, ROWS, PARTS };
