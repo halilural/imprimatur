@@ -100,6 +100,8 @@ class LauncherView {
 function registerLauncher(ctx, counts) {
   const provider = new LauncherView(counts);
   provider.view = vscode.window.createTreeView("imprimatur.launcher", { treeDataProvider: provider });
+  // Which build runs here, next to the view's title: two machines can run different ones.
+  provider.view.description = `v${ctx.extension.packageJSON.version}`;
   ctx.subscriptions.push(provider.view);
   provider.refresh();
   return provider;
