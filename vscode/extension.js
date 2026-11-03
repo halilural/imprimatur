@@ -9,7 +9,6 @@ const path = require("node:path");
 const { review, acceptHunk, acceptLines, acceptGroups } = require("./diff.js");
 const { markdownItPlugin, markdownBlocks, reviewHtml } = require("./preview.js");
 const { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setGraphExtensionUri, setPanelScope, setPanelHooks, panelState, panelMessage, inboxNow: panelInbox, inboxParts } = require("./graphView.js");
-const { WAITING_DIR, waitingSteps } = require("./waiting.js");
 const { acceptEdit, spotsOf, graphRows } = require("./graph.js");
 const { registerSetupView } = require("./setupView.js");
 const { registerRecordCommands } = require("./recordsView.js");
@@ -67,6 +66,8 @@ const types = makeTypes();
 
 /** Git roots, normalized for comparison. @type {Set<string>} */
 const roots = new Set();
+/** Each repo's watcher handler, by root: the integration tests replay hook writes through it (#114). @type {Map<string, (uri: vscode.Uri) => void>} */
+const watchHandlers = new Map();
 /** @type {Map<string, ReturnType<typeof review>>} hunks by document path */
 const hunksByFile = new Map();
 let status = /** @type {vscode.StatusBarItem} */ (/** @type {unknown} */ (undefined));
@@ -364,7 +365,7 @@ function updateGraphButton() {
   const root = graphRoot();
   if (!root) return graphButton.hide();
   const open = inboxNow();
-  launcher?.refresh();
+  launcher?.refresh(open);
   graphButton.text = open ? `$(git-merge) Agent Graph $(bell-dot) ${open}` : "$(git-merge) Agent Graph";
   graphButton.tooltip = open ? `Open the Agent Change Graph · ${open} waiting on you` : "Open the Agent Change Graph";
   graphButton.show();
@@ -511,17 +512,15 @@ function refreshEverything() {
   codeLensChanged.fire();
 }
 
-/** @type {NodeJS.Timeout[]} */
-let refreshTimers = [];
 /**
- * The hook writes the copy and history just BEFORE the agent's edit lands on
- * disk, so redraw the editor now and again shortly after, when the edit is
- * there; the preview once, when it is quiet.
+ * One redraw 300 ms after the last copy or history write of a burst, at least every
+ * 2 s while they keep coming (#114; it used to be three: at once, 500 ms, 2 s). The
+ * hook writes them just before the agent's edit lands: an open file redraws when its
+ * text changes (onDidChangeTextDocument), so the late redraws are not needed.
  */
+const redrawSoon = require("./refresh-route.js").trailing(refreshEverything, { wait: 300, maxWait: 2000 });
 function refreshSoon() {
-  refreshTimers.forEach(clearTimeout);
-  refreshEverything();
-  refreshTimers = [500, 2000].map((ms) => setTimeout(refreshEverything, ms));
+  redrawSoon();
   refreshPreview();
 }
 
@@ -559,18 +558,19 @@ function addFolder(folder, ctx) {
   const found = repoRoot(folder.uri.fsPath) ?? folder.uri.fsPath;
   if (roots.has(norm(found))) return;
   roots.add(norm(found));
-  // Copies and history change on every agent edit; re-render on any of them.
-  // The waiting log changes every turn and only feeds the graph: no preview reload.
+  // Copies and history change on every agent edit: everything redraws. The waiting log,
+  // activity and descriptions only feed the graph and the counts: no preview reload.
   const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(found), ".claude/imprimatur/**"));
+  const { routeOf } = require("./refresh-route.js");
   /** @param {vscode.Uri} uri */
-  // So does the descriptions file the describe hook writes a few seconds after an edit.
-  const waiting = path.join(found, WAITING_DIR) + path.sep;
-  const descriptions = path.join(found, ".claude", "imprimatur", "descriptions.jsonl");
   const changed = (uri) => {
-    if (!uri.fsPath.startsWith(waiting) && uri.fsPath !== descriptions) return refreshSoon();
-    // The hooks write waiting/ on every tool call: one refresh a second after the
-    // last write, and at least every 3 s while they keep coming. Cheap: the graph's
-    // costly half is cached per file (graph.js fileEdits).
+    // #114: only copies and history redraw everything; the hooks' bookkeeping nothing.
+    const route = routeOf(found, uri.fsPath);
+    if (route === "none") return;
+    if (route === "edits") return refreshSoon();
+    // waiting/, activity/ and the like change on every tool call: one refresh a second
+    // after the last write, and at least every 3 s while they keep coming. Cheap: the
+    // graph's costly half is cached per file (graph.js fileEdits).
     clearTimeout(waitingTimer);
     const flush = () => {
       clearTimeout(waitingTimer);
@@ -581,6 +581,7 @@ function addFolder(folder, ctx) {
     waitingFirst ||= Date.now();
     waitingTimer = setTimeout(flush, Math.max(0, Math.min(1000, waitingFirst + 3000 - Date.now())));
   };
+  watchHandlers.set(norm(found), changed);
   ctx.subscriptions.push(w, w.onDidChange(changed), w.onDidCreate(changed), w.onDidDelete(changed));
 }
 
@@ -970,7 +971,7 @@ function activate(ctx) {
     // The status line shows them (#92); it draws no graph.
     require("./review-state.js").writeOpenEdits(root, edits);
     return { edits, inbox: inboxNow(), parts: inboxParts(root) };
-  });
+  }, inboxNow);
   // Its graph row moved to the launcher (#69): no counts to keep.
   setupView = registerSetupView(ctx, () => [...roots], () => ({ edits: 0, waiting: 0 }));
   renderAll();
@@ -987,6 +988,10 @@ function activate(ctx) {
     panelState,
     panelMessage,
     launcher,
+    // #114: a write under .claude/imprimatur/ as the watcher sees it (its events are not reliable in tests).
+    watchChanged: (/** @type {string} */ file) => {
+      for (const [root, fn] of watchHandlers) if (norm(file).startsWith(root)) fn(vscode.Uri.file(file));
+    },
     extendMarkdownIt: (md) => {
       markdownIt = md;
       codeLensChanged.fire();

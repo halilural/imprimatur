@@ -73,4 +73,35 @@ suite("Imprimatur in the extension host", () => {
     while (!graphTab() && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
     assert.ok(graphTab(), "a graph webview tab");
   });
+
+  test("#114: a burst of 20 tool calls builds the panel at most twice", async () => {
+    const { panelState, watchChanged } = await api();
+    await vscode.commands.executeCommand("imprimatur.openGraph");
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const deadline = Date.now() + 10_000;
+    while (!panelState().visible && Date.now() < deadline) await wait(100);
+    assert.ok(panelState().visible, "the panel shows");
+    const fs = require("node:fs");
+    const base = path.join(vscode.workspace.workspaceFolders[0].uri.fsPath, ".claude", "imprimatur");
+    for (const d of ["activity", "history", "pending"]) fs.mkdirSync(path.join(base, d), { recursive: true });
+    await wait(3500); // earlier tests' redraws settle
+    const before = panelState().builds;
+    // What one tool call writes: an activity line, a pending file, process.json, open-edits.json;
+    // every fifth an edit, with its history. Each write goes through the watcher's handler.
+    const write = (rel, text) => {
+      fs.writeFileSync(path.join(base, rel), text);
+      watchChanged(path.join(base, rel));
+    };
+    for (let i = 0; i < 20; i++) {
+      write(path.join("activity", "it-burst.jsonl"), "");
+      write(path.join("pending", `it-${i}.json`), "{}");
+      write("process.json", JSON.stringify({ i }));
+      write("open-edits.json", JSON.stringify({ at: Date.now(), edits: 0 }));
+      if (i % 5 === 0) write(path.join("history", "it-burst.md.jsonl"), "");
+      await wait(50);
+    }
+    await wait(4000);
+    const builds = panelState().builds - before;
+    assert.ok(builds >= 1 && builds <= 2, `panel builds for the burst: ${builds}`);
+  });
 });

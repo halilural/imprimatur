@@ -4,6 +4,19 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.77.0] - 2026-11-03
+
+### Fixed
+- Hook writes no longer redraw everything three times each. A burst of 20 tool calls built the
+  panel 146 times and now builds it once or twice (#114):
+  - only edit copies and history redraw the editors, lenses, preview and panel, once 300 ms after
+    the last write (at least every 2 s while writes keep coming);
+  - activity, calls and descriptions take the same light path as the waiting log;
+  - the hooks' own bookkeeping (`pending/`, `process.json`, `open-edits.json`, `archive/`,
+    `docs-backup/`) and the extension's own state files redraw nothing.
+- While the side bar's launcher is hidden, it counts only its badge; the item list and the edit
+  count catch up when it shows (at least once a minute, so the status line's count stays fresh).
+
 ## [0.76.0] - 2026-11-03
 
 ### Added
