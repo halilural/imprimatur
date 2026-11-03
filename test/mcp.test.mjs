@@ -407,8 +407,10 @@ test("task_get: open records and the 👉 by default, kind, paging, bodies cut u
   assert.equal(p1.returned, 50);
   assert.equal(p1.records.length, 50);
   assert.equal(p1.next_offset, 50);
-  assert.equal(p1.records[0].body.length, 501, "500 chars and an ellipsis");
+  // #120: lean by default: the body's first line, at most 160 chars, and fewer fields.
+  assert.equal(p1.records[0].body.length, 160, "159 chars and an ellipsis");
   assert.equal(p1.records[0].body_truncated, true);
+  assert.equal(p1.records[0].uid, undefined, "internal fields left out");
   assert.match(first.content[0].text, /offset 50/);
   assert.match(first.content[0].text, /full:true/);
   assert.match(first.content[0].text, /status "all"/);
@@ -442,7 +444,9 @@ test("digests: compact text for the model", async () => {
   assert.equal(await text("where_we_left_off", {}), `1 unfinished task:\n- #58 MCP [active] 👉 [${todo.id}] server.mjs (2 open)\n  where we are: server written`);
   const got = await text("task_get", { key: "#58" });
   assert.equal(got.split("\n")[0], "#58 MCP [active] — server written");
-  assert.ok(got.includes(`[${todo.id}] todo/open C server.mjs 👉\n    line one line two`), got);
+  assert.ok(got.includes(`[${todo.id}] todo/open C server.mjs 👉\n    line one`), got);
+  assert.ok(!got.includes("line two"), "the lean body is the first line (#120)");
+  assert.ok((await text("task_get", { key: "#58", full: true })).includes("line two"), "full:true gives the rest");
   assert.ok(got.includes(`[${todo.id + 1}] question/open K Is it general?`), got);
   assert.match(got, /2 of 2 records \(status open\)/);
   assert.equal(await text("task_list", {}), "1 task:\n- #58 MCP [active] — server written");

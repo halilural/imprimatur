@@ -4,6 +4,15 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.85.0] - 2026-11-03
+
+### Changed
+- MCP answers are smaller for the agent (#120). `search` answers with an index: id, task, kind,
+  status, owner and title (cut to 160 chars), 8 hits, `more: true` when there are more;
+  `full: true` gives whole records with bodies. `task_get` gives each body's first line and only
+  the fields an agent acts on; `full: true` gives everything. A typical search went from 17–35 KB
+  to under 2 KB.
+
 ## [0.84.0] - 2026-11-03
 
 ### Added
