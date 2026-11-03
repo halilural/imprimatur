@@ -4,6 +4,15 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.89.1] - 2026-11-03
+
+### Security
+- The move of an old `.claude/imprimatur/` folder (#126) follows no link: when `.claude` or
+  `.claude/imprimatur` is a link, or its real path is outside the repo, nothing is moved; links
+  inside it are left alone; `MOVED.md` and `.gitignore` are written as new plain files. A repo
+  could otherwise point the folder at any of the user's folders (`~/.ssh`) and the move would
+  carry its files away.
+
 ## [0.89.0] - 2026-11-03
 
 ### Changed
