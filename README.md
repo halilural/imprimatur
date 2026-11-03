@@ -122,6 +122,20 @@ Or install a `.vsix` from the [GitHub releases](https://github.com/halilural/imp
 To install from a clone instead, with the status line, see
 [Setup options](docs/REFERENCE.md#setup-options).
 
+### Auto mode
+
+In auto mode, every MCP call without an allow rule waits for Claude Code's permission
+check. In one day's log that check took 5.5 s per Imprimatur call on average, while the
+call itself took 5 to 108 ms. Allow the server in `~/.claude/settings.json`:
+
+```json
+{ "permissions": { "allow": ["mcp__plugin_imprimatur_imprimatur"] } }
+```
+
+Use `"mcp__imprimatur"` instead when you installed from a clone without the plugin.
+`npm run setup` adds the matching rule for you (`--no-allow` skips it), and the setup
+audit warns when the rule is missing (`IMP-MCP-001`).
+
 ### Requirements
 
 - Node.js 22.13 or later, and the `claude` CLI on your `PATH` (the model features use it).
