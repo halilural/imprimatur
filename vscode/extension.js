@@ -530,6 +530,13 @@ function refreshSoon() {
  * @param {boolean} [now] the command: run whatever the last run
  */
 function archiveAll(now = false) {
+  // The database's daily upkeep rides along (#117): it runs at most once a day itself.
+  try {
+    const db = require("./records.js").dbOf();
+    if (db) require("./db-maint.js").maintainDb(db, (l) => log.info(l)).catch((e) => log.error(`db upkeep: ${e instanceof Error ? e.message : e}`));
+  } catch (e) {
+    log.error(`db upkeep: ${e instanceof Error ? e.message : e}`);
+  }
   const days = vscode.workspace.getConfiguration("imprimatur").get("archive.afterDays", 7);
   /** @type {string[]} */
   const done = [];

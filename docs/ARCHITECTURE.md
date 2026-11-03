@@ -123,7 +123,11 @@ The shared modules (`vscode/diff.js`, `waiting.js`, `audit.js`, `tasks.js`, `rec
 
 ### Concurrency
 
-Every connection opens with `journal_mode=WAL`, `synchronous=NORMAL`, `busy_timeout=5000`, `foreign_keys=ON`. The extension keeps one long connection, each hook process a short one, and the MCP server its own. Every write is a short `BEGIN IMMEDIATE` transaction: the record and its version row are written in the same transaction, and a plugin's `onChange` runs inside that transaction's savepoint. A new file's first switch to WAL is retried for 5 s. Tests cover 12 processes opening and writing a new file at the same time.
+Every connection opens with `journal_mode=WAL`, `journal_size_limit=4 MB`, `synchronous=NORMAL`, `busy_timeout=5000`, `foreign_keys=ON`. The extension keeps one long connection, each hook process a short one, and the MCP server its own. Every write is a short `BEGIN IMMEDIATE` transaction: the record and its version row are written in the same transaction, and a plugin's `onChange` runs inside that transaction's savepoint. A new file's first switch to WAL is retried for 5 s. Tests cover 12 processes opening and writing a new file at the same time.
+
+### Upkeep (#117)
+
+Once a day across processes (meta `maint:at`), `db.maintain()` runs `wal_checkpoint(TRUNCATE)`, `incremental_vacuum` (only when the file is already incremental), and `PRAGMA optimize`. When free pages pass 5% of the file, the extension runs a `VACUUM` in a worker thread (`db-maint.js`) on its own connection. Other connections wait for the write lock for its length, up to their busy timeout. A WAL database cannot be switched to incremental `auto_vacuum` without closing every other connection, so a full VACUUM is the tool. Measured on a copy of the real file: 88.6 MB → 65.1 MB and the WAL 27.8 MB → 0, in 454 ms.
 
 ### Schema (version 4, `PRAGMA user_version`)
 

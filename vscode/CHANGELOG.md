@@ -4,6 +4,15 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.81.0] - 2026-11-03
+
+### Fixed
+- The database no longer grows without bound (#117). The WAL is cut back to 4 MB at each
+  checkpoint, and once a day the extension checkpoints it to zero, refreshes SQLite's statistics
+  and, when more than 5% of the file is free pages, runs a VACUUM in a worker thread (VS Code
+  does not freeze). On a copy of a real database: 88.6 MB → 65.1 MB and the WAL 27.8 MB → 0,
+  in under half a second.
+
 ## [0.80.0] - 2026-11-03
 
 ### Changed

@@ -618,6 +618,36 @@ function recordOf(r) {
 
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
+/** The WAL's size after a checkpoint (#117): journal_size_limit. */
+const WAL_LIMIT = 4 * 1024 * 1024;
+/** How often maintain() runs (across processes, through meta "maint:at"). */
+const MAINTAIN_MS = 24 * 60 * 60 * 1000;
+/** Free pages given back per maintain() in a file already in incremental auto_vacuum: 8 MB at 4 KB pages. */
+const VACUUM_STEP = 2000;
+/** Free pages, as a share of the file, that call for a VACUUM (the acceptance: under 5% after a day). */
+const VACUUM_FREE = 0.05;
+
+/**
+ * A VACUUM (#117) on its own connection: it needs no open transaction, takes the write
+ * lock for its length (1.8 s on 86 MB; other connections wait up to their busy_timeout)
+ * and leaves the file without its free pages. Run it off the extension host's thread.
+ * Self-contained (its source runs in a worker, db-maint.js): pass DatabaseSync there.
+ * @param {string} file @param {{busyMs?: number, DatabaseSync?: any}} [o] @returns {{before: number, after: number}}
+ */
+function vacuumFile(file, { busyMs = 10_000, DatabaseSync = loadSqlite().DatabaseSync } = {}) {
+  const s = new DatabaseSync(file);
+  try {
+    s.exec(`PRAGMA busy_timeout = ${busyMs}`);
+    const size = () => /** @type {any} */ (s.prepare("PRAGMA page_count").get()).page_count * /** @type {any} */ (s.prepare("PRAGMA page_size").get()).page_size;
+    const before = size();
+    s.exec("VACUUM");
+    s.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    return { before, after: size() };
+  } finally {
+    s.close();
+  }
+}
+
 /**
  * Switches a new database to WAL. The first switch needs an exclusive lock and
  * SQLite answers SQLITE_BUSY at once (busy_timeout does not apply): retry for 5 s.
@@ -1705,6 +1735,35 @@ class Db {
     return this.q("SELECT v FROM meta WHERE k = ?").get(k)?.v ?? undefined;
   }
 
+  /**
+   * Daily upkeep (#117), at most once a day across processes: the WAL checkpointed and
+   * truncated, free pages given back in a step when the file is in incremental
+   * auto_vacuum, and the planner's statistics refreshed. Each part takes milliseconds.
+   * `vacuum: true` in the result: over VACUUM_FREE of the file is free pages; it needs a
+   * VACUUM, which blocks writers for a second or two (vacuumFile, off the caller's thread).
+   * A WAL database cannot be switched to incremental auto_vacuum (that takes leaving WAL,
+   * with every other connection closed), so a file made before auto_vacuum gets a VACUUM
+   * whenever its free pages pass the bound.
+   * @param {{now?: number, everyMs?: number}} [o] @returns {undefined | {checkpoint: any, pages: number, free: number, freed: number, vacuum: boolean}}
+   */
+  maintain({ now = Date.now(), everyMs = MAINTAIN_MS } = {}) {
+    const due = this.tx(() => {
+      if (now - Number(this.meta("maint:at") ?? 0) < everyMs) return false;
+      this.setMeta("maint:at", now);
+      return true;
+    });
+    if (!due) return undefined;
+    const g = (/** @type {string} */ q) => /** @type {any} */ (this.sqlite.prepare(q).get());
+    const checkpoint = g("PRAGMA wal_checkpoint(TRUNCATE)");
+    const before = g("PRAGMA freelist_count").freelist_count;
+    const incremental = g("PRAGMA auto_vacuum").auto_vacuum === 2;
+    if (incremental && before) this.sqlite.exec(`PRAGMA incremental_vacuum(${VACUUM_STEP})`);
+    const free = g("PRAGMA freelist_count").freelist_count;
+    const pages = g("PRAGMA page_count").page_count;
+    this.sqlite.exec("PRAGMA optimize");
+    return { checkpoint, pages, free, freed: before - free, vacuum: pages > 0 && free / pages > VACUUM_FREE };
+  }
+
   /** @param {string} k @param {string | number | null} v null deletes */
   setMeta(k, v) {
     if (v == null) this.q("DELETE FROM meta WHERE k = ?").run(k);
@@ -1815,6 +1874,8 @@ function openDb({ path: file = dbPath(), busyMs = 5000, plugins } = {}) {
     // busy_timeout first: the rest may wait on another opener.
     s.exec(`PRAGMA busy_timeout = ${Math.max(0, Math.floor(busyMs))}`);
     toWal(s, busyMs);
+    // #117: a checkpoint cuts the WAL back to 4 MB; without it the file only grows (32 MB seen).
+    s.exec(`PRAGMA journal_size_limit = ${WAL_LIMIT}`);
     s.exec("PRAGMA synchronous = NORMAL");
     s.exec("PRAGMA foreign_keys = ON");
     db.version = /** @type {any} */ (s.prepare("PRAGMA user_version").get()).user_version;
@@ -1848,6 +1909,8 @@ function openDb({ path: file = dbPath(), busyMs = 5000, plugins } = {}) {
 }
 
 module.exports = {
+  vacuumFile,
+  WAL_LIMIT,
   openDb, dbPath, onWindowsDrive, normOrigin, refersTo, recordOf, analysisTitle, KINDS, ACTORS, VERSION, MIGRATIONS, FIELDS,
   TRACKER_KEY, TASK_STATUSES, RECORD_STATUSES, EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, weakText, REVIEW_DAYS, REVIEW_RESULTS, DOC_KINDS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, SECTION_TITLE_MAX, SOURCE_MAX,
 };
