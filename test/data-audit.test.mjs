@@ -63,8 +63,8 @@ test("#45: a variable's path is not a file path", async () => {
 
 test("#45: setup adds the Bash failure hook", () => {
   const { settings, changes } = mergeHooks({}, { root: "/r" });
-  assert.ok(changes.includes("added   PostToolUseFailure [Bash] → baseline.mjs"));
-  assert.equal(settings.hooks.PostToolUseFailure[0].hooks[0].command, 'node "/r/hooks/baseline.mjs" md mdx');
+  assert.ok(changes.includes("added   PostToolUseFailure [Bash] → run.mjs"));
+  assert.equal(settings.hooks.PostToolUseFailure[0].hooks[0].command, 'node "/r/hooks/run.mjs" md mdx');
 });
 
 test("#45: task keys are normalized; a step's own leading key is its task", () => {

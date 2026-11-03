@@ -4,6 +4,15 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.82.0] - 2026-11-03
+
+### Changed
+- One Imprimatur hook process per event instead of one per job (#118). A Bash or Edit call now
+  starts two node processes (before and after the tool) instead of five, and costs about half
+  the CPU (140 ms instead of 294 ms for a Bash call). The tool-call rows on Agent changes stay.
+  `npm run setup` swaps the old hook entries for the new ones; sessions already open keep the old
+  ones until they restart, and those still work.
+
 ## [0.81.0] - 2026-11-03
 
 ### Fixed

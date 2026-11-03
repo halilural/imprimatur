@@ -182,32 +182,39 @@ The review of an agent edit is kept not in the database but as files in the repo
 
 ## 5. Hooks and flows
 
-Hooks are registered either in `~/.claude/settings.json` (`npm run setup`) or in the Claude Code plugin's `hooks/hooks.json`; both are generated from the same list and are not installed at the same time. Each hook is a separate Node process (~65 ms, 43 ms of it Node startup); Claude Code runs matching hooks in parallel.
+Hooks are registered either in `~/.claude/settings.json` (`npm run setup`) or in the Claude Code plugin's `hooks/hooks.json`. Both are generated from the same list (`vscode/hook-plan.js`) and are not installed at the same time.
 
-| Event | Match | Hook | Job |
-|---|---|---|---|
-| PreToolUse | `Edit\|Write\|Bash` | `baseline.mjs` | Copy (if missing) + history line; `pending/` for Bash |
-| PostToolUse / PostToolUseFailure | `Bash` | `baseline.mjs` | Comparison after the command; the change made by a failed command is recorded too |
-| PreToolUse / PostToolUse | `AskUserQuestion` | `waiting.mjs` | The question and its answer |
-| PermissionRequest, Notification (`agent_needs_input`, `elicitation_*`) | | `waiting.mjs` | Permission and input requests |
-| UserPromptSubmit | | `waiting.mjs` → `resolve.mjs` | The user's answer; in the background Haiku picks which open steps it settled |
-| Stop | | `waiting.mjs` → `audit.mjs`, `process.mjs` | End of turn: the Haiku audit; process checks |
-| PreToolUse | `mcp__imprimatur__.*`, `mcp__plugin_imprimatur_imprimatur__.*` | `mcp-session.mjs` | Adds `_session` to the input, returns `allow` |
-| PostToolUse / PostToolUseFailure | `*` (async) | `activity.mjs` | One line for every action of the agent |
-| SessionStart, PreToolUse, PostToolUse (edits, Bash, MCP write tools) | | `process.mjs` | Process checks (if the repo opted in) |
+Since #118 there is **one dispatcher process per event**: `hooks/run.mjs` reads the input once and runs, in-process, every step the plan gives for the event and the tool. Each step is caught on its own. The steps' answers are merged:
+- a block (exit 2) wins, with its stderr;
+- `additionalContext` and `systemMessage` texts are joined;
+- `permissionDecision` is the strongest (deny > ask > allow);
+- `updatedInput` is kept.
+
+A Bash or Edit call costs two node processes (Pre, Post) instead of five. Measured medians for a Bash call: 140 ms of CPU instead of 294 ms. The agent's wait is about the same, because Claude Code ran the old hooks in parallel.
+
+| Event | Tools (anchored) | Steps in `run.mjs` |
+|---|---|---|
+| PreToolUse | `Edit`, `Write`, `Bash` · `AskUserQuestion` · Imprimatur MCP · `Bash`, `Edit`, `Write`, `MultiEdit`, `NotebookEdit` | baseline (copy + history line; `pending/` for Bash) · waiting · mcp (adds `_session`, returns `allow`) · process |
+| PostToolUse | `Bash` · `AskUserQuestion` · `Edit`, `Write`, `MultiEdit`, `ExitPlanMode`, `Bash`, MCP write tools | baseline (comparison after the command) · waiting · process · activity |
+| PostToolUseFailure | `Bash` | baseline (a failed command's change is recorded too) · activity |
+| PermissionRequest, Notification (`agent_needs_input`, `elicitation_*`), UserPromptSubmit | | waiting (UserPromptSubmit → `resolve.mjs` in the background) |
+| SessionStart | | process |
+| Stop | | waiting (→ `audit.mjs` in the background) · process |
+
+`hooks/activity.mjs` (PostToolUse and PostToolUseFailure, matcher `*`, async) writes the activity row only for tools the dispatcher does not run for (`activityHookWrites`). That gives one row per call. The older per-step scripts (`baseline.mjs`, `waiting.mjs`, `mcp-session.mjs`, `process.mjs`) still work on their own, for sessions started before an update. `npm run setup` takes their settings entries out as stale.
 
 `statusline.mjs` is also Claude Code's status line (not a hook, the `statusLine` setting).
 
 ### Main flows
 
-1. **Edit:** the agent calls Edit/Write → `baseline.mjs` writes the copy and the history line before the edit → the extension sees the file change, compares the file with the copy and marks it.
-2. **End of turn:** on Stop, `waiting.mjs` writes the `step` line that closes the questions and starts `audit.mjs` in the background. Haiku reads the open steps and the agent's last message: it marks steps that are done, answered or asked again, and writes what the message really asks for as short steps (👉 lines word for word). The audit runs only when there is an open item or the reply asks for something; a plain report makes no model call.
+1. **Edit:** the agent calls Edit/Write → the baseline step writes the copy and the history line before the edit → the extension sees the file change, compares the file with the copy and marks it.
+2. **End of turn:** on Stop, the waiting step writes the `step` line that closes the questions and starts `audit.mjs` in the background. Haiku reads the open steps and the agent's last message: it marks steps that are done, answered or asked again, and writes what the message really asks for as short steps (👉 lines word for word). The audit runs only when there is an open item or the reply asks for something; a plain report makes no model call.
 3. **User message:** UserPromptSubmit writes the `answer` line, and `resolve.mjs` asks Haiku "which steps did this message settle?"; a message that names a task (`LATD-13977`, or just `13977`) also evaluates the steps of that task in other sessions.
 4. **Task done:** for a task that is `done` in the database, the steps opened before the task last changed are closed in every session (`todo-done.js`, on every Stop and when the graph is drawn).
 
 ### Rules
 
-- Hooks do not block the tool: every path is `exit 0`. Even the process checks do nothing on their own errors.
+- Hooks do not block the tool: every path is `exit 0`, except a process check that blocks on purpose. Even the process checks do nothing on their own errors.
 - Model calls do not make a hook wait: they start as a detached background process.
 - In model sessions started with `IMPRIMATUR_CHILD=1`, Imprimatur hooks write nothing.
 - Language and file extensions: hook argument > `IMPRIMATUR_LANG` > plugin options (`CLAUDE_PLUGIN_OPTION_*`) > `config.json` in the database folder.
