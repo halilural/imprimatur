@@ -275,13 +275,23 @@ test("export: the golden file; written only when changed; superseded left out; n
   assert.deepEqual(exportDocs(db, root), [], "no document yet");
   const dec = db.addRecord(task.id, { kind: "decision", title: "Debounce 2 s" }, agent);
   const doc = db.docOf(repo.id, "architecture");
-  db.upsertSection(doc.id, "storage", { title: "Storage", body: "SQLite in WAL mode.\n\n### Why\n\n- one file per device", addRecords: [adr.id] }, agent);
-  db.upsertSection(doc.id, "export", { title: "Export [docs]", body: "Generated after a change.", addRecords: [adr.id, dec.id] }, agent);
+  db.upsertSection(doc.id, "storage", { title: "Storage", body: "SQLite in WAL mode.\n\n#### Why\n\n- one file per device", addRecords: [adr.id], chapter: "building-blocks" }, agent);
+  db.upsertSection(doc.id, "export", { title: "Export [docs]", body: "Generated after a change.", addRecords: [adr.id, dec.id], chapter: "goals" }, agent);
   db.upsertSection(doc.id, "old", { title: "Old", body: "replaced", status: "superseded" }, agent);
   db.upsertSection(doc.id, "empty", { title: "Empty" }, agent);
+  // UPDATE_GOLDEN=1 writes the fixture from the current output; read the diff before committing it.
+  if (process.env.UPDATE_GOLDEN) fs.writeFileSync(new URL("./fixtures/docs-export.golden.md", import.meta.url), docMarkdown(db, doc.id));
   const golden = fs.readFileSync(new URL("./fixtures/docs-export.golden.md", import.meta.url), "utf8");
   assert.equal(docMarkdown(db, doc.id), golden);
   assert.ok(golden.startsWith(HEADER));
+  // #129: read back, the chapters and their "not written yet" lines belong to no section.
+  assert.deepEqual(req("../vscode/docs-sync.js").parseManaged(golden).map((s) => [s.key, s.title, s.body]), [
+    ["export", "Export [docs]", "Generated after a change."],
+    ["storage", "Storage", "SQLite in WAL mode.\n\n#### Why\n\n- one file per device"],
+    ["empty", "Empty", ""],
+  ]);
+  assert.throws(() => db.upsertSection(doc.id, "x", { title: "X", chapter: "nope" }, agent), /not one of the architecture/);
+  assert.throws(() => db.upsertSection(doc.id, "chapter-goals", { title: "X" }, agent), /must not start with "chapter-"/);
   const first = exportDocs(db, root);
   assert.deepEqual(first.map((r) => [r.kind, path.relative(root, r.file), r.written]), [["architecture", "docs/ARCHITECTURE.md", true]]);
   assert.equal(fs.readFileSync(path.join(root, "docs", "ARCHITECTURE.md"), "utf8"), golden);

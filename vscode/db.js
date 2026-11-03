@@ -430,6 +430,8 @@ const MIGRATIONS = [
   );
   CREATE INDEX exercise_reviews_due ON exercise_reviews(status, due_at);
   `,
+  // #129: the fixed chapter a section of the architecture or product document sits in (CHAPTERS).
+  `ALTER TABLE doc_sections ADD COLUMN chapter TEXT;`,
 ];
 const VERSION = MIGRATIONS.length;
 
@@ -445,6 +447,18 @@ const FIELDS = {
   section: ["title", "body", "position", "status", "records", "source"],
 };
 /** Design documents (#72) and the project glossary: kind → the title a new one gets. */
+/**
+ * The fixed chapters of a document kind (#129, #128), in order: the same in every repo.
+ * Architecture: arc42-lite with Deployment; product: problem to metrics. A section with
+ * no chapter is listed after them until it gets one.
+ */
+const CHAPTERS = {
+  architecture: { goals: "Goals", context: "Context and scope", strategy: "Solution strategy", "building-blocks": "Building blocks",
+    deployment: "Deployment", crosscutting: "Crosscutting concepts", decisions: "Decisions", risks: "Risks and technical debt" },
+  product: { problem: "Problem", users: "Users", goals: "Goals", "non-goals": "Non-goals", features: "Features", metrics: "Metrics" },
+};
+/** A chapter's anchor in the file; no section key may start with it. */
+const CHAPTER_ANCHOR = "chapter-";
 const DOC_KINDS = { architecture: "Architecture Design Document", product: "Product Design Document", glossary: "Project Glossary", social: "Social Media" };
 /** A task's analysis document (TASK-ANALYSIS): one per task, its scope the task's key. */
 const ANALYSIS = "analysis";
@@ -1480,8 +1494,15 @@ class Db {
       const mine = links.filter((/** @type {any} */ l) => l.section_id === s.id).map(({ section_id, ...r }) => r);
       return { ...s, records: mine.map((r) => r.id), contributors: mine };
     });
+    const kind = this.docById(docId)?.kind;
+    // Chapters in their fixed order, then position; a section with none after them all.
+    const order = Object.keys(/** @type {Record<string, object>} */ (CHAPTERS)[kind] ?? {});
+    if (order.length) {
+      const at = (/** @type {any} */ s) => (s.chapter && order.includes(s.chapter) ? order.indexOf(s.chapter) : order.length);
+      out.sort((a, b) => at(a) - at(b));
+    }
     // The glossary reads alphabetically, whatever order its terms were written in.
-    if (this.docById(docId)?.kind === "glossary") out.sort((a, b) => a.title.localeCompare(b.title, "tr", { sensitivity: "base" }) || a.id - b.id);
+    if (kind === "glossary") out.sort((a, b) => a.title.localeCompare(b.title, "tr", { sensitivity: "base" }) || a.id - b.id);
     return out;
   }
 
@@ -1512,7 +1533,8 @@ class Db {
    * @param {number} docId @param {string} key a slug, unique in the document
    * source: the file the section was read from (a task's analysis). at: when the change was
    * made, for one replayed from the past (default now).
-   * @param {{title?: string, body?: string | null, position?: number, status?: string, records?: number[], addRecords?: number[], source?: string | null}} fields
+   * chapter: one of CHAPTERS[the document's kind], null to take it out of its chapter.
+   * @param {{title?: string, body?: string | null, position?: number, status?: string, records?: number[], addRecords?: number[], source?: string | null, chapter?: string | null}} fields
    * @param {Actor} actor @param {{at?: number}} [o]
    */
   upsertSection(docId, key, fields, actor, { at } = {}) {
@@ -1530,6 +1552,10 @@ class Db {
     return this.tx(() => {
       const doc = this.docById(docId);
       if (!doc) throw new Error(`Imprimatur: no document ${docId}`);
+      const chapters = /** @type {Record<string, Record<string, string>>} */ (CHAPTERS)[doc.kind];
+      if (fields.chapter != null && !Object.hasOwn(chapters ?? {}, fields.chapter)) {
+        throw new Error(`Imprimatur: chapter "${fields.chapter}" is not one of the ${doc.kind} document's: ${chapters ? Object.keys(chapters).join(", ") : "it has none"}`);
+      }
       for (const id of [...(fields.records ?? []), ...(fields.addRecords ?? [])]) {
         const rec = this.q("SELECT t.repo_id FROM records r JOIN tasks t ON t.id = r.task_id WHERE r.id = ?").get(id);
         if (!rec) throw new Error(`Imprimatur: no record ${id}`);
@@ -1541,15 +1567,17 @@ class Db {
       /** @type {Record<string, any>} */ const after = {};
       if (!old) {
         if (fields.title === undefined) throw new Error(`Imprimatur: a new section needs a title (key ${key})`);
+        if (chapters && key.startsWith(CHAPTER_ANCHOR)) throw new Error(`Imprimatur: section key "${key}" must not start with "${CHAPTER_ANCHOR}": the file uses it for chapters`);
         const position = fields.position
           ?? /** @type {any} */ (this.q("SELECT coalesce(max(position), 0) + 1 AS p FROM doc_sections WHERE doc_id = ?").get(docId)).p;
-        this.q(`INSERT INTO doc_sections (uid, doc_id, key, title, body, position, status, source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-          .run(uid(), docId, key, fields.title.trim(), fields.body ?? null, position, fields.status ?? "current", fields.source ?? null, now);
+        this.q(`INSERT INTO doc_sections (uid, doc_id, key, title, body, position, status, source, chapter, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(uid(), docId, key, fields.title.trim(), fields.body ?? null, position, fields.status ?? "current", fields.source ?? null, fields.chapter ?? null, now);
         old = /** @type {any} */ (this.docSection(docId, key));
         Object.assign(after, { key, title: old.title, body: old.body, position: old.position, status: old.status });
         if (old.source != null) after.source = old.source;
+        if (old.chapter != null) after.chapter = old.chapter;
       } else {
-        for (const f of /** @type {const} */ (["title", "body", "position", "status", "source"])) {
+        for (const f of /** @type {const} */ (["title", "body", "position", "status", "source", "chapter"])) {
           if (fields[f] === undefined) continue;
           const v = f === "title" ? /** @type {string} */ (fields.title).trim() : fields[f] ?? null;
           if (old[f] === v) continue;
@@ -1990,5 +2018,5 @@ module.exports = {
   backupFile,
   WAL_LIMIT,
   openDb, dbPath, onWindowsDrive, normOrigin, refersTo, recordOf, analysisTitle, KINDS, ACTORS, VERSION, MIGRATIONS, FIELDS,
-  TRACKER_KEY, TASK_STATUSES, RECORD_STATUSES, EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, weakText, REVIEW_DAYS, REVIEW_RESULTS, DOC_KINDS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, SECTION_TITLE_MAX, SOURCE_MAX,
+  TRACKER_KEY, TASK_STATUSES, RECORD_STATUSES, EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, weakText, REVIEW_DAYS, REVIEW_RESULTS, DOC_KINDS, CHAPTERS, CHAPTER_ANCHOR, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, SECTION_TITLE_MAX, SOURCE_MAX,
 };

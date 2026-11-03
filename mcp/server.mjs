@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const {
-  openDb, KINDS, DOC_KINDS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, analysisTitle,
+  openDb, KINDS, DOC_KINDS, CHAPTERS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, analysisTitle,
   EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, REVIEW_DAYS, REVIEW_RESULTS, weakText,
 } = require("../vscode/db.js");
 const { repoRoot } = require("../vscode/review-state.js");
@@ -283,9 +283,14 @@ const TOOLS = [
       task: DOC_TASK,
       key: SECTION_KEY_ARG,
       title: { type: "string", maxLength: MAX_TITLE, description: "The section heading" },
-      body: { type: "string", maxLength: MAX_SECTION_BODY, description: "The section's text (Markdown; headings from ### down)" },
+      body: { type: "string", maxLength: MAX_SECTION_BODY, description: "The section's text (Markdown; headings from #### down)" },
       position: { type: "number", description: "Sort order; a new section goes last (the glossary sorts by title)" },
       status: { type: "string", enum: SECTION_STATUSES },
+      chapter: {
+        type: "string",
+        enum: [...new Set(Object.values(CHAPTERS).flatMap((c) => Object.keys(c)))],
+        description: `The fixed chapter the section sits in (architecture and product only; every new section needs one): ${Object.entries(CHAPTERS).map(([k, c]) => `${k}: ${Object.keys(c).join(", ")}`).join("; ")}`,
+      },
       records: { type: "array", items: int, description: "Record ids that contribute to the section (linked, never unlinked here)" },
       repo: repoArg,
     }, ["kind", "key"]),
@@ -586,7 +591,7 @@ function docUpsert(db, repo, a, actor) {
   if (created && a.title === undefined) {
     throw new ToolError(`no section ${JSON.stringify(a.key)} in the ${a.kind} document yet: give a title to create it (doc_get lists the sections)`);
   }
-  const section = db.upsertSection(doc.id, a.key, { ...pick(a, ["title", "body", "position", "status"]), addRecords: a.records ?? [] }, actor);
+  const section = db.upsertSection(doc.id, a.key, { ...pick(a, ["title", "body", "position", "status", "chapter"]), addRecords: a.records ?? [] }, actor);
   /** @type {any} */
   const out = { document: db.docById(doc.id), section, created };
   // The repo's file follows (#73); a section also edited in the file is a conflict, told back.

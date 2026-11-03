@@ -25,6 +25,7 @@ const path = require("node:path");
 const { docMarkdown, fileOf, inside, docsSettings, kindsOf, FILES, isHeader } = require("./docs-export.js");
 const { fenceTracker, filesAt, importRepo, originOf } = require("./import.js");
 const { slugify } = require("./docsView.js");
+const { CHAPTER_ANCHOR } = require("./db.js");
 
 const ACTOR = { kind: /** @type {"import"} */ ("import"), id: "file" };
 const OVERVIEW = { key: "overview", title: "Overview" };
@@ -46,7 +47,8 @@ const trimBlank = (/** @type {string[]} */ lines) => {
 
 /**
  * A file Imprimatur wrote (docs-export.js docMarkdown): a section opens with a line
- * `<a id="key"></a>` whose next non-blank line is its "## n. Title"; everything before the
+ * `<a id="key"></a>` whose next non-blank line is its "## n. Title" ("### n. Title" under a
+ * chapter, whose own `<a id="chapter-…">` block is skipped); everything before the
  * first (header, title, contents) is not one. No code-fence tracking: an unclosed fence in
  * one body must not swallow the sections after it (roundTrips guards the rest).
  * @param {string} text @returns {FileSection[]}
@@ -55,15 +57,23 @@ function parseManaged(text) {
   /** @type {{key: string, title: string, lines: string[]}[]} */
   const out = [];
   const lines = text.split(/\r?\n/);
+  /** @type {{key: string, title: string, lines: string[]} | undefined} */
+  let cur;
   for (let i = 0; i < lines.length; i++) {
     const a = /^<a id="([a-z0-9][a-z0-9-]*)"><\/a>\s*$/.exec(lines[i]);
     let j = i + 1;
     while (a && j < lines.length && !lines[j].trim()) j++;
-    const h = a && /^##\s+(?:\d+\.\s+)?(.*?)\s*$/.exec(lines[j] ?? "");
-    if (a && h) {
-      out.push({ key: a[1], title: h[1], lines: [] });
+    // "##" in a flat document, "###" under a chapter (#129).
+    const h = a && /^#{2,3}\s+(?:\d+\.\s+)?(.*?)\s*$/.exec(lines[j] ?? "");
+    if (a && h && a[1].startsWith(CHAPTER_ANCHOR)) {
+      // A chapter heading and its "not written yet" line belong to no section.
+      // shortcut: a section moved under another chapter in the file is not read back (the DB keeps its chapter); read the chapter here if hand moves matter.
+      cur = undefined;
       i = j;
-    } else if (out.length) out[out.length - 1].lines.push(lines[i]);
+    } else if (a && h) {
+      out.push((cur = { key: a[1], title: h[1], lines: [] }));
+      i = j;
+    } else if (cur) cur.lines.push(lines[i]);
   }
   return out.map((s) => ({ key: s.key, title: s.title, body: trimBlank(s.lines).join("\n") }));
 }

@@ -4,26 +4,83 @@
 
 ## Contents
 
-1. [Storage](#storage)
-2. [Export \[docs\]](#export)
-3. [Empty](#empty)
+- [Goals](#chapter-goals)
+  1. [Export \[docs\]](#export)
+- [Context and scope](#chapter-context)
+- [Solution strategy](#chapter-strategy)
+- [Building blocks](#chapter-building-blocks)
+  2. [Storage](#storage)
+- [Deployment](#chapter-deployment)
+- [Crosscutting concepts](#chapter-crosscutting)
+- [Decisions](#chapter-decisions)
+- [Risks and technical debt](#chapter-risks)
+- [Unsorted](#chapter-unsorted)
+  3. [Empty](#empty)
 
-<a id="storage"></a>
+<a id="chapter-goals"></a>
 
-## 1. Storage
-
-SQLite in WAL mode.
-
-### Why
-
-- one file per device
+## Goals
 
 <a id="export"></a>
 
-## 2. Export [docs]
+### 1. Export [docs]
 
 Generated after a change.
 
+<a id="chapter-context"></a>
+
+## Context and scope
+
+_Not written yet._
+
+<a id="chapter-strategy"></a>
+
+## Solution strategy
+
+_Not written yet._
+
+<a id="chapter-building-blocks"></a>
+
+## Building blocks
+
+<a id="storage"></a>
+
+### 2. Storage
+
+SQLite in WAL mode.
+
+#### Why
+
+- one file per device
+
+<a id="chapter-deployment"></a>
+
+## Deployment
+
+_Not written yet._
+
+<a id="chapter-crosscutting"></a>
+
+## Crosscutting concepts
+
+_Not written yet._
+
+<a id="chapter-decisions"></a>
+
+## Decisions
+
+_Not written yet._
+
+<a id="chapter-risks"></a>
+
+## Risks and technical debt
+
+_Not written yet._
+
+<a id="chapter-unsorted"></a>
+
+## Unsorted
+
 <a id="empty"></a>
 
-## 3. Empty
+### 3. Empty
