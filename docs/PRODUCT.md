@@ -20,6 +20,7 @@
 14. [/study: studying a topic (#95)](#study)
 15. [/exercise: practise any topic in small steps (#108)](#exercise)
 16. [Social media: /social-post and the Social document (#109)](#social)
+17. [The agent's toolset: seen, versioned, installed, found (#138, planned)](#agent-toolset)
 
 <a id="summary"></a>
 
@@ -378,3 +379,19 @@ Announcing a project means a different post for each channel, and each channel h
 - **Imprimatur: Turn on social media tracking** for a repo adds a **Social** page under Analysis, next to Architecture, Product and Glossary, kept in `docs/SOCIAL.md`.
 - One section per channel: the rules read, the post, its status (planned, posted, link), results over time, what was learned. /social-post writes it and updates a channel when the user says a post went out or brings its numbers.
 - **Turn off** hides the page and stops the file; the document is kept for when it is turned on again.
+
+<a id="agent-toolset"></a>
+
+## 17. The agent's toolset: seen, versioned, installed, found (#138, planned)
+
+Planned in epic #138 (opened 2026-11-04). Imprimatur becomes the place where everything the agent uses is seen and managed. It builds on the Agent setup view, which already shows every agent file per repo and globally, the drift between copies, the effective settings, and the audit findings.
+
+- **Seen (#139):** every third-party skill, plugin, MCP server and hook script, with its source, installed version or commit, and scope. An item installed at more than one scope is flagged.
+- **Versioned (#140):** "update available" with what changed, a one-click update, and a lock so an update can be undone.
+- **Installed (#141):** a must-have set ships with Imprimatur and goes into every repo, and a repo can turn an item off. Imprimatur changes only what it installed. Repo-specific agent files stay in the repo.
+- **Checklist (#142):** the panel lists what this repo is missing or has out of date. Each item has an action, and Home shows the count.
+- **Recommended (#143):** maintained, well-adopted OSS skills, plugins and MCP servers that match the repo's stack.
+- **Found on demand (#144):** when work touches a technology with no skill installed, Imprimatur finds candidates, vets them, and installs one once the user agrees.
+- **Cost (#145):** what each hook costs per run and per session.
+
+Anything brought in is vetted first: its license allows redistribution, its hooks and network calls have been read, and it adds no second task store, memory store or context injector.
