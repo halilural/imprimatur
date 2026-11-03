@@ -45,6 +45,8 @@ const sleep = (/** @type {number} */ ms) => Atomics.wait(new Int32Array(new Shar
  */
 function mergeInto(src, dst) {
   const st = fs.lstatSync(src);
+  // A link is not followed nor moved: what it points to may be outside the repo.
+  if (st.isSymbolicLink()) return;
   if (!fs.existsSync(dst)) {
     fs.mkdirSync(path.dirname(dst), { recursive: true });
     try {
@@ -71,6 +73,30 @@ function mergeInto(src, dst) {
   fs.rmSync(src, { force: true });
 }
 
+/**
+ * Whether the old folder is really the repo's own: neither .claude nor .claude/imprimatur a
+ * link, and its real path inside the repo's. A repo could point either at any folder of the
+ * user (~/.ssh), and the move would carry that folder's files away.
+ * @param {string} root @param {string} legacy
+ */
+function inRepo(root, legacy) {
+  try {
+    for (const p of [path.dirname(legacy), legacy]) if (fs.lstatSync(p).isSymbolicLink()) return false;
+    const realRoot = fs.realpathSync(path.resolve(root));
+    return fs.realpathSync(legacy).startsWith(realRoot + path.sep);
+  } catch {
+    return false;
+  }
+}
+
+/** Writes a plain new file: a link in its place is removed first, never written through. @param {string} f @param {string} text */
+function plainWrite(f, text) {
+  try {
+    if (fs.lstatSync(f).isSymbolicLink() || fs.existsSync(f)) fs.rmSync(f, { force: true });
+  } catch {}
+  fs.writeFileSync(f, text, { flag: "wx" });
+}
+
 /** The old folder's entries still to take in. @param {string} legacy */
 const leftovers = (legacy) => {
   try {
@@ -87,7 +113,7 @@ const leftovers = (legacy) => {
  */
 function mergeLegacy(root, dir = dataDir(root)) {
   const legacy = path.join(path.resolve(root), LEGACY);
-  if (!leftovers(legacy).length) return 0;
+  if (!inRepo(root, legacy) || !leftovers(legacy).length) return 0;
   const lock = `${dir}.moving`;
   fs.mkdirSync(path.dirname(lock), { recursive: true });
   const deadline = Date.now() + LOCK_WAIT_MS;
@@ -118,11 +144,8 @@ function mergeLegacy(root, dir = dataDir(root)) {
         // a hook writing it right now: the next run takes it
       }
     }
-    fs.writeFileSync(path.join(legacy, ".gitignore"), "# Imprimatur's local data (edit copies, logs): never committed.\n*\n");
-    fs.writeFileSync(
-      path.join(legacy, "MOVED.md"),
-      `Imprimatur keeps this repo's data outside the repo since 0.89.0 (#126):\n\n${dir}\n\nThis folder can be deleted.\n`,
-    );
+    plainWrite(path.join(legacy, ".gitignore"), "# Imprimatur's local data (edit copies, logs): never committed.\n*\n");
+    plainWrite(path.join(legacy, "MOVED.md"), `Imprimatur keeps this repo's data outside the repo since 0.89.0 (#126):\n\n${dir}\n\nThis folder can be deleted.\n`);
   } finally {
     fs.rmSync(lock, { recursive: true, force: true });
   }
