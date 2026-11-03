@@ -599,8 +599,12 @@ function main() {
   // The rule names the server Claude Code runs: the plugin's or ours (#113).
   const { ALLOW, mergeAllow } = require("../vscode/mcp-allow.js");
   const allowed = opts.allow ? mergeAllow(status.settings, fromPlugin ? ALLOW.plugin : ALLOW.settings) : { settings: status.settings, change: undefined };
-  const settings = allowed.settings;
-  const changes = [...hooked.changes, ...(status.change ? [status.change] : []), ...(allowed.change ? [allowed.change] : [])];
+  // #124: Claude Code's file tools stay off the keys file.
+  const sec = require("../vscode/secrets.js");
+  const { dbPath } = require("../vscode/db.js");
+  const denied = sec.mergeDeny(allowed.settings, sec.denyRules(dbPath()));
+  const settings = denied.settings;
+  const changes = [...hooked.changes, ...(status.change ? [status.change] : []), ...(allowed.change ? [allowed.change] : []), ...(denied.change ? [denied.change] : [])];
 
   console.log(`Settings in ${file}${fromPlugin ? ` (the ${PLUGIN_ID} plugin brings them)` : ""}:`);
   console.log(changes.length ? changes.map((c) => `  ${c}`).join("\n") : "  all in place");
@@ -612,6 +616,21 @@ function main() {
 
   registerMcp(root, { dry: opts.dry, claude: opts.plugin ? "remove" : fromPlugin ? "skip" : "add" });
   for (const line of linkSkills(root, { dry: opts.dry, remove: opts.plugin || fromPlugin })) console.log(`Skill ${line}`);
+
+  // #124: keys and tokens out of config.json, for the readers that read secrets.json.
+  try {
+    const { openDb } = require("../vscode/db.js");
+    const db = openDb();
+    try {
+      const r = opts.dry ? { moved: [], left: [] } : sec.migrateSecrets(db.file, { keys: sec.keysOf(db) });
+      if (r.moved.length) console.log(`Secrets: moved ${r.moved.join(", ")} from config.json to ${sec.filesOf(db.file).secrets}`);
+      if (r.left.length) console.log(`Secrets: ${r.left.join(", ")} left in config.json (update the plugin that reads it, then run setup again)`);
+    } finally {
+      db.close?.();
+    }
+  } catch (e) {
+    console.log(`Secrets: not moved (${e instanceof Error ? e.message : e})`);
+  }
 
   // Language and extensions for hooks started without args (the plugin's): vscode/config.js.
   if (opts.lang || opts.exts?.length) {

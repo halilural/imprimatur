@@ -82,7 +82,7 @@ function githubRepo(origin) {
 
 /**
  * The Jira settings, or undefined (with why, for the log). https only (http for localhost);
- * a token in config.json only when it is a plain file only this user can read.
+ * the token from IMPRIMATUR_JIRA_TOKEN, secrets.json (#124), or a config.json only this user can read (before the move).
  * @param {string} dbFile @param {NodeJS.ProcessEnv} [env] @param {string} [platform]
  * @returns {{jira?: {baseUrl: string, email: string, token: string}, why?: string}}
  */
@@ -103,11 +103,14 @@ function readJira(dbFile, env = process.env, platform = process.platform) {
     return { why: `Jira baseUrl must be https (${baseUrl})` };
   }
   let token = env.IMPRIMATUR_JIRA_TOKEN?.trim();
+  // #124: the token lives in secrets.json (0600; ignored when others can read it).
+  const secret = require("./secrets.js").sectionWithSecrets(dbFile, ["tracker", "jira"], { platform })?.token;
+  if (!token && typeof secret === "string" && secret && secret !== jira.token) token = secret;
   if (!token && typeof jira.token === "string" && jira.token) {
     if (platform !== "win32" && (st.mode & 0o077) !== 0) return { why: `${file} holds a Jira token but is readable by others (chmod 600 it)` };
     token = jira.token;
   }
-  if (!token) return { why: "Jira is set up but has no token (IMPRIMATUR_JIRA_TOKEN or tracker.jira.token)" };
+  if (!token) return { why: "Jira is set up but has no token (IMPRIMATUR_JIRA_TOKEN, or tracker.jira.token in secrets.json)" };
   return { jira: { baseUrl, email: jira.email, token } };
 }
 

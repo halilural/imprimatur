@@ -967,6 +967,18 @@ function activate(ctx) {
     const rc = recordCommands;
     setPanelHooks({ visible: (v) => (v ? rc.backstop.start() : rc.backstop.stop()), afterWrite: () => rc.changed(true) });
     if (panelState().visible) rc.backstop.start();
+    // #124: keys and tokens out of config.json into secrets.json, for the readers that take them there.
+    try {
+      const db = records.dbOf();
+      if (db && db.file !== ":memory:") {
+        const sec = require("./secrets.js");
+        const r = sec.migrateSecrets(db.file, { keys: sec.keysOf(db) });
+        if (r.moved.length) log.info(`secrets: moved ${r.moved.join(", ")} from config.json to secrets.json`);
+        if (r.left.length) log.info(`secrets: ${r.left.join(", ")} left in config.json (its plugin does not read secrets.json yet)`);
+      }
+    } catch (e) {
+      log.error(`secrets: ${e instanceof Error ? e.message : e}`);
+    }
     // Documents and files out of step since the last window (edited, pulled, hand-written): synced once.
     exportSoon();
   } catch (e) {

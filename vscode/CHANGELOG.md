@@ -4,6 +4,17 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.83.0] - 2026-11-03
+
+### Security
+- Keys and tokens leave `config.json` for `secrets.json` (mode 0600, the same folder) (#124).
+  The move happens when the extension starts and in `npm run setup`, only for the keys whose
+  reader reads the new file: the Jira token, and the keys a plugin names (the private sync,
+  cards and GitLab plugins from their release of today). An older plugin keeps its key where it
+  was and keeps working.
+- `npm run setup` tells Claude Code not to read or edit `secrets.json` (`permissions.deny`), so an
+  agent looking at the settings does not pull a key into its context.
+
 ## [0.82.0] - 2026-11-03
 
 ### Changed
