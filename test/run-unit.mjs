@@ -7,7 +7,11 @@ import os from "node:os";
 import path from "node:path";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-unit-"));
-const env = { ...process.env, IMPRIMATUR_DB: process.env.IMPRIMATUR_DB_TEST ?? path.join(tmp, "imprimatur.db") };
+// Every temp folder the tests make goes under this run's own one, removed at the end: a run
+// left ~500 folders in /tmp (a RAM tmpfs on WSL), 40 runs filled its 5.9 GB.
+const scratch = path.join(tmp, "tmp");
+fs.mkdirSync(scratch);
+const env = { ...process.env, TMPDIR: scratch, TMP: scratch, TEMP: scratch, IMPRIMATUR_DB: process.env.IMPRIMATUR_DB_TEST ?? path.join(tmp, "imprimatur.db") };
 const r = spawnSync(process.execPath, ["--test", ...process.argv.slice(2), "test/*.test.mjs"], {
   cwd: path.join(import.meta.dirname, ".."),
   env,

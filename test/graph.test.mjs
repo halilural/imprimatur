@@ -4,12 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const { graphRows, previewOf, summaryOf, acceptEdit, spotsOf } = createRequire(import.meta.url)("../vscode/graph.js");
 
 test("graph: all files' edits newest first; no task named, one No task lane", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-graph-"));
-  const h = path.join(root, ".claude/imprimatur/history");
+  const h = dataPath(root, ".claude/imprimatur/history");
   fs.mkdirSync(path.join(h, "docs"), { recursive: true });
   const row = (t, session, prompt, before) => JSON.stringify({ t, session, tool: "Edit", prompt, before }) + "\n";
   fs.writeFileSync(path.join(h, "a.md.jsonl"), row("2026-10-02T10:00:00Z", "s1", "first", "") + row("2026-10-02T12:00:00Z", "s2", "third", "x\n"));
@@ -31,14 +33,14 @@ test("graph: all files' edits newest first; no task named, one No task lane", ()
 
 test("graph: edits whose lines are still under review are not accepted", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-graph-"));
-  const h = path.join(root, ".claude/imprimatur/history");
+  const h = dataPath(root, ".claude/imprimatur/history");
   fs.mkdirSync(h, { recursive: true });
   const row = (t, before) => JSON.stringify({ t, session: "s1", tool: "Edit", before }) + "\n";
   // #1 adds "b", #2 adds "c"; "b" was accepted (in the copy), "c" was not.
   fs.writeFileSync(path.join(h, "a.md.jsonl"), row("2026-10-02T10:00:00Z", "a\n") + row("2026-10-02T11:00:00Z", "a\nb\n"));
   fs.writeFileSync(path.join(root, "a.md"), "a\nb\nc\n");
-  fs.mkdirSync(path.join(root, ".claude/imprimatur/baseline"), { recursive: true });
-  const copy = path.join(root, ".claude/imprimatur/baseline/a.md");
+  fs.mkdirSync(dataPath(root, ".claude/imprimatur/baseline"), { recursive: true });
+  const copy = dataPath(root, ".claude/imprimatur/baseline/a.md");
   fs.writeFileSync(copy, "a\nb\n");
   let { rows } = graphRows(root);
   assert.deepEqual(rows.map((r) => [r.n, r.accepted]), [[2, false], [1, true]]);
@@ -52,14 +54,14 @@ test("graph: edits whose lines are still under review are not accepted", () => {
 
 test("graph: an edit whose line a later edit rewrote follows the later edit", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-graph-"));
-  const h = path.join(root, ".claude/imprimatur/history");
-  fs.mkdirSync(path.join(root, ".claude/imprimatur/baseline"), { recursive: true });
+  const h = dataPath(root, ".claude/imprimatur/history");
+  fs.mkdirSync(dataPath(root, ".claude/imprimatur/baseline"), { recursive: true });
   fs.mkdirSync(h, { recursive: true });
   const row = (t, before) => JSON.stringify({ t, session: "s1", before }) + "\n";
   // #1 adds "x" (accepted), #2 adds "y" after it (open).
   fs.writeFileSync(path.join(h, "a.md.jsonl"), row("2026-10-02T10:00:00Z", "a\n") + row("2026-10-02T11:00:00Z", "a\nx\n"));
   fs.writeFileSync(path.join(root, "a.md"), "a\nx\ny\n");
-  fs.writeFileSync(path.join(root, ".claude/imprimatur/baseline/a.md"), "a\nx\n");
+  fs.writeFileSync(dataPath(root, ".claude/imprimatur/baseline/a.md"), "a\nx\n");
   assert.deepEqual(graphRows(root).rows.map((r) => [r.n, r.accepted]), [[2, false], [1, true]]);
 });
 
@@ -102,15 +104,15 @@ test("graph: no history, empty graph", () => {
 
 test("graph: one lane per task, not per session (#39)", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-graph-"));
-  const h = path.join(root, ".claude/imprimatur/history");
+  const h = dataPath(root, ".claude/imprimatur/history");
   const write = (file, rows) => {
     fs.mkdirSync(path.dirname(path.join(h, file)), { recursive: true });
     fs.writeFileSync(path.join(h, `${file}.jsonl`), rows.map((r) => JSON.stringify({ tool: "Edit", before: "", ...r }) + "\n").join(""));
     fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
     fs.writeFileSync(path.join(root, file), "x\n");
   };
-  const dbFile = path.join(root, "imprimatur.db");
-  process.env.IMPRIMATUR_DB = dbFile;
+  // The test process's own database: the data folder (#126) sits next to it and must not move.
+  const dbFile = createRequire(import.meta.url)("../vscode/db.js").dbPath();
   createRequire(import.meta.url)("../vscode/records.js").reset();
   const db = createRequire(import.meta.url)("../vscode/db.js").openDb({ path: dbFile });
   db.upsertTask(db.repoOf(root).id, "#25", { title: "Agent setup" });
@@ -160,7 +162,7 @@ test("graph: agents' record changes are rows in their task's lane, with nothing 
   const os = await import("node:os");
   const pathm = await import("node:path");
   const root = fsm.realpathSync(fsm.mkdtempSync(pathm.join(os.tmpdir(), "imprimatur-60-")));
-  process.env.IMPRIMATUR_DB = pathm.join(root, "i.db");
+  createRequire(import.meta.url)("../vscode/db.js").dbPath(); // the test's own database (#126)
   const records = req("../vscode/records.js");
   records.reset();
   const db = req("../vscode/db.js").openDb({ path: process.env.IMPRIMATUR_DB });
@@ -184,7 +186,7 @@ test("graph: a model description is asked only for edits nothing describes (#63)
   const os = await import("node:os");
   const pathm = await import("node:path");
   const root = fsm.realpathSync(fsm.mkdtempSync(pathm.join(os.tmpdir(), "imprimatur-63-")));
-  process.env.IMPRIMATUR_DB = pathm.join(root, "i.db");
+  createRequire(import.meta.url)("../vscode/db.js").dbPath(); // the test's own database (#126)
   req("../vscode/records.js").reset();
   const I = pathm.join(root, ".claude", "imprimatur");
   fsm.mkdirSync(pathm.join(I, "history"), { recursive: true });
@@ -209,7 +211,7 @@ test("graph: every tool call is a row in its task's lane; a subagent's calls fol
   const os = await import("node:os");
   const pathm = await import("node:path");
   const root = fsm.realpathSync(fsm.mkdtempSync(pathm.join(os.tmpdir(), "imprimatur-55g-")));
-  process.env.IMPRIMATUR_DB = pathm.join(root, "i.db");
+  createRequire(import.meta.url)("../vscode/db.js").dbPath(); // the test's own database (#126)
   const records = req("../vscode/records.js");
   records.reset();
   const db = req("../vscode/db.js").openDb({ path: process.env.IMPRIMATUR_DB });

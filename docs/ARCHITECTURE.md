@@ -171,9 +171,19 @@ Panel queries are indexed and `LIMIT`ed: < 1 ms at 10,000 records; opening (prag
 
 ## 4. File-based review data
 
-The review of an agent edit is kept not in the database but as files in the repo's `.claude/imprimatur/` folder: hooks must write very fast before an edit, the data must be split by repo and by file, and old data must be archivable on its own. Since 0.77.1 the folder hides itself from git with a `.gitignore` of `*` inside it; moving the data out of the repo is #126.
+The review of an agent edit is kept not in the database but as files, one folder per repo: hooks must write very fast before an edit, the data must be split by repo and by file, and old data must be archivable on its own.
 
-| Path | Written by | Content |
+**Where (#126, 0.89.0):** `vscode/data-dir.js` resolves `dataDir(root) = <database folder>/repos/<repo name>-<sha1 of its real path, 10>/`, e.g. `~/.local/share/imprimatur/repos/imprimatur-ab0d6953a0/`. A `root.txt` in it names the repo. It used to be `<repo>/.claude/imprimatur/`. Every reader and writer keeps the old relative constants (`.claude/imprimatur/history` …) and asks `dataPath(root, CONST)`, so nothing in the repo changes on a tool call, and nothing goes into git.
+
+The first `dataDir()` of a process moves an old in-repo folder there, under a lock (`<dir>.moving`; another process waits up to 3 s, a lock older than 60 s is taken over):
+- a missing target is renamed;
+- folders merge;
+- two `.jsonl` files are joined;
+- for any other file, the one already in the data folder stays.
+
+The old folder keeps `.gitignore` and `MOVED.md`. What an older release still writes there is merged the same way by the extension's daily job (`mergeLegacy`). The extension watches the data folder (outside the workspace) and `refresh-route.js` routes relative to it.
+
+| Path (in the data folder) | Written by | Content |
 | --- | --- | --- |
 | `baseline/<path>` | the baseline step (`run.mjs`, #118) | The file's first state in the review (empty for a new file). Accept (per line) writes here, Accept all deletes it. |
 | `history/<path>.jsonl` | the baseline step | For each agent edit: `{t, session, tool, prompt, intent, title, transcript, toolUseId, branch, before}`. Stays after Accept all. |
@@ -182,13 +192,13 @@ The review of an agent edit is kept not in the database but as files in the repo
 | `activity/<session>.jsonl` | the activity step, `activity.mjs` | A short line per tool call: `{t, session, id, tool, kind, what, out, ms, agent, agentId, failed}`. |
 | `calls.jsonl` | the extension (`calls.js`) | Call information read from the transcript (branch, Edit/Write input, failure) and the call matching of old lines; a permanent copy, because Claude Code deletes transcripts after 30 days. |
 | `descriptions.jsonl` | the extension (`describe.js`) | One-sentence edit descriptions written by the model, `{toolUseId, file, text}`. |
-| `todo-done.json`, `scanned.json`, `setup-history.json`, `process.json` | the extension, hooks | Cache and state files. |
+| `todo-done.json`, `scanned.json`, `setup-history.json`, `process.json`, `open-edits.json` | the extension, hooks | Cache and state files. |
 | `docs-backup/<name>-<ms>.md` | docs sync | A design document file's text before a sync overwrote it. |
 | `archive/<YYYY-MM-DD>/` | the extension (`archive.js`) | Old lines in the same layout, gzipped; read with `zcat`. |
 
 ### Principles
 
-- **Persistence:** marks go away only with Accept; staging, committing or reopening has no effect. The extension watches `.claude/imprimatur/**`, not git.
+- **Persistence:** marks go away only with Accept; staging, committing or reopening has no effect. The extension watches the data folder, not git.
 - **Self-healing:** old or missing data is not rewritten, and there is no repair script. The fix happens at read time, and lasting information is kept in a separate file (`calls.jsonl`).
 - **Accuracy:** the real result of an Edit/Write is built from the call in the transcript; its difference from the next `before` becomes a separate "Outside change" line, so a change that came by hand or through git is not written to the agent. The result of a Bash command cannot be known (the transcript has only the command).
 - **Archive:** once a day (30 s after startup, checked hourly), edits older than `imprimatur.archive.afterDays` (default 7) days are treated as accepted and moved to the archive, and so are old waiting logs with no open item. An open request is never closed. A file is rewritten only if it still stands as it was read; it does not run while a git operation is in progress; two windows are kept apart by `archive/.lock`.
@@ -198,6 +208,11 @@ The review of an agent edit is kept not in the database but as files in the repo
   - removes the `unread.json` left from the removed unread feature.
 
   The database upkeep (#117, #121) runs in the same daily job.
+
+**Measured (2026-11-03), copies of three real repos:** the old code reading the in-repo folder and the new code after the move give the same Agent changes rows and waiting steps:
+- dirtywork: 1,502 rows and 1,245 steps;
+- self-learning: 275 and 637;
+- investment: 551 and 158.
 
 <a id="hooks"></a>
 

@@ -13,6 +13,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { callInfo, usesOf, titleOf } = require("./narration.js");
+const { dataPath } = require("./data-dir.js");
 
 const TRANSCRIPTS = path.join(os.homedir(), ".claude", "projects");
 
@@ -39,7 +40,7 @@ function keptLinks(root) {
 
 /** @param {string} root */
 function kept(root) {
-  const f = path.join(root, CALLS);
+  const f = dataPath(root, CALLS);
   let size = 0;
   let text = "";
   try {
@@ -97,8 +98,8 @@ function callOf(root, transcript, toolUseId) {
 /** Append one line to the repo's calls, and to the cache (no re-read). @param {string} root @param {string} line */
 function keep(root, line) {
   try {
-    fs.mkdirSync(path.dirname(path.join(root, CALLS)), { recursive: true });
-    fs.appendFileSync(path.join(root, CALLS), line);
+    fs.mkdirSync(path.dirname(dataPath(root, CALLS)), { recursive: true });
+    fs.appendFileSync(dataPath(root, CALLS), line);
     const c = cache.get(root);
     if (c) {
       const r = JSON.parse(line);

@@ -12,6 +12,7 @@ const { CALLS, callOf, toolCallIn, linkIn } = require("./calls.js");
 const { taskKeyIn, taskOfFile } = require("./tasks.js");
 const records = require("./records.js");
 const { activityOf } = require("./activity.js");
+const { dataPath } = require("./data-dir.js");
 
 const DESCRIPTIONS = path.join(".claude", "imprimatur", "descriptions.jsonl");
 
@@ -26,7 +27,7 @@ const OUTSIDE = "Outside change: not in the agent's recorded edit (by hand, git,
 const describedCache = new Map();
 
 function descriptionsOf(root) {
-  const f = path.join(root, DESCRIPTIONS);
+  const f = dataPath(root, DESCRIPTIONS);
   // Read again only when the describe hook appended.
   const key = statKey(f);
   const hit = describedCache.get(root);
@@ -223,7 +224,7 @@ const fileCache = new Map();
  * @param {string | undefined} open the editor's text, if open @param {string} callsAt the kept calls' statKey
  */
 function fileEdits(root, file, log, abs, open, callsAt) {
-  const copy = path.join(root, BASELINE_DIR, file);
+  const copy = dataPath(root, BASELINE_DIR, file);
   const key = [statKey(log), statKey(copy), open === undefined ? statKey(abs) : "open", callsAt].join("|");
   const hit = fileCache.get(log);
   if (hit && hit.key === key && hit.text === open) return hit.edits;
@@ -253,13 +254,13 @@ function fileEdits(root, file, log, abs, open, callsAt) {
  *            sessions: Array<{session: string, title?: string}>}}
  */
 function graphRows(root, currentText = () => undefined) {
-  const dir = path.join(root, HISTORY_DIR);
+  const dir = dataPath(root, HISTORY_DIR);
   /** @type {ReturnType<typeof graphRows>["rows"]} */
   const rows = [];
   /** The clues tasksOf reads that the rows do not keep (the branch, the Bash description). */
   const clues = new Map();
   const described = descriptionsOf(root);
-  const callsAt = statKey(path.join(root, CALLS));
+  const callsAt = statKey(dataPath(root, CALLS));
   for (const ent of fs.existsSync(dir) ? fs.readdirSync(dir, { recursive: true, withFileTypes: true }) : []) {
     if (!ent.isFile() || !ent.name.endsWith(".jsonl")) continue;
     const log = path.join(ent.parentPath, ent.name);

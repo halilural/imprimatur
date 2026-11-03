@@ -5,12 +5,14 @@ import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { describe, diffText, cleanSentence, editTexts } from "../hooks/describe.mjs";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const { graphRows } = createRequire(import.meta.url)("../vscode/graph.js");
 
 function repo() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-describe-"));
-  const h = path.join(root, ".claude/imprimatur/history");
+  const h = dataPath(root, ".claude/imprimatur/history");
   fs.mkdirSync(h, { recursive: true });
   const row = (toolUseId, before) => JSON.stringify({ t: "2026-10-05T10:00:00Z", session: "s1", toolUseId, before }) + "\n";
   fs.writeFileSync(path.join(h, "a.md.jsonl"), row("t1", "a\n") + row("t2", "a\nb\n"));
@@ -48,6 +50,6 @@ test("describe: an unchanged edit or a failed call leaves no line", async () => 
   fs.writeFileSync(path.join(root, "a.md"), "a\nb\n");
   assert.equal(await describe(root, "a.md", "t2", "English", async () => "x"), undefined);
   await assert.rejects(describe(root, "a.md", "t1", "English", async () => { throw new Error("offline"); }));
-  assert.equal(fs.existsSync(path.join(root, ".claude/imprimatur/descriptions.jsonl")), false);
+  assert.equal(fs.existsSync(dataPath(root, ".claude/imprimatur/descriptions.jsonl")), false);
   assert.equal(cleanSentence("**Added a line.**\nmore"), "Added a line.");
 });

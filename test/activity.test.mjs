@@ -6,6 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const req = createRequire(import.meta.url);
 const { kindOf, rowOf, record, activityOf, ACTIVITY_DIR } = req("../vscode/activity.js");
@@ -48,7 +50,7 @@ test("record and read back: one file per session, read again only when it change
   record(root, { session_id: "S1", tool_use_id: "a", tool_name: "Read", tool_input: { file_path: "a.md" } });
   record(root, { session_id: "S2", tool_use_id: "b", tool_name: "Grep", tool_input: { pattern: "x" } });
   record(root, { session_id: "../evil", tool_name: "Read" });
-  assert.deepEqual(fs.readdirSync(path.join(root, ACTIVITY_DIR)).sort(), ["S1.jsonl", "S2.jsonl"]);
+  assert.deepEqual(fs.readdirSync(dataPath(root, ACTIVITY_DIR)).sort(), ["S1.jsonl", "S2.jsonl"]);
   assert.deepEqual(activityOf(root).map((r) => r.id), ["a", "b"]);
   record(root, { session_id: "S1", tool_use_id: "c", tool_name: "WebSearch", tool_input: { query: "q" } });
   assert.deepEqual(activityOf(root).map((r) => r.id).sort(), ["a", "b", "c"]);

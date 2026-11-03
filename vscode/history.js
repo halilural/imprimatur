@@ -17,6 +17,7 @@ const path = require("node:path");
 const { audit, pointedAsks } = require("./audit.js");
 const { WAITING_DIR, itemsOf, readLog, tickStep } = require("./waiting.js");
 const records = require("./records.js");
+const { dataPath } = require("./data-dir.js");
 
 const DAYS = 30;
 const SCANNED = path.join(".claude", "imprimatur", "scanned.json");
@@ -93,7 +94,7 @@ function transcriptsOf(root, home = TRANSCRIPTS) {
 /** @param {string} root @returns {{sessions: string[]}} */
 function readScanned(root) {
   try {
-    return { sessions: [], ...JSON.parse(fs.readFileSync(path.join(root, SCANNED), "utf8")) };
+    return { sessions: [], ...JSON.parse(fs.readFileSync(dataPath(root, SCANNED), "utf8")) };
   } catch {
     return { sessions: [] };
   }
@@ -109,7 +110,7 @@ const scanOnly = (log) =>
   readLog(log).every((r) => r.kind === "verify" || r.kind === "answer" || (r.kind === "check" && (r.by === "audit" || r.by === "file")));
 
 /** True once the project was scanned (the extension scans a project once on its own). @param {string} root */
-const scannedBefore = (root) => fs.existsSync(path.join(root, SCANNED));
+const scannedBefore = (root) => fs.existsSync(dataPath(root, SCANNED));
 
 /** @param {string} log @param {object} row */
 function append(log, row) {
@@ -124,7 +125,7 @@ function append(log, row) {
  * @param {{ask?: (prompt: string) => Promise<string>, lang?: string}} opts
  */
 async function scanSession(root, session, tx, opts) {
-  const log = path.join(root, WAITING_DIR, `${session}.jsonl`);
+  const log = dataPath(root, WAITING_DIR, `${session}.jsonl`);
   const turns = tx.turns;
   const last = turns[turns.length - 1];
   for (const turn of turns.slice(0, -1)) {
@@ -161,7 +162,7 @@ function todoAsks(root) {
  * @param {string} root @returns {{added: number, ticked: number}}
  */
 function scanTodos(root) {
-  const log = path.join(root, WAITING_DIR, `${FILES_SESSION}.jsonl`);
+  const log = dataPath(root, WAITING_DIR, `${FILES_SESSION}.jsonl`);
   const now = todoAsks(root);
   const items = itemsOf(readLog(log), FILES_SESSION);
   const known = new Set(items.flatMap((it) => it.text.split("\n").map((t) => `${it.task ?? it.prompt}\n${t}`)));
@@ -199,7 +200,7 @@ async function scanHistory(root, opts = {}) {
   // Again: what the scan alone wrote is written anew (e.g. in another language).
   if (opts.again)
     for (const session of [...done]) {
-      const log = path.join(root, WAITING_DIR, `${session}.jsonl`);
+      const log = dataPath(root, WAITING_DIR, `${session}.jsonl`);
       if (fs.existsSync(log) && !scanOnly(log)) continue;
       if (fs.existsSync(log)) fs.rmSync(log);
       done.delete(session);
@@ -207,7 +208,7 @@ async function scanHistory(root, opts = {}) {
   const jobs = [];
   for (const file of transcriptsOf(root, opts.home)) {
     const session = path.basename(file, ".jsonl").replace(/[^\w-]/g, "");
-    if (done.has(session) || fs.existsSync(path.join(root, WAITING_DIR, `${session}.jsonl`))) continue;
+    if (done.has(session) || fs.existsSync(dataPath(root, WAITING_DIR, `${session}.jsonl`))) continue;
     if (fs.statSync(file).mtimeMs < since) continue;
     const tx = turnsOf(file);
     const inside = tx.cwd && !path.relative(root, tx.cwd).startsWith("..");
@@ -227,8 +228,8 @@ async function scanHistory(root, opts = {}) {
   };
   await Promise.all(Array.from({ length: opts.parallel ?? 4 }, worker));
   const todos = scanTodos(root);
-  fs.mkdirSync(path.dirname(path.join(root, SCANNED)), { recursive: true });
-  fs.writeFileSync(path.join(root, SCANNED), JSON.stringify({ at: new Date().toISOString(), sessions: [...done] }, null, 2) + "\n");
+  fs.mkdirSync(path.dirname(dataPath(root, SCANNED)), { recursive: true });
+  fs.writeFileSync(dataPath(root, SCANNED), JSON.stringify({ at: new Date().toISOString(), sessions: [...done] }, null, 2) + "\n");
   return { sessions: jobs.length, todos };
 }
 

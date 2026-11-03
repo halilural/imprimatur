@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const req = createRequire(import.meta.url);
 const { scanHistory, scanTodos, todoAsks, turnsOf, slugOf, scannedBefore, FILES_SESSION } = req("../vscode/history.js");
@@ -67,7 +69,7 @@ test("history: a past session's 👉 asks become steps, the user's later words s
   // The model saw the step with what the user wrote since.
   assert.match(asked, /A\. Can you try the login on staging\?/);
   assert.match(asked, /the user wrote since: tried it, works/);
-  const log = path.join(root, ".claude/imprimatur/waiting/s1.jsonl");
+  const log = dataPath(root, ".claude/imprimatur/waiting/s1.jsonl");
   assert.deepEqual(openSteps(log).map((s) => s.text), ["Shall I commit the change?"]);
   // The new item keeps the turn's own time, not the scan's.
   const open = waitingSteps(root).find((s) => s.state === "open");
@@ -83,8 +85,8 @@ test("history: sessions already logged, scanned, too old or from another project
     other: { cwd: "/somewhere/else", records: [user("c", ago(10)), said("👉 Z?", ago(9))] },
     fresh: { records: [user("d", ago(10)), said("👉 W?", ago(9))] },
   });
-  fs.mkdirSync(path.join(root, ".claude/imprimatur/waiting"), { recursive: true });
-  fs.writeFileSync(path.join(root, ".claude/imprimatur/waiting/logged.jsonl"), "");
+  fs.mkdirSync(dataPath(root, ".claude/imprimatur/waiting"), { recursive: true });
+  fs.writeFileSync(dataPath(root, ".claude/imprimatur/waiting/logged.jsonl"), "");
   let calls = 0;
   const ask = async () => (calls++, '{"settled": []}');
   assert.equal(scannedBefore(root), false);
@@ -145,7 +147,7 @@ test("history: rescan writes again what only the scan wrote; sessions a hook or 
   const ask = async () => '{"settled": []}';
   await scanHistory(root, { home, ask });
   // b went on after setup: the hook wrote a turn end.
-  fs.appendFileSync(path.join(root, ".claude/imprimatur/waiting/b.jsonl"), JSON.stringify({ t: ago(1), session: "b", kind: "step" }) + "\n");
+  fs.appendFileSync(dataPath(root, ".claude/imprimatur/waiting/b.jsonl"), JSON.stringify({ t: ago(1), session: "b", kind: "step" }) + "\n");
   assert.equal((await scanHistory(root, { home, ask })).sessions, 0);
   const res = await scanHistory(root, { home, ask, again: true });
   assert.equal(res.sessions, 1);

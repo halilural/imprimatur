@@ -4,6 +4,19 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.89.0] - 2026-11-03
+
+### Changed
+- Imprimatur's per-repo data lives outside the repo, next to the database:
+  `~/.local/share/imprimatur/repos/<repo>-<id>/` (#126). Nothing changes in the repo on a tool
+  call any more, nothing can be committed, and VS Code sees no file events from Imprimatur in the
+  workspace. The first run moves an old `.claude/imprimatur/` folder there (a `MOVED.md` is left
+  in its place; the folder can be deleted); what an older release still writes there is taken
+  in once a day. On copies of three real repos the panel showed the same edits and asks before
+  and after the move.
+- Test runs keep their temporary files in a folder of their own and remove it at the end; they
+  used to leave about 500 folders in `/tmp` per run.
+
 ## [0.88.0] - 2026-11-03
 
 ### Added

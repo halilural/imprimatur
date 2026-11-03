@@ -25,6 +25,7 @@ let launcher;
 const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, historyEdits } = require("./review-state.js");
 const { toolCallIn, linkIn } = require("./calls.js");
 const { archiveRepo, archiveDue } = require("./archive.js");
+const { dataPath } = require("./data-dir.js");
 
 const color = (id) => new vscode.ThemeColor(id);
 const ruler = { overviewRulerLane: vscode.OverviewRulerLane.Left };
@@ -82,7 +83,7 @@ const norm = (p) => (process.platform === "win32" ? path.resolve(p).toLowerCase(
 /** @param {string} file @returns {string | undefined} */
 function copyPath(file) {
   const root = rootOf(file);
-  return root && path.join(root, BASELINE_DIR, norm(file).slice(root.length + 1));
+  return root && dataPath(root, BASELINE_DIR, norm(file).slice(root.length + 1));
 }
 
 /**
@@ -106,7 +107,7 @@ function hunksOf(file, text) {
   const copy = copyPath(file);
   const root = rootOf(file);
   if (!copy || !root || !fs.existsSync(copy)) return [];
-  const log = path.join(root, HISTORY_DIR, `${path.relative(root, norm(file))}.jsonl`);
+  const log = dataPath(root, HISTORY_DIR, `${path.relative(root, norm(file))}.jsonl`);
   return review(fs.readFileSync(copy, "utf8"), latestBefore(log), text);
 }
 
@@ -122,7 +123,7 @@ const editsOf = (file, text) => {
 /** @param {string} file */
 function logOf(file) {
   const root = rootOf(file);
-  return root && path.join(root, HISTORY_DIR, `${path.relative(root, norm(file))}.jsonl`);
+  return root && dataPath(root, HISTORY_DIR, `${path.relative(root, norm(file))}.jsonl`);
 }
 
 // Read-only documents for the diff view: imprimatur:/<name>?<file, edit, side>
@@ -542,6 +543,13 @@ function archiveAll(now = false) {
   const done = [];
   if (!(days > 0)) return done;
   for (const root of roots) {
+    // #126: what an older release still wrote in the repo moves to the data folder.
+    try {
+      const n = require("./data-dir.js").mergeLegacy(root);
+      if (n) log.info(`data ${root}: ${n} entries moved from .claude/imprimatur/ to ${require("./data-dir.js").dataDir(root)}`);
+    } catch (e) {
+      log.error(`data ${root}: ${e instanceof Error ? e.message : e}`);
+    }
     if (!now && !archiveDue(root)) continue;
     try {
       const r = archiveRepo(root, { days });
@@ -569,11 +577,12 @@ function addFolder(folder, ctx) {
   const found = repoRoot(folder.uri.fsPath) ?? folder.uri.fsPath;
   if (roots.has(norm(found))) return;
   roots.add(norm(found));
-  // Repos set up before 0.77.1: their data folder hides itself from git from now on.
-  if (fs.existsSync(path.join(found, ".claude", "imprimatur"))) require("./review-state.js").ensureIgnored(found);
+  // #126: the repo's data lives outside it (data-dir.js); an old in-repo folder moves there now.
+  const data = require("./data-dir.js").dataDir(found);
   // Copies and history change on every agent edit: everything redraws. The waiting log,
   // activity and descriptions only feed the graph and the counts: no preview reload.
-  const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(found), ".claude/imprimatur/**"));
+  // Outside the workspace: Imprimatur's writes are no file events in it (#126).
+  const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(data), "**"));
   const { routeOf } = require("./refresh-route.js");
   /** @param {vscode.Uri} uri */
   const changed = (uri) => {
@@ -744,7 +753,7 @@ function activate(ctx) {
       const days = vscode.workspace.getConfiguration("imprimatur").get("archive.afterDays", 7);
       vscode.window.showInformationMessage(
         !(days > 0) ? "Imprimatur archive is off (imprimatur.archive.afterDays = 0)."
-        : done.length ? `Archived (older than ${days} days): ${done.join("; ")}. In .claude/imprimatur/archive/.`
+        : done.length ? `Archived (older than ${days} days): ${done.join("; ")}. In each repo's data folder, archive/ (${require("./data-dir.js").dataHome()}).`
         : `Nothing older than ${days} days to archive.`,
       );
     }),
@@ -1034,7 +1043,7 @@ function activate(ctx) {
     launcher,
     // #114: a write under .claude/imprimatur/ as the watcher sees it (its events are not reliable in tests).
     watchChanged: (/** @type {string} */ file) => {
-      for (const [root, fn] of watchHandlers) if (norm(file).startsWith(root)) fn(vscode.Uri.file(file));
+      for (const [root, fn] of watchHandlers) if (norm(file).startsWith(root) || norm(file).startsWith(norm(require("./data-dir.js").dataDir(root)))) fn(vscode.Uri.file(file));
     },
     extendMarkdownIt: (md) => {
       markdownIt = md;

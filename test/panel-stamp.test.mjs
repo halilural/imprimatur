@@ -5,13 +5,16 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const require = createRequire(import.meta.url);
 const { dataStamp, panelStamp } = require("../vscode/panel-stamp.js");
 
 const mk = () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-stamp-"));
-  const data = path.join(root, ".claude", "imprimatur");
+  const data = dataPath(root, ".claude/imprimatur");
+  fs.mkdirSync(path.join(root, ".claude"), { recursive: true });
   for (const d of ["history/docs", "baseline/docs", "waiting", "activity", "archive", "pending"]) fs.mkdirSync(path.join(data, d), { recursive: true });
   fs.writeFileSync(path.join(data, "history", "docs", "a.md.jsonl"), "{}\n");
   fs.writeFileSync(path.join(data, "baseline", "docs", "a.md"), "one\n");

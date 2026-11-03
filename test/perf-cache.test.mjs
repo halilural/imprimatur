@@ -6,6 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const req = createRequire(import.meta.url);
 const { graphRows } = req("../vscode/graph.js");
@@ -24,8 +26,8 @@ const view = (root, open) => graphRows(root, open).rows.map((r) => [r.n, r.added
 
 test("#51: cached rows follow the log, the file, the review copy and the open editor", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-51-"));
-  const log = path.join(root, ".claude/imprimatur/history/a.md.jsonl");
-  const copy = path.join(root, ".claude/imprimatur/baseline/a.md");
+  const log = dataPath(root, ".claude/imprimatur/history/a.md.jsonl");
+  const copy = dataPath(root, ".claude/imprimatur/baseline/a.md");
   write(path.join(root, "a.md"), "one\ntwo\n");
   write(copy, "one\n");
   write(log, row("2026-10-07T10:00:00Z", "one\n"));

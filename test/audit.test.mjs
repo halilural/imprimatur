@@ -5,6 +5,8 @@ import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { auditTurn } from "../hooks/audit.mjs";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const req = createRequire(import.meta.url);
 const { audit, parseAudit, auditPrompt, overlap, pointedAsks } = req("../vscode/audit.js");
@@ -12,7 +14,7 @@ const { waitingItems, openSteps, waitingSteps } = req("../vscode/waiting.js");
 
 function session() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-audit-"));
-  const log = path.join(root, ".claude/imprimatur/waiting/s1.jsonl");
+  const log = dataPath(root, ".claude/imprimatur/waiting/s1.jsonl");
   fs.mkdirSync(path.dirname(log), { recursive: true });
   const rec = (r) => JSON.stringify({ session: "s1", ...r }) + "\n";
   fs.writeFileSync(

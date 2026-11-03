@@ -5,12 +5,14 @@ import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { openSteps, resolve, settledIn } from "../hooks/resolve.mjs";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const { waitingItems } = createRequire(import.meta.url)("../vscode/waiting.js");
 
 function session() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-resolve-"));
-  const log = path.join(root, ".claude/imprimatur/waiting/s1.jsonl");
+  const log = dataPath(root, ".claude/imprimatur/waiting/s1.jsonl");
   fs.mkdirSync(path.dirname(log), { recursive: true });
   const rec = (r) => JSON.stringify({ session: "s1", ...r }) + "\n";
   fs.writeFileSync(
@@ -50,7 +52,7 @@ test("resolve: without the model, a reply answers the question steps", async () 
 
 test("resolve: a message naming a task weighs its steps from other sessions, ticked in their own log (#43)", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-resolve-"));
-  const dir = path.join(root, ".claude/imprimatur/waiting");
+  const dir = dataPath(root, ".claude/imprimatur/waiting");
   fs.mkdirSync(dir, { recursive: true });
   const write = (s, ...rs) => fs.writeFileSync(path.join(dir, `${s}.jsonl`), rs.map((r) => JSON.stringify({ session: s, ...r }) + "\n").join(""));
   write("a", { t: "2026-10-06T08:00:00Z", kind: "question", text: "Should LATD-13977 be closed?", task: "LATD-13977" });

@@ -8,6 +8,7 @@
 "use strict";
 const fs = require("node:fs");
 const path = require("node:path");
+const { dataPath } = require("./data-dir.js");
 
 const ACTIVITY_DIR = path.join(".claude", "imprimatur", "activity");
 const KINDS = ["edit", "bash", "read", "search", "web", "mcp", "agent", "skill", "other"];
@@ -106,8 +107,7 @@ function rowOf(root, input) {
 /** Appends a call's row to its session's log. @param {string} root @param {any} input */
 function record(root, input) {
   if (!input?.tool_name || !/^[\w-]+$/.test(String(input.session_id ?? ""))) return;
-  const dir = path.join(root, ACTIVITY_DIR);
-  require("./review-state.js").ensureIgnored(root);
+  const dir = dataPath(root, ACTIVITY_DIR);
   fs.mkdirSync(dir, { recursive: true });
   fs.appendFileSync(path.join(dir, `${input.session_id}.jsonl`), JSON.stringify(rowOf(root, input)) + "\n");
 }
@@ -117,7 +117,7 @@ const cache = new Map();
 
 /** Every activity row of a repo, oldest first. @param {string} root @returns {any[]} */
 function activityOf(root) {
-  const dir = path.join(root, ACTIVITY_DIR);
+  const dir = dataPath(root, ACTIVITY_DIR);
   let names = [];
   try {
     names = fs.readdirSync(dir).filter((n) => n.endsWith(".jsonl"));

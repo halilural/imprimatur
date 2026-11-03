@@ -7,6 +7,8 @@ import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { merge } from "../hooks/run.mjs";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const require = createRequire(import.meta.url);
 const { stepsFor, activityHookWrites, matcherFor } = require("../vscode/hook-plan.js");
@@ -23,15 +25,18 @@ function repo(settings) {
   }
   return root;
 }
-const run = (script, root, input, args = []) =>
-  spawnSync(process.execPath, [path.join(HOOKS, script), ...args], { input: JSON.stringify({ cwd: root, session_id: "s118", ...input }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: root, IMPRIMATUR_DB: path.join(root, "i.db"), IMPRIMATUR_DESCRIBE: "off" } });
+// The hooks use this process's database, so both sides see the same data folder (#126).
+const run = (script, root, input, args = []) => {
+  require("../vscode/db.js").dbPath();
+  return spawnSync(process.execPath, [path.join(HOOKS, script), ...args], { input: JSON.stringify({ cwd: root, session_id: "s118", ...input }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: root, IMPRIMATUR_DESCRIBE: "off" } });
+};
 const activityRows = (root) => {
-  const f = path.join(root, ".claude", "imprimatur", "activity", "s118.jsonl");
+  const f = dataPath(root, ".claude/imprimatur", "activity", "s118.jsonl");
   return fs.existsSync(f) ? fs.readFileSync(f, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l).tool) : [];
 };
 /** Everything under the data folder but the volatile parts: same effects, same tree. */
 const tree = (root) => {
-  const base = path.join(root, ".claude", "imprimatur");
+  const base = dataPath(root, ".claude/imprimatur");
   const out = [];
   const walk = (d, rel) => {
     for (const e of fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }) : []) {

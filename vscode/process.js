@@ -28,6 +28,7 @@
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+const { dataPath } = require("./data-dir.js");
 
 const CONFIG = path.join(".claude", "imprimatur.json");
 
@@ -198,13 +199,13 @@ const parse = (text) => {
 /** Per-session notes of the checks (.claude/imprimatur/process.json): warned once, issues opened. */
 const STATE = path.join(".claude", "imprimatur", "process.json");
 /** @param {string} root */
-const readState = (root) => parse(fs.existsSync(path.join(root, STATE)) ? fs.readFileSync(path.join(root, STATE), "utf8") : "") ?? {};
+const readState = (root) => parse(fs.existsSync(dataPath(root, STATE)) ? fs.readFileSync(dataPath(root, STATE), "utf8") : "") ?? {};
 /** @param {string} root @param {any} state */
 const writeState = (root, state) => {
   // Only the latest sessions are kept.
   const keep = Object.fromEntries(Object.entries(state).slice(-20));
-  fs.mkdirSync(path.dirname(path.join(root, STATE)), { recursive: true });
-  fs.writeFileSync(path.join(root, STATE), JSON.stringify(keep));
+  fs.mkdirSync(path.dirname(dataPath(root, STATE)), { recursive: true });
+  fs.writeFileSync(dataPath(root, STATE), JSON.stringify(keep));
 };
 /** True the first time a session asks for this key. @param {string} root @param {string | undefined} session @param {string} key */
 function once(root, session, key) {

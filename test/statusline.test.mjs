@@ -5,6 +5,8 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { createRequire as __cr } from "node:module";
+const { dataDir } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const require = createRequire(import.meta.url);
 const HOOK = path.join(import.meta.dirname, "..", "hooks", "statusline.mjs");
@@ -43,7 +45,8 @@ test("statusline: counts the user's asks and open waiting steps, shows this sess
   db.addRecord(t.id, { kind: "todo", owner: "C", title: "Not the user's" }, agent);
   db.addRecord(t.id, { kind: "todo", owner: "C", title: "discover cache and keep it short enough to need cutting", pointer: true }, agent);
   db.close();
-  const dir = path.join(root, ".claude", "imprimatur", "waiting");
+  // The status line runs with this test's database: its data folder is next to that one (#126).
+  const dir = path.join(dataDir(root, { env: { IMPRIMATUR_DB: dbFile } }), "waiting");
   fs.mkdirSync(dir, { recursive: true });
   const rec = (o) => JSON.stringify(o) + "\n";
   fs.writeFileSync(path.join(dir, "w1.jsonl"),
@@ -81,7 +84,8 @@ test("statusline: a second run within 2 s answers from its cache", () => {
   const { root, dbFile } = fixture();
   const sid = session();
   assert.equal(run({ session_id: sid, cwd: root }, dbFile).line, "Imprimatur");
-  const dir = path.join(root, ".claude", "imprimatur", "waiting");
+  // The status line runs with this test's database: its data folder is next to that one (#126).
+  const dir = path.join(dataDir(root, { env: { IMPRIMATUR_DB: dbFile } }), "waiting");
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "w.jsonl"), JSON.stringify({ t: "2026-10-01T10:00:00Z", session: "w", kind: "verify", text: "Reload" }) + "\n");
   assert.equal(run({ session_id: sid, cwd: root }, dbFile).line, "Imprimatur");
