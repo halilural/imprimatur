@@ -24,7 +24,8 @@ const run = (input, dbFile) => {
   const r = spawnSync(process.execPath, [HOOK], {
     input: typeof input === "string" ? input : JSON.stringify(input),
     encoding: "utf8",
-    env: { ...process.env, IMPRIMATUR_DB: dbFile, NO_COLOR: "1" },
+    // A home of its own (#123): no installed plugin or extension of this machine takes part.
+    env: { ...process.env, IMPRIMATUR_DB: dbFile, NO_COLOR: "1", HOME: path.dirname(dbFile) },
   });
   return { ...r, line: r.stdout.trimEnd() };
 };

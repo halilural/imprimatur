@@ -997,6 +997,25 @@ function activate(ctx) {
     require("./review-state.js").writeOpenEdits(root, edits);
     return { edits, inbox: inboxNow(), parts: inboxParts(root) };
   }, inboxNow);
+  // #123: the Claude Code plugin (hooks, MCP server) should be this extension's version: a
+  // migration shipped in one makes the other read-only.
+  try {
+    const own = ctx.extension.packageJSON.version;
+    const plugin = require("./versions.js").imprimaturPlugin();
+    if (plugin && plugin.version && plugin.version !== own) {
+      log.warn(`the Claude Code plugin ${plugin.id} is ${plugin.version}, this extension ${own}`);
+      vscode.window
+        .showWarningMessage(`Imprimatur: the Claude Code plugin is ${plugin.version}, this extension ${own}. Hooks and the MCP server run the plugin's code; update it so both are one version.`, "Update the plugin")
+        .then((choice) => {
+          if (!choice) return;
+          const t = vscode.window.createTerminal("Imprimatur plugin update");
+          t.show();
+          t.sendText(`claude plugin marketplace update imprimatur && claude plugin update ${plugin.id} && echo "Updated: restart your Claude Code sessions to load it."`);
+        });
+    }
+  } catch (e) {
+    log.error(`plugin version check: ${e instanceof Error ? e.message : e}`);
+  }
   // Its graph row moved to the launcher (#69): no counts to keep.
   setupView = registerSetupView(ctx, () => [...roots], () => ({ edits: 0, waiting: 0 }));
   renderAll();

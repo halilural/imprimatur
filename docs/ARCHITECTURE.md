@@ -474,13 +474,14 @@ Imprimatur turns to a small model (Haiku) only where verbal judgment is needed; 
 
 In a repo clone (Node 22+, git, VS Code 1.100+, the `claude` CLI), one command:
 
-- Adds the hooks to `~/.claude/settings.json` (backup first; ours are found by script name, updated if the path or language changed, other people's are not touched).
+- Adds the hooks to `~/.claude/settings.json` (backup first; ours are found by script name, older releases' per-script entries included, updated if the path or language changed, other people's are not touched): one `run.mjs` dispatcher entry per event (#118).
 - If there is no status line, makes `hooks/statusline.mjs` the status line.
+- Adds the MCP allow rule (#113) and the deny rules for `secrets.json` (#124) to `permissions`, and moves keys from `config.json` to `secrets.json`.
 - Registers the MCP server with Claude Code (user scope, `claude mcp add`) and, if installed, with Cursor and Codex (the rest of the file is preserved byte for byte). If Node < 22.13 it does not register and says why.
 - Packages and installs the extension; `--lang`, `--show-in` go to the VS Code machine settings; `--lang`/`--exts` go to `config.json` in the database folder.
-- Options `--dry-run`, `--no-extension` exist.
+- Options `--dry-run`, `--no-extension`, `--no-allow` exist.
 
-Hooks and the MCP server run **from the repo clone**: on this machine the main checkout of `~/projects/imprimatur` is live code; a change merged to main is in effect at the next hook call. The extension stays on the old version until it is packaged and installed.
+Hooks and the MCP server run **from the repo clone**: on this machine the main checkout of `~/projects/imprimatur` is live code; a change merged to main is in effect at the next hook call (a session reads its hook list when it starts). The extension stays on the old version until it is packaged and installed.
 
 ### Claude Code plugin
 
@@ -488,17 +489,26 @@ Hooks and the MCP server run **from the repo clone**: on this machine the main c
 - `claude plugin marketplace add halilural/imprimatur` + `claude plugin install imprimatur@imprimatur`. The plugin does not bring the VS Code extension or the status line.
 - `npm run setup -- --plugin` adds the clone as a marketplace, installs the plugin, and removes the hooks in the settings file and the user-scope MCP server (backup first). While the plugin is on, a plain `setup` writes no hooks: the same hook never runs twice.
 
+### One version per machine (#123)
+
+Claude Code does not update a plugin's cache by itself, so the plugin can lag behind the extension; a migration shipped in one then makes the other read-only. `vscode/versions.js` reads what runs, from files only:
+- `imprimaturPlugin()`: the user-scope, enabled entry in `~/.claude/plugins/installed_plugins.json`;
+- `extensionVersion()`: VS Code's `extensions.json`;
+- `codeVersion(root)`: the version of the code in a folder.
+
+With the plugin installed, the status line imports the plugin's own `hooks/statusline.mjs`, so it runs the code the hooks and the MCP server run, whatever path `statusLine` names. It adds `⚠ <own> ≠ extension <ext>` when its version differs from the extension's. At start, the extension warns when the plugin's version differs from its own; its "Update the plugin" button runs `claude plugin marketplace update imprimatur && claude plugin update imprimatur@imprimatur` in a terminal.
+
 ### VS Code extension
 
-`npm run package`: `scripts/build.mjs` produces a single `vscode/dist/extension.js` with esbuild (`vscode` and Node built-ins left out), then `dist/imprimatur-<version>.vsix` with `vsce`. The package file list is kept by hand; a test catches a missing file. There is no Marketplace or Open VSX release yet (#1).
+`npm run package`: `scripts/build.mjs` produces a single `vscode/dist/extension.js` with esbuild (`vscode` and Node built-ins left out), then `dist/imprimatur-<version>.vsix` with `vsce`. The package file list is kept by hand; a test catches a missing file.
 
 ### Plugins
 
-`db.js` has an optional plugin hook (config.json "plugins"; a plugin hears every write through `onChange` in a savepoint, can answer `adoptRepo`, hears `onOrigin`, and its `activate` gets the extension's API; `vscode/loop.js` `runLoop` runs timed jobs). Plugins are installed and deployed on their own, outside this repo.
+`db.js` has an optional plugin hook (config.json "plugins"; a plugin hears every write through `onChange` in a savepoint, can answer `adoptRepo`, hears `onOrigin`, its `activate` gets the extension's API, and its `secrets` export names the keys it reads from `secrets.json`; `vscode/loop.js` `runLoop` runs timed jobs). Plugins are installed and deployed on their own, outside this repo.
 
 ### Versioning
 
-One version number (`vscode/package.json`) is shared by the extension and the plugin. Work is done on a short-lived branch and, when quality is green, merged straight into main (no PR), followed by a `chore: <version>` commit.
+One version number (`vscode/package.json`) is shared by the extension and the plugin. Work is done on a short-lived branch and, when quality is green, merged straight into main (no PR).
 
 <a id="testing"></a>
 

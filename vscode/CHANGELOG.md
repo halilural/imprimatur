@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.88.0] - 2026-11-03
+
+### Added
+- One Imprimatur version per machine (#123). With the Claude Code plugin installed, the status
+  line runs the plugin's own copy (the code the hooks and the MCP server run), and it shows
+  `⚠ 0.73.0 ≠ extension 0.75.0` when its version differs from the extension's. At start the
+  extension warns when the plugin is another version, with an "Update the plugin" button.
+
 ## [0.87.0] - 2026-11-03
 
 ### Added
