@@ -4,6 +4,16 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.86.0] - 2026-11-03
+
+### Changed
+- The version history takes less room with nothing lost (#121). Once a day the extension drops
+  only what another stored value already says (an unchanged create, a repeated "before", a
+  section's latest body that is its body now) and reads it back when a history is shown. Before
+  the first run it writes a full copy of the database next to it
+  (`imprimatur-backup-<date>.db`). On a copy of a real database the version tables went from
+  26.2 MB to 16.2 MB, and every history read back exactly the same.
+
 ## [0.85.0] - 2026-11-03
 
 ### Changed

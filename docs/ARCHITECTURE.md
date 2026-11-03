@@ -125,9 +125,23 @@ The shared modules (`vscode/diff.js`, `waiting.js`, `audit.js`, `tasks.js`, `rec
 
 Every connection opens with `journal_mode=WAL`, `journal_size_limit=4 MB`, `synchronous=NORMAL`, `busy_timeout=5000`, `foreign_keys=ON`. The extension keeps one long connection, each hook process a short one, and the MCP server its own. Every write is a short `BEGIN IMMEDIATE` transaction: the record and its version row are written in the same transaction, and a plugin's `onChange` runs inside that transaction's savepoint. A new file's first switch to WAL is retried for 5 s. Tests cover 12 processes opening and writing a new file at the same time.
 
-### Upkeep (#117)
+### Upkeep (#117, #121)
 
-Once a day across processes (meta `maint:at`), `db.maintain()` runs `wal_checkpoint(TRUNCATE)`, `incremental_vacuum` (only when the file is already incremental), and `PRAGMA optimize`. When free pages pass 5% of the file, the extension runs a `VACUUM` in a worker thread (`db-maint.js`) on its own connection. Other connections wait for the write lock for its length, up to their busy timeout. A WAL database cannot be switched to incremental `auto_vacuum` without closing every other connection, so a full VACUUM is the tool. Measured on a copy of the real file: 88.6 MB → 65.1 MB and the WAL 27.8 MB → 0, in 454 ms.
+Once a day across processes (meta `maint:at`), `db.maintain()` runs `wal_checkpoint(TRUNCATE)`, `incremental_vacuum` (only when the file is already incremental), and `PRAGMA optimize`. The extension then:
+
+1. compacts the version tables losslessly (`db.compactVersions`, `vscode/version-compact.js`), looking only at records and sections with a version newer than the last run (meta `compact:record`, `compact:doc`). Before the first run, a full copy of the database goes to `imprimatur-backup-<date>.db` (`VACUUM INTO`, in a worker; meta `compact:backup` names it);
+2. runs a `VACUUM` in a worker thread when free pages pass 5% of the file. Other connections wait for the write lock for its length, up to their busy timeout. A WAL database cannot be switched to incremental `auto_vacuum` without closing every other connection, so a full VACUUM is the tool.
+
+Measured on a copy of the real file:
+- #117: 88.6 MB → 65.1 MB and the WAL 27.8 MB → 0, in 454 ms.
+- #121: the version tables went 26.2 MB → 16.2 MB (38%) in 0.9 s. Every record, task, section and agent history read back byte for byte the same.
+
+**What compaction drops**, each only where another stored value says it:
+- an update's `before` field that an earlier stored `after` set;
+- the create of a record never changed since, kept as `{"@row": [keys]}` and read back from the record;
+- a section's latest `after.body` equal to its body now, kept as `"@body": 1`.
+
+The readers (`versionsOf`, `taskVersions`, `agentChanges`, `sectionVersions`) fill these back in. Nothing is derived from a compacted value, so the job stays lossless on every later run. The history of superseded sections is kept whole (option B, dropping it, is not taken).
 
 ### Schema (version 4, `PRAGMA user_version`)
 
@@ -137,14 +151,14 @@ The `MIGRATIONS` array is applied in order inside a single `BEGIN IMMEDIATE`; a 
    - `repos(uid, root UNIQUE, origin, name)`: `root` is the git root; `origin` is the normalized remote (ssh and https are written the same).
    - `tasks(uid, repo_id, key, title, status, epic_id, summary)`: `key` is `#57` or a Jira key (`PROJ-12`), special tasks are `ADR`, `PDR`, `TEST`; `status` is `open|active|done|dropped`; `summary` is the one-line "where we left off".
    - `records(uid, task_id, kind, owner, status, pointer, title, body, position, parent_id, links)`: `kind` has 9 values; `owner` is `C` (agent) / `K` (user); the 👉 `pointer` is at most one per task (partial unique index) and only on an open record; `position` is REAL (insertion without renumbering); `parent_id` is the answer's question.
-   - `record_versions(record_id, at, actor_kind, actor, op, before, after)`: who changed what, when and in which fields (`agent|user|hook|import`, session or client).
+   - `record_versions(record_id, at, actor_kind, actor, op, before, after)`: who changed what, when and in which fields (`agent|user|hook|import`, session or client). `before` and `after` name only the fields that changed.
 2. **Meta:** `meta`, a small key-value table.
 3. **Issue tracker:** `tracker_outbox` (the close/reopen queue, with try and backoff fields), `tracker_state` (the last pulled state of each issue). Device-specific.
 4. **Design documents:** `documents(repo_id, kind architecture|product, title)`, `doc_sections(doc_id, key, title, body, position, status current|superseded)`, `doc_section_records` (records that contribute to a section), `doc_versions`.
 
 ### Invariants
 
-- Records and sections are **never deleted**: a record becomes `dropped`, a section becomes `superseded`; the version history stays complete and foreign keys never dangle.
+- Records and sections are **never deleted**: a record becomes `dropped`, a section becomes `superseded`; the version history stays complete (compaction keeps it readable whole) and foreign keys never dangle.
 - Every row has a random `uid`: `id` is used locally, `uid` is the stable identity outside this database.
 - When a task becomes `done`/`dropped`, the open row for that task in the epic is closed in the same transaction (see Issue tracker sync).
 - A section body is at most 40,000 characters, a title at most 300; the key is a slug (`a-z0-9-`, ≤ 64).
