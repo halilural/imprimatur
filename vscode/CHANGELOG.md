@@ -4,6 +4,16 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.76.0] - 2026-11-03
+
+### Added
+- `npm run setup` allows Imprimatur's MCP server in `~/.claude/settings.json`
+  (`mcp__imprimatur`, or `mcp__plugin_imprimatur_imprimatur` with the plugin) and prints the line
+  it adds; `--no-allow` skips it. In auto mode a call without the rule waited 5.5 s on average
+  for the permission check, against 5 to 108 ms for the call (#113).
+- The setup audit warns when the repo's effective settings have no allow rule for the server
+  (`IMP-MCP-001`). A deny or ask rule set on purpose is left alone.
+
 ## [0.75.0] - 2026-11-02
 
 ### Added

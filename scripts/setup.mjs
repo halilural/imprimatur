@@ -4,6 +4,8 @@
 //   found by their script name, added when missing, updated when the path or
 //   language differs; other hooks are left alone);
 // - the status line (hooks/statusline.mjs) there, only when none is set;
+// - an allow rule for the Imprimatur MCP server there (#113): in auto mode a call
+//   without one waits ~5.5 s for the permission check; --no-allow leaves it out;
 // - the Imprimatur MCP server (mcp/server.mjs) for Claude Code (user scope, via
 //   `claude mcp`), Cursor (~/.cursor/mcp.json) and Codex (~/.codex/config.toml)
 //   when those are installed;
@@ -25,7 +27,7 @@
 // The extension is packaged and installed from this checkout, unless VS Code already has it
 // from the Marketplace or Open VSX (it updates itself there): --vsix installs the local build anyway.
 //
-//   npm run setup -- [--plugin] [--lang Turkish] [--show-in both] [--exts md,mdx] [--no-extension] [--vsix] [--dry-run]
+//   npm run setup -- [--plugin] [--lang Turkish] [--show-in both] [--exts md,mdx] [--no-extension] [--vsix] [--no-allow] [--dry-run]
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -508,6 +510,7 @@ function options(argv) {
     vsix: argv.includes("--vsix"),
     dry: argv.includes("--dry-run"),
     plugin: argv.includes("--plugin"),
+    allow: !argv.includes("--no-allow"),
   };
 }
 
@@ -601,10 +604,13 @@ function main() {
   const fromPlugin = opts.plugin || pluginEnabled(has("claude") ? claudeJson(["plugin", "list", "--json"]) : undefined);
   const hooked = opts.plugin ? removeOurHooks(before) : fromPlugin ? { settings: before, changes: [] } : mergeHooks(before, { root, lang: opts.lang, exts: opts.exts });
   const status = mergeStatusLine(hooked.settings, { root });
-  const settings = status.settings;
-  const changes = [...hooked.changes, ...(status.change ? [status.change] : [])];
+  // The rule names the server Claude Code runs: the plugin's or ours (#113).
+  const { ALLOW, mergeAllow } = require("../vscode/mcp-allow.js");
+  const allowed = opts.allow ? mergeAllow(status.settings, fromPlugin ? ALLOW.plugin : ALLOW.settings) : { settings: status.settings, change: undefined };
+  const settings = allowed.settings;
+  const changes = [...hooked.changes, ...(status.change ? [status.change] : []), ...(allowed.change ? [allowed.change] : [])];
 
-  console.log(`Hooks in ${file}${fromPlugin ? ` (the ${PLUGIN_ID} plugin brings them)` : ""}:`);
+  console.log(`Settings in ${file}${fromPlugin ? ` (the ${PLUGIN_ID} plugin brings them)` : ""}:`);
   console.log(changes.length ? changes.map((c) => `  ${c}`).join("\n") : "  all in place");
   if (fromPlugin && !opts.plugin && removeOurHooks(before).changes.length) {
     console.log("  Imprimatur's hooks are also in this file and would run twice: npm run setup -- --plugin takes them out.");

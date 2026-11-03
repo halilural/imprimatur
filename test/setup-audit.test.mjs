@@ -12,6 +12,11 @@ const { openDb } = require("../vscode/db.js");
 
 const home = "/home/u";
 const d = (rule, file, message, extra = {}) => ({ level: "warning", rule, file, line: 1, column: 1, message, category: "claude-hooks", ...extra });
+/** A repo whose local settings allow Imprimatur's MCP server: no IMP-MCP-001 finding (#113). @param {string} root */
+const allowMcp = (root) => {
+  fs.mkdirSync(path.join(root, ".claude"), { recursive: true });
+  fs.writeFileSync(path.join(root, ".claude", "settings.local.json"), JSON.stringify({ permissions: { allow: ["mcp__imprimatur"] } }));
+};
 
 test("audit: a file's group — plugin (named), worktree, user, project", () => {
   assert.deepEqual(groupOf("/home/u/.claude/plugins/cache/claude-plugins-official/datadog/0.7.17/hooks/hooks.json", { home }), { group: "plugin", owner: "datadog" });
@@ -72,6 +77,7 @@ test("audit: runs write the AUDIT task — applied when gone, back when found ag
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "audit-db-"));
   const db = openDb({ path: path.join(dir, "imprimatur.db") });
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "audit-repo-"));
+  allowMcp(root);
   // explain answers from a fake agnix: no process is started.
   const spawn = /** @type {any} */ ((_bin, args) => ({ status: 0, stdout: JSON.stringify({ id: args[1], name: "Rule", evidence: { source_urls: ["https://example.com/doc"] } }) }));
   const run = (diagnostics) => auditRoot(db, { root }, { bin: "agnix", spawn, report: { files_checked: 2, diagnostics } });
@@ -128,6 +134,7 @@ test("audit: the MCP tool audits the repo with the agnix it finds (AGNIX_BIN)", 
   const db = openDb({ path: path.join(dir, "imprimatur.db") });
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "audit-mcp-repo-"));
   require("node:child_process").execFileSync("git", ["init", "-q", root]);
+  allowMcp(root);
   // A fake agnix: one finding for any path, a rule for explain.
   const bin = path.join(dir, "agnix");
   fs.writeFileSync(bin, `#!/bin/sh\nif [ "$1" = explain ]; then echo '{"id":"CC-HK-010","name":"Timeout Policy"}'; else echo '{"files_checked":1,"diagnostics":[{"level":"warning","rule":"CC-HK-010","file":"hooks/hooks.json","line":1,"message":"no timeout"}]}'; exit 1; fi\n`, { mode: 0o755 });
@@ -286,4 +293,37 @@ test("audit: what Claude Code loads — installed, on, a plugin part; the rest n
   assert.deepEqual(auditGroups(recs).map((g) => [g.key, g.count]), [["st:open", 1], ["st:idle", 3]]);
   assert.deepEqual(auditGroups(recs)[1].children.map((g) => g.label), ["Marketplace catalog", "Leftover temp clone"]);
   assert.equal(summaryLine(recs), "1 open (1 warning) · 3 not loaded");
+});
+
+test("audit (#113): no allow rule for Imprimatur's MCP server is a warning of its own; an allow rule clears it", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "audit-allow-"));
+  const db = openDb({ path: path.join(dir, "imprimatur.db") });
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "audit-allow-repo-"));
+  const h = fs.mkdtempSync(path.join(os.tmpdir(), "audit-allow-home-"));
+  const managedDir = path.join(dir, "managed");
+  // agnix must not be asked to explain Imprimatur's rule.
+  const spawn = /** @type {any} */ ((_bin, args) => {
+    assert.notEqual(args[1], "IMP-MCP-001");
+    return { status: 0, stdout: "{}" };
+  });
+  const run = () => auditRoot(db, { root, home: h }, { bin: "agnix", spawn, managedDir, report: { files_checked: 0, diagnostics: [] } });
+  try {
+    let s = run();
+    assert.equal(s.added, 1);
+    const task = db.taskByKey(db.repoByRoot(root).id, TASK);
+    const [r] = db.recordsOf(task.id, { dropped: true });
+    assert.match(r.title, /^IMP-MCP-001: No allow rule for Imprimatur's MCP server/);
+    assert.equal(r.links.audit.group, "user");
+    assert.match(r.body, /npm run setup/);
+    assert.match(r.body, /code.claude.com\/docs\/en\/permissions/);
+    // The plugin's server name in user settings counts too.
+    fs.mkdirSync(path.join(h, ".claude"));
+    fs.writeFileSync(path.join(h, ".claude", "settings.json"), JSON.stringify({ permissions: { allow: ["mcp__plugin_imprimatur_imprimatur"] } }));
+    s = run();
+    assert.equal(s.resolved, 1);
+    // The global audit never adds it (the repo audit does, once).
+    assert.equal(auditRoot(db, { root: h, home: h, global: true }, { bin: "agnix", spawn, managedDir, report: { diagnostics: [] } }).findings, 0);
+  } finally {
+    db.close();
+  }
 });

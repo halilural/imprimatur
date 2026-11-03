@@ -18,6 +18,7 @@ const path = require("node:path");
 /** The agnix release this code reads; its JSON shape is pinned with it. */
 const AGNIX = "agnix@0.57.0";
 const recs = require("./recs.js");
+const mcpAllow = require("./mcp-allow.js");
 /** Findings are records of the repo's Recommendations task (#87; AUDIT before). */
 const TASK = recs.TASK;
 /** @type {import("./db.js").Actor} */
@@ -336,12 +337,15 @@ const GLOBAL_DIRS = [".claude", ".cursor", ".codex", ".gemini", ".kiro", ".copil
 /**
  * Audits one root and writes the plan to its Recommendations task (RECS), in one transaction.
  * @param {any} db @param {{root: string, global?: boolean, home?: string, plugins?: ReturnType<typeof pluginsOf>}} scope
- * @param {{bin: string, dryRun?: boolean, rules?: Map<string, Rule | undefined>, spawn?: typeof spawnSync, now?: number, report?: any}} o
+ * @param {{bin: string, dryRun?: boolean, rules?: Map<string, Rule | undefined>, spawn?: typeof spawnSync, now?: number, report?: any, managedDir?: string}} o
  */
-function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = spawnSync, now = Date.now(), report }) {
+function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = spawnSync, now = Date.now(), report, managedDir }) {
   const home = scope.home ?? os.homedir();
   const paths = pathsOf(scope);
-  const rep = report ?? (paths.length ? runAgnix(bin, scope.root, { paths, spawn }) : { files_checked: 0, diagnostics: [] });
+  const agnix = report ?? (paths.length ? runAgnix(bin, scope.root, { paths, spawn }) : { files_checked: 0, diagnostics: [] });
+  // Imprimatur's own check (#113), on the repo's effective settings: once per repo, not again in the global audit.
+  const own = scope.global ? undefined : mcpAllow.allowDiagnostic({ root: scope.root, home, ...(managedDir ? { managedDir } : {}) });
+  const rep = own ? { ...agnix, diagnostics: [...(agnix.diagnostics ?? []), own] } : agnix;
   const findings = findingsOf(rep, { root: scope.root, home, global: scope.global, plugins: scope.plugins });
   const repo = db.repoOf(scope.root, scope.global ? { name: "~" } : {});
   // Read only: RECS and the containers it replaces (a dry run moves nothing).
@@ -357,6 +361,7 @@ function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = 
   const first = read().plan;
   if (dryRun) return summaryOf(first);
   const ruleOf = (/** @type {string} */ id) => {
+    if (id === mcpAllow.RULE) return mcpAllow.RULE_INFO;
     if (!rules.has(id)) rules.set(id, explainRule(bin, id, { spawn }));
     return rules.get(id);
   };
