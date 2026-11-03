@@ -4,41 +4,56 @@
 
 ## Contents
 
-1. [Product summary](#summary)
-2. [Who it is for](#users)
-3. [Problems it solves](#problems)
-4. [Principles](#principles)
-5. [Main flows](#flows)
-6. [Surfaces and features](#surfaces)
-7. [Success metrics](#metrics)
-8. [Roadmap](#roadmap)
-9. [Out of scope](#non-goals)
-10. [Agent setup audit (planned)](#agent-setup-audit)
-11. [Project glossary](#glossary)
-12. [A task's analysis](#task-analysis)
-13. [Unread: comprehension debt (#91, #92)](#unread)
-14. [/study: studying a topic (#95)](#study)
-15. [/exercise: practise any topic in small steps (#108)](#exercise)
-16. [Social media: /social-post and the Social document (#109)](#social)
-17. [The agent's toolset: seen, versioned, installed, found (#138, planned)](#agent-toolset)
+- [Problem](#chapter-problem)
+  1. [Problems it solves](#problems)
+- [Users](#chapter-users)
+  2. [Who it is for](#users)
+- [Goals](#chapter-goals)
+  3. [Product summary](#summary)
+  4. [Principles](#principles)
+- [Non-goals](#chapter-non-goals)
+  5. [Out of scope](#non-goals)
+- [Features](#chapter-features)
+  6. [Main flows](#flows)
+  7. [Surfaces and features](#surfaces)
+  8. [A task's analysis](#task-analysis)
+  9. [Agent setup audit (planned)](#agent-setup-audit)
+  10. [Unread: comprehension debt (#91, #92)](#unread)
+  11. [/study: studying a topic (#95)](#study)
+  12. [/exercise: practise any topic in small steps (#108)](#exercise)
+  13. [Social media: /social-post and the Social document (#109)](#social)
+  14. [The agent's toolset: seen, versioned, installed, found (#138, planned)](#agent-toolset)
+- [Metrics](#chapter-metrics)
+  15. [Success metrics](#metrics)
 
-<a id="summary"></a>
+<a id="chapter-problem"></a>
 
-## 1. Product summary
+## Problem
 
-**Imprimatur: the agent writes, you approve.** (*Imprimatur* is Latin for "let it be printed": a stamp of approval.)
+<a id="problems"></a>
 
-An open source (MIT) tool made of a VS Code extension, Claude Code hooks and an MCP server. It answers three questions of a developer who works with a coding agent, in one place:
+### 1. Problems it solves
 
-1. **What did the agent change?** The agent's document edits stay marked in the editor and in the Markdown preview, like Word's tracked changes, until they are accepted. A block, a file or a whole edit is **Accepted** with one click. It does not depend on Git.
-2. **What is the agent waiting on me for?** Its questions, permission requests and "test this" steps are collected across sessions in the **Waiting on you** list; the list updates itself after every turn.
-3. **Where did we leave off, and what did we decide?** Tasks, to-dos, questions, decisions, ADRs and PDRs live in Imprimatur's database; the agent (Claude Code, Cursor, Codex) reads and writes them through MCP tools, and the user sees and edits them in the panel. The architecture and product documents are living documents fed by these records.
+| Problem | What happens today | With Imprimatur |
+|---|---|---|
+| The agent's document changes are hard to review | A git diff or a summary in chat; after stage/commit the change is lost, and several turns pile on top of each other | Every change stays marked in the editor and preview until Accepted; independent of git; a one-sentence explanation and history for every edit |
+| The agent is waiting for the human and it goes unnoticed | The question is left in the middle of the chat and is lost at the next prompt; with parallel sessions nobody knows who is waiting | Requests from all sessions in one list, tied to a task, closing themselves; a count in the status bar and on the sidebar badge |
+| "Where did we leave off" is rebuilt every session | TODO.md files, chat history, memory | A 👉 pointer and a one-line summary per task; handed to the agent at the start of a session |
+| Decisions and design are scattered | In chat, in commit messages, in Markdown | Decision, ADR and PDR records are versioned; the architecture and product documents link to them |
+| What the agent did is invisible | Only edits are seen | Reads, searches, web, MCP, sub-agent and skill calls as rows tied to a task |
+| The configuration that shapes the agent is scattered | CLAUDE.md, rules, skills, Cursor rules and hooks are in separate places; drift goes unnoticed | Agent Setup: one tool-independent view, change tracking, health, drift, merged settings |
+| Process rules are copied into every repo | Separate `.claude/hooks/*.sh` in every repo, and the variants diverge | One global hook, plus a small settings file committed per repo |
+| The tracker and the tasks drift apart | The status of a GitHub issue and the status of the task are separate | Two-way status with GitHub/Jira |
 
-It is used daily by a developer who works with an AI agent across several repositories, possibly on more than one machine. Imprimatur also accepts optional plugins.
+The market research (2026-10-05) concluded that the bottleneck is not tokens but human attention: reviewing, noticing a wait, and knowing whether a rule worked.
+
+<a id="chapter-users"></a>
+
+## Users
 
 <a id="users"></a>
 
-## 2. Who it is for
+### 2. Who it is for
 
 ### Primary user
 
@@ -58,26 +73,27 @@ An **individual developer** who spends most of the day with a coding agent (firs
 
 The open source extension is the distribution and trust vehicle: because the hook reads the agent's session transcripts, open code builds trust. Today it installs from a repo clone (`npm run setup`) or as a Claude Code plugin; Marketplace / Open VSX publishing is on the roadmap.
 
-<a id="problems"></a>
+<a id="chapter-goals"></a>
 
-## 3. Problems it solves
+## Goals
 
-| Problem | What happens today | With Imprimatur |
-|---|---|---|
-| The agent's document changes are hard to review | A git diff or a summary in chat; after stage/commit the change is lost, and several turns pile on top of each other | Every change stays marked in the editor and preview until Accepted; independent of git; a one-sentence explanation and history for every edit |
-| The agent is waiting for the human and it goes unnoticed | The question is left in the middle of the chat and is lost at the next prompt; with parallel sessions nobody knows who is waiting | Requests from all sessions in one list, tied to a task, closing themselves; a count in the status bar and on the sidebar badge |
-| "Where did we leave off" is rebuilt every session | TODO.md files, chat history, memory | A 👉 pointer and a one-line summary per task; handed to the agent at the start of a session |
-| Decisions and design are scattered | In chat, in commit messages, in Markdown | Decision, ADR and PDR records are versioned; the architecture and product documents link to them |
-| What the agent did is invisible | Only edits are seen | Reads, searches, web, MCP, sub-agent and skill calls as rows tied to a task |
-| The configuration that shapes the agent is scattered | CLAUDE.md, rules, skills, Cursor rules and hooks are in separate places; drift goes unnoticed | Agent Setup: one tool-independent view, change tracking, health, drift, merged settings |
-| Process rules are copied into every repo | Separate `.claude/hooks/*.sh` in every repo, and the variants diverge | One global hook, plus a small settings file committed per repo |
-| The tracker and the tasks drift apart | The status of a GitHub issue and the status of the task are separate | Two-way status with GitHub/Jira |
+<a id="summary"></a>
 
-The market research (2026-10-05) concluded that the bottleneck is not tokens but human attention: reviewing, noticing a wait, and knowing whether a rule worked.
+### 3. Product summary
+
+**Imprimatur: the agent writes, you approve.** (*Imprimatur* is Latin for "let it be printed": a stamp of approval.)
+
+An open source (MIT) tool made of a VS Code extension, Claude Code hooks and an MCP server. It answers three questions of a developer who works with a coding agent, in one place:
+
+1. **What did the agent change?** The agent's document edits stay marked in the editor and in the Markdown preview, like Word's tracked changes, until they are accepted. A block, a file or a whole edit is **Accepted** with one click. It does not depend on Git.
+2. **What is the agent waiting on me for?** Its questions, permission requests and "test this" steps are collected across sessions in the **Waiting on you** list; the list updates itself after every turn.
+3. **Where did we leave off, and what did we decide?** Tasks, to-dos, questions, decisions, ADRs and PDRs live in Imprimatur's database; the agent (Claude Code, Cursor, Codex) reads and writes them through MCP tools, and the user sees and edits them in the panel. The architecture and product documents are living documents fed by these records.
+
+It is used daily by a developer who works with an AI agent across several repositories, possibly on more than one machine. Imprimatur also accepts optional plugins.
 
 <a id="principles"></a>
 
-## 4. Principles
+### 4. Principles
 
 ### 1. Nothing slips through
 
@@ -109,9 +125,30 @@ The market research (2026-10-05) concluded that the bottleneck is not tokens but
 - In an untrusted folder no model, `gh` or repo script runs; secrets live in a `0600` file; comments sent to the tracker are fixed text.
 - Process checks do not run unless the repo explicitly turns them on.
 
+<a id="chapter-non-goals"></a>
+
+## Non-goals
+
+<a id="non-goals"></a>
+
+### 5. Out of scope
+
+- **A cost dashboard or enterprise FinOps:** providers (Claude Code `/usage`, Cursor, Copilot) and free tools already report cost. Imprimatur shows what eats context and what does not help.
+- **Being a code review tool:** review is for documents (`md`, `mdx` by default); for code, git diff and existing tools are enough. The extension list can be widened but that is not the goal.
+- **Changing the Git workflow:** Imprimatur does not commit, stage or manage branches; it does not open PRs.
+- **Sending text to the chat:** Claude Code does not allow sending text to an open chat from outside; "Send to Claude" was tried and removed.
+- **Process rules specific to a repo:** rules such as an em dash ban, deploy, migration and approval gates stay in the repo; Imprimatur carries only the general process checks.
+- **Managing tool configuration:** Agent Setup is read-only; turning rules on and off or moving them across repos is out of scope for now.
+- **Making Markdown the source of truth:** README, CLAUDE.md, AGENTS.md, rules and skills stay in files as tool configuration; the source of truth for records and design documents is the database.
+- **Command-line task management** (like `imprimatur done --task`) and a restore-from-archive command: not seen as needed.
+
+<a id="chapter-features"></a>
+
+## Features
+
 <a id="flows"></a>
 
-## 5. Main flows
+### 6. Main flows
 
 ```mermaid
 flowchart TD
@@ -166,7 +203,7 @@ When a task is done, its GitHub issue closes (or moves to Done in Jira); an issu
 
 <a id="surfaces"></a>
 
-## 6. Surfaces and features
+### 7. Surfaces and features
 
 ### VS Code panel (the Imprimatur panel)
 
@@ -206,9 +243,122 @@ Optional per repo (`.claude/imprimatur.json`): where we left off at session star
 
 `npm run setup` (install), `npm run import` (import old Markdown records), `npm run tracker`, `node scripts/github-webhooks.mjs`, `node scripts/stale-epic-lines.mjs`.
 
+<a id="task-analysis"></a>
+
+### 8. A task's analysis
+
+STORY: I read a task's analyses, plans, spike results and research notes (wherever the agent wrote the file, including the plan it came out of plan mode with) in one place, the **Analysis** tab; the task page stays focused on to-dos.
+
+- A single **Analysis** tab in the top menu: under it **Architecture**, **Product**, **Glossary** and **Task analyses**; the tab returns to the sub-page opened last.
+- **Task analyses:** on the left the tasks that have analyses (newest on top), on the right the selected task's files; one card per file, the sections are the file's `##` headings. A file that was read on this machine opens in the editor with "open", "Go to task" takes you to the task page.
+- **Analyses without a task:** below the list; a task picker next to every file, it moves to the selected task.
+- **Task page:** an "Analysis · N files →" link in the title; at the top Where we left off and Waiting on you, below it tabs: To-dos, Decisions, Notes, Tests, Activity (the selected tab is remembered, while searching all are shown).
+- What was written in past sessions comes in once per repo in the background; by hand: **Imprimatur: Take Task Analyses from Past Sessions** or `npm run analysis` (`--dry-run`, `--no-model`).
+- To turn it off: `"analysis": false` in `.claude/imprimatur.json`; to exclude a path: `{"exclude": ["drafts/"]}`.
+
+<a id="agent-setup-audit"></a>
+
+### 9. Agent setup audit (planned)
+
+The agent setup (CLAUDE.md, AGENTS.md, `.claude/` settings, hooks, skills, subagents, MCP, plugins, Cursor/Codex/Copilot/Gemini/Kiro files) is audited with rules based on the official documentation. The rule engine is agnix and it is used with its full coverage: no rule or file is cut.
+
+- Findings are not hidden; they are grouped as project / user / plugin / worktree and shown with category and level counts. Every finding has a link to the rule's documentation and the date it was verified.
+- Every finding is an Imprimatur record: open / applied / rejected (with a reason). A finding that disappears becomes "applied", a rejected one is not reopened; the difference between two scans is visible. Competitors have no per-suggestion status history; that is Imprimatur's difference.
+- Later: an LLM layer (quality, contradiction, stale instruction), consistency across agents, context cost × usage (#29).
+
+Epic [#76](https://github.com/halilural/imprimatur/issues/76), first piece of work [#77](https://github.com/halilural/imprimatur/issues/77).
+
+<a id="unread"></a>
+
+### 10. Unread: comprehension debt (#91, #92)
+
+The agent writes code and documents faster than a person can read them; Imprimatur shows how much you have not yet seen.
+
+- **Task list:** "N unread" per task.
+- **Task page and Home:** an "Unread" card: edits that are not accepted (clicking filters Agent changes by that task) and document sections the agent changed since your last read; each one opens, with "Read" or "Mark all read".
+- **Architecture / Product / Glossary:** an "Unread" mark and a left edge line on the changed section, a dot in the contents, "N unread · Mark all read" in the title.
+- **Status line:** `Imprimatur · 3 waiting on you · 12 unread · …`.
+
+A section you wrote counts as read. Read marks are specific to the device. On first install everything that exists counts as read.
+
+Next: a "since your last read" diff (#93), an end-of-turn briefing (#94).
+
+<a id="study"></a>
+
+### 11. /study: studying a topic (#95)
+
+To learn a design decision, a feature or a document the agent made well enough to explain it, defend it and point to it in the code: `/study #92` (or "I want to study the section_reads design").
+
+1. A **study note** is written to the task's Analysis page: what and why, how it works, where in the code (a tour in order with `file:line`), the alternatives and why they were not chosen, limits and risks, terms, sources. Nothing without a reason in the records is invented; it says "no reason in the records".
+2. **Quiz yourself**: questions come one at a time (comprehension, why, alternative, where in the code, debug, what if it were this way, objection). You answer first; the agent says full / partial / missing and shows what is missing with its source; an "I don't know" gets a hint first.
+3. **Mastery**: the score and weak points stay on the task as a note. The next `/study` asks the weak questions first and says what changed since then. A reason found missing in the document becomes a to-do for the agent.
+
+Why it is this way: in Anthropic's 2026 study, people who asked for explanations and asked questions kept 65–86% of the topic, those who only delegated kept 39%.
+
+<a id="exercise"></a>
+
+### 12. /exercise: practise any topic in small steps (#108)
+
+The user picks any topic (a language feature, a concept for an interview, a spoken language, a book chapter, a sport) and wants to practise it, not only read about it. `/exercise <topic>` in Claude Code turns it into an exercise they tick in the panel's **Exercises** tab.
+
+### What the user gets
+- **A few questions first:** why (understand, do, an exam or interview), their level, time and place; then two or three quick diagnostic questions, so what they know is skipped.
+- **A "can do" goal** with how it is checked at the end.
+- **5 to 9 steps of 10 to 25 minutes**, each with a kind (learn, example, predict, do, vary, explain, recall), what it is for, and when it counts as done: something they can show.
+- **Coaching without answers:** the agent reviews what they bring, gives a hint, then a narrower one; the solution only when they ask after trying.
+- **A closing recall** without notes; the weak points are kept for the next session.
+
+### The Exercises tab
+Progress, the step to do now, a box per step, **skip** (why goes in its note), a note per step, **split** (copies `/exercise split step … of exercise …` for Claude Code), drop and resume, finished exercises below.
+
+### Rules
+- Exercises are the user's, not a repo's or a task's: the same list in every project. They stay on this machine.
+- A split step is ticked when its smaller steps are; an exercise is done when its steps are.
+- Reading is at most a third of the steps; every exercise has a do step and a closing recall.
+
+Later: spaced recall of weak points (1, 3, 7 days, then FSRS-like) on Home; a quick create from the panel.
+
+<a id="social"></a>
+
+### 13. Social media: /social-post and the Social document (#109)
+
+Announcing a project means a different post for each channel, and each channel has its own rules: a subreddit's sidebar, X's character counting, Show HN's guidelines, Product Hunt's launch page. Rules change, and a post that breaks one is removed or ignored.
+
+### /social-post
+- Reads the target platform's own rules and docs **when it writes**, not from memory. When a page cannot be fetched (Reddit blocks most fetches; Discord rules live in the server), the user pastes it, or the post is marked "rules not checked".
+- Keeps a dated **rules card** per channel: length, title format, self-promotion, where links go, flair, required parts, timing, what is forbidden.
+- Writes the post to fit the card and that community's way of reading, counts characters with a script, and checks every fact against its source.
+- Where a platform asks for text written by hand (Show HN), it gives the facts and an outline instead of a draft.
+- Never posts, schedules or logs in for the user.
+
+### The Social document (off by default)
+- **Imprimatur: Turn on social media tracking** for a repo adds a **Social** page under Analysis, next to Architecture, Product and Glossary, kept in `docs/SOCIAL.md`.
+- One section per channel: the rules read, the post, its status (planned, posted, link), results over time, what was learned. /social-post writes it and updates a channel when the user says a post went out or brings its numbers.
+- **Turn off** hides the page and stops the file; the document is kept for when it is turned on again.
+
+<a id="agent-toolset"></a>
+
+### 14. The agent's toolset: seen, versioned, installed, found (#138, planned)
+
+Planned in epic #138 (opened 2026-11-04). Imprimatur becomes the place where everything the agent uses is seen and managed. It builds on the Agent setup view, which already shows every agent file per repo and globally, the drift between copies, the effective settings, and the audit findings.
+
+- **Seen (#139):** every third-party skill, plugin, MCP server and hook script, with its source, installed version or commit, and scope. An item installed at more than one scope is flagged.
+- **Versioned (#140):** "update available" with what changed, a one-click update, and a lock so an update can be undone.
+- **Installed (#141):** a must-have set ships with Imprimatur and goes into every repo, and a repo can turn an item off. Imprimatur changes only what it installed. Repo-specific agent files stay in the repo.
+- **Checklist (#142):** the panel lists what this repo is missing or has out of date. Each item has an action, and Home shows the count.
+- **Recommended (#143):** maintained, well-adopted OSS skills, plugins and MCP servers that match the repo's stack.
+- **Found on demand (#144):** when work touches a technology with no skill installed, Imprimatur finds candidates, vets them, and installs one once the user agrees.
+- **Cost (#145):** what each hook costs per run and per session.
+
+Anything brought in is vetted first: its license allows redistribution, its hooks and network calls have been read, and it adds no second task store, memory store or context injector.
+
+<a id="chapter-metrics"></a>
+
+## Metrics
+
 <a id="metrics"></a>
 
-## 7. Success metrics
+### 15. Success metrics
 
 The metrics are values measured in real repositories of different sizes.
 
@@ -243,155 +393,3 @@ The metrics are values measured in real repositories of different sizes.
 
 - How long the agent waits for the user and how soon changes are reviewed (#42).
 - The per-item token cost of the context loaded in every session (#29).
-
-<a id="roadmap"></a>
-
-## 8. Roadmap
-
-Open work, by priority:
-
-| Work | What | Status |
-|---|---|---|
-| [#67](https://github.com/halilural/imprimatur/issues/67) Claude Code plugin switch | Hooks and the MCP server as a plugin; moving from the settings file to the plugin with `npm run setup -- --plugin` | Code is ready (0.38.0, `validate --strict` passes); the switch waits for the user's decision |
-| [#29](https://github.com/halilural/imprimatur/issues/29) Context budget | In Agent Setup, the approximate tokens of each file, the total loaded in every session (CLAUDE.md + imports, rules, skill/agent descriptions, MCP definitions), a warning for big ones, a suggestion to remove with the tokens it would save | Next; the first piece of #41 |
-| [#41](https://github.com/halilural/imprimatur/issues/41) Epic: Cost and context (open source) | Show what eats context and which turns are wasted; the promise is not a "cost dashboard" | Open; starts with #29 |
-| [#1](https://github.com/halilural/imprimatur/issues/1) Marketplace + Open VSX publishing | Anyone can install the extension from the store, the Claude Code side comes with one command; CI (GitHub Actions) | A revised plan (R1–R7) waits for the user's approval |
-| [#6](https://github.com/halilural/imprimatur/issues/6) Manual tests | Manual tests of the editor and preview behavior (MT-AR-001…012) | Open; the tests are in the `TEST` task |
-| [#42](https://github.com/halilural/imprimatur/issues/42) Epic: Team (paid) | Configuration governance, drift across repos and machines, change history, "did this rule work", review and wait metrics | No sub-work; willingness to pay will be tested with a waitlist and a trial, not with interviews |
-
-### Known next steps
-
-- Linear in the tracker, and the board's Status field (postponed in #70).
-
-<a id="non-goals"></a>
-
-## 9. Out of scope
-
-- **A cost dashboard or enterprise FinOps:** providers (Claude Code `/usage`, Cursor, Copilot) and free tools already report cost. Imprimatur shows what eats context and what does not help.
-- **Being a code review tool:** review is for documents (`md`, `mdx` by default); for code, git diff and existing tools are enough. The extension list can be widened but that is not the goal.
-- **Changing the Git workflow:** Imprimatur does not commit, stage or manage branches; it does not open PRs.
-- **Sending text to the chat:** Claude Code does not allow sending text to an open chat from outside; "Send to Claude" was tried and removed.
-- **Process rules specific to a repo:** rules such as an em dash ban, deploy, migration and approval gates stay in the repo; Imprimatur carries only the general process checks.
-- **Managing tool configuration:** Agent Setup is read-only; turning rules on and off or moving them across repos is out of scope for now.
-- **Making Markdown the source of truth:** README, CLAUDE.md, AGENTS.md, rules and skills stay in files as tool configuration; the source of truth for records and design documents is the database.
-- **Command-line task management** (like `imprimatur done --task`) and a restore-from-archive command: not seen as needed.
-
-<a id="agent-setup-audit"></a>
-
-## 10. Agent setup audit (planned)
-
-The agent setup (CLAUDE.md, AGENTS.md, `.claude/` settings, hooks, skills, subagents, MCP, plugins, Cursor/Codex/Copilot/Gemini/Kiro files) is audited with rules based on the official documentation. The rule engine is agnix and it is used with its full coverage: no rule or file is cut.
-
-- Findings are not hidden; they are grouped as project / user / plugin / worktree and shown with category and level counts. Every finding has a link to the rule's documentation and the date it was verified.
-- Every finding is an Imprimatur record: open / applied / rejected (with a reason). A finding that disappears becomes "applied", a rejected one is not reopened; the difference between two scans is visible. Competitors have no per-suggestion status history; that is Imprimatur's difference.
-- Later: an LLM layer (quality, contradiction, stale instruction), consistency across agents, context cost × usage (#29).
-
-Epic [#76](https://github.com/halilural/imprimatur/issues/76), first piece of work [#77](https://github.com/halilural/imprimatur/issues/77).
-
-<a id="glossary"></a>
-
-## 11. Project glossary
-
-Next to Architecture and Product, every repo keeps a third living document: the **Glossary**. The project's terms stand in one place, with one meaning each.
-
-- Every term is a section: the title is the term, the text is its definition (what it means, where it appears, what not to confuse it with). Terms are listed alphabetically and without numbers.
-- In the panel there is a **Glossary** tab and a button in the launcher: a term is added with "New term", updated with "Edit"; its history is versioned like a section's. A term that is no longer used is not deleted, it ends with "Mark superseded".
-- The agent reads and writes the glossary through MCP (`doc_get` / `doc_section_upsert`, `kind: "glossary"`). Its instruction: a new term or a term whose meaning changed is written to the glossary.
-- It is written to the repo as `docs/GLOSSARY.md`; edits in the file are reverted as in Architecture/Product.
-
-<a id="task-analysis"></a>
-
-## 12. A task's analysis
-
-STORY: I read a task's analyses, plans, spike results and research notes (wherever the agent wrote the file, including the plan it came out of plan mode with) in one place, the **Analysis** tab; the task page stays focused on to-dos.
-
-- A single **Analysis** tab in the top menu: under it **Architecture**, **Product**, **Glossary** and **Task analyses**; the tab returns to the sub-page opened last.
-- **Task analyses:** on the left the tasks that have analyses (newest on top), on the right the selected task's files; one card per file, the sections are the file's `##` headings. A file that was read on this machine opens in the editor with "open", "Go to task" takes you to the task page.
-- **Analyses without a task:** below the list; a task picker next to every file, it moves to the selected task.
-- **Task page:** an "Analysis · N files →" link in the title; at the top Where we left off and Waiting on you, below it tabs: To-dos, Decisions, Notes, Tests, Activity (the selected tab is remembered, while searching all are shown).
-- What was written in past sessions comes in once per repo in the background; by hand: **Imprimatur: Take Task Analyses from Past Sessions** or `npm run analysis` (`--dry-run`, `--no-model`).
-- To turn it off: `"analysis": false` in `.claude/imprimatur.json`; to exclude a path: `{"exclude": ["drafts/"]}`.
-
-<a id="unread"></a>
-
-## 13. Unread: comprehension debt (#91, #92)
-
-The agent writes code and documents faster than a person can read them; Imprimatur shows how much you have not yet seen.
-
-- **Task list:** "N unread" per task.
-- **Task page and Home:** an "Unread" card: edits that are not accepted (clicking filters Agent changes by that task) and document sections the agent changed since your last read; each one opens, with "Read" or "Mark all read".
-- **Architecture / Product / Glossary:** an "Unread" mark and a left edge line on the changed section, a dot in the contents, "N unread · Mark all read" in the title.
-- **Status line:** `Imprimatur · 3 waiting on you · 12 unread · …`.
-
-A section you wrote counts as read. Read marks are specific to the device. On first install everything that exists counts as read.
-
-Next: a "since your last read" diff (#93), an end-of-turn briefing (#94).
-
-<a id="study"></a>
-
-## 14. /study: studying a topic (#95)
-
-To learn a design decision, a feature or a document the agent made well enough to explain it, defend it and point to it in the code: `/study #92` (or "I want to study the section_reads design").
-
-1. A **study note** is written to the task's Analysis page: what and why, how it works, where in the code (a tour in order with `file:line`), the alternatives and why they were not chosen, limits and risks, terms, sources. Nothing without a reason in the records is invented; it says "no reason in the records".
-2. **Quiz yourself**: questions come one at a time (comprehension, why, alternative, where in the code, debug, what if it were this way, objection). You answer first; the agent says full / partial / missing and shows what is missing with its source; an "I don't know" gets a hint first.
-3. **Mastery**: the score and weak points stay on the task as a note. The next `/study` asks the weak questions first and says what changed since then. A reason found missing in the document becomes a to-do for the agent.
-
-Why it is this way: in Anthropic's 2026 study, people who asked for explanations and asked questions kept 65–86% of the topic, those who only delegated kept 39%.
-
-<a id="exercise"></a>
-
-## 15. /exercise: practise any topic in small steps (#108)
-
-The user picks any topic (a language feature, a concept for an interview, a spoken language, a book chapter, a sport) and wants to practise it, not only read about it. `/exercise <topic>` in Claude Code turns it into an exercise they tick in the panel's **Exercises** tab.
-
-### What the user gets
-- **A few questions first:** why (understand, do, an exam or interview), their level, time and place; then two or three quick diagnostic questions, so what they know is skipped.
-- **A "can do" goal** with how it is checked at the end.
-- **5 to 9 steps of 10 to 25 minutes**, each with a kind (learn, example, predict, do, vary, explain, recall), what it is for, and when it counts as done: something they can show.
-- **Coaching without answers:** the agent reviews what they bring, gives a hint, then a narrower one; the solution only when they ask after trying.
-- **A closing recall** without notes; the weak points are kept for the next session.
-
-### The Exercises tab
-Progress, the step to do now, a box per step, **skip** (why goes in its note), a note per step, **split** (copies `/exercise split step … of exercise …` for Claude Code), drop and resume, finished exercises below.
-
-### Rules
-- Exercises are the user's, not a repo's or a task's: the same list in every project. They stay on this machine.
-- A split step is ticked when its smaller steps are; an exercise is done when its steps are.
-- Reading is at most a third of the steps; every exercise has a do step and a closing recall.
-
-Later: spaced recall of weak points (1, 3, 7 days, then FSRS-like) on Home; a quick create from the panel.
-
-<a id="social"></a>
-
-## 16. Social media: /social-post and the Social document (#109)
-
-Announcing a project means a different post for each channel, and each channel has its own rules: a subreddit's sidebar, X's character counting, Show HN's guidelines, Product Hunt's launch page. Rules change, and a post that breaks one is removed or ignored.
-
-### /social-post
-- Reads the target platform's own rules and docs **when it writes**, not from memory. When a page cannot be fetched (Reddit blocks most fetches; Discord rules live in the server), the user pastes it, or the post is marked "rules not checked".
-- Keeps a dated **rules card** per channel: length, title format, self-promotion, where links go, flair, required parts, timing, what is forbidden.
-- Writes the post to fit the card and that community's way of reading, counts characters with a script, and checks every fact against its source.
-- Where a platform asks for text written by hand (Show HN), it gives the facts and an outline instead of a draft.
-- Never posts, schedules or logs in for the user.
-
-### The Social document (off by default)
-- **Imprimatur: Turn on social media tracking** for a repo adds a **Social** page under Analysis, next to Architecture, Product and Glossary, kept in `docs/SOCIAL.md`.
-- One section per channel: the rules read, the post, its status (planned, posted, link), results over time, what was learned. /social-post writes it and updates a channel when the user says a post went out or brings its numbers.
-- **Turn off** hides the page and stops the file; the document is kept for when it is turned on again.
-
-<a id="agent-toolset"></a>
-
-## 17. The agent's toolset: seen, versioned, installed, found (#138, planned)
-
-Planned in epic #138 (opened 2026-11-04). Imprimatur becomes the place where everything the agent uses is seen and managed. It builds on the Agent setup view, which already shows every agent file per repo and globally, the drift between copies, the effective settings, and the audit findings.
-
-- **Seen (#139):** every third-party skill, plugin, MCP server and hook script, with its source, installed version or commit, and scope. An item installed at more than one scope is flagged.
-- **Versioned (#140):** "update available" with what changed, a one-click update, and a lock so an update can be undone.
-- **Installed (#141):** a must-have set ships with Imprimatur and goes into every repo, and a repo can turn an item off. Imprimatur changes only what it installed. Repo-specific agent files stay in the repo.
-- **Checklist (#142):** the panel lists what this repo is missing or has out of date. Each item has an action, and Home shows the count.
-- **Recommended (#143):** maintained, well-adopted OSS skills, plugins and MCP servers that match the repo's stack.
-- **Found on demand (#144):** when work touches a technology with no skill installed, Imprimatur finds candidates, vets them, and installs one once the user agrees.
-- **Cost (#145):** what each hook costs per run and per session.
-
-Anything brought in is vetted first: its license allows redistribution, its hooks and network calls have been read, and it adds no second task store, memory store or context injector.

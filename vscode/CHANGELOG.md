@@ -4,6 +4,16 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.91.0] - 2026-11-04
+
+### Changed
+- ARCHITECTURE.md and PRODUCT.md have fixed chapters, the same in every repo (#129).
+  Architecture: Goals, Context and scope, Solution strategy, Building blocks, Deployment,
+  Crosscutting concepts, Decisions, Risks and technical debt. Product: Problem, Users,
+  Goals, Non-goals, Features, Metrics. Every chapter is shown, and an empty one says so.
+  Sections are numbered under their chapter, and sections not yet placed are listed
+  under "Unsorted". `doc_section_upsert` takes a `chapter`.
+
 ## [0.90.0] - 2026-11-03
 
 ### Changed
