@@ -4,6 +4,15 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.84.0] - 2026-11-03
+
+### Added
+- MCP tool profiles (#119): `core` (7 tools, ~1.7k tokens for the model), `standard` (10, ~2.7k)
+  and `all` (15, ~4.6k, the default). Set `IMPRIMATUR_TOOLS`, or `"mcp": {"tools": …}` in the
+  repo's `.claude/imprimatur.json` or in `config.json`; profiles, groups and tool names combine
+  (`core,exercise`). `core` and `standard` also leave out the output schemas: core's tool list
+  is 7.1 KB instead of 13.7 KB.
+
 ## [0.83.0] - 2026-11-03
 
 ### Security

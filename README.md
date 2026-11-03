@@ -136,6 +136,24 @@ Use `"mcp__imprimatur"` instead when you installed from a clone without the plug
 `npm run setup` adds the matching rule for you (`--no-allow` skips it), and the setup
 audit warns when the rule is missing (`IMP-MCP-001`).
 
+### Fewer MCP tools
+
+Claude Code loads MCP tools by name and fetches a tool's definition only when it is about to
+call it. Clients that load every definition up front (Cursor, Codex) pay for the whole list.
+To make the list shorter, pick a profile:
+
+| Profile | Tools | What the model reads |
+| --- | --- | --- |
+| `core` | 7: where_we_left_off, task_get, task_upsert, record_add, record_update, search, pointer_set | ~1.7k tokens |
+| `standard` | 10: core plus task_list, doc_get, doc_section_upsert | ~2.7k tokens |
+| `all` (default) | 15: also study_material, the exercise tools, setup_audit | ~4.6k tokens |
+
+Set it in `IMPRIMATUR_TOOLS`, in `"mcp": {"tools": "core"}` of the repo's
+`.claude/imprimatur.json`, or in the same key of `config.json` in the database folder (first
+found wins). Profiles, groups (`list`, `docs`, `study`, `exercise`, `audit`) and tool names
+combine: `core,exercise` keeps `/exercise` working. `/study` needs `study`, and `/exercise`
+needs `exercise`.
+
 ### Requirements
 
 - Node.js 22.13 or later, and the `claude` CLI on your `PATH` (the model features use it).
