@@ -169,3 +169,24 @@ test("waiting: a turn end closes the asks of a task the database says done, in o
   recordWaiting({ hook_event_name: "Stop", session_id: "now", last_assistant_message: "Closed." }, root);
   assert.deepEqual(waitingItems(root).map((i) => [i.session, i.open]), [["old", false]]);
 });
+
+test("waiting: parsed logs are cached per file version, appends and removed logs show at once (#127)", () => {
+  const { waitingSteps } = createRequire(import.meta.url)("../vscode/waiting.js");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "imp-wcache-"));
+  const dir = dataPath(root, path.join(".claude", "imprimatur", "waiting"));
+  fs.mkdirSync(dir, { recursive: true });
+  const log = path.join(dir, "s1.jsonl");
+  const line = (/** @type {object} */ r) => JSON.stringify({ session: "s1", ...r }) + "\n";
+  fs.writeFileSync(log, line({ t: "2026-11-03T10:00:00Z", kind: "verify", text: "A\nB" }));
+  const first = waitingSteps(root);
+  assert.deepEqual(first.map((s) => [s.text, s.state]), [["A", "open"], ["B", "open"]]);
+  // A caller changing a row does not change the cache.
+  first[0].state = "mutated";
+  assert.equal(waitingSteps(root)[0].state, "open");
+  fs.appendFileSync(log, line({ t: "2026-11-03T10:01:00Z", kind: "check", item: "2026-11-03T10:00:00Z", i: 0, on: true }));
+  assert.deepEqual(waitingSteps(root).map((s) => [s.text, s.state]), [["A", "done"], ["B", "open"]]);
+  assert.equal(waitingItems(root).length, 1);
+  fs.rmSync(log);
+  assert.deepEqual(waitingSteps(root), []);
+  assert.deepEqual(waitingItems(root), []);
+});

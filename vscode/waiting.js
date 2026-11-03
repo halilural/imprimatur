@@ -87,14 +87,54 @@ function itemsOf(records, session) {
  * @param {string} root repo root @returns {WaitingItem[]}
  */
 function waitingItems(root) {
-  const dir = dataPath(root, WAITING_DIR);
-  if (!fs.existsSync(dir)) return [];
   /** @type {WaitingItem[]} */
   const out = [];
-  for (const name of fs.readdirSync(dir)) {
-    if (name.endsWith(".jsonl")) out.push(...itemsOf(readLog(path.join(dir, name)), name.slice(0, -".jsonl".length)));
-  }
+  for (const e of parsedLogs(root)) out.push(...e.items.map((it) => ({ ...it })));
   return out.sort((a, b) => Number(b.open) - Number(a.open) || Date.parse(b.t) - Date.parse(a.t));
+}
+
+/**
+ * Parsed logs, one entry per session file, kept while the file's inode, size
+ * and mtime stay the same (#127): a panel draw asks two or three times and most
+ * logs have not changed since the last one. Hooks only append (size grows); the
+ * archive rewrites through a new file (new inode).
+ * @typedef {{key: string, items: WaitingItem[], steps?: ReturnType<typeof stepsOf>}} LogEntry
+ * @type {Map<string, LogEntry>}
+ */
+const parsed = new Map();
+
+/** @param {string} root @returns {LogEntry[]} */
+function parsedLogs(root) {
+  const dir = dataPath(root, WAITING_DIR);
+  /** @type {string[]} */
+  let names;
+  try {
+    names = fs.readdirSync(dir).filter((n) => n.endsWith(".jsonl"));
+  } catch {
+    names = [];
+  }
+  const files = new Set(names.map((n) => path.join(dir, n)));
+  // Forget logs gone from this folder (archived or removed).
+  for (const f of parsed.keys()) if (path.dirname(f) === dir && !files.has(f)) parsed.delete(f);
+  /** @type {LogEntry[]} */
+  const out = [];
+  for (const file of files) {
+    let st;
+    try {
+      st = fs.statSync(file);
+    } catch {
+      parsed.delete(file);
+      continue;
+    }
+    const key = `${st.ino}:${st.size}:${st.mtimeMs}`;
+    let e = parsed.get(file);
+    if (!e || e.key !== key) {
+      e = { key, items: itemsOf(readLog(file), path.basename(file, ".jsonl")) };
+      parsed.set(file, e);
+    }
+    out.push(e);
+  }
+  return out;
 }
 
 /** A session log's records (lines being written are skipped). @param {string} log @returns {WaitingRecord[]} */
@@ -168,7 +208,17 @@ function tickStep(log, step, by, note, why) {
  */
 function waitingSteps(root) {
   const out = [];
-  for (const it of waitingItems(root)) {
+  for (const e of parsedLogs(root)) {
+    e.steps ??= stepsOf(e.items);
+    for (const s of e.steps) out.push({ ...s });
+  }
+  return out.sort((a, b) => Date.parse(b.t) - Date.parse(a.t) || a.i - b.i);
+}
+
+/** One log's items → their step rows, unsorted. @param {WaitingItem[]} items */
+function stepsOf(items) {
+  const out = [];
+  for (const it of items) {
     const lines = it.text.split("\n").filter((l) => l.trim());
     lines.forEach((text, i) => {
       const tick = it.ticks?.[i];
@@ -181,7 +231,7 @@ function waitingSteps(root) {
       });
     });
   }
-  return out.sort((a, b) => Date.parse(b.t) - Date.parse(a.t) || a.i - b.i);
+  return out;
 }
 
 module.exports = { WAITING_DIR, OPENS, itemsOf, waitingItems, waitingSteps, readLog, openSteps, tickStep, stepLabel, labelsIn };

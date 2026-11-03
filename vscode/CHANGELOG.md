@@ -4,6 +4,13 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.90.0] - 2026-11-03
+
+### Changed
+- The panel parses each "waiting on you" log once per version of the file and reuses it
+  on later draws: a refresh in a repo with many turn-end asks no longer re-reads every
+  log (41 ms → 5 ms per call on a 1,245-step repo; a draw makes two or three calls).
+
 ## [0.89.4] - 2026-11-03
 
 ### Security
