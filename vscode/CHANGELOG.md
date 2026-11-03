@@ -4,6 +4,13 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.89.3] - 2026-11-03
+
+### Security
+- The first time a repo's data folder is used, any link in it is removed (once; a `.no-links`
+  note marks it done). 0.89.0 and 0.89.1 moved old folders whole, so a link could have come
+  along, and a hook could have written through it.
+
 ## [0.89.2] - 2026-11-03
 
 ### Security
