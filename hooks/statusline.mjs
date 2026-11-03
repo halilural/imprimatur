@@ -12,14 +12,21 @@
 // model) and keeps its line for 2 s in a temp file per repo and session.
 // Settings: {"statusLine": {"type": "command", "command": "node /…/hooks/statusline.mjs"}}
 //
+// #123: with the Imprimatur plugin installed, the plugin's copy answers (the same code as the
+// hooks and the MCP server), and a version other than the extension's is flagged: "⚠ 0.73.0 ≠
+// extension 0.75.0".
+//
 // Never fails: any error prints nothing and exits 0.
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const require = createRequire(import.meta.url);
+/** The checkout or plugin folder this copy runs from. */
+const HERE = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 
 const CACHE_MS = 2000;
 const TITLE_MAX = 40;
@@ -104,6 +111,7 @@ function main() {
     } catch {
       line = "Imprimatur";
     }
+    line += skew();
     try {
       fs.writeFileSync(file, JSON.stringify({ at: Date.now(), line }));
     } catch {}
@@ -111,7 +119,44 @@ function main() {
   process.stdout.write(`${line}\n`);
 }
 
-try {
-  main();
-} catch {}
+/** " · ⚠ 0.73.0 ≠ extension 0.75.0" when this code and the installed extension differ (#123), else "". */
+function skew() {
+  try {
+    const v = require("../vscode/versions.js");
+    const own = v.codeVersion(HERE);
+    const ext = v.extensionVersion();
+    return own && ext && own !== ext ? dim(" · ") + warm(`⚠ ${own} ≠ extension ${ext}`) : "";
+  } catch {
+    return "";
+  }
+}
+
+/** The plugin's own status line, when the plugin is installed and this copy is not it (#123). */
+function pluginCopy() {
+  if (process.env.IMPRIMATUR_STATUSLINE_HOP) return undefined;
+  try {
+    const v = require("../vscode/versions.js");
+    const p = v.imprimaturPlugin();
+    if (!p || v.sameDir(p.installPath, HERE)) return undefined;
+    const f = path.join(p.installPath, "hooks", "statusline.mjs");
+    return fs.existsSync(f) ? f : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const delegate = pluginCopy();
+let answered = false;
+if (delegate) {
+  // It reads stdin and prints its line itself; once only (an older copy has no hop check).
+  process.env.IMPRIMATUR_STATUSLINE_HOP = "1";
+  try {
+    await import(pathToFileURL(delegate).href);
+    answered = true;
+  } catch {}
+}
+if (!answered)
+  try {
+    main();
+  } catch {}
 process.exitCode = 0;
