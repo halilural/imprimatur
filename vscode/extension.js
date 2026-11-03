@@ -545,7 +545,11 @@ function archiveAll(now = false) {
     if (!now && !archiveDue(root)) continue;
     try {
       const r = archiveRepo(root, { days });
-      log.info(`archive ${root}: ${r.edits} edits (${r.files} files), ${r.sessions} waiting logs, ${r.calls} calls, ${r.descriptions} descriptions`);
+      log.info(`archive ${root}: ${r.edits} edits (${r.files} files), ${r.sessions} waiting logs (${r.trimmed ?? 0} cut to their open asks), ${r.calls} calls, ${r.descriptions} descriptions`);
+      // #122: the archive and the document backups do not grow without end.
+      const cfg = vscode.workspace.getConfiguration("imprimatur");
+      const p = require("./archive.js").pruneRepo(root, { keepDays: cfg.get("archive.keepDays", 90), maxBytes: cfg.get("archive.maxMB", 25) * 1024 * 1024 });
+      if (p.days || p.backups || p.unread) log.info(`archive ${root}: retention removed ${p.days} archive days, ${p.backups} document backups${p.unread ? ", unread.json" : ""}; archive now ${(p.archiveBytes / 1e6).toFixed(1)} MB`);
       if (r.edits || r.sessions) done.push(`${path.basename(root)}: ${r.edits} edits, ${r.sessions} waiting logs`);
     } catch (e) {
       log.error(`archive ${root}: ${e instanceof Error ? e.message : e}`);

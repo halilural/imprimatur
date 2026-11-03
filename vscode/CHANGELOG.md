@@ -4,6 +4,16 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.87.0] - 2026-11-03
+
+### Added
+- `.claude/imprimatur/` no longer grows without end (#122). Archive days older than
+  `imprimatur.archive.keepDays` (90) go, then the oldest past `imprimatur.archive.maxMB` (25 MB;
+  the newest day always stays). Document backups keep each file's newest copy and at most 5. A
+  waiting log quiet for 30 days that still has open asks is archived whole and kept with only
+  what those asks need; it is cut only when the cut log gives the very same open asks. The
+  leftover `unread.json` is removed.
+
 ## [0.86.0] - 2026-11-03
 
 ### Changed

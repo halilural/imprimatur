@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.86.0",
+  "version": "0.87.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -653,6 +653,18 @@
           "default": 7,
           "minimum": 0,
           "markdownDescription": "After this many days an agent edit counts as accepted and leaves review; its history, and waiting logs with nothing open, move to `.claude/imprimatur/archive/<date>/` (gzipped, read with `zcat`). Runs once a day per repo; **Imprimatur: Archive Old Agent Edits and Asks Now** runs it at once. `0`: never."
+        },
+        "imprimatur.archive.keepDays": {
+          "type": "number",
+          "default": 90,
+          "minimum": 0,
+          "markdownDescription": "How long `.claude/imprimatur/archive/<date>/` folders and `docs-backup/` copies are kept (each file's newest backup always stays). `0`: kept forever (the size limit still applies)."
+        },
+        "imprimatur.archive.maxMB": {
+          "type": "number",
+          "default": 25,
+          "minimum": 0,
+          "markdownDescription": "The most `.claude/imprimatur/archive/` may hold per repo: the oldest days go first, the newest always stays. `0`: no limit."
         },
         "imprimatur.docs.export": {
           "type": "boolean",
