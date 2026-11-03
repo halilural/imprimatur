@@ -158,6 +158,7 @@ export function recordWaiting(data, project) {
   const { transcriptInfo } = require("./baseline.mjs");
   const root = repoRoot(path.resolve(project)) ?? path.resolve(project);
   const log = path.join(root, WAITING_DIR, `${session}.jsonl`);
+  require("../vscode/review-state.js").ensureIgnored(root);
   // A task marked done in Imprimatur closes its asks in every session (#43, #60).
   if (data.hook_event_name === "Stop") {
     try {

@@ -4,6 +4,15 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.77.1] - 2026-11-03
+
+### Fixed
+- Imprimatur's data folder (`.claude/imprimatur/`: edit copies, history, logs) hides itself from
+  git with a `.gitignore` of `*` inside it. It used to be committed and to show as changed on
+  every tool call unless your own ignore rules covered it. The repo's `.gitignore` is not touched.
+  Files already committed stay tracked: run `git rm -r --cached .claude/imprimatur` once in that
+  repo and commit.
+
 ## [0.77.0] - 2026-11-03
 
 ### Fixed

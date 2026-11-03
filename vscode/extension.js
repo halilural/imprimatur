@@ -558,6 +558,8 @@ function addFolder(folder, ctx) {
   const found = repoRoot(folder.uri.fsPath) ?? folder.uri.fsPath;
   if (roots.has(norm(found))) return;
   roots.add(norm(found));
+  // Repos set up before 0.77.1: their data folder hides itself from git from now on.
+  if (fs.existsSync(path.join(found, ".claude", "imprimatur"))) require("./review-state.js").ensureIgnored(found);
   // Copies and history change on every agent edit: everything redraws. The waiting log,
   // activity and descriptions only feed the graph and the counts: no preview reload.
   const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(found), ".claude/imprimatur/**"));

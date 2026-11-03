@@ -16,9 +16,9 @@ const EDITS = ["baseline", "history"];
  * pending/ (a Bash call's before state, gone after it), process.json (the
  * process hooks' notes), open-edits.json (the status line's count, written by
  * the launcher), archive/ and docs-backup/ (archiveAll and docs sync redraw),
- * todo-done.json, scanned.json, setup-history.json (the extension's own state).
+ * todo-done.json, scanned.json, setup-history.json (the extension's own state), .gitignore.
  */
-const NONE = ["pending", "archive", "docs-backup", "process.json", "open-edits.json", "todo-done.json", "scanned.json", "setup-history.json"];
+const NONE = [".gitignore", "pending", "archive", "docs-backup", "process.json", "open-edits.json", "todo-done.json", "scanned.json", "setup-history.json"];
 
 /**
  * The route for one changed path.

@@ -107,6 +107,7 @@ function rowOf(root, input) {
 function record(root, input) {
   if (!input?.tool_name || !/^[\w-]+$/.test(String(input.session_id ?? ""))) return;
   const dir = path.join(root, ACTIVITY_DIR);
+  require("./review-state.js").ensureIgnored(root);
   fs.mkdirSync(dir, { recursive: true });
   fs.appendFileSync(path.join(dir, `${input.session_id}.jsonl`), JSON.stringify(rowOf(root, input)) + "\n");
 }
