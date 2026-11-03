@@ -61,3 +61,24 @@ test("db upkeep: a failed VACUUM is logged and the upkeep goes on", async () => 
   assert.ok(r.vacuum && !r.vacuumed);
   assert.ok(lines.some((l) => /VACUUM failed .*locked/.test(l)));
 });
+
+test("db upkeep (#121): a full copy once, then the version compaction every day, only on what changed", async () => {
+  const db = fresh();
+  const AGENT = { kind: "agent", id: "t" };
+  const repo = db.repoOf("/r121m", { name: "r" });
+  const task = db.upsertTask(repo.id, "#1", {}, AGENT);
+  for (let i = 0; i < 20; i++) db.addRecord(task.id, { kind: "note", title: `n${i}`, body: "y".repeat(3000) }, { kind: "import", id: "t" });
+  const lines = [];
+  const t0 = 1_800_000_000_000;
+  const r = await maintainDb(db, (l) => lines.push(l), { now: t0 });
+  const copy = db.meta("compact:backup");
+  assert.ok(copy && fs.existsSync(copy), "the copy is on disk");
+  assert.ok(lines.some((l) => /full copy before the first version compaction/.test(l)), lines.join("\n"));
+  assert.equal(r.compacted.records, 20);
+  assert.ok(r.compacted.bytesAfter < r.compacted.bytesBefore / 10);
+  // The next day: no new copy, nothing old looked at again; a new change is compacted.
+  db.addRecord(task.id, { kind: "note", title: "later", body: "z".repeat(3000) }, AGENT);
+  const r2 = await maintainDb(db, () => {}, { now: t0 + DAY + 1, backup: () => assert.fail("one copy only") });
+  assert.equal(r2.compacted.records, 1);
+  assert.equal(db.versionsOf(db.recordsOf(task.id).at(-1).id)[0].after.body, "z".repeat(3000), "read back whole");
+});

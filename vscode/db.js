@@ -609,6 +609,11 @@ const uid = () => crypto.randomUUID();
 const json = (v) => (v == null ? null : JSON.stringify(v));
 
 /** @param {any} r */
+/** @param {string | null | undefined} t */
+const parseJson = (t) => (t ? JSON.parse(t) : null);
+/** A version row with before/after parsed. @param {any} v */
+const parseVersion = (v) => ({ ...v, before: parseJson(v.before), after: parseJson(v.after) });
+
 function recordOf(r) {
   if (!r) return undefined;
   r.pointer = r.pointer === 1;
@@ -654,6 +659,22 @@ function vacuumFile(file, { busyMs = 10_000, DatabaseSync = loadSqlite().Databas
  * @param {any} s
  */
 /** @param {any} s @param {number} [waitMs] */
+/**
+ * A full copy of the database (#121), before the first compaction: VACUUM INTO a new file.
+ * Self-contained like vacuumFile (it runs in a worker). @param {string} file @param {string} to
+ * @param {{busyMs?: number, DatabaseSync?: any}} [o] @returns {{to: string, bytes: number}}
+ */
+function backupFile(file, to, { busyMs = 10_000, DatabaseSync = loadSqlite().DatabaseSync } = {}) {
+  const s = new DatabaseSync(file);
+  try {
+    s.exec(`PRAGMA busy_timeout = ${busyMs}`);
+    s.exec(`VACUUM INTO '${to.replace(/'/g, "''")}'`);
+  } finally {
+    s.close();
+  }
+  return { to, bytes: require("node:fs").statSync(to).size };
+}
+
 function toWal(s, waitMs = 5000) {
   const deadline = Date.now() + waitMs;
   for (;;) {
@@ -1066,11 +1087,69 @@ class Db {
       .run(id, at, actor.kind, actor.id ?? null, op, json(before), json(after));
   }
 
-  /** @param {number} id */
+  /** A record's versions, oldest first, as written (#121: compacted fields filled back in). @param {number} id */
   versionsOf(id) {
-    return this.q("SELECT * FROM record_versions WHERE record_id = ? ORDER BY id").all(id).map((/** @type {any} */ v) => ({
-      ...v, before: v.before ? JSON.parse(v.before) : null, after: v.after ? JSON.parse(v.after) : null,
-    }));
+    return this.chainOf(id);
+  }
+
+  /** One record's whole version chain, hydrated (versionsOf; hydrateVersions per record). @param {number} id */
+  chainOf(id) {
+    const vs = this.q("SELECT * FROM record_versions WHERE record_id = ? ORDER BY id").all(id).map(parseVersion);
+    return require("./version-compact.js").hydrateRecord(vs, this.record(id));
+  }
+
+  /**
+   * Versions picked from several records, each filled back in from its record's whole chain (#121).
+   * @param {any[]} list rows with record_id and JSON before/after @returns {any[]} the same order
+   */
+  hydrateVersions(list) {
+    const byId = new Map();
+    for (const rid of new Set(list.map((v) => v.record_id))) for (const v of this.chainOf(rid)) byId.set(v.id, v);
+    return list.map((v) => {
+      const h = byId.get(v.id);
+      return { ...v, before: h ? h.before : parseJson(v.before), after: h ? h.after : parseJson(v.after) };
+    });
+  }
+
+  /**
+   * Compacts the version tables losslessly (#121, vscode/version-compact.js): only values another
+   * stored value says go; readers fill them back. One transaction; returns what changed.
+   * since: only records and sections with a version newer than these ids (the daily run looks
+   * at what changed since the last one); the result's maxRecordVersion and maxDocVersion are
+   * the next run's since.
+   * @param {{since?: {record?: number, doc?: number}}} [o]
+   * @returns {{records: number, sections: number, bytesBefore: number, bytesAfter: number, maxRecordVersion: number, maxDocVersion: number}}
+   */
+  compactVersions({ since = {} } = {}) {
+    const vc = require("./version-compact.js");
+    const size = () => /** @type {any} */ (this.q(`SELECT coalesce((SELECT sum(length(coalesce(before, '')) + length(coalesce(after, ''))) FROM record_versions), 0)
+      + coalesce((SELECT sum(length(coalesce(before, '')) + length(coalesce(after, ''))) FROM doc_versions), 0) AS n`).get()).n;
+    return this.tx(() => {
+      const bytesBefore = size();
+      let records = 0;
+      let sections = 0;
+      const setR = this.q("UPDATE record_versions SET before = ?, after = ? WHERE id = ?");
+      for (const { record_id: rid } of this.q("SELECT DISTINCT record_id FROM record_versions WHERE id > ?").all(since.record ?? 0)) {
+        const vs = this.q("SELECT id, op, before, after FROM record_versions WHERE record_id = ? ORDER BY id").all(rid).map(parseVersion);
+        const row = this.record(rid);
+        if (!row) continue;
+        for (const c of vc.compactRecord(vs, row)) {
+          const v = vs.find((x) => x.id === c.id);
+          setR.run(json("before" in c ? c.before : v.before), json("after" in c ? c.after : v.after), c.id);
+          records++;
+        }
+      }
+      const setS = this.q("UPDATE doc_versions SET after = ? WHERE id = ?");
+      for (const sec of this.q("SELECT s.id, s.body FROM doc_sections s WHERE EXISTS (SELECT 1 FROM doc_versions v WHERE v.section_id = s.id AND v.id > ?)").all(since.doc ?? 0)) {
+        const vs = this.q("SELECT id, before, after FROM doc_versions WHERE section_id = ? ORDER BY id").all(sec.id).map(parseVersion);
+        for (const c of vc.compactSection(vs, sec)) {
+          setS.run(json(c.after), c.id);
+          sections++;
+        }
+      }
+      const max = (/** @type {string} */ t) => /** @type {any} */ (this.q(`SELECT coalesce(max(id), 0) AS n FROM ${t}`).get()).n;
+      return { records, sections, bytesBefore, bytesAfter: size(), maxRecordVersion: max("record_versions"), maxDocVersion: max("doc_versions") };
+    });
   }
 
   /** @param {number} repoId @param {{status?: string, limit?: number}} [o] */
@@ -1156,10 +1235,9 @@ class Db {
    * @param {number} repoId @param {{limit?: number}} [o]
    */
   agentChanges(repoId, { limit = 300 } = {}) {
-    return this.q(`SELECT v.id, v.at, v.actor, v.op, v.before, v.after, r.id AS record_id, r.kind, r.title, r.status, t.key AS task_key
+    return this.hydrateVersions(this.q(`SELECT v.id, v.at, v.actor, v.op, v.before, v.after, r.id AS record_id, r.kind, r.title, r.status, t.key AS task_key
                    FROM record_versions v JOIN records r ON r.id = v.record_id JOIN tasks t ON t.id = r.task_id
-                   WHERE t.repo_id = ? AND v.actor_kind = 'agent' ORDER BY v.id DESC LIMIT ?`).all(repoId, limit)
-      .map((/** @type {any} */ v) => ({ ...v, before: v.before ? JSON.parse(v.before) : null, after: v.after ? JSON.parse(v.after) : null }));
+                   WHERE t.repo_id = ? AND v.actor_kind = 'agent' ORDER BY v.id DESC LIMIT ?`).all(repoId, limit));
   }
 
   /** Done tasks and when they last changed: key → epoch ms. @param {number} repoId @returns {Map<string, number>} */
@@ -1268,9 +1346,8 @@ class Db {
    */
   taskVersions(taskId, { limit = 200 } = {}) {
     const total = /** @type {any} */ (this.q("SELECT count(*) AS n FROM record_versions v JOIN records r ON r.id = v.record_id WHERE r.task_id = ?").get(taskId)).n;
-    const list = this.q(`SELECT v.*, r.kind, r.title FROM record_versions v JOIN records r ON r.id = v.record_id
-                         WHERE r.task_id = ? ORDER BY v.id DESC LIMIT ?`).all(taskId, limit)
-      .map((/** @type {any} */ v) => ({ ...v, before: v.before ? JSON.parse(v.before) : null, after: v.after ? JSON.parse(v.after) : null }));
+    const list = this.hydrateVersions(this.q(`SELECT v.*, r.kind, r.title FROM record_versions v JOIN records r ON r.id = v.record_id
+                         WHERE r.task_id = ? ORDER BY v.id DESC LIMIT ?`).all(taskId, limit));
     return { list, total };
   }
 
@@ -1500,11 +1577,11 @@ class Db {
     });
   }
 
-  /** A section's versions, newest first. @param {number} sectionId */
+  /** A section's versions, newest first, as written (#121: a compacted body filled back in). @param {number} sectionId */
   sectionVersions(sectionId) {
-    return this.q("SELECT * FROM doc_versions WHERE section_id = ? ORDER BY id DESC").all(sectionId).map((/** @type {any} */ v) => ({
-      ...v, before: v.before ? JSON.parse(v.before) : null, after: v.after ? JSON.parse(v.after) : null,
-    }));
+    const vs = this.q("SELECT * FROM doc_versions WHERE section_id = ? ORDER BY id").all(sectionId).map(parseVersion);
+    const sec = this.q("SELECT body FROM doc_sections WHERE id = ?").get(sectionId);
+    return require("./version-compact.js").hydrateSection(vs, sec).reverse();
   }
 
   /** The document's last change: when and by whom. @param {number} docId */
@@ -1910,6 +1987,7 @@ function openDb({ path: file = dbPath(), busyMs = 5000, plugins } = {}) {
 
 module.exports = {
   vacuumFile,
+  backupFile,
   WAL_LIMIT,
   openDb, dbPath, onWindowsDrive, normOrigin, refersTo, recordOf, analysisTitle, KINDS, ACTORS, VERSION, MIGRATIONS, FIELDS,
   TRACKER_KEY, TASK_STATUSES, RECORD_STATUSES, EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, weakText, REVIEW_DAYS, REVIEW_RESULTS, DOC_KINDS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, SECTION_TITLE_MAX, SOURCE_MAX,
