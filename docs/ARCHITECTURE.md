@@ -232,28 +232,32 @@ A Bash or Edit call costs two node processes (Pre, Post) instead of five. Measur
 - Two protocol eras: 2026-07-28 (`server/discover`, the protocol version and `clientInfo` in `_meta` on every request; the discovery result has `ttlMs: 3,600,000`, `cacheScope: "public"`) and the old `initialize` handshake.
 - The server's `instructions` field tells once how the tools are used together ("`where_we_left_off` at the start of a session", etc.).
 
-### Tools (11)
+### Tools (15) and profiles (#119)
 
-| Tool | Type | Job |
-|---|---|---|
-| `where_we_left_off` | read | Unfinished tasks, each one's 👉 and the number of open records |
-| `task_list` | read | Tasks, most recently updated first |
-| `task_get` | read | A task and its records; by default open records + 👉, 50 at a time, body 500 characters; `status: "all"`, `kind`, `limit/offset`, `full` |
-| `task_upsert` | write | Open/update a task (title, status, summary, epic) |
-| `record_add` | write | Add a record (the task is opened if missing); `pointer: true` moves the 👉 |
-| `record_update` | write | Change the given fields; every change is versioned |
-| `pointer_set` | write | Move the 👉 to an open record |
-| `search` | read | Text in titles/bodies; `repo: "*"` for all repos |
-| `doc_get` | read | The table of contents of the architecture or product document; bodies with `section` or `full` |
-| `doc_section_upsert` | write | Write/update a section, link contributing records |
-| `setup_audit` | write | Audit the agent setup with agnix, reconcile the findings into `AUDIT` records; `global`, `dry_run` |
+| Group | Tool | Type | Job |
+| --- | --- | --- | --- |
+| core | `where_we_left_off` | read | Unfinished tasks, each one's 👉 and the number of open records |
+| core | `task_get` | read | A task and its records; by default open records + 👉, 50 at a time, body 500 characters; `status: "all"`, `kind`, `limit/offset`, `full` |
+| core | `task_upsert` | write | Open/update a task (title, status, summary, epic) |
+| core | `record_add` | write | Add a record (the task is opened if missing); `pointer: true` moves the 👉 |
+| core | `record_update` | write | Change the given fields; every change is versioned |
+| core | `pointer_set` | write | Move the 👉 to an open record |
+| core | `search` | read | Text in titles/bodies; `repo: "*"` for all repos |
+| list | `task_list` | read | Tasks, most recently updated first |
+| docs | `doc_get` | read | A document's table of contents (architecture, product, glossary, social, a task's analysis); bodies with `section` or `full` |
+| docs | `doc_section_upsert` | write | Write/update a section, link contributing records |
+| study | `study_material` | read | What `/study` builds its note from |
+| exercise | `exercise_save`, `exercise_get`, `exercise_review` | write/read | `/exercise` and its spaced recall |
+| audit | `setup_audit` | write | Audit the agent setup with agnix, reconcile the findings into `RECS` records; `global`, `dry_run` |
 
-The tools are deliberately few and general (no tool per kind): every definition enters the agent's context. A result comes back as a short text summary plus the full `structuredContent` (+ `outputSchema`); a tool's own error comes back with `isError` and a message that says what to do (the model corrects it), an unknown tool is `-32602`.
+A profile picks the groups: `core` (7 tools, about 1.7k tokens for the model), `standard` (core + list + docs, 10 tools, about 2.7k) and `all` (the default, 15 tools, about 4.6k). The setting is a comma list of profiles, groups and tool names, read from `IMPRIMATUR_TOOLS`, else `mcp.tools` in the repo's `.claude/imprimatur.json`, else `mcp.tools` in `config.json`. A tool left out is neither listed nor callable (`-32602`). `core` and `standard` also drop `outputSchema`: clients give the model only the name, description and input schema, so core's list is 7.1 KB instead of 13.7 KB. The default stays `all`, because Claude Code fetches a tool's definition only when it is about to call it.
+
+A result comes back as a short text summary plus the full `structuredContent` (+ `outputSchema` in `all`). A tool's own error comes back with `isError` and a message that says what to do, so the model can correct it; an unknown tool is `-32602`.
 
 ### Repo and identity
 
 - Repo: the `repo` argument, otherwise `CLAUDE_PROJECT_DIR`, otherwise the server's working folder; resolved to the git root. MCP `roots` is not used.
-- Claude Code does not tell the MCP server the session: `mcp-session.mjs` adds `_session` to the input on PreToolUse (by copying, since `updatedInput` replaces the whole input) and returns `allow`, because the tools touch only the Imprimatur database. The actor of a version row becomes `<clientInfo.name>:<session>` (e.g. `claude-code:adddf…`).
+- Claude Code does not tell the MCP server the session: the dispatcher's mcp step (`hooks/run.mjs`, #118) adds `_session` to the input on PreToolUse (by copying, since `updatedInput` replaces the whole input) and returns `allow`, because the tools touch only the Imprimatur database. The actor of a version row becomes `<clientInfo.name>:<session>` (e.g. `claude-code:adddf…`).
 
 <a id="panel"></a>
 

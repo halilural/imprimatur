@@ -589,10 +589,11 @@ function docUpsert(db, repo, a, actor) {
 }
 
 /**
- * Runs one tool. @param {any} db @param {string} name @param {any} a @param {{client: string}} ctx
+ * Runs one tool. @param {any} db @param {string} name @param {any} a @param {{client: string, profile?: ReturnType<typeof toolProfile>}} ctx
  */
 export function callTool(db, name, a, ctx = { client: "unknown" }) {
-  const tool = TOOLS.find((t) => t.name === name);
+  // #119: a tool left out of the profile is as unknown as one that does not exist.
+  const tool = TOOLS.find((t) => t.name === name && (!ctx.profile || ctx.profile.names.has(name)));
   if (!tool) throw Object.assign(new Error(`unknown tool ${name}`), { code: -32602 });
   if (a == null) a = {};
   if (!isObject(a)) throw new ToolError("arguments must be an object");
@@ -837,9 +838,65 @@ function studyDigest(out) {
   return L.join("\n");
 }
 
-const toolList = () =>
-  TOOLS.map(({ readOnly, idempotent, ...t }) => ({
+/**
+ * Tool groups and profiles (#119). A setting is a comma list of profiles, groups or tool
+ * names; "core" and "standard" also leave out outputSchema (clients give the model the
+ * name, description and input schema only, and the model reads the text digest).
+ */
+export const TOOL_GROUPS = {
+  core: ["where_we_left_off", "task_get", "task_upsert", "record_add", "record_update", "search", "pointer_set"],
+  list: ["task_list"],
+  docs: ["doc_get", "doc_section_upsert"],
+  study: ["study_material"],
+  exercise: ["exercise_save", "exercise_get", "exercise_review"],
+  audit: ["setup_audit"],
+};
+const PROFILES = { core: ["core"], standard: ["core", "list", "docs"], all: Object.keys(TOOL_GROUPS) };
+
+/**
+ * The tools a setting enables. Nothing known in it: every tool.
+ * @param {string} [spec] @returns {{names: Set<string>, lean: boolean, unknown: string[]}}
+ */
+export function toolProfile(spec = "all") {
+  /** @type {Set<string>} */
+  const names = new Set();
+  /** @type {string[]} */
+  const unknown = [];
+  let all = false;
+  const known = new Set(TOOLS.map((t) => t.name));
+  for (const w of String(spec).split(",").map((x) => x.trim()).filter(Boolean)) {
+    const k = w.toLowerCase();
+    if (k === "all") all = true;
+    const groups = /** @type {Record<string, string[]>} */ (PROFILES)[k] ?? (k in TOOL_GROUPS ? [k] : undefined);
+    if (groups) for (const g of groups) for (const n of /** @type {Record<string, string[]>} */ (TOOL_GROUPS)[g]) names.add(n);
+    else if (known.has(w)) names.add(w);
+    else unknown.push(w);
+  }
+  if (!names.size) return { names: known, lean: false, unknown };
+  return { names, lean: !all, unknown };
+}
+
+/**
+ * The profile setting: IMPRIMATUR_TOOLS, else mcp.tools in the repo's .claude/imprimatur.json
+ * (the server runs in the project's folder), else mcp.tools in config.json, else "all".
+ * @param {{env?: NodeJS.ProcessEnv, cwd?: string}} [o]
+ */
+export function profileSetting({ env = process.env, cwd = process.cwd() } = {}) {
+  if (env.IMPRIMATUR_TOOLS?.trim()) return env.IMPRIMATUR_TOOLS.trim();
+  const of = (/** @type {any} */ c) => (typeof c?.mcp?.tools === "string" && c.mcp.tools.trim() ? c.mcp.tools.trim() : undefined);
+  try {
+    const root = repoRoot(cwd) ?? cwd;
+    const repo = of(JSON.parse(fs.readFileSync(path.join(root, ".claude", "imprimatur.json"), "utf8")));
+    if (repo) return repo;
+  } catch {}
+  const { readConfig, configPath } = require("../vscode/config.js");
+  return of(readConfig(configPath(env))) ?? "all";
+}
+
+const toolList = (profile = toolProfile()) =>
+  TOOLS.filter((t) => profile.names.has(t.name)).map(({ readOnly, idempotent, outputSchema, ...t }) => ({
     ...t,
+    ...(!profile.lean && { outputSchema }),
     annotations: {
       title: t.title, readOnlyHint: Boolean(readOnly), destructiveHint: false,
       idempotentHint: Boolean(readOnly || idempotent), openWorldHint: false,
@@ -848,7 +905,7 @@ const toolList = () =>
 
 /**
  * Answers one JSON-RPC message; undefined for notifications.
- * @param {any} db @param {any} msg @param {{client: string, version?: string}} state
+ * @param {any} db @param {any} msg @param {{client: string, version?: string, profile?: ReturnType<typeof toolProfile>}} state
  */
 export function handle(db, msg, state) {
   if (msg === null || typeof msg !== "object" || Array.isArray(msg)) {
@@ -887,7 +944,7 @@ export function handle(db, msg, state) {
       case "tools/list":
         // 2026-07-28 list results carry caching hints, which modern clients require. The tools
         // are the same for everyone and change only with a new server version.
-        return done({ tools: toolList(), ...(modern && { ttlMs: 3_600_000, cacheScope: "public" }) });
+        return done({ tools: toolList(state.profile), ...(modern && { ttlMs: 3_600_000, cacheScope: "public" }) });
       case "tools/call": {
         try {
           const out = callTool(db, params.name, params.arguments, state);
@@ -919,7 +976,9 @@ function open() {
 
 function main() {
   const db = open();
-  const state = { client: "unknown" };
+  const profile = toolProfile(profileSetting());
+  if (profile.unknown.length) process.stderr.write(`Imprimatur: unknown tool profile words ignored: ${profile.unknown.join(", ")}\n`);
+  const state = { client: "unknown", profile };
   const rl = readline.createInterface({ input: process.stdin });
   rl.on("line", (line) => {
     if (!line.trim()) return;
