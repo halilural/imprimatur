@@ -291,12 +291,24 @@ Goal: a change shows up in the panel the moment it is written. This is all local
 - `watch.js` watches the database file (and `-wal`, `-shm`) through its folder with `fs.watch`. **The first event is handled immediately**; while events continue, at most once every 50 ms, and once more at the end. If the watcher fails (folder deleted, watcher limit), it is set up again at most every 5 s.
 - A single **change gate** (`PRAGMA data_version` + the extension's own transactions) is shared by the watcher, the backstop poll and the extension's own writes: a change is drawn once.
 - While the panel is visible, the change stamp is checked every 500 ms (the backstop, in case the watcher misses an event). There is no polling while the panel is hidden.
-- Changes under `.claude/imprimatur/**`: the editor and the graph at once; `waiting/` and description changes are refreshed once, 1 s after the last write (at most every 3 s if writes keep coming). The preview is refreshed only when a copy or history changes, after 700 ms of quiet.
 - Measured: the file watcher takes 25 to 49 ms; the target is about 50 ms. An integration test checks that a record written from another process reaches the panel within 500 ms.
 
-### Panel redraw
+### Hook writes under `.claude/imprimatur/` (#114)
 
-On a change the panel redraws only the visible tab. A write by a plugin (see the plugin hook in the Database section) goes through the same change gate, so it is drawn like any other write.
+`refresh-route.js` `routeOf` decides what a write redraws:
+- **edits** (`baseline/`, `history/`): the editors, lenses, preview and panel, once, 300 ms after the last write (at least every 2 s while writes keep coming). An open file also redraws when its text changes (`onDidChangeTextDocument`), so the late redraws of old are not needed.
+- **graph** (`waiting/`, `activity/`, `descriptions.jsonl`, `calls.jsonl`, anything new): the panel and the counts, 1 s after the last write (at least every 3 s).
+- **none** (`pending/`, `process.json`, `open-edits.json`, `archive/`, `docs-backup/`, `.gitignore`, the extension's own state files): nothing.
+
+A burst of 20 tool calls built the panel 146 times before this and 1–2 times after. The side bar's launcher counts only its badge while hidden. Moving the data out of the repo, with one change stamp in place of path routing, is #126.
+
+### Panel redraw (#115)
+
+1. **Input stamp.** `panel-stamp.js` `panelStamp` joins the full view, `db.changeStamp()`, the last database error, open documents' versions, the minute (for relative times) and a stat of the data folder and of the files under review. An equal stamp skips the page build: about 1.5 ms instead of 30–180 ms. It is not used on the Social and Task analyses tabs, which read other files, nor with every repo shown.
+2. **Edits paging.** The Edits tab draws the newest 200 rows. "Show 500 more" and "Show all" ask the host for more (`view.rows`).
+3. **Line diff.** The host keeps the lines it last sent and posts `{type: "diff", base, ver, ops}` (`line-diff.js`, Myers over the changed middle). The page applies the ops to its own copy with the same `applyOps`, inlined, and then draws through its usual update: nav, row patch, pane morph. A version the page does not have makes it post `resync`, and the host then sends the whole page. Edit rows carry ids counted from the oldest, and the hover previews are one JSON line per row, so a new row changes only its own lines.
+
+Only the visible tab is drawn. A write by a plugin goes through the same change gate, so it is drawn like any other write.
 
 <a id="tracker"></a>
 

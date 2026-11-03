@@ -336,7 +336,9 @@ test("#115 Edits paging: the newest 200 rows drawn, Show more adds 500, Show all
     assert.match(page, /The newest 200 of 2000 rows/);
     assert.match(page, /data-more="700">Show 500 more<\/a> · <a href="#" data-more="2000">Show all/);
     const json = JSON.parse(page.match(/<script type="application\/json" id="rows">([\s\S]*?)<\/script>/)[1]);
-    assert.equal(json.length, 200, "the hover previews match the rows drawn");
+    assert.equal(Object.keys(json).length, 200, "the hover previews match the rows drawn");
+    assert.ok("1999" in json && "1800" in json && !("1799" in json), "keyed by ids counted from the oldest row");
+    assert.match(page, /data-file="f0\.md"[^>]*data-i="1999"|data-i="1999"[^>]*data-file="f0\.md"/, "the newest row has the highest id");
     assert.ok(page.length < 1_000_000, `page ${Math.round(page.length / 1024)} KB`);
     const more = html(data, "/r", "N", [], { view: { tab: "edits", rows: 700 } });
     assert.equal(count(more), 700);

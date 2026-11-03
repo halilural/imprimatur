@@ -4,6 +4,15 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.80.0] - 2026-11-03
+
+### Changed
+- Panel updates go as the lines that changed, not the whole page (#115, step 2). The page keeps
+  its copy of the last page and applies the changed lines to it; if it ever misses a version, it
+  asks for the whole page again. A new tool call on Agent changes was about 118 KB of the 587 KB
+  page and is now a few KB: rows keep their ids when a new one comes, and the hover previews are
+  one line per row.
+
 ## [0.79.0] - 2026-11-03
 
 ### Changed
