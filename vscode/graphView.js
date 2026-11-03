@@ -1203,6 +1203,9 @@ let renders = 0;
 let renderedAt = 0;
 /** Pages built for a refresh, sent or not (#114: a burst of hook writes builds one or two). */
 let builds = 0;
+/** Refreshes the input stamp skipped (#115), and the last refresh's time in ms. */
+let skips = 0;
+let refreshMs = 0;
 /**
  * extension.js (#71): visible(true/false) as the panel shows and hides (it starts the
  * database backstop poll); afterWrite() after the page wrote to the database (it draws
@@ -1530,18 +1533,39 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
   };
   // An edit refreshes three times (extension.js refreshSoon): send only what changed.
   let sent = "";
+  // #115: the inputs of the page last built in full; equal inputs, equal page.
+  /** @type {string | undefined} */
+  let stampSent;
+  const { panelStamp, STAMPED_TABS } = require("./panel-stamp.js");
+  const stampNow = () => {
+    if (!STAMPED_TABS.has(view.tab) || view.all) return undefined;
+    // Open documents decide the edits' state too (currentText): their versions.
+    const docs = vscode.workspace.textDocuments?.filter((d) => d.uri.scheme === "file").map((d) => `${d.uri.fsPath}@${d.version}`).join("|") ?? "";
+    return panelStamp(root, { view, db: records.dbOf(), error: records.lastError, docs });
+  };
   // Load once; after that the page updates in place (its "render" message):
   // setting the html reloads it, and a click during a reload is lost.
   reload = () => {
     sent = "";
+    stampSent = stampNow();
     p.webview.html = lastHtml = page();
   };
   reload();
   refresh = (waitingOnly = false) => {
     // Not drawn while hidden, but not forgotten: drawn when it shows (onDidChangeViewState).
     if (!p.visible) return void (missed = true);
+    const t0 = Date.now();
+    const stamp = stampNow();
+    if (stamp !== undefined && stamp === stampSent) {
+      skips++;
+      refreshMs = Date.now() - t0;
+      return;
+    }
     const next = page("", waitingOnly);
     builds++;
+    // A waiting-only build reuses the last edits: the next refresh builds in full.
+    stampSent = waitingOnly ? undefined : stamp;
+    refreshMs = Date.now() - t0;
     if (next === sent) return;
     p.webview.postMessage({ type: "render", html: (sent = lastHtml = next) });
     renders++;
@@ -1555,7 +1579,7 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
 }
 
 /** The open panel, for the integration tests: its repo, view, last page and last failed write. */
-const panelState = () => ({ open: !!panel, visible: !!panel?.visible, root: shown, view: { ...view }, html: lastHtml, failed: lastFailed, renders, renderedAt, builds });
+const panelState = () => ({ open: !!panel, visible: !!panel?.visible, root: shown, view: { ...view }, html: lastHtml, failed: lastFailed, renders, renderedAt, builds, skips, refreshMs });
 
 /**
  * What waits on the user, counted once for every place that shows it (the launcher's

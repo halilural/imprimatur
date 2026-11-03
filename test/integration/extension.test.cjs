@@ -104,4 +104,22 @@ suite("Imprimatur in the extension host", () => {
     const builds = panelState().builds - before;
     assert.ok(builds >= 1 && builds <= 2, `panel builds for the burst: ${builds}`);
   });
+
+  test("#115: a refresh with nothing changed builds no page, in under 10 ms", async () => {
+    const { panelState, watchChanged } = await api();
+    await vscode.commands.executeCommand("imprimatur.openGraph");
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    await wait(3500); // earlier redraws settle (and one full build sets the stamp)
+    const base = path.join(vscode.workspace.workspaceFolders[0].uri.fsPath, ".claude", "imprimatur");
+    // A watcher event with no write behind it: the graph's path refreshes, the inputs are the same.
+    watchChanged(path.join(base, "activity", "it-burst.jsonl"));
+    await wait(1500);
+    const a = panelState();
+    watchChanged(path.join(base, "activity", "it-burst.jsonl"));
+    await wait(1500);
+    const b = panelState();
+    assert.equal(b.builds, a.builds, "no page built");
+    assert.ok(b.skips > a.skips, "the stamp skipped it");
+    assert.ok(b.refreshMs < 10, `the skipped refresh took ${b.refreshMs} ms`);
+  });
 });
