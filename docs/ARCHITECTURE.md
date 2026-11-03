@@ -423,9 +423,12 @@ Imprimatur turns to a small model (Haiku) only where verbal judgment is needed; 
 - **Webview:** `localResourceRoots: []` (no local file is loaded, everything is inline); CSP `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-…'; form-action 'none'; base-uri 'none'`. Document bodies are rendered with `html: false`, links are only http(s), mailto and in-page anchors. Data is carried by `postMessage`.
 - The Accept links in the preview go through the `vscode://halilural.imprimatur/accept?…` URI handler. The 📄 link of a waiting step does not open a file outside the repo.
 
-### Secrets
+### Secrets (#124)
 
-- The Jira token lives in `config.json` in the database folder, with file mode `0600`. A token is not given on the command line (shell history); it is taken from an environment variable or a hidden prompt.
+- Keys and tokens live in `secrets.json` (mode `0600`) next to `config.json` in the database folder. `config.json` keeps only what is not secret. A section reads as the two merged, with `secrets.json` winning (`vscode/secrets.js` `sectionWithSecrets`; `imprimatur-private` `lib/settings.js`). A `secrets.json` that others can read, or that is a symlink, is ignored.
+- `migrateSecrets` moves a field out of `config.json` only once its reader reads `secrets.json`: Imprimatur's own (`tracker.jira.token`), or a loaded plugin that names the key in `module.exports.secrets`. It runs when the extension starts and in `npm run setup`. It reports names only, never values. `secrets.json` is written first, so a crash never loses a key.
+- `npm run setup` adds `permissions.deny` `Read(…/secrets.json)` and `Edit(…/secrets.json)` to `~/.claude/settings.json`, so an agent's file tools do not pull a key into its context. A Bash command that reads the file still goes through the permission check; any process running as the user can read it; an OS keychain is the next step where one exists.
+- A token is not given on the command line (shell history); it is taken from an environment variable or a hidden prompt.
 - Comments sent to the issue tracker are fixed: no task or record text leaks out.
 - If the Agent Setup health check finds a secret, it names only the line and never writes the value.
 - Plugins listed in `config.json` ("plugins") are code the user chose to install; a plugin reaches only what the plugin hook gives it (writes through `onChange`, `adoptRepo`, `onOrigin`, and the extension's API in `activate`).
