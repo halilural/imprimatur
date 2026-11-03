@@ -122,4 +122,14 @@ suite("Imprimatur in the extension host", () => {
     assert.ok(b.skips > a.skips, "the stamp skipped it");
     assert.ok(b.refreshMs < 10, `the skipped refresh took ${b.refreshMs} ms`);
   });
+
+  test("#115: Show more on Edits asks the host for more rows; the view keeps the count", async () => {
+    const { panelState, panelMessage } = await api();
+    await vscode.commands.executeCommand("imprimatur.openGraph");
+    await panelMessage({ type: "view", view: { tab: "edits", rows: 700 } });
+    assert.equal(panelState().view.rows, 700);
+    assert.equal(panelState().view.tab, "edits");
+    await panelMessage({ type: "view", view: { tab: "edits", rows: "all" } });
+    assert.equal(panelState().view.rows, 700, "a bad count is ignored");
+  });
 });

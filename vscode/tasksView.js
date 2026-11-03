@@ -967,6 +967,8 @@ function cleanView(v) {
   if (ids(v.old)) out.old = ids(v.old);
   // The section open for editing on a document tab (#72): "architecture:12", "product:new", "glossary:3".
   if (v.edit === null || (typeof v.edit === "string" && /^(architecture|product|glossary):(new|\d+)$/.test(v.edit))) out.edit = v.edit;
+  // How many Edits rows the page draws (#115): the newest first, "Show more" adds.
+  if (Number.isInteger(v.rows) && v.rows > 0) out.rows = Math.min(v.rows, 1_000_000);
   return out;
 }
 
