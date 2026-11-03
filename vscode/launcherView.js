@@ -29,10 +29,22 @@ const ROWS = [
   { id: "edits", label: "Agent changes", icon: "git-merge", command: "imprimatur.openGraph", tooltip: "Agent Change Graph: the agent's edits" },
 ];
 
+/**
+ * While the view is hidden (#114), a refresh counts only the badge; the full counts (the
+ * edits under review, which also keep the status line's count fresh) run at most this often.
+ */
+const HIDDEN_FULL_MS = 60_000;
+
 class LauncherView {
-  /** @param {() => Counts} counts */
-  constructor(counts) {
+  /** @param {() => Counts} counts @param {{inbox?: () => number, now?: () => number}} [o] inbox: the badge's count alone, cheap */
+  constructor(counts, { inbox, now = Date.now } = {}) {
     this.counts = counts;
+    this.inbox = inbox;
+    this.clock = now;
+    /** When the full counts last ran (0: never). */
+    this.fullAt = 0;
+    /** A hidden refresh skipped the full counts: run them when the view shows. */
+    this.stale = false;
     /** @type {Counts} */
     this.now = { edits: 0, inbox: 0 };
     this.changed = new vscode.EventEmitter();
@@ -41,10 +53,17 @@ class LauncherView {
     this.view = undefined;
   }
 
-  /** Counts again, redraws, sets the badge. */
-  refresh() {
+  /** Counts again, redraws, sets the badge. @param {number} [inbox] the badge's count, when the caller has it */
+  refresh(inbox) {
+    const hidden = this.view !== undefined && !this.view.visible;
     try {
-      this.now = this.counts();
+      if (hidden && this.clock() - this.fullAt < HIDDEN_FULL_MS) {
+        this.now = { ...this.now, inbox: inbox ?? this.inbox?.() ?? this.now.inbox };
+        this.stale = true;
+        if (this.view) this.view.badge = this.now.inbox ? { value: this.now.inbox, tooltip: `${this.now.inbox} waiting on you` } : undefined;
+        return;
+      }
+      this.catchUp();
     } catch {
       // the database or a log being written: the next change catches up
     }
@@ -53,8 +72,21 @@ class LauncherView {
     this.changed.fire(undefined);
   }
 
+  /** The full counts now: a hidden refresh skipped them. */
+  catchUp() {
+    try {
+      this.now = this.counts();
+      this.fullAt = this.clock();
+      this.stale = false;
+    } catch {
+      // the next change catches up
+    }
+  }
+
   /** @param {any} [row] */
   getChildren(row) {
+    // Drawn (or read) after hidden refreshes: the rows match the badge.
+    if (!row && this.stale) this.catchUp();
     if (!row) return ROWS;
     const parts = this.now.parts;
     if (!parts) return [];
@@ -96,10 +128,12 @@ class LauncherView {
   }
 }
 
-/** @param {vscode.ExtensionContext} ctx @param {() => Counts} counts */
-function registerLauncher(ctx, counts) {
-  const provider = new LauncherView(counts);
+/** @param {vscode.ExtensionContext} ctx @param {() => Counts} counts @param {() => number} [inbox] the badge's count alone */
+function registerLauncher(ctx, counts, inbox) {
+  const provider = new LauncherView(counts, { inbox });
   provider.view = vscode.window.createTreeView("imprimatur.launcher", { treeDataProvider: provider });
+  // Counts skipped while hidden are caught up when it shows.
+  ctx.subscriptions.push(provider.view.onDidChangeVisibility((e) => e.visible && provider.stale && provider.refresh()));
   // Which build runs here, next to the view's title: two machines can run different ones.
   provider.view.description = `v${ctx.extension.packageJSON.version}`;
   ctx.subscriptions.push(provider.view);
@@ -107,4 +141,4 @@ function registerLauncher(ctx, counts) {
   return provider;
 }
 
-module.exports = { registerLauncher, LauncherView, ROWS, PARTS };
+module.exports = { registerLauncher, LauncherView, ROWS, PARTS, HIDDEN_FULL_MS };

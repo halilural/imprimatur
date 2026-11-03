@@ -1201,6 +1201,8 @@ let lastFailed;
 /** Pages posted, and when the last one was (the integration tests time a write with them, #71). */
 let renders = 0;
 let renderedAt = 0;
+/** Pages built for a refresh, sent or not (#114: a burst of hook writes builds one or two). */
+let builds = 0;
 /**
  * extension.js (#71): visible(true/false) as the panel shows and hides (it starts the
  * database backstop poll); afterWrite() after the page wrote to the database (it draws
@@ -1539,6 +1541,7 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
     // Not drawn while hidden, but not forgotten: drawn when it shows (onDidChangeViewState).
     if (!p.visible) return void (missed = true);
     const next = page("", waitingOnly);
+    builds++;
     if (next === sent) return;
     p.webview.postMessage({ type: "render", html: (sent = lastHtml = next) });
     renders++;
@@ -1552,7 +1555,7 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
 }
 
 /** The open panel, for the integration tests: its repo, view, last page and last failed write. */
-const panelState = () => ({ open: !!panel, visible: !!panel?.visible, root: shown, view: { ...view }, html: lastHtml, failed: lastFailed, renders, renderedAt });
+const panelState = () => ({ open: !!panel, visible: !!panel?.visible, root: shown, view: { ...view }, html: lastHtml, failed: lastFailed, renders, renderedAt, builds });
 
 /**
  * What waits on the user, counted once for every place that shows it (the launcher's
