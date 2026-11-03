@@ -4,6 +4,13 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.79.0] - 2026-11-03
+
+### Changed
+- The Agent changes (Edits) tab draws the newest 200 rows, with "Show 500 more" and "Show all"
+  under them (#115, step 3). 1,853 rows were 5.4 MB in one page; the page now stays near 600 KB
+  however many rows there are. Search and the kind filters cover the rows drawn.
+
 ## [0.78.0] - 2026-11-03
 
 ### Changed

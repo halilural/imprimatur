@@ -318,3 +318,37 @@ test("steps in a record body: checkboxes with their line, a tick rewrites that l
   inbox = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting: [] });
   assert.ok(inbox.includes("1/3 steps"));
 });
+
+test("#115 Edits paging: the newest 200 rows drawn, Show more adds 500, Show all; the view keeps the count", async () => {
+  const Module = req("node:module");
+  const load = Module._load;
+  Module._load = function (r, ...a) {
+    return r === "vscode" ? { window: {}, workspace: {}, commands: {}, env: {}, Uri: {} } : load.call(this, r, ...a);
+  };
+  try {
+    const { html } = req("../vscode/graphView.js");
+    const rows = Array.from({ length: 2000 }, (_, i) => ({ file: `f${i}.md`, n: 1, t: Date.now() - i * 1000, added: 1, removed: 0, lane: 0, intent: `Edit ${i}`, preview: "<p>x</p>" }));
+    const data = { rows, lanes: [{ first: 0, last: 1999 }], sessions: [] };
+    const count = (page) => (page.match(/<tr data-kind="edit"/g) ?? []).length;
+    const page = html(data, "/r", "N", [], { view: { tab: "edits" } });
+    assert.equal(count(page), 200);
+    assert.ok(page.includes('data-file="f0.md"') && page.includes('data-file="f199.md"') && !page.includes('data-file="f200.md"'), "the newest first");
+    assert.match(page, /The newest 200 of 2000 rows/);
+    assert.match(page, /data-more="700">Show 500 more<\/a> · <a href="#" data-more="2000">Show all/);
+    const json = JSON.parse(page.match(/<script type="application\/json" id="rows">([\s\S]*?)<\/script>/)[1]);
+    assert.equal(json.length, 200, "the hover previews match the rows drawn");
+    assert.ok(page.length < 1_000_000, `page ${Math.round(page.length / 1024)} KB`);
+    const more = html(data, "/r", "N", [], { view: { tab: "edits", rows: 700 } });
+    assert.equal(count(more), 700);
+    const all = html(data, "/r", "N", [], { view: { tab: "edits", rows: 2000 } });
+    assert.equal(count(all), 2000);
+    assert.ok(!all.includes('class="more"'), "nothing left to show");
+    assert.deepEqual(tv.cleanView({ rows: 700 }), { rows: 700 });
+    assert.deepEqual(tv.cleanView({ rows: -1 }), {});
+    assert.deepEqual(tv.cleanView({ rows: "all" }), {});
+    const js = page.match(/<script nonce="N">([\s\S]*?)<\/script>/)[1];
+    assert.doesNotThrow(() => new Function(js));
+  } finally {
+    Module._load = load;
+  }
+});

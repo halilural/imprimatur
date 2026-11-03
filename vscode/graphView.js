@@ -158,8 +158,15 @@ function laneSvg(i, row, lanes, cols = columnsOf(lanes)) {
  * @param {ReturnType<typeof waitingSteps>} [waiting]
  * @param {{view?: Record<string, any>, pane?: string, inbox?: number, repoName?: string, mermaid?: {src: string, csp: string}}} [opts] mermaid: dist/mermaid.min.js as a webview URI, and the webview's cspSource
  */
+/** Edits rows drawn at first (#115): 1,853 rows were 5.4 MB in one document; "Show more" adds. */
+const EDIT_ROWS = 200;
+const MORE_ROWS = 500;
+
 function html(data, root, nonce, waiting = [], opts = {}) {
   const view = { tab: "edits", ...opts.view };
+  const limit = Number(view.rows) > 0 ? Number(view.rows) : EDIT_ROWS;
+  const drawnRows = data.rows.slice(0, limit);
+  const hiddenRows = data.rows.length - drawnRows.length;
   const tab = tasksView.TABS.includes(view.tab) ? view.tab : "edits";
   const turn = waiting.filter((w) => w.session !== FILES_SESSION);
   const open = turn.filter((w) => w.state === "open").length;
@@ -214,8 +221,11 @@ function html(data, root, nonce, waiting = [], opts = {}) {
     .filter(([k]) => kindCount.get(k))
     .map(([k, [icon, label]]) => `<button class="chip" data-kind="${k}" title="Show or hide: ${esc(label)}">${tasksView.icon(/** @type {any} */ (icon), 13)} ${esc(label)} <span class="n">${kindCount.get(k)}</span></button>`)
     .join("");
+  const more = hiddenRows > 0
+    ? `<tr class="more"><td colspan="8" class="empty">The newest ${drawnRows.length} of ${data.rows.length} rows; search and filters cover these. <a href="#" data-more="${limit + MORE_ROWS}">Show ${Math.min(MORE_ROWS, hiddenRows)} more</a>${hiddenRows > MORE_ROWS ? ` · <a href="#" data-more="${data.rows.length}">Show all</a>` : ""}</td></tr>`
+    : "";
   const body = tab !== "edits" ? LOADING(8) : data.rows.length
-    ? data.rows
+    ? drawnRows
         .map(
           (r, i) => r.record ? recordRow(r, i) : r.activity ? activityRow(r, i) : `<tr data-kind="edit"${r.gone || r.outside ? ` class="${[r.gone && "gone", r.outside && "outside"].filter(Boolean).join(" ")}"` : ""} data-file="${esc(r.file)}" data-n="${r.n}" data-i="${i}" data-q="${esc([r.file, r.intent, r.summary, r.prompt, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}"
   data-vscode-context="${menu({ webviewSection: r.accepted || r.gone ? "edit-ok" : "edit-open", file: r.file, n: r.n })}"${r.preview ? "" : ` title="${esc(r.prompt ? `Request: ${r.prompt}` : "")}"`}>
@@ -229,7 +239,7 @@ function html(data, root, nonce, waiting = [], opts = {}) {
   <td class="c"><span class="a">+${r.added}</span> <span class="r">−${r.removed}</span></td>
 </tr>`,
         )
-        .join("\n")
+        .join("\n") + more
     : `<tr><td colspan="8" class="empty">No agent edits recorded in ${esc(root)} yet.</td></tr>`;
   const pending = data.rows.filter((r) => !r.accepted).length;
   return `<!doctype html><html><head><meta charset="utf-8">
@@ -332,7 +342,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
 <span class="tools-r"><label class="searchbox">${tasksView.icon("search", 14)}<input id="filter" type="search" aria-label="Search" placeholder="Search… (/)"></label><button id="audit" class="tbtn" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">${tasksView.icon("audit", 14)}Audit</button><button id="scan" class="tbtn" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">${tasksView.icon("scan", 14)}Scan history</button></span></header>
 <section id="edits"${tab === "edits" ? "" : " hidden"}><div class="ehead"><div id="kinds">${chips}</div><span class="n" id="count-edits">${data.rows.filter((r) => !r.record && !r.activity).length} edits · ${data.rows.filter((r) => r.activity).length} other calls · ${data.rows.filter((r) => r.record).length} record changes · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span></div><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><div class="etable"><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
 <tbody>${body}</tbody></table></div>
-<script type="application/json" id="rows">${JSON.stringify((tab === "edits" ? data.rows : []).map((r) => (r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview, file: r.file, n: r.n, md: /\.mdx?$/i.test(r.file) } : null))).replace(/</g, "\\u003c")}</script></section>
+<script type="application/json" id="rows">${JSON.stringify((tab === "edits" ? drawnRows : []).map((r) => (r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview, file: r.file, n: r.n, md: /\.mdx?$/i.test(r.file) } : null))).replace(/</g, "\\u003c")}</script></section>
 <section id="pane" data-tab="${tab}"${tab === "edits" ? " hidden" : ""}>${tab === "edits" ? '<p class="empty loading" data-k="loading">Loading…</p>' : opts.pane ?? ""}</section>
 <div id="pop"></div>
 <script nonce="${nonce}">
@@ -894,6 +904,11 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       run.lastChild.textContent = run.id === "audit" ? "Auditing…" : "Scanning…";
       return vscode.postMessage({ type: run.id });
     }
+    const moreRows = t.closest("#edits [data-more]");
+    if (moreRows) {
+      e.preventDefault();
+      return vscode.postMessage({ type: "view", view: { tab: "edits", rows: Number(moreRows.dataset.more) } });
+    }
     const chip = t.closest("#kinds .chip");
     if (chip) { state.kinds[chip.dataset.kind] = state.kinds[chip.dataset.kind] === false; return apply(); }
     const grp = t.closest("a.grp");
@@ -1225,6 +1240,8 @@ const view = {
   flash: /** @type {number | null} */ (null),
   // Document tabs (#72): the section being edited ("architecture:12", "product:new") and one to light up (its key).
   edit: /** @type {string | null} */ (null), docFlash: /** @type {string | null} */ (null),
+  // Edits rows drawn (#115); undefined: EDIT_ROWS.
+  rows: /** @type {number | undefined} */ (undefined),
 };
 /** Where "every repo" is kept (extension.js: the workspace state, as the record views kept it). */
 let scopeStore = { get: () => false, set: (/** @type {boolean} */ _v) => {} };
@@ -1234,7 +1251,7 @@ function setPanelScope(store) {
   view.all = !!store.get();
 }
 /** The view as the page keeps it. */
-const pageView = () => ({ tab: view.tab, sel: view.sel, filter: view.filter, all: view.all, showDone: view.showDone, old: view.old, edit: view.edit });
+const pageView = () => ({ tab: view.tab, sel: view.sel, filter: view.filter, all: view.all, showDone: view.showDone, old: view.old, edit: view.edit, rows: view.rows });
 
 /**
  * Moves the view: a tab, or a task (by key in a repo, or by one of its records) on Tasks.
