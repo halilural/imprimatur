@@ -79,3 +79,18 @@ test("data dir: a link deep in the old folder is not moved, and a target that is
   mergeLegacy(root);
   assert.equal(fs.readFileSync(path.join(secret, "bashrc"), "utf8"), "SAFE\n");
 });
+
+test("data dir: a link left in a data folder by 0.89.0/0.89.1 is removed the first time the folder is used", () => {
+  const { dataHome, keyOf, forget } = require("../vscode/data-dir.js");
+  const secret = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-126-secret-"));
+  put(path.join(secret, "bashrc"), "SAFE\n");
+  const root = repo();
+  const dir = path.join(dataHome(), keyOf(root));
+  put(path.join(dir, "history", "a.md.jsonl"), "1\n");
+  fs.symlinkSync(path.join(secret, "bashrc"), path.join(dir, "history", "b.md.jsonl"));
+  forget();
+  assert.equal(dataDir(root), dir);
+  assert.ok(!fs.existsSync(path.join(dir, "history", "b.md.jsonl")), "the link is gone");
+  assert.equal(fs.readFileSync(path.join(dir, "history", "a.md.jsonl"), "utf8"), "1\n", "real files stay");
+  assert.equal(fs.readFileSync(path.join(secret, "bashrc"), "utf8"), "SAFE\n", "its target untouched");
+});

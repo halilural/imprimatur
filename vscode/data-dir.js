@@ -184,6 +184,16 @@ function dataDir(root, { env = process.env } = {}) {
   try {
     mergeLegacy(r, dir);
   } catch {}
+  // 0.89.0 and 0.89.1 moved old folders whole: a link that came along could be written
+  // through by a hook. Once per folder, every link in it goes (the folder only ever holds
+  // Imprimatur's own regular files).
+  try {
+    const mark = path.join(dir, ".no-links");
+    if (!fs.existsSync(mark)) {
+      sweepLinks(dir);
+      fs.writeFileSync(mark, "Links removed once (#126, 0.89.3).\n");
+    }
+  } catch {}
   return dir;
 }
 
@@ -198,7 +208,20 @@ function dataPath(root, rel, ...more) {
   return path.join(dataDir(root), inside, ...more);
 }
 
+/** Removes every link under dir, at any depth, without following one. @param {string} dir @returns {number} links removed */
+function sweepLinks(dir) {
+  let n = 0;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isSymbolicLink()) {
+      fs.rmSync(p, { force: true });
+      n++;
+    } else if (e.isDirectory()) n += sweepLinks(p);
+  }
+  return n;
+}
+
 /** Forget the folders found (tests that change IMPRIMATUR_DB). */
 const forget = () => known.clear();
 
-module.exports = { LEGACY, dataDir, dataPath, dataHome, keyOf, mergeLegacy, mergeInto, forget };
+module.exports = { LEGACY, dataDir, dataPath, dataHome, keyOf, mergeLegacy, mergeInto, sweepLinks, forget };
