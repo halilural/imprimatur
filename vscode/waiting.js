@@ -183,4 +183,4 @@ function waitingSteps(root) {
   return out.sort((a, b) => Date.parse(b.t) - Date.parse(a.t) || a.i - b.i);
 }
 
-module.exports = { WAITING_DIR, itemsOf, waitingItems, waitingSteps, readLog, openSteps, tickStep, stepLabel, labelsIn };
+module.exports = { WAITING_DIR, OPENS, itemsOf, waitingItems, waitingSteps, readLog, openSteps, tickStep, stepLabel, labelsIn };

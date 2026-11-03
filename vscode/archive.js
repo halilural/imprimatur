@@ -16,7 +16,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const zlib = require("node:zlib");
 const { BASELINE_DIR, HISTORY_DIR, historyEdits } = require("./review-state.js");
-const { WAITING_DIR, readLog, itemsOf } = require("./waiting.js");
+const { WAITING_DIR, readLog, itemsOf, OPENS } = require("./waiting.js");
 const { ACTIVITY_DIR } = require("./activity.js");
 const { acceptEdit } = require("./graph.js");
 const { CALLS } = require("./calls.js");
@@ -112,7 +112,7 @@ function archiveRepo(root, opts = {}) {
 
 /** @param {string} root @param {{days?: number, now?: number}} opts */
 function archiveUnlocked(root, { days = 7, now = Date.now() }) {
-  const out = { edits: 0, files: 0, sessions: 0, calls: 0, descriptions: 0, activity: 0 };
+  const out = { edits: 0, files: 0, sessions: 0, calls: 0, descriptions: 0, activity: 0, trimmed: 0 };
   const cutoff = now - days * DAY;
   const dest = path.join(root, ARCHIVE_DIR, new Date(now).toISOString().slice(0, 10));
   const history = path.join(root, HISTORY_DIR);
@@ -230,8 +230,18 @@ function archiveUnlocked(root, { days = 7, now = Date.now() }) {
       const was = stamp(log);
       const records = readLog(log);
       const last = Math.max(0, ...records.map((r) => Date.parse(r.t) || 0));
-      // Empty or being written (no record read yet), new, or still asking: left alone.
-      if (!records.length || last >= cutoff || fs.statSync(log).mtimeMs >= cutoff || itemsOf(records, name.slice(0, -".jsonl".length)).some((it) => it.open)) continue;
+      // Empty or being written (no record read yet), or new: left alone.
+      if (!records.length || last >= cutoff || fs.statSync(log).mtimeMs >= cutoff) continue;
+      const session = name.slice(0, -".jsonl".length);
+      if (itemsOf(records, session).some((it) => it.open)) {
+        // #122: a log quiet for TRIM_DAYS that still asks keeps only what its open asks need.
+        if (last >= now - Math.max(days, TRIM_DAYS) * DAY) continue;
+        const kept = openOnly(lines(log), session);
+        if (!kept) continue;
+        stash(path.join(dest, "waiting", name), fs.readFileSync(log, "utf8"));
+        if (rewrite(log, kept, was)) out.trimmed++;
+        continue;
+      }
       stash(path.join(dest, "waiting", name), fs.readFileSync(log, "utf8"));
       if (rewrite(log, "", was)) out.sessions++;
     }
@@ -252,6 +262,103 @@ function archiveUnlocked(root, { days = 7, now = Date.now() }) {
   return out;
 }
 
+/** A waiting log quiet this long while it still asks is cut down to its open asks (#122). */
+const TRIM_DAYS = 30;
+
+/**
+ * The lines a waiting log needs for its open asks alone: each open ask's own record, the
+ * ticks of its steps, and the answers a still-open verify step gathers as notes. Checked
+ * before it is used: the cut log must give the very same open asks, or undefined (the log
+ * stays whole). Undefined too when nothing would be cut.
+ * @param {Array<{line: string, r: any}>} all @param {string} session @returns {string | undefined}
+ */
+function openOnly(all, session) {
+  const records = all.map((x) => x.r).filter(Boolean);
+  const open = itemsOf(records, session).filter((it) => it.open);
+  const ts = new Set(open.map((it) => it.t));
+  const firstVerify = Math.min(...open.filter((it) => it.kind === "verify").map((it) => Date.parse(it.t) || Infinity));
+  const keep = all.filter(({ r }) => r && (
+    (OPENS.includes(r.kind) && ts.has(r.t)) ||
+    (r.kind === "check" && ts.has(r.item)) ||
+    (r.kind === "answer" && r.answer && (Date.parse(r.t) || 0) >= firstVerify)));
+  if (keep.length === all.length) return undefined;
+  const same = (/** @type {any[]} */ items) => JSON.stringify(items.filter((it) => it.open));
+  if (same(itemsOf(keep.map((x) => x.r), session)) !== same(open)) return undefined;
+  return keep.map((x) => x.line).join("\n") + "\n";
+}
+
+/** Total size of a folder's files. @param {string} dir */
+function sizeOf(dir) {
+  let n = 0;
+  for (const e of fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }) : []) {
+    const p = path.join(dir, e.name);
+    n += e.isDirectory() ? sizeOf(p) : fs.statSync(p).size;
+  }
+  return n;
+}
+
+/**
+ * Retention (#122): archive/<date>/ folders older than keepDays go, then the oldest until
+ * the archive is under maxBytes (the newest day stays); docs-backup/ copies older than
+ * keepDays go, except each file's newest, and at most BACKUPS_KEPT per file stay; the
+ * unread marks of the removed unread feature (#111) go.
+ * @param {string} root @param {{keepDays?: number, maxBytes?: number, now?: number}} [o]
+ * @returns {{days: number, archiveBytes: number, backups: number, unread: boolean}}
+ */
+function pruneRepo(root, { keepDays = 90, maxBytes = 25 * 1024 * 1024, now = Date.now() } = {}) {
+  const out = { days: 0, archiveBytes: 0, backups: 0, unread: false };
+  const archive = path.join(root, ARCHIVE_DIR);
+  if (fs.existsSync(archive)) {
+    let dated = fs.readdirSync(archive, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(e.name))
+      .map((e) => ({ name: e.name, at: Date.parse(`${e.name}T00:00:00Z`), bytes: sizeOf(path.join(archive, e.name)) }))
+      .sort((a, b) => a.at - b.at);
+    const drop = (/** @type {{name: string}} */ d) => {
+      fs.rmSync(path.join(archive, d.name), { recursive: true, force: true });
+      out.days++;
+    };
+    if (keepDays > 0) for (const d of dated.filter((d) => d.at < now - keepDays * DAY)) drop(d);
+    dated = dated.filter((d) => fs.existsSync(path.join(archive, d.name)));
+    let total = dated.reduce((n, d) => n + d.bytes, 0);
+    while (maxBytes > 0 && total > maxBytes && dated.length > 1) {
+      const d = /** @type {any} */ (dated.shift());
+      drop(d);
+      total -= d.bytes;
+    }
+    out.archiveBytes = total;
+  }
+  const backups = path.join(root, ".claude", "imprimatur", "docs-backup");
+  if (fs.existsSync(backups)) {
+    /** @type {Map<string, Array<{f: string, at: number}>>} */
+    const byName = new Map();
+    for (const n of fs.readdirSync(backups)) {
+      const m = /^(.*)-(\d{10,})\.md$/.exec(n);
+      if (!m) continue;
+      const list = byName.get(m[1]) ?? [];
+      list.push({ f: path.join(backups, n), at: Number(m[2]) });
+      byName.set(m[1], list);
+    }
+    for (const list of byName.values()) {
+      list.sort((a, b) => b.at - a.at);
+      list.forEach((b, i) => {
+        if (i === 0) return;
+        if (i >= BACKUPS_KEPT || (keepDays > 0 && b.at < now - keepDays * DAY)) {
+          fs.rmSync(b.f, { force: true });
+          out.backups++;
+        }
+      });
+    }
+  }
+  const unread = path.join(root, ".claude", "imprimatur", "unread.json");
+  if (fs.existsSync(unread)) {
+    fs.rmSync(unread, { force: true });
+    out.unread = true;
+  }
+  return out;
+}
+/** docs-backup/ copies kept per file (#122). */
+const BACKUPS_KEPT = 5;
+
 /** Has the repo's archive not run in the last day? @param {string} root @param {number} [now] */
 function archiveDue(root, now = Date.now()) {
   try {
@@ -261,4 +368,4 @@ function archiveDue(root, now = Date.now()) {
   }
 }
 
-module.exports = { ARCHIVE_DIR, archiveRepo, archiveDue };
+module.exports = { ARCHIVE_DIR, archiveRepo, archiveDue, pruneRepo, openOnly, TRIM_DAYS };
