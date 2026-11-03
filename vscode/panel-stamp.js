@@ -1,8 +1,8 @@
 // @ts-check
 // The panel's input stamp (#115): a cheap string that changes whenever what the page
 // is built from may have changed. Equal stamps mean an equal page, so refresh() skips
-// the build (30-180 ms) and the post. The files part is a stat of every file under the
-// data folder (archive/, docs-backup/ and pending/ aside: no page reads them), plus each
+// the build (30-180 ms) and the post. The files part is a stat of every file in the repo's
+// data folder (data-dir.js, #126) (archive/, docs-backup/ and pending/ aside: no page reads them), plus each
 // file under review in the repo (its text on disk decides accepted and gone), plus the
 // repo's .claude/imprimatur.json. No file is read.
 "use strict";
@@ -56,7 +56,7 @@ function dataStamp(root) {
   const out = [];
   /** @type {string[]} */
   const reviewed = [];
-  walk(path.join(root, DATA), "", out, (rel) => reviewed.push(rel));
+  walk(require("./data-dir.js").dataDir(root), "", out, (rel) => reviewed.push(rel));
   for (const rel of reviewed) out.push(`@${rel}=${statOf(path.join(root, rel))}`);
   out.push(`cfg=${statOf(path.join(root, ".claude", "imprimatur.json"))}`);
   return out.join("\n");

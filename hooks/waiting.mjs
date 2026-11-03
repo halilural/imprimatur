@@ -25,6 +25,7 @@ import { pathToFileURL } from "node:url";
 
 // Loaded on use, inside the caller's try: a missing module must not fail the hook.
 const require = createRequire(import.meta.url);
+const { dataPath } = require("../vscode/data-dir.js");
 
 const TEXT_MAX = 1500;
 const DETAIL_MAX = 4000;
@@ -157,8 +158,7 @@ export function recordWaiting(data, project) {
   const { WAITING_DIR } = require("../vscode/waiting.js");
   const { transcriptInfo } = require("./baseline.mjs");
   const root = repoRoot(path.resolve(project)) ?? path.resolve(project);
-  const log = path.join(root, WAITING_DIR, `${session}.jsonl`);
-  require("../vscode/review-state.js").ensureIgnored(root);
+  const log = dataPath(root, WAITING_DIR, `${session}.jsonl`);
   // A task marked done in Imprimatur closes its asks in every session (#43, #60).
   if (data.hook_event_name === "Stop") {
     try {

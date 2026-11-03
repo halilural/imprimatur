@@ -7,6 +7,8 @@ import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { editBranch } from "../hooks/baseline.mjs";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const req = createRequire(import.meta.url);
 const { historyEdits } = req("../vscode/review-state.js");
@@ -28,7 +30,7 @@ function bash(dir, id, command, event) {
   return spawnSync("node", [hook], { input, env: { ...process.env, CLAUDE_PROJECT_DIR: dir, IMPRIMATUR_DESCRIBE: "off" } }).status;
 }
 const history = (dir, file) =>
-  fs.readFileSync(path.join(dir, ".claude/imprimatur/history", `${file}.jsonl`), "utf8").trimEnd().split("\n").map((l) => JSON.parse(l));
+  fs.readFileSync(dataPath(dir, ".claude/imprimatur/history", `${file}.jsonl`), "utf8").trimEnd().split("\n").map((l) => JSON.parse(l));
 
 test("#46: a Bash command that edits on its branch and switches back to main records its branch", () => {
   const dir = tmp("imprimatur-46b-");
@@ -50,7 +52,7 @@ test("#46: a pending file in the old format (the files alone) is still read", ()
   execFileSync("git", ["init", "-q", "-b", "main"], { cwd: dir });
   const f = path.join(dir, "a.md");
   fs.writeFileSync(f, "two\n");
-  const pending = path.join(dir, ".claude/imprimatur/pending");
+  const pending = dataPath(dir, ".claude/imprimatur/pending");
   fs.mkdirSync(pending, { recursive: true });
   fs.writeFileSync(path.join(pending, "t2.json"), JSON.stringify({ [f]: "one\n" }));
   bash(dir, "t2", "sed -i s/one/two/ a.md", "PostToolUse");
@@ -70,7 +72,7 @@ function transcript(dir, calls) {
 
 function fileWithHistory(rows, current) {
   const root = tmp("imprimatur-46g-");
-  const h = path.join(root, ".claude/imprimatur/history");
+  const h = dataPath(root, ".claude/imprimatur/history");
   fs.mkdirSync(h, { recursive: true });
   fs.writeFileSync(path.join(h, "a.md.jsonl"), rows.map((r) => JSON.stringify(r) + "\n").join(""));
   fs.writeFileSync(path.join(root, "a.md"), current);

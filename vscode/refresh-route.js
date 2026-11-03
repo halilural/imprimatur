@@ -26,7 +26,9 @@ const NONE = [".gitignore", "pending", "archive", "docs-backup", "process.json",
  * @returns {"edits" | "graph" | "none"}
  */
 function routeOf(root, file) {
-  const rel = path.relative(path.join(root, BASE), file);
+  // #126: the data folder is outside the repo (data-dir.js); BASE only for an old in-repo one.
+  const base = require("./data-dir.js").dataDir(root);
+  const rel = file.startsWith(base + path.sep) ? path.relative(base, file) : path.relative(path.join(root, BASE), file);
   if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return "none";
   const first = rel.split(path.sep)[0];
   if (EDITS.includes(first)) return "edits";

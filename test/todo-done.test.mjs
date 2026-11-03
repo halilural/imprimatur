@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const require = createRequire(import.meta.url);
 const { closeDoneTasks } = require("../vscode/todo-done.js");
@@ -37,7 +39,7 @@ function seed(tasks) {
 
 test("todo-done: a task done in the database ticks its earlier asks in every session, not later ones (#43)", () => {
   const root = seed({ "LATD-13977": ["done", "2026-10-06T10:00:00Z"], "LATD-13937": ["open"] });
-  const dir = path.join(root, ".claude/imprimatur/waiting");
+  const dir = dataPath(root, ".claude/imprimatur/waiting");
   fs.mkdirSync(dir, { recursive: true });
   const write = (s, ...rs) => fs.writeFileSync(path.join(dir, `${s}.jsonl`), rs.map((r) => JSON.stringify({ session: s, ...r }) + "\n").join(""));
   write("a", { t: "2026-10-06T08:00:00Z", kind: "question", text: "Shall we close it?", task: "LATD-13977" });

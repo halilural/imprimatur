@@ -5,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const req = createRequire(import.meta.url);
 const { callOf, keptCalls, CALLS } = req("../vscode/calls.js");
@@ -40,7 +42,7 @@ test("#47: a finished call is kept in the repo and read from there once its tran
   assert.equal(callOf(root, tr, "e1")?.input.new_string, "b");
   assert.equal(callOf(root, tr, "r1"), undefined);
   // Read twice, kept once.
-  assert.equal(fs.readFileSync(path.join(root, CALLS), "utf8").trimEnd().split("\n").length, 2);
+  assert.equal(fs.readFileSync(dataPath(root, CALLS), "utf8").trimEnd().split("\n").length, 2);
 });
 
 test("#47: an older Bash row recorded the branch after the command: the graph corrects it from the transcript", () => {
@@ -49,7 +51,7 @@ test("#47: an older Bash row recorded the branch after the command: the graph co
     { id: "b1", name: "Bash", input: { command: "sed -i s/a/b/ a.md && git commit -qam x && git switch main" }, branch: "fix/692-reroute" },
     { id: "b2", name: "Bash", input: { command: "sed -i s/b/c/ a.md" }, branch: "feat/5-y" },
   ]);
-  const h = path.join(root, ".claude/imprimatur/history");
+  const h = dataPath(root, ".claude/imprimatur/history");
   fs.mkdirSync(h, { recursive: true });
   fs.writeFileSync(
     path.join(h, "a.md.jsonl"),
@@ -65,12 +67,12 @@ test("#47: an older Bash row recorded the branch after the command: the graph co
 
 test("#47: a done-cache written under older rules is read again from scratch", () => {
   const root = tmp("imprimatur-47t-");
-  const log = path.join(root, ".claude/imprimatur/waiting/s1.jsonl");
+  const log = dataPath(root, ".claude/imprimatur/waiting/s1.jsonl");
   fs.mkdirSync(path.dirname(log), { recursive: true });
   // The item's task field names another task; the step itself is about #37.
   fs.writeFileSync(log, JSON.stringify({ t: "2026-10-06T08:00:00Z", session: "s1", kind: "verify", task: "#36", text: "#37: tick the boxes in the panel" }) + "\n");
-  const file = path.join(root, "imprimatur.db");
-  process.env.IMPRIMATUR_DB = file;
+  // The test process's own database: the data folder (#126) sits next to it and must not move.
+  const file = createRequire(import.meta.url)("../vscode/db.js").dbPath();
   req("../vscode/records.js").reset();
   const db = req("../vscode/db.js").openDb({ path: file });
   const repoId = db.repoOf(root).id;
@@ -79,12 +81,12 @@ test("#47: a done-cache written under older rules is read again from scratch", (
   db.sqlite.prepare("UPDATE tasks SET updated_at = ? WHERE repo_id = ? AND key = '#37'").run(at, repoId);
   db.close();
   // The old cache (file-based rules) saw this task already.
-  fs.writeFileSync(path.join(root, ".claude/imprimatur/todo-done.json"), JSON.stringify({ rules: 2, tasks: { "#37": at } }));
+  fs.writeFileSync(dataPath(root, ".claude/imprimatur/todo-done.json"), JSON.stringify({ rules: 2, tasks: { "#37": at } }));
   assert.equal(closeDoneTasks(root), 1);
   assert.equal(waitingItems(root)[0].open, false);
   // The new cache: nothing to do twice.
   assert.equal(closeDoneTasks(root), 0);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(root, ".claude/imprimatur/todo-done.json"), "utf8")).rules, 3);
+  assert.equal(JSON.parse(fs.readFileSync(dataPath(root, ".claude/imprimatur/todo-done.json"), "utf8")).rules, 3);
 });
 
 test("#49: a row from before tool calls were recorded is matched to its call by file and time, and kept", () => {
@@ -113,7 +115,7 @@ test("#49: a row from before tool calls were recorded is matched to its call by 
     ].map((l) => JSON.stringify(l)).join("\n") + "\n",
   );
   try {
-    const h = path.join(root, ".claude/imprimatur/history/docs");
+    const h = dataPath(root, ".claude/imprimatur/history/docs");
     fs.mkdirSync(h, { recursive: true });
     fs.writeFileSync(
       path.join(h, "a.md.jsonl"),

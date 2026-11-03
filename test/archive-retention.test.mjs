@@ -6,6 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const require = createRequire(import.meta.url);
 const { pruneRepo, openOnly, archiveRepo } = require("../vscode/archive.js");
@@ -40,7 +42,7 @@ test("openOnly: the cut log gives the same open asks; closed ones and the chatte
 
 test("archiveRepo: a waiting log quiet for 30 days that still asks is cut (whole copy archived); a newer one is left", () => {
   const root = repo();
-  const dir = path.join(root, ".claude", "imprimatur", "waiting");
+  const dir = dataPath(root, ".claude/imprimatur", "waiting");
   fs.mkdirSync(dir, { recursive: true });
   const write = (name, recs, daysAgo) => {
     const f = path.join(dir, name);
@@ -63,12 +65,12 @@ test("archiveRepo: a waiting log quiet for 30 days that still asks is cut (whole
   assert.equal(r.trimmed, 1);
   assert.deepEqual(readLog(old).map((x) => x.text ?? x.answer), ["Still to do"]);
   assert.equal(readLog(recent).length, 3, "under 30 days: whole");
-  assert.ok(fs.existsSync(path.join(root, ".claude", "imprimatur", "archive", "2026-11-03", "waiting", "old.jsonl.gz")), "the whole log is archived");
+  assert.ok(fs.existsSync(dataPath(root, ".claude/imprimatur", "archive", "2026-11-03", "waiting", "old.jsonl.gz")), "the whole log is archived");
 });
 
 test("pruneRepo: archive days past keepDays go, then the oldest past maxBytes; backups keep each file's newest; unread.json goes", () => {
   const root = repo();
-  const base = path.join(root, ".claude", "imprimatur");
+  const base = dataPath(root, ".claude/imprimatur");
   const day = (daysAgo, bytes) => {
     const d = path.join(base, "archive", new Date(NOW - daysAgo * DAY).toISOString().slice(0, 10));
     fs.mkdirSync(d, { recursive: true });

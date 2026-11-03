@@ -12,6 +12,7 @@ const HASH = /^[0-9a-f]{7,64}$/;
 const fs = require("node:fs");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
+const { dataPath } = require("./data-dir.js");
 
 const FILE = path.join(".claude", "imprimatur", "setup-history.json");
 const DIFF_LINES = 120;
@@ -105,7 +106,7 @@ class SetupHistory {
     if (r) return r;
     r = { head: "", files: {}, explained: {} };
     try {
-      const saved = JSON.parse(fs.readFileSync(path.join(root, FILE), "utf8"));
+      const saved = JSON.parse(fs.readFileSync(dataPath(root, FILE), "utf8"));
       // The cache lives in the repo: a cloned repo could seed it. Only entries whose hashes are hashes.
       const ok = (h) => !h || (HASH.test(String(h.first?.hash ?? "")) && HASH.test(String(h.last?.hash ?? "")));
       const files = Object.fromEntries(Object.entries(saved.files ?? {}).filter(([, h]) => ok(h)));
@@ -120,7 +121,7 @@ class SetupHistory {
     const r = this.load(root);
     try {
       fs.mkdirSync(path.join(root, path.dirname(FILE)), { recursive: true });
-      fs.writeFileSync(path.join(root, FILE), JSON.stringify(r, null, 1) + "\n");
+      fs.writeFileSync(dataPath(root, FILE), JSON.stringify(r, null, 1) + "\n");
     } catch {}
   }
 

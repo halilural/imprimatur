@@ -5,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const { FILE, parseLog, historyLines, capDiff, SetupHistory } = createRequire(import.meta.url)("../vscode/setup-history.js");
 
@@ -72,7 +74,7 @@ test("history: added and last commit follow renames, git runs again only after a
   assert.match(prompts[0], /fix: louder hook/);
   assert.equal(await h.explain(root, ".claude/hooks/new.sh"), "Makes the hook print TWO in capitals.");
   assert.equal(prompts.length, 1);
-  const saved = JSON.parse(fs.readFileSync(path.join(root, FILE), "utf8"));
+  const saved = JSON.parse(fs.readFileSync(dataPath(root, FILE), "utf8"));
   assert.equal(saved.explained[`${info.last.hash}:.claude/hooks/new.sh`], "Makes the hook print TWO in capitals.");
   const again = new SetupHistory({ run, ask: async () => assert.fail("cached") });
   calls.length = 0;

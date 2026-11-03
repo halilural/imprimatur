@@ -6,6 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const req = createRequire(import.meta.url);
 const { openDb, MIGRATIONS } = req("../vscode/db.js");
@@ -66,5 +68,5 @@ test("the status line's edit count: fresh from the extension, else none", () => 
   writeOpenEdits(root, 4);
   assert.equal(readOpenEdits(root), 4);
   assert.equal(readOpenEdits(root, Date.now() + 16 * 60 * 1000), 0);
-  assert.ok(fs.existsSync(path.join(root, OPEN_EDITS_FILE)));
+  assert.ok(fs.existsSync(dataPath(root, OPEN_EDITS_FILE)));
 });

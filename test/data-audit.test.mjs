@@ -7,6 +7,8 @@ import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mergeHooks } from "../scripts/setup.mjs";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const req = createRequire(import.meta.url);
 const { latestBefore } = req("../vscode/review-state.js");
@@ -27,8 +29,8 @@ function bash(dir, id, command, event) {
   return spawnSync("node", [hook], { input, env: { ...process.env, CLAUDE_PROJECT_DIR: dir } }).status;
 }
 const history = (dir, file) =>
-  fs.readFileSync(path.join(dir, ".claude/imprimatur/history", `${file}.jsonl`), "utf8").trimEnd().split("\n").map((l) => JSON.parse(l));
-const pendingDir = (dir) => path.join(dir, ".claude/imprimatur/pending");
+  fs.readFileSync(dataPath(dir, ".claude/imprimatur/history", `${file}.jsonl`), "utf8").trimEnd().split("\n").map((l) => JSON.parse(l));
+const pendingDir = (dir) => dataPath(dir, ".claude/imprimatur/pending");
 
 test("#45: a Bash command that fails after editing is still recorded, and leaves no pending file", () => {
   const dir = repo();
@@ -85,7 +87,7 @@ test("#45: task keys are normalized; a step's own leading key is its task", () =
 
 function waitingRepo(records) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-45w-"));
-  const log = path.join(root, ".claude/imprimatur/waiting/s1.jsonl");
+  const log = dataPath(root, ".claude/imprimatur/waiting/s1.jsonl");
   fs.mkdirSync(path.dirname(log), { recursive: true });
   fs.writeFileSync(log, records.map((r) => JSON.stringify({ session: "s1", ...r }) + "\n").join(""));
   return { root, log };
@@ -101,8 +103,8 @@ test("#45: a record of an unknown kind closes nothing", () => {
 
 test("#45: a done task ticks only the steps about its task, also when the item names another", () => {
   const { root, log } = waitingRepo([{ t: "2026-10-06T08:00:00Z", kind: "verify", task: "#76", text: "#88: Check the board\n#76: Update the note" }]);
-  const file = path.join(root, "imprimatur.db");
-  process.env.IMPRIMATUR_DB = file;
+  // The test's own database (#126: the data folder sits next to it, so it must not move).
+  const file = req("../vscode/db.js").dbPath();
   req("../vscode/records.js").reset();
   const db = req("../vscode/db.js").openDb({ path: file });
   db.upsertTask(db.repoOf(root).id, "#88", { status: "done" });
@@ -123,7 +125,7 @@ test("#45: audit keeps the task every ask starts with, and normalizes the model'
 
 test("#45: a deleted file's history is not in the graph", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-45g-"));
-  const h = path.join(root, ".claude/imprimatur/history");
+  const h = dataPath(root, ".claude/imprimatur/history");
   fs.mkdirSync(h, { recursive: true });
   const row = JSON.stringify({ t: "2026-10-02T10:00:00Z", session: "s1", tool: "Edit", before: "" }) + "\n";
   fs.writeFileSync(path.join(h, "kept.md.jsonl"), row);

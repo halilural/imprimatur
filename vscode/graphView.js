@@ -25,6 +25,7 @@ const { trustGate } = require("./trust.js");
 const tasksView = require("./tasksView.js");
 const docsView = require("./docsView.js");
 const { githubOf } = require("./tasks.js");
+const { dataPath } = require("./data-dir.js");
 
 /** Where the graph logs (the extension's output channel). @type {(msg: string) => void} */
 let logLine = () => {};
@@ -1717,7 +1718,7 @@ function graphTrusted() {
  */
 function tick(m) {
   if (!shown || !/^[\w-]+$/.test(m.session ?? "")) return;
-  const log = path.join(shown, WAITING_DIR, `${m.session}.jsonl`);
+  const log = dataPath(shown, WAITING_DIR, `${m.session}.jsonl`);
   fs.appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), session: m.session, kind: "check", item: m.t, i: m.i, on: !!m.on }) + "\n");
   // Redraw now: the file watcher reports the write late (its refresh then finds nothing new).
   refresh?.(true);
@@ -1795,7 +1796,7 @@ async function auditAll() {
     reload?.(); // the button shows "Auditing…" and an update would not redraw it: load the page anew
     return void vscode.window.showInformationMessage("Imprimatur: Audit calls the claude CLI; trust this folder to use it.");
   }
-  const dir = path.join(shown, WAITING_DIR);
+  const dir = dataPath(shown, WAITING_DIR);
   const logs = fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => n.endsWith(".jsonl")).map((n) => path.join(dir, n)) : [];
   const withOpen = logs.filter((l) => openSteps(l).length);
   let closed = 0;

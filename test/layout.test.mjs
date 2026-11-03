@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const require = createRequire(import.meta.url);
 const { taskOfFile, placeOf } = require("../vscode/tasks.js");
@@ -46,7 +48,7 @@ test("layout: asks, Jira links and done tasks are read from the database (#54)",
   const root = repo();
   assert.deepEqual(todoAsks(root), [{ task: "#54", text: "Choose the move order" }]);
   assert.equal(placeOf(root, { session: "x", text: "LATD-99: something" }, new Map()).url, "https://acme.atlassian.net/browse/LATD-99");
-  const dir = path.join(root, ".claude/imprimatur/waiting");
+  const dir = dataPath(root, ".claude/imprimatur/waiting");
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "a.jsonl"), JSON.stringify({ session: "a", t: "2026-10-09T10:00:00Z", kind: "verify", text: "Close", task: "LATD-7" }) + "\n");
   assert.equal(closeDoneTasks(root), 1);

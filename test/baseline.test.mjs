@@ -5,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 // Hooks spawned below must not call a model (describe.mjs).
 process.env.IMPRIMATUR_DESCRIBE = "off";
@@ -29,8 +31,8 @@ function run(dir, file, ...exts) {
   return r.status;
 }
 
-const copy = (dir, file) => path.join(dir, ".claude/imprimatur/baseline", file);
-const log = (dir, file) => path.join(dir, ".claude/imprimatur/history", `${file}.jsonl`);
+const copy = (dir, file) => dataPath(dir, ".claude/imprimatur/baseline", file);
+const log = (dir, file) => dataPath(dir, ".claude/imprimatur/history", `${file}.jsonl`);
 const read = (p) => fs.readFileSync(p, "utf8");
 const history = (dir, file) => read(log(dir, file)).trimEnd().split("\n").map((l) => JSON.parse(l));
 
@@ -97,7 +99,7 @@ test("path with a space still runs the hook", () => {
   fs.mkdirSync(path.join(spaced, "hooks"), { recursive: true });
   fs.mkdirSync(path.join(spaced, "vscode"));
   fs.copyFileSync(hook, path.join(spaced, "hooks/baseline.mjs"));
-  for (const f of ["review-state.js", "config.js", "db.js"]) fs.copyFileSync(path.resolve(import.meta.dirname, "../vscode", f), path.join(spaced, "vscode", f));
+  for (const f of ["review-state.js", "config.js", "db.js", "data-dir.js"]) fs.copyFileSync(path.resolve(import.meta.dirname, "../vscode", f), path.join(spaced, "vscode", f));
   const input = JSON.stringify({ tool_input: { file_path: path.join(dir, "b.md") } });
   spawnSync("node", [path.join(spaced, "hooks/baseline.mjs")], { input, env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
   assert.equal(read(copy(dir, "b.md")), "");
@@ -209,7 +211,7 @@ test("bash edit (python heredoc) is recorded like an Edit; a read-only command l
   bash(dir, "t2", "cat docs/a.md", "PreToolUse");
   bash(dir, "t2", "cat docs/a.md", "PostToolUse");
   assert.equal(history(dir, "docs/a.md").length, 1);
-  assert.equal(fs.readdirSync(path.join(dir, ".claude/imprimatur/pending")).length, 0);
+  assert.equal(fs.readdirSync(dataPath(dir, ".claude/imprimatur/pending")).length, 0);
 });
 
 test("paths named in a command", async () => {

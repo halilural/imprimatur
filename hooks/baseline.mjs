@@ -22,7 +22,8 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, editBranch, ensureIgnored } = createRequire(import.meta.url)("../vscode/review-state.js");
+const { dataPath } = createRequire(import.meta.url)("../vscode/data-dir.js");
+const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, editBranch } = createRequire(import.meta.url)("../vscode/review-state.js");
 
 export { editBranch };
 
@@ -116,14 +117,13 @@ export function takeBaseline(project, file, exts = ["md", "mdx"], meta = {}, kno
   const root = repoRoot(path.dirname(abs)) ?? path.resolve(project);
   const rel = path.relative(root, abs);
   const before = knownBefore ?? (fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "");
-  const copy = path.join(root, BASELINE_DIR, rel);
-  ensureIgnored(root);
+  const copy = dataPath(root, BASELINE_DIR, rel);
   const kept = fs.existsSync(copy);
   if (!kept) {
     fs.mkdirSync(path.dirname(copy), { recursive: true });
     fs.writeFileSync(copy, before);
   }
-  const log = path.join(root, HISTORY_DIR, `${rel}.jsonl`);
+  const log = dataPath(root, HISTORY_DIR, `${rel}.jsonl`);
   // The same hook can be installed twice (project and user settings); one line per edit.
   if (latestBefore(log) === before && sameEditWindow(log)) return kept ? "kept" : "written";
   fs.mkdirSync(path.dirname(log), { recursive: true });
@@ -170,7 +170,7 @@ function sweepPending(dir) {
 export function bashEdit(event, data, project, exts) {
   const id = String(data.tool_use_id ?? "").replace(/[^\w-]/g, "");
   if (!id) return;
-  const pending = path.join(path.resolve(project), PENDING_DIR, `${id}.json`);
+  const pending = dataPath(path.resolve(project), PENDING_DIR, `${id}.json`);
   if (event === "PreToolUse") {
     const command = String(data.tool_input?.command ?? "");
     // Relative paths: the command's own `cd <dir>` first, then the tool's cwd, then the project.

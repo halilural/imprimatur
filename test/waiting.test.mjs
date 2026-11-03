@@ -5,6 +5,8 @@ import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { asksIn, recordOf, recordWaiting, userText } from "../hooks/waiting.mjs";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 // recordWaiting must not start a model call (resolve.mjs) here.
 process.env.IMPRIMATUR_DESCRIBE = "off";
@@ -132,7 +134,7 @@ test("waiting: ticked steps are kept per item and close nothing", () => {
 
 test("waiting: the hook writes per-session logs; quiet events start none", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-waiting-"));
-  const log = path.join(root, ".claude/imprimatur/waiting/s1.jsonl");
+  const log = dataPath(root, ".claude/imprimatur/waiting/s1.jsonl");
   assert.equal(recordWaiting({ hook_event_name: "UserPromptSubmit", session_id: "s1", prompt: "hi" }, root), undefined);
   assert.equal(fs.existsSync(log), false);
   assert.equal(recordWaiting({ hook_event_name: "Stop", session_id: "s1", last_assistant_message: "Shall I start?" }, root), log);
@@ -154,12 +156,12 @@ test("waiting: no logs, no items", () => {
 
 test("waiting: a turn end closes the asks of a task the database says done, in other sessions too (#43)", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-waiting-"));
-  const dir = path.join(root, ".claude/imprimatur/waiting");
+  const dir = dataPath(root, ".claude/imprimatur/waiting");
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "old.jsonl"), JSON.stringify({ t: "2020-01-01T00:00:00Z", session: "old", kind: "question", text: "Should #7 be merged?", task: "#7" }) + "\n");
-  const file = path.join(root, "imprimatur.db");
-  process.env.IMPRIMATUR_DB = file;
   const req = createRequire(import.meta.url);
+  // The test process's own database: the data folder (#126) sits next to it and must not move.
+  const file = req("../vscode/db.js").dbPath();
   req("../vscode/records.js").reset();
   const db = req("../vscode/db.js").openDb({ path: file });
   db.upsertTask(db.repoOf(root).id, "#7", { status: "done" });

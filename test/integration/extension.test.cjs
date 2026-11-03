@@ -82,7 +82,7 @@ suite("Imprimatur in the extension host", () => {
     while (!panelState().visible && Date.now() < deadline) await wait(100);
     assert.ok(panelState().visible, "the panel shows");
     const fs = require("node:fs");
-    const base = path.join(vscode.workspace.workspaceFolders[0].uri.fsPath, ".claude", "imprimatur");
+    const base = require(path.join(__dirname, "..", "..", "vscode", "data-dir.js")).dataDir(vscode.workspace.workspaceFolders[0].uri.fsPath); // #126: outside the repo
     for (const d of ["activity", "history", "pending"]) fs.mkdirSync(path.join(base, d), { recursive: true });
     await wait(3500); // earlier tests' redraws settle
     const before = panelState().builds;
@@ -110,7 +110,7 @@ suite("Imprimatur in the extension host", () => {
     await vscode.commands.executeCommand("imprimatur.openGraph");
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     await wait(3500); // earlier redraws settle (and one full build sets the stamp)
-    const base = path.join(vscode.workspace.workspaceFolders[0].uri.fsPath, ".claude", "imprimatur");
+    const base = require(path.join(__dirname, "..", "..", "vscode", "data-dir.js")).dataDir(vscode.workspace.workspaceFolders[0].uri.fsPath); // #126: outside the repo
     // A watcher event with no write behind it: the graph's path refreshes, the inputs are the same.
     watchChanged(path.join(base, "activity", "it-burst.jsonl"));
     await wait(1500);
@@ -142,7 +142,7 @@ suite("Imprimatur in the extension host", () => {
     const root = vscode.workspace.workspaceFolders[0].uri.fsPath;
     const call = (i) => {
       require(path.join(__dirname, "..", "..", "vscode", "activity.js")).record(root, { tool_name: "Bash", session_id: "it-diff", hook_event_name: "PostToolUse", tool_input: { command: `echo ${i}` }, tool_response: { stdout: String(i) } });
-      watchChanged(path.join(root, ".claude", "imprimatur", "activity", "it-diff.jsonl"));
+      watchChanged(path.join(require(path.join(__dirname, "..", "..", "vscode", "data-dir.js")).dataDir(root), "activity", "it-diff.jsonl"));
     };
     call(0); // the first update after a reload may go whole
     await wait(2500);

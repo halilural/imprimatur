@@ -4,6 +4,7 @@
 const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+const { dataPath } = require("./data-dir.js");
 
 const BASELINE_DIR = path.join(".claude", "imprimatur", "baseline");
 const HISTORY_DIR = path.join(".claude", "imprimatur", "history");
@@ -37,7 +38,7 @@ const OPEN_EDITS_STALE_MS = 15 * 60 * 1000;
 
 /** Writes the count when it changed, or every 5 minutes to show it is fresh. @param {string} root @param {number} edits */
 function writeOpenEdits(root, edits) {
-  const file = path.join(root, OPEN_EDITS_FILE);
+  const file = dataPath(root, OPEN_EDITS_FILE);
   try {
     const old = JSON.parse(fs.readFileSync(file, "utf8"));
     if (old.edits === edits && Date.now() - old.at < 5 * 60 * 1000) return;
@@ -51,7 +52,7 @@ function writeOpenEdits(root, edits) {
 /** The last count written, 0 when none or stale. @param {string} root @param {number} [now] */
 function readOpenEdits(root, now = Date.now()) {
   try {
-    const { edits: n, at } = JSON.parse(fs.readFileSync(path.join(root, OPEN_EDITS_FILE), "utf8"));
+    const { edits: n, at } = JSON.parse(fs.readFileSync(dataPath(root, OPEN_EDITS_FILE), "utf8"));
     return Number.isInteger(n) && n > 0 && now - at < OPEN_EDITS_STALE_MS ? n : 0;
   } catch {
     return 0;

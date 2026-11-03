@@ -345,10 +345,11 @@ function syncKind(db, repo, root, kind, { dryRun = false, take, adopt, adoptFile
     if (!inside(root, file)) return { ...report, skipped: "outside" };
     if (text !== undefined && !managed(text)) {
       // The hand-written original, as it was, before Imprimatur's form replaces it.
-      const backup = path.join(root, ".claude", "imprimatur", "docs-backup", `${path.basename(file, ".md")}-${Date.now()}.md`);
+      const backup = require("./data-dir.js").dataPath(root, "docs-backup", `${path.basename(file, ".md")}-${Date.now()}.md`);
       fs.mkdirSync(path.dirname(backup), { recursive: true });
       fs.writeFileSync(backup, text);
-      report.backup = path.relative(root, backup);
+      // The data folder is outside the repo (#126): the whole path.
+      report.backup = backup;
     }
     const tmp = `${file}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, out);

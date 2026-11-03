@@ -11,6 +11,7 @@ const path = require("node:path");
 const { WAITING_DIR, readLog, itemsOf, tickStep } = require("./waiting.js");
 const { stepTask } = require("./tasks.js");
 const records = require("./records.js");
+const { dataPath } = require("./data-dir.js");
 
 const SEEN = path.join(".claude", "imprimatur", "todo-done.json");
 /**
@@ -27,7 +28,7 @@ function closeDoneTasks(root) {
   /** @type {Record<string, number>} */
   let seen = {};
   try {
-    const kept = JSON.parse(fs.readFileSync(path.join(root, SEEN), "utf8"));
+    const kept = JSON.parse(fs.readFileSync(dataPath(root, SEEN), "utf8"));
     if (kept?.rules === RULES && kept.tasks) seen = kept.tasks;
   } catch {
     // first run, or a file being written
@@ -41,7 +42,7 @@ function closeDoneTasks(root) {
   }
   if (!done.size) return 0;
   let ticked = 0;
-  const dir = path.join(root, WAITING_DIR);
+  const dir = dataPath(root, WAITING_DIR);
   if (fs.existsSync(dir))
     for (const name of fs.readdirSync(dir).filter((n) => n.endsWith(".jsonl"))) {
       const log = path.join(dir, name);
@@ -61,8 +62,8 @@ function closeDoneTasks(root) {
           });
       }
     }
-  fs.mkdirSync(path.dirname(path.join(root, SEEN)), { recursive: true });
-  fs.writeFileSync(path.join(root, SEEN), JSON.stringify({ rules: RULES, tasks: seen }, null, 2) + "\n");
+  fs.mkdirSync(path.dirname(dataPath(root, SEEN)), { recursive: true });
+  fs.writeFileSync(dataPath(root, SEEN), JSON.stringify({ rules: RULES, tasks: seen }, null, 2) + "\n");
   return ticked;
 }
 

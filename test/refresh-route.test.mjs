@@ -3,13 +3,15 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire as __cr } from "node:module";
+const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const require = createRequire(import.meta.url);
 const { routeOf, trailing } = require("../vscode/refresh-route.js");
 
 test("refresh route: copies and history redraw everything, the graph's inputs the graph, bookkeeping nothing", () => {
   const root = path.resolve("/r");
-  const at = (...p) => path.join(root, ".claude", "imprimatur", ...p);
+  const at = (...p) => dataPath(root, ".claude/imprimatur", ...p);
   assert.equal(routeOf(root, at("baseline", "README.md")), "edits");
   assert.equal(routeOf(root, at("history", "docs", "a.md.jsonl")), "edits");
   for (const p of [at("waiting", "s1.jsonl"), at("activity", "s1.jsonl"), at("descriptions.jsonl"), at("calls.jsonl"), at("something-new.json")]) assert.equal(routeOf(root, p), "graph", p);
@@ -74,6 +76,7 @@ test("data folder hides itself from git: a .gitignore of * inside it, written on
   execFileSync("git", ["init", "-q", root]);
   // No global ignore rules may help: only the folder's own file.
   const git = (...a) => execFileSync("git", ["-C", root, "-c", "core.excludesFile=/dev/null", ...a], { encoding: "utf8" });
+  // The in-repo folder of releases before #126 (an old one still writes it).
   fs.mkdirSync(path.join(root, ".claude", "imprimatur", "baseline"), { recursive: true });
   fs.writeFileSync(path.join(root, ".claude", "imprimatur", "baseline", "README.md"), "x");
   fs.writeFileSync(path.join(root, "README.md"), "x");
@@ -82,5 +85,5 @@ test("data folder hides itself from git: a .gitignore of * inside it, written on
   assert.equal(ensureIgnored(root), false, "once");
   assert.equal(git("status", "--porcelain", "-uall"), "?? README.md\n", "the folder and its .gitignore are hidden; the repo's files are not");
   assert.equal(fs.existsSync(path.join(root, ".gitignore")), false, "the repo's .gitignore is not made");
-  assert.equal(routeOf(root, path.join(root, ".claude", "imprimatur", ".gitignore")), "none");
+  assert.equal(routeOf(root, dataPath(root, ".claude/imprimatur", ".gitignore")), "none");
 });

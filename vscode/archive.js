@@ -20,6 +20,7 @@ const { WAITING_DIR, readLog, itemsOf, OPENS } = require("./waiting.js");
 const { ACTIVITY_DIR } = require("./activity.js");
 const { acceptEdit } = require("./graph.js");
 const { CALLS } = require("./calls.js");
+const { dataPath } = require("./data-dir.js");
 
 const ARCHIVE_DIR = path.join(".claude", "imprimatur", "archive");
 const STATE = path.join(ARCHIVE_DIR, "state.json");
@@ -90,7 +91,7 @@ function archiveRepo(root, opts = {}) {
   // Not while git is changing the files (a checkout, rebase or merge), nor twice at once (two windows).
   const git = path.join(root, ".git");
   if (["index.lock", "rebase-merge", "rebase-apply", "MERGE_HEAD"].some((f) => fs.existsSync(path.join(git, f)))) return none;
-  const lock = path.join(root, ARCHIVE_DIR, ".lock");
+  const lock = dataPath(root, ARCHIVE_DIR, ".lock");
   fs.mkdirSync(path.dirname(lock), { recursive: true });
   try {
     fs.writeFileSync(lock, String(process.pid), { flag: "wx" });
@@ -114,8 +115,8 @@ function archiveRepo(root, opts = {}) {
 function archiveUnlocked(root, { days = 7, now = Date.now() }) {
   const out = { edits: 0, files: 0, sessions: 0, calls: 0, descriptions: 0, activity: 0, trimmed: 0 };
   const cutoff = now - days * DAY;
-  const dest = path.join(root, ARCHIVE_DIR, new Date(now).toISOString().slice(0, 10));
-  const history = path.join(root, HISTORY_DIR);
+  const dest = dataPath(root, ARCHIVE_DIR, new Date(now).toISOString().slice(0, 10));
+  const history = dataPath(root, HISTORY_DIR);
   /** Tool calls and older rows' keys still used by rows left in review. */
   const keptIds = new Set();
   const keptRows = new Set();
@@ -129,7 +130,7 @@ function archiveUnlocked(root, { days = 7, now = Date.now() }) {
     const log = path.join(ent.parentPath, ent.name);
     const file = path.relative(history, log).slice(0, -".jsonl".length);
     const abs = path.join(root, file);
-    const copy = path.join(root, BASELINE_DIR, file);
+    const copy = dataPath(root, BASELINE_DIR, file);
     const was = stamp(log);
     const rows = lines(log);
     const keep = (rs) => {
@@ -187,7 +188,7 @@ function archiveUnlocked(root, { days = 7, now = Date.now() }) {
     shifted.set(file, rows.slice(0, k).filter((x) => x.r).length);
   }
   // Rows from before tool calls were recorded hold theirs through a kept link.
-  const callsFile = path.join(root, CALLS);
+  const callsFile = dataPath(root, CALLS);
   if (fs.existsSync(callsFile)) {
     const was = stamp(callsFile);
     const all = lines(callsFile);
@@ -200,7 +201,7 @@ function archiveUnlocked(root, { days = 7, now = Date.now() }) {
     }
   }
   // Descriptions: by tool call; older ones by the file's edit number ("#n"), which shifts.
-  const descFile = path.join(root, DESCRIPTIONS);
+  const descFile = dataPath(root, DESCRIPTIONS);
   if (fs.existsSync(descFile)) {
     const was = stamp(descFile);
     const all = lines(descFile);
@@ -223,7 +224,7 @@ function archiveUnlocked(root, { days = 7, now = Date.now() }) {
     }
   }
   // Waiting logs: nothing open and nothing new.
-  const waiting = path.join(root, WAITING_DIR);
+  const waiting = dataPath(root, WAITING_DIR);
   if (fs.existsSync(waiting))
     for (const name of fs.readdirSync(waiting).filter((n) => n.endsWith(".jsonl"))) {
       const log = path.join(waiting, name);
@@ -246,7 +247,7 @@ function archiveUnlocked(root, { days = 7, now = Date.now() }) {
       if (rewrite(log, "", was)) out.sessions++;
     }
   // Activity logs (#55): a session's whole log once its last call is old.
-  const activity = path.join(root, ACTIVITY_DIR);
+  const activity = dataPath(root, ACTIVITY_DIR);
   if (fs.existsSync(activity))
     for (const name of fs.readdirSync(activity).filter((n) => n.endsWith(".jsonl"))) {
       const log = path.join(activity, name);
@@ -257,8 +258,8 @@ function archiveUnlocked(root, { days = 7, now = Date.now() }) {
       stash(path.join(dest, "activity", name), text);
       if (rewrite(log, "", was)) out.activity++;
     }
-  fs.mkdirSync(path.dirname(path.join(root, STATE)), { recursive: true });
-  fs.writeFileSync(path.join(root, STATE), JSON.stringify({ at: new Date(now).toISOString(), days, ...out }, null, 2) + "\n");
+  fs.mkdirSync(path.dirname(dataPath(root, STATE)), { recursive: true });
+  fs.writeFileSync(dataPath(root, STATE), JSON.stringify({ at: new Date(now).toISOString(), days, ...out }, null, 2) + "\n");
   return out;
 }
 
@@ -307,7 +308,7 @@ function sizeOf(dir) {
  */
 function pruneRepo(root, { keepDays = 90, maxBytes = 25 * 1024 * 1024, now = Date.now() } = {}) {
   const out = { days: 0, archiveBytes: 0, backups: 0, unread: false };
-  const archive = path.join(root, ARCHIVE_DIR);
+  const archive = dataPath(root, ARCHIVE_DIR);
   if (fs.existsSync(archive)) {
     let dated = fs.readdirSync(archive, { withFileTypes: true })
       .filter((e) => e.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(e.name))
@@ -327,7 +328,7 @@ function pruneRepo(root, { keepDays = 90, maxBytes = 25 * 1024 * 1024, now = Dat
     }
     out.archiveBytes = total;
   }
-  const backups = path.join(root, ".claude", "imprimatur", "docs-backup");
+  const backups = dataPath(root, "docs-backup");
   if (fs.existsSync(backups)) {
     /** @type {Map<string, Array<{f: string, at: number}>>} */
     const byName = new Map();
@@ -349,7 +350,7 @@ function pruneRepo(root, { keepDays = 90, maxBytes = 25 * 1024 * 1024, now = Dat
       });
     }
   }
-  const unread = path.join(root, ".claude", "imprimatur", "unread.json");
+  const unread = dataPath(root, "unread.json");
   if (fs.existsSync(unread)) {
     fs.rmSync(unread, { force: true });
     out.unread = true;
@@ -362,7 +363,7 @@ const BACKUPS_KEPT = 5;
 /** Has the repo's archive not run in the last day? @param {string} root @param {number} [now] */
 function archiveDue(root, now = Date.now()) {
   try {
-    return now - Date.parse(JSON.parse(fs.readFileSync(path.join(root, STATE), "utf8")).at) >= DAY;
+    return now - Date.parse(JSON.parse(fs.readFileSync(dataPath(root, STATE), "utf8")).at) >= DAY;
   } catch {
     return true;
   }

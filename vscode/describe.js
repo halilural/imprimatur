@@ -10,6 +10,7 @@
 "use strict";
 const fs = require("node:fs");
 const path = require("node:path");
+const { dataPath } = require("./data-dir.js");
 
 const DESCRIPTIONS = path.join(".claude", "imprimatur", "descriptions.jsonl");
 const DIFF_LINES = 120;
@@ -56,7 +57,7 @@ const cleanSentence = (out) => {
  */
 function editTexts(root, file, toolUseId) {
   const { HISTORY_DIR } = require("./review-state.js");
-  const log = path.join(root, HISTORY_DIR, `${file}.jsonl`);
+  const log = dataPath(root, HISTORY_DIR, `${file}.jsonl`);
   if (!fs.existsSync(log)) return undefined;
   const rows = fs
     .readFileSync(log, "utf8")
@@ -89,7 +90,7 @@ async function describe(root, file, toolUseId, lang, ask = askModel) {
   if (!texts || texts.before === texts.after) return undefined;
   const text = cleanSentence(await ask(promptFor(file, diffText(texts.before, texts.after), lang)));
   if (!text) return undefined;
-  const out = path.join(root, DESCRIPTIONS);
+  const out = dataPath(root, DESCRIPTIONS);
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.appendFileSync(out, JSON.stringify({ t: new Date().toISOString(), toolUseId, file, text }) + "\n");
   return text;

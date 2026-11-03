@@ -13,6 +13,7 @@ import { callTool, digest } from "../mcp/server.mjs";
 const req = createRequire(import.meta.url);
 const { openDb } = req("../vscode/db.js");
 const { syncDocs, describe, parseManaged, parseHand, sectionHash, conflictsOf } = req("../vscode/docs-sync.js");
+const { dataPath } = req("../vscode/data-dir.js");
 const { docMarkdown, HEADER } = req("../vscode/docs-export.js");
 const { importRepo, sources } = req("../vscode/import.js");
 const { check } = req("../vscode/process.js");
@@ -255,8 +256,9 @@ test("a repo that did not opt in: a hand-written file is left alone; asked (adop
   assert.equal(read(root, "docs/ARCHITECTURE.md"), ARCH);
   const asked = syncDocs(db, root, { adopt: true })[0];
   assert.equal(asked.written, true);
-  assert.equal(read(root, asked.backup), ARCH);
-  assert.match(asked.backup, /^\.claude\/imprimatur\/docs-backup\/ARCHITECTURE-\d+\.md$/);
+  assert.equal(fs.readFileSync(asked.backup, "utf8"), ARCH);
+  assert.match(asked.backup, /[\\/]docs-backup[\\/]ARCHITECTURE-\d+\.md$/);
+  assert.ok(asked.backup.startsWith(dataPath(root, "docs-backup")), "in the repo's data folder (#126)");
 });
 
 test("no last sync (new machine, lost state): a section that differs is a conflict, not overwritten; superseded and edited: a conflict", () => {

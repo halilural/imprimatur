@@ -11,6 +11,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { stepTask } = require("./tasks.js");
+const { dataPath } = require("./data-dir.js");
 
 const WAITING_DIR = path.join(".claude", "imprimatur", "waiting");
 
@@ -86,7 +87,7 @@ function itemsOf(records, session) {
  * @param {string} root repo root @returns {WaitingItem[]}
  */
 function waitingItems(root) {
-  const dir = path.join(root, WAITING_DIR);
+  const dir = dataPath(root, WAITING_DIR);
   if (!fs.existsSync(dir)) return [];
   /** @type {WaitingItem[]} */
   const out = [];
