@@ -132,4 +132,28 @@ suite("Imprimatur in the extension host", () => {
     await panelMessage({ type: "view", view: { tab: "edits", rows: "all" } });
     assert.equal(panelState().view.rows, 700, "a bad count is ignored");
   });
+
+  test("#115: a new tool call reaches the open Edits tab as a small line diff, applied without a resync", async () => {
+    const { panelState, panelMessage, watchChanged } = await api();
+    await vscode.commands.executeCommand("imprimatur.openGraph");
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    await panelMessage({ type: "view", view: { tab: "edits" } });
+    await wait(2000);
+    const root = vscode.workspace.workspaceFolders[0].uri.fsPath;
+    const call = (i) => {
+      require(path.join(__dirname, "..", "..", "vscode", "activity.js")).record(root, { tool_name: "Bash", session_id: "it-diff", hook_event_name: "PostToolUse", tool_input: { command: `echo ${i}` }, tool_response: { stdout: String(i) } });
+      watchChanged(path.join(root, ".claude", "imprimatur", "activity", "it-diff.jsonl"));
+    };
+    call(0); // the first update after a reload may go whole
+    await wait(2500);
+    const a = panelState();
+    call(1);
+    await wait(2500);
+    const b = panelState();
+    assert.ok(b.renders > a.renders, "the new call was drawn");
+    assert.ok(b.html.includes("echo 1"), "the host's page has the new row");
+    assert.ok(b.lastPost < 100_000 && b.lastPost < b.html.length / 4, `posted ${b.lastPost} of ${b.html.length} chars`);
+    await wait(500);
+    assert.equal(panelState().resyncs, b.resyncs, "the page had the version the diff was made against");
+  });
 });

@@ -17,6 +17,7 @@ const { audit } = require("./audit.js");
 const { scanHistory, scannedBefore } = require("./history.js");
 const { placeOf } = require("./tasks.js");
 const records = require("./records.js");
+const { applyOps } = require("./line-diff.js");
 const { scanTodos } = require("./history.js");
 const { closeDoneTasks } = require("./todo-done.js");
 const { scopeCss } = require("./preview.js");
@@ -167,6 +168,9 @@ function html(data, root, nonce, waiting = [], opts = {}) {
   const limit = Number(view.rows) > 0 ? Number(view.rows) : EDIT_ROWS;
   const drawnRows = data.rows.slice(0, limit);
   const hiddenRows = data.rows.length - drawnRows.length;
+  // A row's id counts from the oldest (#115): a new row at the top leaves the others' lines
+  // as they were, so the page's update is a few lines (line-diff.js), not every row.
+  const rid = (/** @type {number} */ i) => data.rows.length - 1 - i;
   const tab = tasksView.TABS.includes(view.tab) ? view.tab : "edits";
   const turn = waiting.filter((w) => w.session !== FILES_SESSION);
   const open = turn.filter((w) => w.state === "open").length;
@@ -184,7 +188,7 @@ function html(data, root, nonce, waiting = [], opts = {}) {
     return `${key}<span ${color}>${esc(l.title ?? "")}</span>`;
   });
   // A record change: shown in its task's lane; it opens the record, nothing to accept (#60).
-  const recordRow = (r, i) => `<tr class="rec" data-kind="record" data-record="${r.record}" data-i="${i}" data-q="${esc([r.file, r.intent, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}" title="Record change: click to show the record">
+  const recordRow = (r, i) => `<tr class="rec" data-kind="record" data-record="${r.record}" data-i="${rid(i)}" data-q="${esc([r.file, r.intent, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}" title="Record change: click to show the record">
   <td class="ok"><span class="badge-rec" title="Record change (nothing to accept)">${tasksView.icon("record", 14)}</span></td>
   ${lanes ? `<td class="g">${laneSvg(i, r, data.lanes, cols)}</td>` : ""}
   <td class="d">${esc(r.intent ?? r.summary)}</td>
@@ -201,7 +205,7 @@ function html(data, root, nonce, waiting = [], opts = {}) {
   const activityRow = (r, i) => {
     const [icon, label] = ACTIVITY[r.kind] ?? ACTIVITY.other;
     const fold = r.agentId && calls.get(r.agentId) ? `<a href="#" class="grp" data-agent="${esc(r.agentId)}" title="Show or hide the subagent's calls">▸ ${calls.get(r.agentId)} calls</a> ` : "";
-    return `<tr class="act${r.agent ? " sub" : ""}${r.failed ? " failed" : ""}" data-kind="${esc(r.kind ?? "other")}"${r.agent ? ` data-parent="${esc(r.agent)}"` : ""} data-i="${i}" data-q="${esc([r.tool, r.intent, r.summary, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}" title="${esc([`${r.tool}${r.failed ? " (failed)" : ""}${r.ms != null ? ` · ${r.ms} ms` : ""}`, r.intent, r.summary && `→ ${r.summary}`].filter(Boolean).join("\n"))}">
+    return `<tr class="act${r.agent ? " sub" : ""}${r.failed ? " failed" : ""}" data-kind="${esc(r.kind ?? "other")}"${r.agent ? ` data-parent="${esc(r.agent)}"` : ""} data-i="${rid(i)}" data-q="${esc([r.tool, r.intent, r.summary, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}" title="${esc([`${r.tool}${r.failed ? " (failed)" : ""}${r.ms != null ? ` · ${r.ms} ms` : ""}`, r.intent, r.summary && `→ ${r.summary}`].filter(Boolean).join("\n"))}">
   <td class="ok"><span class="badge-kind" title="${esc(label)}">${tasksView.icon(/** @type {any} */ (icon), 14)}</span></td>
   ${lanes ? `<td class="g">${laneSvg(i, r, data.lanes, cols)}</td>` : ""}
   <td class="d">${r.agent ? tasksView.icon("sub", 13) + " " : ""}${fold}${esc(r.intent ?? "")}${r.summary ? ` <span class="out">→ ${esc(r.summary)}</span>` : ""}</td>
@@ -227,7 +231,7 @@ function html(data, root, nonce, waiting = [], opts = {}) {
   const body = tab !== "edits" ? LOADING(8) : data.rows.length
     ? drawnRows
         .map(
-          (r, i) => r.record ? recordRow(r, i) : r.activity ? activityRow(r, i) : `<tr data-kind="edit"${r.gone || r.outside ? ` class="${[r.gone && "gone", r.outside && "outside"].filter(Boolean).join(" ")}"` : ""} data-file="${esc(r.file)}" data-n="${r.n}" data-i="${i}" data-q="${esc([r.file, r.intent, r.summary, r.prompt, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}"
+          (r, i) => r.record ? recordRow(r, i) : r.activity ? activityRow(r, i) : `<tr data-kind="edit"${r.gone || r.outside ? ` class="${[r.gone && "gone", r.outside && "outside"].filter(Boolean).join(" ")}"` : ""} data-file="${esc(r.file)}" data-n="${r.n}" data-i="${rid(i)}" data-q="${esc([r.file, r.intent, r.summary, r.prompt, r.task, data.lanes[r.lane]?.title, sessionTitle.get(r.session ?? "")].join(" "))}"
   data-vscode-context="${menu({ webviewSection: r.accepted || r.gone ? "edit-ok" : "edit-open", file: r.file, n: r.n })}"${r.preview ? "" : ` title="${esc(r.prompt ? `Request: ${r.prompt}` : "")}"`}>
   <td class="ok">${r.gone ? `<span class="badge-gone" title="Later edits rewrote or removed all of it: nothing left to accept">replaced</span>` : r.accepted ? `<span class="badge-ok" title="Accepted">✓</span>` : `<span class="badge-open" title="Under review — Accept, or right-click">●</span><button class="acc" title="Accept this edit">Accept</button>`}</td>
   ${lanes ? `<td class="g">${laneSvg(i, r, data.lanes, cols)}</td>` : ""}
@@ -342,7 +346,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
 <span class="tools-r"><label class="searchbox">${tasksView.icon("search", 14)}<input id="filter" type="search" aria-label="Search" placeholder="Search… (/)"></label><button id="audit" class="tbtn" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">${tasksView.icon("audit", 14)}Audit</button><button id="scan" class="tbtn" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">${tasksView.icon("scan", 14)}Scan history</button></span></header>
 <section id="edits"${tab === "edits" ? "" : " hidden"}><div class="ehead"><div id="kinds">${chips}</div><span class="n" id="count-edits">${data.rows.filter((r) => !r.record && !r.activity).length} edits · ${data.rows.filter((r) => r.activity).length} other calls · ${data.rows.filter((r) => r.record).length} record changes · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span></div><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><div class="etable"><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
 <tbody>${body}</tbody></table></div>
-<script type="application/json" id="rows">${JSON.stringify((tab === "edits" ? drawnRows : []).map((r) => (r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview, file: r.file, n: r.n, md: /\.mdx?$/i.test(r.file) } : null))).replace(/</g, "\\u003c")}</script></section>
+<script type="application/json" id="rows">${`{${(tab === "edits" ? drawnRows : []).map((r, i) => `\n${JSON.stringify(String(rid(i)))}:${JSON.stringify(r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview, file: r.file, n: r.n, md: /\.mdx?$/i.test(r.file) } : null)}`).join(",")}\n}`.replace(/</g, "\\u003c")}</script></section>
 <section id="pane" data-tab="${tab}"${tab === "edits" ? " hidden" : ""}>${tab === "edits" ? '<p class="empty loading" data-k="loading">Loading…</p>' : opts.pane ?? ""}</section>
 <div id="pop"></div>
 <script nonce="${nonce}">
@@ -984,6 +988,11 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   // and release; it only swaps changed rows, so it need not wait any longer. A
   // release the page never sees (pointer let go outside it) holds it 300 ms at most.
   let next;
+  // The host's last page as lines, its version, and whether a full page was asked for (#115).
+  let copy;
+  let copyVer = 0;
+  let resyncing = false;
+  const applyOps = ${applyOps.toString()};
   let pressed = false;
   let pressedAt = 0;
   // What was drawn last, as strings: an update swaps only what differs from it.
@@ -1183,7 +1192,22 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       document.querySelectorAll("#pane .sent").forEach((el) => el.classList.remove("sent"));
       return;
     }
+    // #115: the whole page, or the lines that changed against the copy kept here (line-diff.js).
+    if (e.data?.type === "diff") {
+      if (!copy || e.data.base !== copyVer) {
+        if (!resyncing) { resyncing = true; vscode.postMessage({ type: "resync" }); }
+        return;
+      }
+      copy = applyOps(copy, e.data.ops);
+      copyVer = e.data.ver;
+      reviews.clear();
+      next = copy.join("\\n");
+      return update();
+    }
     if (e.data?.type !== "render") return;
+    copy = e.data.html.split("\\n");
+    copyVer = e.data.ver;
+    resyncing = false;
     reviews.clear(); // edits changed: their rendered reviews may have too
     next = e.data.html;
     update();
@@ -1221,6 +1245,12 @@ let builds = 0;
 /** Refreshes the input stamp skipped (#115), and the last refresh's time in ms. */
 let skips = 0;
 let refreshMs = 0;
+/** The last update's size as posted, in characters (#115: a diff, or the whole page). */
+let lastPost = 0;
+/** @type {(() => void) | undefined} the page lost track of the versions: post the whole page */
+let resync;
+/** How often the page asked for the whole page (a version it did not have). */
+let resyncs = 0;
 /**
  * extension.js (#71): visible(true/false) as the panel shows and hides (it starts the
  * database backstop poll); afterWrite() after the page wrote to the database (it draws
@@ -1301,6 +1331,7 @@ function onMessage(m) {
   if (m.type === "showRecord" && shown) return showIn({ root: shown, record: Number(m.id) });
   if (m.type === "showTask" && shown) return showIn({ root: shown, task: String(m.task) });
   if (m.type === "scan") return scanAll();
+  if (m.type === "resync") return resync?.();
   if (m.type === "view") {
     const toEdits = m.view?.tab === "edits" && view.tab !== "edits";
     moveView(m.view ?? {});
@@ -1500,6 +1531,7 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
       panel = undefined;
       refresh = undefined;
       reload = undefined;
+      resync = undefined;
       shown = undefined;
     });
   }
@@ -1562,8 +1594,35 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
   };
   // Load once; after that the page updates in place (its "render" message):
   // setting the html reloads it, and a click during a reload is lost.
+  // #115 step 2: the page's copy of what was sent, as lines, and its version. After a reload
+  // the page has none: the first update goes whole.
+  const { diffLines, opsSize } = require("./line-diff.js");
+  /** @type {string[] | undefined} */
+  let sentLines;
+  let ver = 0;
+  /** @param {string} html */
+  const postWhole = (html) => {
+    sentLines = html.split("\n");
+    ver++;
+    lastPost = html.length;
+    p.webview.postMessage({ type: "render", html, ver });
+  };
+  /** @param {string} html */
+  const post = (html) => {
+    const lines = html.split("\n");
+    const ops = sentLines && diffLines(sentLines, lines);
+    if (!ops || opsSize(ops) > html.length / 2) return postWhole(html);
+    sentLines = lines;
+    lastPost = opsSize(ops);
+    p.webview.postMessage({ type: "diff", base: ver, ver: ++ver, ops });
+  };
+  resync = () => {
+    resyncs++;
+    postWhole(sent);
+  };
   reload = () => {
     sent = "";
+    sentLines = undefined;
     stampSent = stampNow();
     p.webview.html = lastHtml = page();
   };
@@ -1584,7 +1643,7 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
     stampSent = waitingOnly ? undefined : stamp;
     refreshMs = Date.now() - t0;
     if (next === sent) return;
-    p.webview.postMessage({ type: "render", html: (sent = lastHtml = next) });
+    post((sent = lastHtml = next));
     renders++;
     renderedAt = Date.now();
   };
@@ -1596,7 +1655,7 @@ function openGraph(root, openDiff, currentText, acceptEdit, goTo, renderEdit = (
 }
 
 /** The open panel, for the integration tests: its repo, view, last page and last failed write. */
-const panelState = () => ({ open: !!panel, visible: !!panel?.visible, root: shown, view: { ...view }, html: lastHtml, failed: lastFailed, renders, renderedAt, builds, skips, refreshMs });
+const panelState = () => ({ open: !!panel, visible: !!panel?.visible, root: shown, view: { ...view }, html: lastHtml, failed: lastFailed, renders, renderedAt, builds, skips, refreshMs, lastPost, resyncs });
 
 /**
  * What waits on the user, counted once for every place that shows it (the launcher's
