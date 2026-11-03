@@ -10,6 +10,28 @@ const HISTORY_DIR = path.join(".claude", "imprimatur", "history");
 /** The extension's last count of edits not accepted, for the status line (#92): it draws no graph. */
 const OPEN_EDITS_FILE = path.join(".claude", "imprimatur", "open-edits.json");
 
+/** Imprimatur's data folder in a repo. */
+const DATA_DIR = path.join(".claude", "imprimatur");
+
+/**
+ * The data folder hides itself from git: a .gitignore of "*" inside it, as .venv and
+ * .pytest_cache do. Edit copies, logs and history change on every tool call; without it
+ * they are committed and show as changes all the time, unless the user's own ignore
+ * rules happen to cover them. The repo's .gitignore is not touched. Cheap when there.
+ * @param {string} root
+ */
+function ensureIgnored(root) {
+  const file = path.join(root, DATA_DIR, ".gitignore");
+  if (fs.existsSync(file)) return false;
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "# Imprimatur's local data (edit copies, logs): never committed.\n*\n", { flag: "wx" });
+    return true;
+  } catch {
+    return false; // another process wrote it first, or the folder is read-only
+  }
+}
+
 /** Older than this, the extension is not running: the count is not trusted. */
 const OPEN_EDITS_STALE_MS = 15 * 60 * 1000;
 
@@ -202,4 +224,4 @@ function repoFileOf(root, rel) {
   return hits.length === 1 ? path.join(root, hits[0]) : undefined;
 }
 
-module.exports = { repoFileOf, BASELINE_DIR, HISTORY_DIR, OPEN_EDITS_FILE, writeOpenEdits, readOpenEdits, repoRoot, latestBefore, historyEdits, editBranch };
+module.exports = { repoFileOf, DATA_DIR, ensureIgnored, BASELINE_DIR, HISTORY_DIR, OPEN_EDITS_FILE, writeOpenEdits, readOpenEdits, repoRoot, latestBefore, historyEdits, editBranch };

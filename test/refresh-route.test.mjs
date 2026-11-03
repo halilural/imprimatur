@@ -64,3 +64,23 @@ test("refresh route: trailing runs once after a burst, and at least every maxWai
   call.flush();
   assert.equal(runs, 1);
 });
+
+test("data folder hides itself from git: a .gitignore of * inside it, written once, the repo's own untouched", async () => {
+  const fs = (await import("node:fs")).default;
+  const os = (await import("node:os")).default;
+  const { execFileSync } = await import("node:child_process");
+  const { ensureIgnored } = require("../vscode/review-state.js");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-ignore-"));
+  execFileSync("git", ["init", "-q", root]);
+  // No global ignore rules may help: only the folder's own file.
+  const git = (...a) => execFileSync("git", ["-C", root, "-c", "core.excludesFile=/dev/null", ...a], { encoding: "utf8" });
+  fs.mkdirSync(path.join(root, ".claude", "imprimatur", "baseline"), { recursive: true });
+  fs.writeFileSync(path.join(root, ".claude", "imprimatur", "baseline", "README.md"), "x");
+  fs.writeFileSync(path.join(root, "README.md"), "x");
+  assert.match(git("status", "--porcelain", "-uall"), /\.claude\/imprimatur\/baseline\/README.md/);
+  assert.equal(ensureIgnored(root), true);
+  assert.equal(ensureIgnored(root), false, "once");
+  assert.equal(git("status", "--porcelain", "-uall"), "?? README.md\n", "the folder and its .gitignore are hidden; the repo's files are not");
+  assert.equal(fs.existsSync(path.join(root, ".gitignore")), false, "the repo's .gitignore is not made");
+  assert.equal(routeOf(root, path.join(root, ".claude", "imprimatur", ".gitignore")), "none");
+});

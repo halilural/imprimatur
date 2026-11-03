@@ -22,7 +22,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, editBranch } = createRequire(import.meta.url)("../vscode/review-state.js");
+const { BASELINE_DIR, HISTORY_DIR, repoRoot, latestBefore, editBranch, ensureIgnored } = createRequire(import.meta.url)("../vscode/review-state.js");
 
 export { editBranch };
 
@@ -117,6 +117,7 @@ export function takeBaseline(project, file, exts = ["md", "mdx"], meta = {}, kno
   const rel = path.relative(root, abs);
   const before = knownBefore ?? (fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "");
   const copy = path.join(root, BASELINE_DIR, rel);
+  ensureIgnored(root);
   const kept = fs.existsSync(copy);
   if (!kept) {
     fs.mkdirSync(path.dirname(copy), { recursive: true });
