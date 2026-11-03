@@ -37,39 +37,31 @@ import { pathToFileURL } from "node:url";
 
 const require = createRequire(import.meta.url);
 
-const ASK = "AskUserQuestion";
 
 /**
- * The hooks Imprimatur needs: [event, matcher, script, args].
+ * The hooks Imprimatur needs: [event, matcher, script, args]. One dispatcher per event
+ * (#118: hooks/run.mjs runs every step of vscode/hook-plan.js in one process), and the
+ * async activity row (#55) for the tools the dispatcher does not run for.
  * @param {string[]} exts @returns {Array<[string, string | undefined, string, string, {async?: boolean}?]>}
  */
-export const wanted = (exts) => [
-  ["PreToolUse", "Edit|Write|Bash", "baseline.mjs", ` ${exts.join(" ")}`],
-  ["PostToolUse", "Bash", "baseline.mjs", ` ${exts.join(" ")}`],
-  ["PostToolUseFailure", "Bash", "baseline.mjs", ` ${exts.join(" ")}`],
-  ["PreToolUse", ASK, "waiting.mjs", ""],
-  ["PostToolUse", ASK, "waiting.mjs", ""],
-  ["PermissionRequest", "*", "waiting.mjs", ""],
-  ["Notification", "agent_needs_input|elicitation_dialog|elicitation_url_dialog", "waiting.mjs", ""],
-  ["Stop", undefined, "waiting.mjs", ""],
-  ["UserPromptSubmit", undefined, "waiting.mjs", ""],
-  ["PreToolUse", "mcp__imprimatur__.*", "mcp-session.mjs", ""],
-  // Process checks (#56): they act only in repos with .claude/imprimatur.json.
-  ["SessionStart", undefined, "process.mjs", ""],
-  ["PreToolUse", "Bash|Edit|Write|MultiEdit|NotebookEdit", "process.mjs", ""],
-  ["PostToolUse", "Edit|Write|MultiEdit|ExitPlanMode|Bash|mcp__imprimatur__task_upsert|mcp__imprimatur__record_add|mcp__imprimatur__record_update", "process.mjs", ""],
-  ["Stop", undefined, "process.mjs", ""],
-  // Every tool call, in a line (#55): async, the tool never waits for it.
-  ["PostToolUse", "*", "activity.mjs", "", { async: true }],
-  ["PostToolUseFailure", "*", "activity.mjs", "", { async: true }],
-];
+export const wanted = (exts) => {
+  const { EVENTS, matcherFor } = require("../vscode/hook-plan.js");
+  return [
+    ...EVENTS.map((/** @type {string} */ e) => /** @type {[string, string | undefined, string, string]} */ ([e, matcherFor(e), "run.mjs", ` ${exts.join(" ")}`])),
+    ["PostToolUse", "*", "activity.mjs", "", { async: true }],
+    ["PostToolUseFailure", "*", "activity.mjs", "", { async: true }],
+  ];
+};
+
+/** Every hook script Imprimatur has installed, older releases' too: an entry of one is ours (removed when no longer wanted). */
+const OUR_SCRIPTS = ["run.mjs", "activity.mjs", "baseline.mjs", "waiting.mjs", "mcp-session.mjs", "process.mjs"];
 
 /**
  * Each hook's timeout in seconds (#77: agnix CC-HK-010; Claude Code's default is 600).
- * Ours take ~65 ms; process.mjs may wait on git and gh (10 s each), so it gets more.
+ * Ours take ~65 ms; the dispatcher's process checks may wait on git and gh (10 s each), so it gets more.
  * @param {string} script
  */
-export const timeoutOf = (script) => (script === "process.mjs" ? 60 : 30);
+export const timeoutOf = (script) => (script === "run.mjs" || script === "process.mjs" ? 60 : 30);
 
 const MCP_NAME = "imprimatur";
 /** How every client starts the MCP server. @param {string} root */
@@ -171,7 +163,7 @@ export function mergeCodex(toml, { root }) {
 function ourHook(hook, script) {
   if (typeof hook?.command !== "string" || !/imprimatur/i.test(hook.command)) return false;
   const cmd = hook.command.replace(/\\/g, "/");
-  const scripts = script ? [script] : [...new Set(wanted([]).map((w) => w[2]))];
+  const scripts = script ? [script] : OUR_SCRIPTS;
   return scripts.some((s) => cmd.includes(`/hooks/${s}`));
 }
 

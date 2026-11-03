@@ -209,21 +209,29 @@ export function bashEdit(event, data, project, exts) {
   }
 }
 
+/**
+ * One hook call's baseline work (the dispatcher, hooks/run.mjs, calls it too, #118):
+ * a Bash call's before/after copies, or an Edit/Write's copy before it lands.
+ * @param {any} data the hook's input @param {string[]} [argv] the extensions, from a settings hook's args
+ */
+export function onHook(data, argv = []) {
+  const file = data.tool_input?.file_path;
+  const project = process.env.CLAUDE_PROJECT_DIR || data.cwd || process.cwd();
+  // Args (settings-file hooks) win; else IMPRIMATUR_*, plugin options, config.json (#67).
+  const exts = createRequire(import.meta.url)("../vscode/config.js").hookExts(argv);
+  if (data.tool_name === "Bash") bashEdit(data.hook_event_name, data, project, exts);
+  else if (file && !String(data.hook_event_name ?? "").startsWith("PostToolUse"))
+    takeBaseline(project, file, exts, { session: data.session_id, tool: data.tool_name, ...transcriptInfo(data.transcript_path),
+      transcript: data.transcript_path, toolUseId: data.tool_use_id });
+}
+
 // IMPRIMATUR_CHILD: a model call started by describe.mjs; nothing to record.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href && !process.env.IMPRIMATUR_CHILD) {
   let input = "";
   process.stdin.on("data", (d) => (input += d));
   process.stdin.on("end", () => {
     try {
-      const data = JSON.parse(input || "{}");
-      const file = data.tool_input?.file_path;
-      const project = process.env.CLAUDE_PROJECT_DIR || data.cwd || process.cwd();
-      // Args (settings-file hooks) win; else IMPRIMATUR_*, plugin options, config.json (#67).
-      const exts = createRequire(import.meta.url)("../vscode/config.js").hookExts(process.argv.slice(2));
-      if (data.tool_name === "Bash") bashEdit(data.hook_event_name, data, project, exts);
-      else if (file && !String(data.hook_event_name ?? "").startsWith("PostToolUse"))
-        takeBaseline(project, file, exts, { session: data.session_id, tool: data.tool_name, ...transcriptInfo(data.transcript_path),
-          transcript: data.transcript_path, toolUseId: data.tool_use_id });
+      onHook(JSON.parse(input || "{}"), process.argv.slice(2));
     } catch (e) {
       process.stderr.write(`imprimatur baseline: ${e.message}\n`);
     }

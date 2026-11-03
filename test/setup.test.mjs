@@ -7,24 +7,21 @@ import { mergeHooks, mergeShowIn, mergeLanguage, mergeStatusLine, installedFrom 
 
 const root = "/home/u/projects/imprimatur";
 
-test("setup: adds every hook to empty settings, keeps other hooks", () => {
+test("setup: adds every hook to empty settings, keeps other hooks (#118: one dispatcher per event)", () => {
   const before = { model: "x", hooks: { SessionStart: [{ hooks: [{ type: "command", command: "heal.mjs" }] }] } };
   const { settings, changes } = mergeHooks(before, { root, lang: "Turkish" });
-  assert.equal(changes.length, 16);
+  assert.equal(changes.length, 10, changes.join("\n"));
   const activity = settings.hooks.PostToolUse.find((e) => e.matcher === "*").hooks[0];
   assert.equal(activity.async, true, "the activity hook never makes a tool wait (#55)");
   assert.ok(changes.every((c) => c.startsWith("added")));
   assert.deepEqual(settings.hooks.SessionStart[0], before.hooks.SessionStart[0], "other hooks are kept, ours added after them");
-  assert.match(settings.hooks.SessionStart[1].hooks[0].command, /hooks\/process\.mjs"$/);
+  assert.match(settings.hooks.SessionStart[1].hooks[0].command, /hooks\/run\.mjs" md mdx$/);
   assert.equal(settings.model, "x");
-  assert.deepEqual(settings.hooks.PreToolUse[0], {
-    matcher: "Edit|Write|Bash",
-    hooks: [{ type: "command", command: `IMPRIMATUR_LANG=Turkish node "${root}/hooks/baseline.mjs" md mdx`, timeout: 30 }],
-  });
-  assert.deepEqual(settings.hooks.Stop, [
-    { hooks: [{ type: "command", command: `IMPRIMATUR_LANG=Turkish node "${root}/hooks/waiting.mjs"`, timeout: 30 }] },
-    { hooks: [{ type: "command", command: `IMPRIMATUR_LANG=Turkish node "${root}/hooks/process.mjs"`, timeout: 60 }] },
-  ]);
+  assert.deepEqual(settings.hooks.PreToolUse, [{
+    matcher: "Edit|Write|Bash|MultiEdit|NotebookEdit|AskUserQuestion|mcp__imprimatur__.*",
+    hooks: [{ type: "command", command: `IMPRIMATUR_LANG=Turkish node "${root}/hooks/run.mjs" md mdx`, timeout: 60 }],
+  }], "one process for every PreToolUse step");
+  assert.deepEqual(settings.hooks.Stop, [{ hooks: [{ type: "command", command: `IMPRIMATUR_LANG=Turkish node "${root}/hooks/run.mjs" md mdx`, timeout: 60 }] }]);
   assert.equal(before.hooks.PreToolUse, undefined); // the input is not changed
 });
 
@@ -33,11 +30,31 @@ test("setup: a second run changes nothing; an old path or language is updated in
   assert.deepEqual(mergeHooks(once, { root, lang: "Turkish" }).changes, []);
   const unquoted = JSON.parse(JSON.stringify(once).replaceAll('\\"', ""));
   assert.deepEqual(mergeHooks(unquoted, { root, lang: "Turkish" }).changes, []); // quotes alone are no change
-  const old = { hooks: { PostToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "node /old/imprimatur/hooks/baseline.mjs md mdx" }] }] } };
+  const old = { hooks: { PostToolUseFailure: [{ matcher: "Bash", hooks: [{ type: "command", command: "node /old/imprimatur/hooks/run.mjs md mdx" }] }] } };
   const { settings, changes } = mergeHooks(old, { root });
-  assert.ok(changes.includes("updated PostToolUse [Bash] → baseline.mjs"));
-  assert.equal(settings.hooks.PostToolUse.filter((e) => e.matcher === "Bash").length, 1);
-  assert.equal(settings.hooks.PostToolUse[0].hooks[0].command, `node "${root}/hooks/baseline.mjs" md mdx`);
+  assert.ok(changes.includes("updated PostToolUseFailure [Bash] → run.mjs"), changes.join("\n"));
+  assert.equal(settings.hooks.PostToolUseFailure.filter((e) => e.matcher === "Bash").length, 1);
+  assert.equal(settings.hooks.PostToolUseFailure[0].hooks[0].command, `node "${root}/hooks/run.mjs" md mdx`);
+});
+
+test("setup (#118): the one-script-per-step hooks of older releases are taken out, the dispatcher put in", () => {
+  const cmd = (s, a = "") => ({ type: "command", command: `node "${root}/hooks/${s}"${a}`, timeout: 30 });
+  const old = { hooks: {
+    PreToolUse: [
+      { matcher: "Edit|Write|Bash", hooks: [cmd("baseline.mjs", " md mdx")] },
+      { matcher: "AskUserQuestion", hooks: [cmd("waiting.mjs")] },
+      { matcher: "mcp__imprimatur__.*", hooks: [cmd("mcp-session.mjs")] },
+      { matcher: "Bash|Edit|Write|MultiEdit|NotebookEdit", hooks: [cmd("process.mjs")] },
+      { matcher: "Bash", hooks: [{ type: "command", command: "my-own-guard.sh" }] },
+    ],
+    Stop: [{ hooks: [cmd("waiting.mjs")] }, { hooks: [cmd("process.mjs")] }],
+  } };
+  const { settings, changes } = mergeHooks(old, { root });
+  assert.ok(changes.filter((c) => c.startsWith("removed (stale)")).length === 6, changes.join("\n"));
+  const scripts = JSON.stringify(settings.hooks).match(/hooks\/[\w-]+\.mjs/g);
+  assert.deepEqual([...new Set(scripts)].sort(), ["hooks/activity.mjs", "hooks/run.mjs"]);
+  assert.ok(settings.hooks.PreToolUse.some((g) => g.hooks[0].command === "my-own-guard.sh"), "the user's own hook stays");
+  assert.equal(settings.hooks.Stop.length, 1);
 });
 
 test("setup: --show-in sets imprimatur.showIn, keeps the rest, rejects other values", () => {
