@@ -4,6 +4,15 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.78.0] - 2026-11-03
+
+### Changed
+- The panel is built only when something it shows may have changed (#115, step 1). Before each
+  refresh a cheap stamp is taken: the view, the database's change counter, the files under
+  `.claude/imprimatur/` and the files under review (size and time, nothing read), open documents'
+  versions and the minute (for "3 min ago"). An equal stamp skips the build, 30-180 ms before,
+  about 1.5 ms now. The Social and Task analyses tabs read other files and are built as before.
+
 ## [0.77.1] - 2026-11-03
 
 ### Fixed
