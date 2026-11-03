@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.89.2] - 2026-11-03
+
+### Security
+- The move of an old `.claude/imprimatur/` folder walks it file by file: a link is never moved or
+  followed at any depth, and a target that is a link is never read or written (0.89.1 checked the
+  top level only, and moved folders whole). A planted link could otherwise have made a later hook
+  write through it.
+
 ## [0.89.1] - 2026-11-03
 
 ### Security

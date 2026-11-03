@@ -38,31 +38,44 @@ function keyOf(root) {
 const sleep = (/** @type {number} */ ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
 /**
- * Moves src into dst, entry by entry: a missing target is renamed (copied across devices);
- * folders merge; two .jsonl files are joined (src appended to dst); for any other file the
- * one already in dst stays. src is gone afterwards.
+ * Moves src into dst, file by file: folders are walked (made in dst, removed from src when
+ * left empty), regular files move (renamed, copied across devices). Links are never moved
+ * nor followed, at any depth, and a target that is a link is never read or written: a repo
+ * could plant one to make a later hook write through it. Two .jsonl files are joined (src
+ * appended to dst); for any other file the one already in dst stays.
  * @param {string} src @param {string} dst
  */
 function mergeInto(src, dst) {
   const st = fs.lstatSync(src);
-  // A link is not followed nor moved: what it points to may be outside the repo.
   if (st.isSymbolicLink()) return;
-  if (!fs.existsSync(dst)) {
+  /** @type {fs.Stats | undefined} */
+  let at;
+  try {
+    at = fs.lstatSync(dst);
+  } catch {}
+  if (at?.isSymbolicLink()) return;
+  if (st.isDirectory()) {
+    if (at && !at.isDirectory()) return;
+    fs.mkdirSync(dst, { recursive: true });
+    for (const name of fs.readdirSync(src)) mergeInto(path.join(src, name), path.join(dst, name));
+    try {
+      fs.rmdirSync(src); // only when nothing (a skipped link) is left in it
+    } catch {}
+    return;
+  }
+  if (!st.isFile()) return;
+  if (!at) {
     fs.mkdirSync(path.dirname(dst), { recursive: true });
     try {
       fs.renameSync(src, dst);
     } catch (e) {
       if (/** @type {any} */ (e).code !== "EXDEV") throw e;
-      fs.cpSync(src, dst, { recursive: true });
-      fs.rmSync(src, { recursive: true, force: true });
+      fs.copyFileSync(src, dst);
+      fs.rmSync(src, { force: true });
     }
     return;
   }
-  if (st.isDirectory()) {
-    for (const name of fs.readdirSync(src)) mergeInto(path.join(src, name), path.join(dst, name));
-    fs.rmSync(src, { recursive: true, force: true });
-    return;
-  }
+  if (!at.isFile()) return;
   if (src.endsWith(".jsonl")) {
     const text = fs.readFileSync(src, "utf8");
     if (text) {
