@@ -60,3 +60,22 @@ test("data dir: a linked old folder, or links inside it, are never followed or m
   assert.ok(!fs.lstatSync(path.join(old, "MOVED.md")).isSymbolicLink());
   assert.equal(fs.readFileSync(path.join(dir3, "waiting", "s.jsonl"), "utf8"), "w\n");
 });
+
+test("data dir: a link deep in the old folder is not moved, and a target that is a link is never written through", () => {
+  const secret = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-126-secret-"));
+  put(path.join(secret, "bashrc"), "SAFE\n");
+  const root = repo();
+  const old = path.join(root, ".claude", "imprimatur");
+  put(path.join(old, "history", "docs", "a.md.jsonl"), "1\n");
+  fs.symlinkSync(path.join(secret, "bashrc"), path.join(old, "history", "docs", "evil.md.jsonl"));
+  fs.symlinkSync(secret, path.join(old, "history", "linked-dir"));
+  const dir = dataDir(root);
+  assert.equal(fs.readFileSync(path.join(dir, "history", "docs", "a.md.jsonl"), "utf8"), "1\n");
+  assert.ok(!fs.existsSync(path.join(dir, "history", "docs", "evil.md.jsonl")), "the deep link is not moved");
+  assert.ok(!fs.existsSync(path.join(dir, "history", "linked-dir")), "a linked folder is not moved");
+  // A link already in the data folder (planted, or moved by 0.89.0): the merge does not append through it.
+  fs.symlinkSync(path.join(secret, "bashrc"), path.join(dir, "history", "docs", "b.md.jsonl"));
+  put(path.join(old, "history", "docs", "b.md.jsonl"), "MALICIOUS\n");
+  mergeLegacy(root);
+  assert.equal(fs.readFileSync(path.join(secret, "bashrc"), "utf8"), "SAFE\n");
+});
