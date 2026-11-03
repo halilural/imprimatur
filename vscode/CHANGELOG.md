@@ -4,6 +4,13 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.89.4] - 2026-11-03
+
+### Security
+- The one-time link sweep of a data folder (0.89.3) is marked next to the folder
+  (`<folder>.swept`), not inside it, and a `.no-links` file in a repo's old folder is never
+  moved in: a repo could otherwise bring the marker along and skip the sweep.
+
 ## [0.89.3] - 2026-11-03
 
 ### Security

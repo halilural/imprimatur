@@ -15,7 +15,7 @@ const path = require("node:path");
 /** The in-repo folder of releases before 0.89.0, and the prefix of every data constant. */
 const LEGACY = path.join(".claude", "imprimatur");
 /** What stays in the old folder after the move. */
-const KEEP = new Set([".gitignore", "MOVED.md"]);
+const KEEP = new Set([".gitignore", "MOVED.md", ".no-links"]);
 const LOCK_WAIT_MS = 3000;
 const LOCK_STALE_MS = 60_000;
 
@@ -188,7 +188,9 @@ function dataDir(root, { env = process.env } = {}) {
   // through by a hook. Once per folder, every link in it goes (the folder only ever holds
   // Imprimatur's own regular files).
   try {
-    const mark = path.join(dir, ".no-links");
+    // The marker sits next to the folder, not in it: a repo's old folder (merged in) cannot
+    // bring one along and make the sweep look done.
+    const mark = `${dir}.swept`;
     if (!fs.existsSync(mark)) {
       sweepLinks(dir);
       fs.writeFileSync(mark, "Links removed once (#126, 0.89.3).\n");
