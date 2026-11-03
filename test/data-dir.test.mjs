@@ -94,3 +94,17 @@ test("data dir: a link left in a data folder by 0.89.0/0.89.1 is removed the fir
   assert.equal(fs.readFileSync(path.join(dir, "history", "a.md.jsonl"), "utf8"), "1\n", "real files stay");
   assert.equal(fs.readFileSync(path.join(secret, "bashrc"), "utf8"), "SAFE\n", "its target untouched");
 });
+
+test("data dir: a .no-links file brought by a repo's old folder does not skip the sweep", () => {
+  const { forget } = require("../vscode/data-dir.js");
+  const secret = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-126-secret-"));
+  put(path.join(secret, "bashrc"), "SAFE\n");
+  const root = repo();
+  const old = path.join(root, ".claude", "imprimatur");
+  put(path.join(old, ".no-links"), "fake");
+  put(path.join(old, "history", "a.md.jsonl"), "1\n");
+  forget();
+  const dir = dataDir(root);
+  assert.ok(!fs.existsSync(path.join(dir, ".no-links")), "the control file is not moved in");
+  assert.ok(fs.existsSync(`${dir}.swept`), "the sweep ran, marked next to the folder");
+});
