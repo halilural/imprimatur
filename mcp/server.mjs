@@ -64,7 +64,14 @@ const MAX_SECTION_BODY = SECTION_BODY_MAX;
 const DOC_KIND = { type: "string", enum: [...Object.keys(DOC_KINDS), ANALYSIS], description: "architecture (how it is built), product (what the user gets), glossary (the project's terms, one section each), social (the repo's social media posts, one section per channel; only where the repo turned it on) or analysis (a task's analysis, plan and research files; task needed)" };
 const DOC_TASK = { type: "string", description: "kind analysis: the task's key, e.g. \"#58\"" };
 const SECTION_KEY_ARG = { type: "string", maxLength: 64, description: "The section's slug, e.g. \"storage\" (a-z, 0-9, -); unique in the document" };
-const BODY_CUT = 500;
+/** task_get's lean body (#120): its first line, at most this many chars. */
+const LINE_CUT = 160;
+/** A body's first non-empty line, cut to n chars. @param {string} body @param {number} n */
+const firstLine = (body, n) => {
+  const line = body.split("\n").find((l) => l.trim()) ?? "";
+  const t = line.trim();
+  return t.length > n ? t.slice(0, n - 1) + "…" : t === body ? body : t;
+};
 
 const repoArg = { type: "string", description: "Absolute path inside the repo; default: the project the agent runs in" };
 const sessionArg = { type: "string", description: "Set by Imprimatur's hook; leave empty" };
@@ -96,9 +103,10 @@ const RECORD = {
     status: { type: "string", enum: RECORD_STATUS }, pointer: { type: "boolean" }, title: str, body: orNull("string"),
     position: { type: "number" }, parent_id: orNull("integer"), links: orNull("object"), created_at: int, updated_at: int,
     task_key: { type: "string", description: "search only" },
-    body_truncated: { type: "boolean", description: "task_get: body cut to 500 chars; full:true gives all of it" },
+    body_truncated: { type: "boolean", description: "The body is cut to its first line (task_get) or left out (search); full:true gives all of it" },
   },
-  required: ["id", "task_id", "kind", "status", "pointer", "title", "position", "created_at", "updated_at"],
+  // #120: lean results (the default) carry fewer fields; full:true gives the whole record.
+  required: ["id", "kind", "status", "title"],
 };
 const TASK = {
   type: "object",
@@ -175,7 +183,7 @@ const TOOLS = [
   {
     name: "task_get",
     title: "Get a task and its records",
-    description: "A task and its records in order (todos, questions, answers, decisions, notes, ADRs, PDRs). By default the open records plus the 👉 one, 50 at a time, bodies cut to 500 chars.",
+    description: "A task and its records in order (todos, questions, answers, decisions, notes, ADRs, PDRs). By default the open records plus the 👉 one, 50 at a time, each body cut to its first line; full:true gives whole records.",
     inputSchema: input({
       repo: repoArg,
       key: keyArg,
@@ -183,7 +191,7 @@ const TOOLS = [
       kind: { type: "string", enum: KINDS },
       limit: { type: "integer", minimum: 1, maximum: 100, default: 50 },
       offset: { type: "integer", minimum: 0, default: 0, description: "Skip this many records (next_offset of the previous call)" },
-      full: { type: "boolean", default: false, description: "Whole bodies instead of the first 500 chars" },
+      full: { type: "boolean", default: false, description: "Whole records and bodies instead of each body's first line" },
       dropped: { type: "boolean", description: "Deprecated: same as status \"all\"" },
     }, ["key"]),
     outputSchema: output({
@@ -241,11 +249,12 @@ const TOOLS = [
   {
     name: "search",
     title: "Search records",
-    description: "Records whose title or body contains the text, newest first. repo \"*\" searches every repo.",
+    description: "Records whose title or body contains the text, newest first: id, task, kind, status, owner and title (more: true when there are more). full:true gives whole records with bodies; task_get gives a task's. repo \"*\" searches every repo.",
     inputSchema: input({
-      text: str, repo: repoArg, kind: { type: "string", enum: KINDS }, limit: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+      text: str, repo: repoArg, kind: { type: "string", enum: KINDS }, limit: { type: "integer", minimum: 1, maximum: 100, default: 8 },
+      full: { type: "boolean", default: false, description: "Whole records with their bodies" },
     }, ["text"]),
-    outputSchema: output({ records: { type: "array", items: RECORD } }),
+    outputSchema: output({ records: { type: "array", items: RECORD }, more: { type: "boolean", description: "More records match: raise limit or narrow the text" }, hint: { type: "string" } }, ["records"]),
     readOnly: true,
   },
   {
@@ -501,9 +510,14 @@ function taskRecords(db, task, a) {
   const limit = a.limit ?? 50;
   let cut = 0;
   const records = matching.slice(offset, offset + limit).map((r) => {
-    if (a.full || !r.body || r.body.length <= BODY_CUT) return r;
+    if (a.full) return r;
+    // #120: the fields an agent acts on, and the body's first line.
+    const { uid, task_id, position, created_at, ...lean } = r;
+    if (!r.body) return lean;
+    const line = firstLine(r.body, LINE_CUT);
+    if (line === r.body) return lean;
     cut++;
-    return { ...r, body: r.body.slice(0, BODY_CUT) + "…", body_truncated: true };
+    return { ...lean, body: line, body_truncated: true };
   });
   /** @type {any} */
   const out = { task, records, total: matching.length, returned: records.length };
@@ -512,7 +526,7 @@ function taskRecords(db, task, a) {
     out.next_offset = offset + records.length;
     hints.push(`${matching.length - out.next_offset} more: call again with offset ${out.next_offset}`);
   }
-  if (cut) hints.push(`${cut} bod${cut === 1 ? "y" : "ies"} cut to ${BODY_CUT} chars: full:true gives the whole text`);
+  if (cut) hints.push(`${cut} bod${cut === 1 ? "y" : "ies"} cut to the first line: full:true gives the whole text`);
   const hidden = status === "open" && !a.kind ? all.filter((r) => r.status !== "open" && !r.pointer).length : 0;
   if (hidden) hints.push(`${hidden} done/dropped record${hidden === 1 ? "" : "s"} not shown: status "all" shows them`);
   if (hints.length) out.hint = hints.join("; ");
@@ -686,8 +700,18 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
       const review = a.id === undefined ? undefined : run(() => db.answerReview(a.id, a.result, { note: a.note }));
       return { ...(review && { review }), reviews: db.reviews({ upcoming: Boolean(a.upcoming) }), next: db.reviewCounts().next };
     }
-    case "search":
-      return { records: db.search(a.text, { repoId: a.repo === "*" ? undefined : repoOf(db, a.repo).id, kind: a.kind, limit: a.limit }) };
+    case "search": {
+      // #120: an index by default (claude-mem's pattern); full:true or task_get for the bodies.
+      const limit = a.limit ?? 8;
+      const rows = db.search(a.text, { repoId: a.repo === "*" ? undefined : repoOf(db, a.repo).id, kind: a.kind, limit: limit + 1 });
+      const hits = rows.slice(0, limit);
+      const records = a.full
+        ? hits
+        : hits.map((r) => ({ id: r.id, task_key: r.task_key, kind: r.kind, status: r.status, ...(r.owner && { owner: r.owner }), ...(r.pointer && { pointer: true }),
+            // Older imports have titles of 1,000+ chars: the index cuts them like a body's first line.
+            title: r.title.length > LINE_CUT ? r.title.slice(0, LINE_CUT - 1) + "…" : r.title }));
+      return { records, ...(rows.length > limit && { more: true }), ...(!a.full && hits.length && { hint: "bodies left out: full:true, or task_get for a task's records" }) };
+    }
     default:
       throw Object.assign(new Error(`unknown tool ${name}`), { code: -32602 });
   }
@@ -782,7 +806,7 @@ export function digest(name, out, a = {}) {
       return [`${plural(out.exercises.length, "exercise")}:`, ...out.exercises.map((e) => `- [${e.id}] ${e.topic} [${e.status}] ${e.closed}/${e.step_count} steps${e.goal ? ` — ${oneLine(e.goal, 160)}` : ""}`)].join("\n");
     case "search":
       if (!out.records.length) return `No records match ${JSON.stringify(a.text ?? "")}.`;
-      return [`${plural(out.records.length, "record")}:`, ...out.records.map((r) =>
+      return [`${plural(out.records.length, "record")}${out.more ? " (more match: raise limit)" : ""}:`, ...out.records.map((r) =>
         `- ${r.task_key} ${recordLine(r)}${r.body ? `\n    ${oneLine(r.body, 120)}` : ""}`)].join("\n");
     default:
       return JSON.stringify(out);
@@ -840,8 +864,9 @@ function studyDigest(out) {
 
 /**
  * Tool groups and profiles (#119). A setting is a comma list of profiles, groups or tool
- * names; "core" and "standard" also leave out outputSchema (clients give the model the
- * name, description and input schema only, and the model reads the text digest).
+ * names; "core" and "standard" also leave out outputSchema (clients give the model a
+ * tool's name, description and input schema, not its output schema; the result's
+ * structuredContent does reach the model, hence lean results, #120).
  */
 export const TOOL_GROUPS = {
   core: ["where_we_left_off", "task_get", "task_upsert", "record_add", "record_update", "search", "pointer_set"],
