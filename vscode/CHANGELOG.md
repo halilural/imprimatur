@@ -4,6 +4,15 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.103.0] - 2026-11-04
+
+### Added
+- A Checklist at the top of Agent Setup (#142): what needs doing, each item with what to do and
+  an action. It lists plugins behind their marketplace (Update), skills changed upstream (review
+  the change), health problems (open the file at the line) and open recommendations. The
+  launcher has a Setup checklist row with the count. The baseline, AGENTS.md shape, doc standard
+  and lint items join when #141, #133 and #129–#132 land.
+
 ## [0.102.1] - 2026-11-04
 
 ### Fixed

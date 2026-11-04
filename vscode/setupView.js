@@ -10,6 +10,7 @@ const path = require("node:path");
 const { scanSetup, changesSince, snapshotOf, flatItems } = require("./agent-setup.js");
 const { readUpstream, checkUpstream, staleOf } = require("./upstream.js");
 const { recordVersions, versionLine } = require("./version-history.js");
+const { checklistOf } = require("./setup-checklist.js");
 const { DriftScanner, driftLabel, DEFAULT_EXCLUDE } = require("./setup-drift.js");
 const { SetupHistory, historyLines } = require("./setup-history.js");
 const { trustGate } = require("./trust.js");
@@ -57,7 +58,7 @@ const KIND_ICONS = { settings: "settings-gear", "hook script": "zap", skill: "mo
  *   | {type: "removed", scope: Scope, rel: string} | PlainNode
  *   | {type: "health"} | {type: "problem", scope: Scope, problem: ReturnType<typeof checkHealth>[number]}} Node
  * @typedef {{type: "group" | "leaf", label: string, description?: string, tooltip?: string, markdown?: boolean, icon?: string, color?: string, abs?: string,
- *   line?: number, context?: string, recordId?: number, command?: string, expanded?: boolean, children?: any[]}} PlainNode
+ *   line?: number, context?: string, recordId?: number, command?: string, args?: any[], expanded?: boolean, children?: any[]}} PlainNode
  *   "For <file>", "Effective settings" and "Recommendations" rows, built by setup-scope.js / setup-merged.js / setup-audit-tree.js
  * @typedef {{id: string, label: string, root: string, global: boolean, merged?: ReturnType<typeof mergeSettings>,
  *   items: Array<ReturnType<typeof scanSetup>[number] & {scope?: {label: string}}>, state: Record<string, string>, removed: string[], health: ReturnType<typeof checkHealth>}} Scope
@@ -71,7 +72,7 @@ function plainItem(node) {
   it.tooltip = node.markdown && node.tooltip ? new vscode.MarkdownString(node.tooltip) : node.tooltip;
   if (node.icon) it.iconPath = new vscode.ThemeIcon(node.icon, node.color ? new vscode.ThemeColor(node.color) : undefined);
   if (node.context) it.contextValue = node.context;
-  if (node.command) it.command = { command: node.command, title: node.label };
+  if (node.command) it.command = { command: node.command, title: node.label, ...(node.args ? { arguments: node.args } : {}) };
   else if (node.type === "leaf" && node.abs) {
     const line = Math.max(0, (node.line ?? 1) - 1);
     it.command = { command: "vscode.open", title: "Open", arguments: [vscode.Uri.file(node.abs), ...(node.line ? [{ selection: new vscode.Range(line, 0, line, 0) }] : [])] };
@@ -94,6 +95,10 @@ class SetupView {
     this.onDidChangeTreeData = this.changed.event;
     /** @type {Scope[]} */
     this.scopes = [];
+    /** The checklist (#142) and who hears its count (the launcher). */
+    this.checklist = checklistOf([], 0);
+    /** @type {((count: number) => void) | undefined} */
+    this.onScanned = undefined;
     /** @type {vscode.TreeView<Node> | undefined} */
     this.view = undefined;
     this.graph = { edits: 0, waiting: 0 };
@@ -207,6 +212,9 @@ class SetupView {
     }
     const fresh = this.scopes.reduce((n, s) => n + Object.keys(s.state).length + s.removed.length, 0);
     this.loadAudit();
+    // The checklist (#142): what needs doing, from the scan, the health check and the audit.
+    this.checklist = checklistOf(this.scopes, /** @type {any} */ (this.audit)?.open ?? 0);
+    this.onScanned?.(this.checklist.count);
     this.extras();
     if (this.view) this.view.badge = fresh ? { value: fresh, tooltip: `${fresh} agent setup change${fresh === 1 ? "" : "s"} since you last looked` } : undefined;
   }
@@ -233,7 +241,7 @@ class SetupView {
   getChildren(node) {
     if (!node) {
       const forFile = forFileNode(this.scopes, this.activeFile);
-      return [...healthRoot(this.scopes), ...(this.audit ? [/** @type {Node} */ (this.audit)] : []), ...(forFile ? [/** @type {Node} */ (forFile)] : []), ...this.scopes.map((scope) => /** @type {Node} */ ({ type: "scope", scope }))];
+      return [/** @type {Node} */ (this.checklist.node), ...healthRoot(this.scopes), ...(this.audit ? [/** @type {Node} */ (this.audit)] : []), ...(forFile ? [/** @type {Node} */ (forFile)] : []), ...this.scopes.map((scope) => /** @type {Node} */ ({ type: "scope", scope }))];
     }
     if (node.type === "group") return node.children;
     if (node.type === "health") return healthChildren(this.scopes);

@@ -27,6 +27,7 @@ const ROWS = [
   { id: "product", label: "Product", icon: "package", command: "imprimatur.openProduct", tooltip: "Product design document: what the user gets" },
   { id: "glossary", label: "Glossary", icon: "book", command: "imprimatur.openGlossary", tooltip: "Project glossary: terms and their meanings" },
   { id: "edits", label: "Agent changes", icon: "git-merge", command: "imprimatur.openGraph", tooltip: "Agent Change Graph: the agent's edits" },
+  { id: "checklist", label: "Setup checklist", icon: "checklist", command: "imprimatur.setup.focus", tooltip: "What needs doing in the agent setup: updates, upstream changes, problems, recommendations (#142)" },
 ];
 
 /**
@@ -51,6 +52,15 @@ class LauncherView {
     this.onDidChangeTreeData = this.changed.event;
     /** @type {vscode.TreeView<any> | undefined} */
     this.view = undefined;
+    /** Open items in Agent Setup's checklist (#142), set by the setup view after each scan. */
+    this.checklist = 0;
+  }
+
+  /** @param {number} n */
+  setChecklist(n) {
+    if (n === this.checklist) return;
+    this.checklist = n;
+    this.changed.fire(undefined);
   }
 
   /** Counts again, redraws, sets the badge. @param {number} [inbox] the badge's count, when the caller has it */
@@ -123,6 +133,7 @@ class LauncherView {
     it.iconPath = new vscode.ThemeIcon(row.icon, row.id === "home" && this.now.inbox ? new vscode.ThemeColor("charts.orange") : undefined);
     it.tooltip = row.tooltip;
     if (row.id === "edits" && this.now.edits) it.description = `${this.now.edits} under review`;
+    if (row.id === "checklist") it.description = this.checklist ? `${this.checklist} to do` : "nothing to do";
     it.command = { command: row.command, title: row.label };
     return it;
   }
