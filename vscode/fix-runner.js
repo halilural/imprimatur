@@ -12,11 +12,19 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-/** A permission rule's path for an absolute file: "//abs" (Claude Code's settings syntax). @param {string} abs */
-const rulePath = (abs) => `/${path.resolve(abs)}`;
+/** Characters a path in a permission rule may have: none with a meaning in rule syntax (, ( ) * ? [ ] { } spaces). */
+const PLAIN = /^[\w./~@+-]+$/;
+
+/** A permission rule's path for an absolute file: "//abs" (Claude Code's settings syntax). Throws on a path that is not plain. @param {string} abs */
+function rulePath(abs) {
+  const p = path.resolve(abs);
+  if (!PLAIN.test(p)) throw new Error(`not a plain path for a permission rule: ${p.slice(0, 120)}`);
+  return `/${p}`;
+}
 
 /**
  * The CLI's arguments for a fix. Without --permission-mode, -p denies what is not allowed.
+ * Throws when a target path is not plain enough to be a rule (the caller copies the prompt instead).
  * @param {string} prompt @param {{edit?: string[], editDirs?: string[], addDirs?: string[]}} [o]
  * edit: the files it may change; editDirs: folders it may change and add to; addDirs: folders outside the repo it may read
  */
@@ -25,7 +33,8 @@ function claudeArgs(prompt, { edit = [], editDirs = [], addDirs = [] } = {}) {
     ...[...new Set(edit)].map((f) => `Edit(${rulePath(f)})`),
     ...[...new Set(editDirs)].flatMap((d) => [`Edit(${rulePath(d)}/**)`, `Write(${rulePath(d)}/**)`])];
   return ["-p", prompt, "--setting-sources", "user", "--strict-mcp-config",
-    "--allowedTools", allow.join(","), "--disallowedTools", "Bash,WebFetch,WebSearch,Task,NotebookEdit",
+    // One argument per rule: a rule is never split or joined on a comma.
+    "--allowedTools", ...allow, "--disallowedTools", "Bash", "WebFetch", "WebSearch", "Task", "NotebookEdit",
     ...[...new Set(addDirs)].flatMap((d) => ["--add-dir", d]), "--output-format", "text"];
 }
 
@@ -41,4 +50,4 @@ function claudeBin(env = process.env) {
   return "";
 }
 
-module.exports = { claudeArgs, outside, claudeBin, rulePath };
+module.exports = { claudeArgs, outside, claudeBin, rulePath, PLAIN };
