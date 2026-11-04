@@ -4,6 +4,18 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.101.0] - 2026-11-04
+
+### Added
+- Hand-installed skills are checked against their source (#140). Once a day, the newest commit
+  that touches each skill's folder in its GitHub repo is read through `gh`. A newer one than the
+  installed commit shows "upstream changed <date>" and a Show Upstream Changes button, which
+  opens the GitHub compare page. Updating stays a deliberate copy, because a skill's text goes
+  straight into the agent's context.
+- A plugin fetched from its own repo is behind when the marketplace pins another commit, and one
+  kept in the marketplace under a commit "version" is behind when its files differ from the
+  install. Both get "update available" and the Update Plugin button.
+
 ## [0.100.0] - 2026-11-04
 
 ### Added

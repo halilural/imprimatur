@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.100.3",
+  "version": "0.101.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -184,6 +184,12 @@
         "title": "Mark all as seen",
         "category": "Imprimatur",
         "icon": "$(check-all)"
+      },
+      {
+        "command": "imprimatur.setup.showUpstream",
+        "title": "Show Upstream Changes",
+        "category": "Imprimatur",
+        "icon": "$(git-compare)"
       },
       {
         "command": "imprimatur.setup.updatePlugin",
@@ -400,6 +406,10 @@
     "menus": {
       "commandPalette": [
         {
+          "command": "imprimatur.setup.showUpstream",
+          "when": "false"
+        },
+        {
           "command": "imprimatur.setup.updatePlugin",
           "when": "false"
         },
@@ -548,6 +558,16 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "imprimatur.setup.showUpstream",
+          "when": "view == imprimatur.setup && viewItem =~ /-upstream$/",
+          "group": "inline@0"
+        },
+        {
+          "command": "imprimatur.setup.showUpstream",
+          "when": "view == imprimatur.setup && viewItem =~ /-upstream$/",
+          "group": "1_setup@0"
+        },
         {
           "command": "imprimatur.setup.updatePlugin",
           "when": "view == imprimatur.setup && viewItem =~ /-update$/",
