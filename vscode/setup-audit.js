@@ -296,9 +296,16 @@ const linksOf = (f, rule) => ({
 const REASONS = ["plugin", "synced", "false", "local", "other"];
 
 /**
+ * Groups whose files the user cannot fix (#155): a plugin's cache or catalog (an update
+ * overwrites it) and the skills synced from claude.ai (fixed there). Their findings are not
+ * recorded; an outdated plugin reaches the user as the checklist's Update row (#142).
+ */
+const NOT_YOURS = new Set(["plugin", "synced"]);
+
+/**
  * What a run changes in the AUDIT task's records: a pure plan.
  * @param {Finding[]} findings @param {Array<{id: number, status: string, title: string, links?: any}>} records
- * @returns {{add: Finding[], reopen: Array<{id: number, f: Finding}>, update: Array<{id: number, f: Finding}>, resolve: number[], dismissed: number, open: number, live: Finding[]}}
+ * @returns {{add: Finding[], reopen: Array<{id: number, f: Finding}>, update: Array<{id: number, f: Finding}>, resolve: number[], drop: number[], dismissed: number, open: number, live: Finding[]}}
  */
 function reconcile(findings, records) {
   /** @type {Map<string, any>} */
@@ -306,7 +313,7 @@ function reconcile(findings, records) {
   for (const r of records) if (r.links?.audit?.fp) byFp.set(r.links.audit.fp, r);
   const found = new Set(findings.map((f) => f.fp));
   /** @type {ReturnType<typeof reconcile>} */
-  const plan = { add: [], reopen: [], update: [], resolve: [], dismissed: 0, open: 0, live: [] };
+  const plan = { add: [], reopen: [], update: [], resolve: [], drop: [], dismissed: 0, open: 0, live: [] };
   for (const f of findings) {
     const r = byFp.get(f.fp);
     if (r?.status !== "dropped") plan.live.push(f);
@@ -315,7 +322,8 @@ function reconcile(findings, records) {
     else if (r.status === "done") plan.reopen.push({ id: r.id, f });
     else if (r.links.audit.line !== f.line || r.title !== titleOf(f) || r.links.audit.group !== f.group || r.links.audit.effect !== f.effect || r.links.audit.why !== f.why) plan.update.push({ id: r.id, f });
   }
-  for (const r of byFp.values()) if (r.status === "open" && !found.has(r.links.audit.fp)) plan.resolve.push(r.id);
+  // A finding left out as not yours (#155) is not "applied": its open record is dropped.
+  for (const r of byFp.values()) if (r.status === "open" && !found.has(r.links.audit.fp)) (NOT_YOURS.has(r.links.audit.group) ? plan.drop : plan.resolve).push(r.id);
   // Open counts what Claude Code loads (#78); the rest is kept, as not loaded.
   plan.open = plan.live.filter((f) => f.effect !== "inactive").length;
   return plan;
@@ -346,7 +354,7 @@ function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = 
   // Imprimatur's own check (#113), on the repo's effective settings: once per repo, not again in the global audit.
   const own = scope.global ? undefined : mcpAllow.allowDiagnostic({ root: scope.root, home, ...(managedDir ? { managedDir } : {}) });
   const rep = own ? { ...agnix, diagnostics: [...(agnix.diagnostics ?? []), own] } : agnix;
-  const findings = findingsOf(rep, { root: scope.root, home, global: scope.global, plugins: scope.plugins });
+  const findings = findingsOf(rep, { root: scope.root, home, global: scope.global, plugins: scope.plugins }).filter((f) => !NOT_YOURS.has(f.group));
   const repo = db.repoOf(scope.root, scope.global ? { name: "~" } : {});
   // Read only: RECS and the containers it replaces (a dry run moves nothing).
   const read = () => {
@@ -356,7 +364,7 @@ function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = 
   };
   const summaryOf = (/** @type {ReturnType<typeof reconcile>} */ plan) => ({
     root: scope.root, files: rep.files_checked ?? 0, findings: findings.length, added: plan.add.length, reopened: plan.reopen.length,
-    resolved: plan.resolve.length, dismissed: plan.dismissed, open: plan.open, inactive: plan.live.length - plan.open, groups: countBy(findings, (f) => f.group), levels: countBy(findings, (f) => f.level),
+    resolved: plan.resolve.length, dropped: plan.drop.length, dismissed: plan.dismissed, open: plan.open, inactive: plan.live.length - plan.open, groups: countBy(findings, (f) => f.group), levels: countBy(findings, (f) => f.level),
   });
   const first = read().plan;
   if (dryRun) return summaryOf(first);
@@ -377,6 +385,10 @@ function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = 
     for (const f of plan.add) db.addRecord(t.id, { kind: "fixme", title: titleOf(f), body: bodyOf(f, ruleOf(f.rule)), links: linksOf(f, ruleOf(f.rule)) }, ACTOR);
     for (const { id, f } of plan.reopen) db.updateRecord(id, { status: "open", title: titleOf(f), body: `${bodyOf(f, ruleOf(f.rule))}\n\n_Found again ${day}._`, links: linksOf(f, ruleOf(f.rule)) }, ACTOR);
     for (const { id, f } of plan.update) db.updateRecord(id, { title: titleOf(f), body: bodyOf(f, ruleOf(f.rule)), links: linksOf(f, ruleOf(f.rule)) }, ACTOR);
+    for (const id of plan.drop) {
+      const r = db.record(id);
+      db.updateRecord(id, { status: "dropped", body: `${r.body ?? ""}\n\n_Not yours to fix (${day}): a third-party plugin's or a synced skill's file. Update the plugin instead._` }, ACTOR);
+    }
     for (const id of plan.resolve) {
       const r = db.record(id);
       db.updateRecord(id, { status: "done", body: `${r.body ?? ""}\n\n_Applied: gone in the audit of ${day}._` }, ACTOR);

@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.104.0] - 2026-11-04
+
+### Fixed
+- The setup audit reports only what you can fix (#155). Findings in an installed plugin's files
+  or a marketplace catalog, and in skills synced from claude.ai, are no longer recorded: an
+  update or claude.ai overwrites those files. Their open recommendations are dropped as "not
+  yours to fix", not counted as applied. An outdated plugin still shows in the checklist.
+
 ## [0.103.0] - 2026-11-04
 
 ### Added
