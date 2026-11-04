@@ -10,11 +10,14 @@ test("fix runner (#156): user settings only, no MCP, no commands; edits only the
   assert.ok(!a.includes("--permission-mode"), "no acceptEdits: what is not allowed is denied");
   assert.equal(a[a.indexOf("--setting-sources") + 1], "user", "a repo's hooks and permissions do not load");
   assert.ok(a.includes("--strict-mcp-config"));
-  assert.equal(a[a.indexOf("--allowedTools") + 1], "Read,Glob,Grep,Edit(//h/.claude/settings.json)");
-  assert.equal(a[a.indexOf("--disallowedTools") + 1], "Bash,WebFetch,WebSearch,Task,NotebookEdit");
+  const after = (flag) => a.slice(a.indexOf(flag) + 1, a.findIndex((x, i) => i > a.indexOf(flag) && x.startsWith("--")));
+  assert.deepEqual(after("--allowedTools"), ["Read", "Glob", "Grep", "Edit(//h/.claude/settings.json)"], "one argument per rule");
+  assert.deepEqual(after("--disallowedTools"), ["Bash", "WebFetch", "WebSearch", "Task", "NotebookEdit"]);
   assert.deepEqual(a.filter((x, i) => a[i - 1] === "--add-dir"), ["/h/.claude"]);
   const s = claudeArgs("Update", { editDirs: ["/h/.claude/skills/etf"] });
-  assert.equal(s[s.indexOf("--allowedTools") + 1], "Read,Glob,Grep,Edit(//h/.claude/skills/etf/**),Write(//h/.claude/skills/etf/**)");
+  assert.deepEqual(s.slice(s.indexOf("--allowedTools") + 1, s.indexOf("--disallowedTools")), ["Read", "Glob", "Grep", "Edit(//h/.claude/skills/etf/**)", "Write(//h/.claude/skills/etf/**)"]);
+  // A path with rule syntax in it cannot widen the rules (#156 security review).
+  for (const bad of ["/r/a.md),Bash(rm", "/r/*", "/r/a b.md", "/r/{x}"]) assert.throws(() => claudeArgs("x", { edit: [bad] }), /not a plain path/);
   assert.ok(!s.join(" ").includes("gh api"), "no shell for a skill update");
   assert.deepEqual(outside("/r", ["/r/skills/a/SKILL.md", "/h/.claude/settings.json", "/h/.claude/CLAUDE.md", "/rr/x"]), ["/h/.claude", "/rr"]);
 });

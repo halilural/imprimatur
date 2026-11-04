@@ -405,13 +405,21 @@ async function fixWithClaude(provider, node) {
     }
     fix = { prompt: prompts.skillUpdatePrompt(skill, dest), label: skill.label, edit: [], editDirs: [dir], read: [dest] };
   }
+  let args;
+  try {
+    args = runner.claudeArgs(fix.prompt, { edit: fix.edit, editDirs: fix.editDirs, addDirs: runner.outside(repo, [...fix.edit, ...fix.editDirs.map((d) => path.join(d, "x")), ...fix.read.map((d) => path.join(d, "x"))]) });
+  } catch (e) {
+    // A target path with rule characters in it cannot be limited safely: no run.
+    for (const d of fix.read) fs.rmSync(d, { recursive: true, force: true });
+    await vscode.env.clipboard.writeText(fix.prompt);
+    return void vscode.window.showWarningMessage(`Imprimatur: ${e instanceof Error ? e.message : e}. Fix it did not run; the prompt is on the clipboard.`);
+  }
   const may = [...fix.edit.map((f) => f.replace(os.homedir(), "~")), ...fix.editDirs.map((d) => `${d.replace(os.homedir(), "~")}/`)];
   const go = await vscode.window.showWarningMessage(`Run Claude in the background to fix ${fix.label}?`,
     { modal: true, detail: `It may edit only: ${may.join(", ") || "nothing"}. No commands, no web. Its edits wait for your review in Agent changes.\n\n${fix.prompt.slice(0, 1200)}` }, "Run");
   if (go !== "Run") return;
   const out = (fixOutput ??= vscode.window.createOutputChannel("Imprimatur Fix it"));
   out.appendLine(`\n=== ${new Date().toLocaleString()} · Fix it: ${fix.label} (in ${repo})\n${fix.prompt}\n---`);
-  const args = runner.claudeArgs(fix.prompt, { edit: fix.edit, editDirs: fix.editDirs, addDirs: runner.outside(repo, [...fix.edit, ...fix.editDirs.map((d) => path.join(d, "x")), ...fix.read.map((d) => path.join(d, "x"))]) });
   const res = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Imprimatur: Claude is fixing ${fix.label}…`, cancellable: true },
     (_p, token) => new Promise((resolve) => {
       const { spawn } = require("node:child_process");

@@ -4,6 +4,13 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.106.2] - 2026-11-04
+
+### Security
+- Fix it passes each permission rule as its own argument, and does not run when a file it would
+  edit has characters with a meaning in rule syntax (`, ( ) * ? [ ] { }` or spaces) in its path;
+  it copies the prompt instead (#156).
+
 ## [0.106.1] - 2026-11-04
 
 ### Security
