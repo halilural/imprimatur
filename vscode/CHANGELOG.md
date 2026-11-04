@@ -4,6 +4,12 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.91.1] - 2026-11-04
+
+### Fixed
+- A section's chapter is now one of the fields synced between machines. Before this,
+  the other machine dropped it and listed every section under "Unsorted".
+
 ## [0.91.0] - 2026-11-04
 
 ### Changed
