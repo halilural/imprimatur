@@ -9,6 +9,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { scanSetup, changesSince, snapshotOf, flatItems } = require("./agent-setup.js");
 const { readUpstream, checkUpstream, staleOf } = require("./upstream.js");
+const { recordVersions, versionLine } = require("./version-history.js");
 const { DriftScanner, driftLabel, DEFAULT_EXCLUDE } = require("./setup-drift.js");
 const { SetupHistory, historyLines } = require("./setup-history.js");
 const { trustGate } = require("./trust.js");
@@ -183,6 +184,17 @@ class SetupView {
       const merged = d.global ? undefined : mergeSettings(readSources({ root: d.root, home }));
       return { ...d, items, merged, ...changesSince(items, seen[d.id]), health: checkHealth(items, { root: d.root, global: d.global }) };
     });
+    // Version history of plugins and hand-installed skills (#140): kept here, shown on the row.
+    const versions = recordVersions(path.join(this.ctx.globalStorageUri.fsPath, "versions.json"),
+      this.scopes.flatMap((s) => flatItems(s.items).flatMap((i) => (i.kind === "installed plugin"
+        ? [{ key: `${s.id} ${i.rel}`, value: i.hash, since: i.details.find((d) => d.startsWith("installed "))?.slice(10) }]
+        : i.origin ? [{ key: `${s.id} ${i.rel}`, value: i.origin.commit }] : []))),
+      new Date().toISOString().slice(0, 10));
+    for (const s of this.scopes)
+      for (const i of flatItems(s.items)) {
+        const line = versionLine(versions[`${s.id} ${i.rel}`]);
+        if (line) i.details.push(line);
+      }
     // Hand-installed skills' upstream (#140): checked in the background at most once a day, then shown.
     const origins = this.scopes.flatMap((s) => flatItems(s.items).flatMap((i) => (i.origin ? [i.origin] : [])));
     if (!this.checkingUpstream && staleOf(origins, upstream, Date.now()).length) {
