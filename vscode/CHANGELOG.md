@@ -10,7 +10,7 @@ extension is in early development.
 - "#140" in Quick Open (Ctrl+P) or Go to Symbol in Workspace (Ctrl+T) lists that GitHub issue
   from Imprimatur's tasks (#154), and words find issues by title. Picking one opens the issue
   page of the GitHub Pull Requests extension, or the browser without it, as the tab in front;
-  the cursor stays put, and no other file is left open (0.100.2).
+  no file opens and the cursor stays put (0.100.3).
 
 ## [0.99.1] - 2026-11-04
 
