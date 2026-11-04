@@ -444,7 +444,7 @@ const FIELDS = {
   repo: ["name"],
   task: ["title", "status", "summary", "epic", "pointer"],
   record: ["task", "kind", "owner", "status", "title", "body", "position", "parent", "links", "created_at"],
-  section: ["title", "body", "position", "status", "records", "source"],
+  section: ["title", "body", "position", "status", "records", "source", "chapter"],
 };
 /** Design documents (#72) and the project glossary: kind → the title a new one gets. */
 /**
