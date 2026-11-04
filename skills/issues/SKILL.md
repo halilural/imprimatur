@@ -143,13 +143,14 @@ Steps a person follows to see the change work, in the closing comment (and in a 
 
 ```markdown
 **How to try it** (0.99.0)
-1. Setup: what to install, reload or open first (e.g. "Reload Window", "open the investment repo").
+1. Setup (in VS Code): what to install, reload or open first (e.g. "Reload Window", "open the investment repo").
 2. Do: the exact click, command or input (e.g. "Agent Setup → Installed plugins → ponytail@ponytail").
 3. See: what should appear, in words that can be checked (e.g. "the row ends with 'update available: v5.3.3'").
 4. Edge: one case that should not trigger it (e.g. "imprimatur's ponytail 5.3.3 shows no update").
 5. Undo: how to put things back, if the steps changed anything.
 ```
 
+- Say where the steps happen: the first step names the place (the VS Code panel, a terminal, the browser, GitHub), and a step that moves to another place says so. A reader of the issue on GitHub must not think the steps happen there.
 - Each step is one action and what it shows. Name the real button, view, command or file, and use data the user has, not a made-up example.
 - Cover each acceptance criterion with at least one "See" step, and add one negative case.
 - If a step cannot be run on this machine, say so and why (another OS, a paid account).
