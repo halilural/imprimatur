@@ -276,8 +276,8 @@ function summarize(abs, c) {
   const lines = text.split(/\r?\n/).length;
   if (c.kind === "skill") {
     const desc = (fm.description || firstLine(text)).slice(0, 140);
-    const { from, details } = skillOrigin(path.dirname(abs));
-    return { summary: from ? `from ${from} · ${desc}` : desc, details };
+    const { from, details, origin } = skillOrigin(path.dirname(abs));
+    return { summary: from ? `from ${from} · ${desc}` : desc, details, ...(origin ? { origin } : {}) };
   }
   if (c.kind === "agent" || c.kind === "command")
     return { summary: (fm.description || firstLine(text)).slice(0, 140), details: [] };
@@ -336,7 +336,12 @@ function skillOrigin(dir) {
     const field = (/** @type {string} */ k) => lines.find((l) => l.toLowerCase().startsWith(`${k}:`))?.slice(k.length + 1).trim() ?? "";
     const src = field("source").replace(/^https?:\/\//, "").replace(/\s.*$/, "");
     const commit = field("commit");
-    return { from: [src, commit && `@${commit.slice(0, 12)}`].filter(Boolean).join(" ") || "SOURCE.txt", details: lines };
+    // "https://github.com/o/r (sub/path)": the repo and the skill's folder in it, for the upstream check (#140).
+    const gh = /github\.com\/([\w.-]+\/[\w.-]+?)(?:\.git)?(?:\s+\(([^)]+)\))?$/.exec(field("source"));
+    // Some notes start the folder with the repo's own name ("InvestSkill/plugins/…"): drop it.
+    const sub = (gh?.[2] ?? "").replace(new RegExp(`^${(gh?.[1].split("/")[1] ?? "").replace(/[.]/g, "\\.")}/`), "");
+    const origin = gh && /^[0-9a-f]{7,40}$/i.test(commit) ? { key: `${gh[1]}:${sub}`, repo: gh[1], path: sub, commit } : undefined;
+    return { from: [src, commit && `@${commit.slice(0, 12)}`].filter(Boolean).join(" ") || "SOURCE.txt", details: lines, origin };
   } catch {}
   try {
     if (fs.lstatSync(dir).isSymbolicLink()) {
@@ -344,7 +349,7 @@ function skillOrigin(dir) {
       return { from: `linked from ${target.replace(os.homedir(), "~")}`, details: [] };
     }
   } catch {}
-  return { from: "", details: [] };
+  return { from: "", details: [], origin: undefined };
 }
 
 /**
@@ -426,8 +431,23 @@ function labelOf(rel, kind) {
 }
 
 /**
+ * What the last upstream check found for a hand-installed skill (#140): a newer commit that
+ * touches its folder adds "upstream changed" and the GitHub compare link; no change says so.
+ * @param {SetupItem} it @param {any} u the check's entry for the skill's source
+ */
+function markUpstream(it, u) {
+  if (!it.origin || !u || u.commit !== it.origin.commit) return;
+  if (u.error) return void it.details.push(`upstream: not checked (${u.error})`);
+  if (u.latest && u.latest !== u.installedSha && u.latestDate > u.installedDate) {
+    it.summary = `upstream changed ${u.latestDate.slice(0, 10)} · ${it.summary}`;
+    it.compare = `https://github.com/${it.origin.repo}/compare/${u.installedSha}...${u.latest}`;
+    it.details.push(`upstream: ${u.latest.slice(0, 7)} on ${u.latestDate.slice(0, 10)}, installed ${u.installedSha.slice(0, 7)}; checked ${day(u.checkedAt)}`);
+  } else it.details.push(`upstream: no change since install; checked ${day(u.checkedAt)}`);
+}
+
+/**
  * The agent setup of a folder (a repo, or the home folder with global: true).
- * @param {string} root @param {{global?: boolean, home?: string, managedDir?: string | null}} [opts] home: where ~ and auto memory are; managedDir: the policy folder (null: none)
+ * @param {string} root @param {{global?: boolean, home?: string, managedDir?: string | null, upstream?: Record<string, any>}} [opts] home: where ~ and auto memory are; managedDir: the policy folder (null: none); upstream: the last upstream check (#140)
  * @returns {SetupItem[]} with import rows under children
  */
 function scanSetup(root, opts = {}) {
@@ -464,6 +484,7 @@ function scanSetup(root, opts = {}) {
     if (kids.length) it.children = kids;
   };
   for (const it of items) if (readsImports(it)) addImports(it, 1, new Set([it.abs]));
+  if (opts.upstream) for (const it of items) if (it.origin) markUpstream(it, opts.upstream[it.origin.key]);
   items.push(...pluginItems(root, home, !!opts.global));
   if (opts.global) items.push(...syncedSkills(home), ...memoryStores(home));
   // What the repo's last Claude Code session was given (#139): read from its transcript.
@@ -507,14 +528,13 @@ function pluginItems(root, home, global) {
       const market = markets[id.split("@")[1]]?.installLocation;
       const entry = market ? (/** @type {any[]} */ (readJson(path.join(market, ".claude-plugin", "marketplace.json")).plugins ?? [])).find((p) => p?.name === id.split("@")[0]) : undefined;
       const version = String(e.version ?? "?");
-      const latest = latestVersion(market, entry);
-      const behind = !!latest && isNewer(latest, version);
+      const { latest, behind } = behindOf(market, entry, e);
       const manifest = path.join(String(e.installPath ?? ""), ".claude-plugin", "plugin.json");
       out.push({
         rel: `plugin ${id} (${e.scope})`, abs: fs.existsSync(manifest) ? manifest : String(e.installPath ?? ""),
         tool: "Claude Code", kind: "installed plugin", label: id,
         summary: [/^\d/.test(version) ? `v${version}` : version.slice(0, 12), global ? "every repo" : `${e.scope} scope`, `from ${from}`,
-          !global && all.some((x) => x.scope === "user") && "also installed for every repo", behind && `update available: v${latest}`].filter(Boolean).join(" · "),
+          !global && all.some((x) => x.scope === "user") && "also installed for every repo", behind && `update available: ${latest}`].filter(Boolean).join(" · "),
         details: [...pluginContents(String(e.installPath ?? ""), entry), `source: ${from}`, e.gitCommitSha && `commit ${String(e.gitCommitSha).slice(0, 12)}`, e.installedAt && `installed ${day(e.installedAt)}`, e.lastUpdated && `updated ${day(e.lastUpdated)}`,
           markets[id.split("@")[1]]?.lastUpdated && `marketplace refreshed ${day(markets[id.split("@")[1]].lastUpdated)}`].filter(Boolean),
         hash: version,
@@ -539,6 +559,40 @@ function latestVersion(market, entry) {
   if (typeof entry.source !== "string") return "";
   const v = readJson(path.join(market, entry.source, ".claude-plugin", "plugin.json")).version;
   return typeof v === "string" ? v : "";
+}
+
+/**
+ * Whether an installed plugin is behind its marketplace (#140), and what it would get: a newer
+ * version number; for a plugin fetched from its own repo, the commit the marketplace now pins;
+ * for one kept in the marketplace under a commit "version", files that differ from the install.
+ * @param {string | undefined} market @param {any} entry @param {any} e the install record
+ * @returns {{latest: string, behind: boolean}}
+ */
+function behindOf(market, entry, e) {
+  const version = String(e.version ?? "");
+  const latest = latestVersion(market, entry);
+  if (latest && isNewer(latest, version)) return { latest: `v${latest}`, behind: true };
+  const pin = entry?.source && typeof entry.source === "object" ? entry.source.sha : undefined;
+  if (typeof pin === "string" && typeof e.gitCommitSha === "string" && pin !== e.gitCommitSha) return { latest: `commit ${pin.slice(0, 12)}`, behind: true };
+  if (market && typeof entry?.source === "string" && !/^\d+(\.\d+)*$/.test(version) && e.installPath && treeHash(path.join(market, entry.source)) !== treeHash(String(e.installPath)))
+    return { latest: "newer files in the marketplace", behind: true };
+  return { latest: "", behind: false };
+}
+
+/** Claude Code's own markers in a plugin's cache folder (files or folders), not the plugin's files. */
+const MARKERS = new Set([".in_use", ".orphaned_at"]);
+
+/** One hash of a folder's files (names and contents), "" when missing. @param {string} dir */
+function treeHash(dir) {
+  const files = listFiles(dir, 8).filter((f) => !f.split("/").some((p) => MARKERS.has(p) || SKIP.has(p)));
+  if (!files.length) return "";
+  const h = crypto.createHash("sha1");
+  for (const f of files) {
+    try {
+      h.update(f).update("\0").update(fs.readFileSync(path.join(dir, f))).update("\0");
+    } catch {}
+  }
+  return h.digest("hex");
 }
 
 /** Whether version a is newer than b, both dotted numbers ("5.3.3" > "4.10.0"); anything else is not. @param {string} a @param {string} b */
@@ -603,7 +657,8 @@ function memoryStores(home) {
 
 /**
  * @typedef {{rel: string, abs: string, tool: string, kind: string, label: string, summary: string, details: string[], hash: string,
- *   parent?: string, children?: SetupItem[], update?: {id: string, scope: string, cwd: string}}} SetupItem
+ *   parent?: string, children?: SetupItem[], update?: {id: string, scope: string, cwd: string},
+ *   origin?: {key: string, repo: string, path: string, commit: string}, compare?: string}} SetupItem
  */
 
 /** Imported files load recursively up to four hops (Claude Code memory docs). */

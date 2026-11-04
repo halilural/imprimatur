@@ -7,7 +7,8 @@
 const vscode = require("vscode");
 const os = require("node:os");
 const path = require("node:path");
-const { scanSetup, changesSince, snapshotOf } = require("./agent-setup.js");
+const { scanSetup, changesSince, snapshotOf, flatItems } = require("./agent-setup.js");
+const { readUpstream, checkUpstream, staleOf } = require("./upstream.js");
 const { DriftScanner, driftLabel, DEFAULT_EXCLUDE } = require("./setup-drift.js");
 const { SetupHistory, historyLines } = require("./setup-history.js");
 const { trustGate } = require("./trust.js");
@@ -170,8 +171,10 @@ class SetupView {
     const seen = /** @type {Record<string, Record<string, string>>} */ (this.ctx.globalState.get(SEEN_KEY) ?? {});
     const home = os.homedir();
     const defs = [...this.roots().map((r) => ({ id: r, label: path.basename(r), root: r, global: false })), { id: "~", label: "Global (~)", root: home, global: true }];
+    const upstreamFile = path.join(this.ctx.globalStorageUri.fsPath, "upstream.json");
+    const upstream = readUpstream(upstreamFile);
     this.scopes = defs.map((d) => {
-      const items = withScopes(scanSetup(d.root, { global: d.global }), { global: d.global });
+      const items = withScopes(scanSetup(d.root, { global: d.global, upstream }), { global: d.global });
       // First look at a scope: remember it, mark nothing.
       if (!seen[d.id]) {
         seen[d.id] = snapshotOf(items);
@@ -180,6 +183,15 @@ class SetupView {
       const merged = d.global ? undefined : mergeSettings(readSources({ root: d.root, home }));
       return { ...d, items, merged, ...changesSince(items, seen[d.id]), health: checkHealth(items, { root: d.root, global: d.global }) };
     });
+    // Hand-installed skills' upstream (#140): checked in the background at most once a day, then shown.
+    const origins = this.scopes.flatMap((s) => flatItems(s.items).flatMap((i) => (i.origin ? [i.origin] : [])));
+    if (!this.checkingUpstream && staleOf(origins, upstream, Date.now()).length) {
+      this.checkingUpstream = true;
+      checkUpstream(origins, upstreamFile)
+        .then((checked) => checked && this.refresh())
+        .catch(() => {})
+        .finally(() => (this.checkingUpstream = false));
+    }
     const fresh = this.scopes.reduce((n, s) => n + Object.keys(s.state).length + s.removed.length, 0);
     this.loadAudit();
     this.extras();
@@ -284,7 +296,7 @@ class SetupView {
       const problems = (node.scope.health ?? []).filter((p) => p.file === item.abs);
       const lazy = !problems.length && !node.scope.global && !explained && this.history.info(node.scope.root, item.rel);
       it.tooltip = lazy ? undefined : this.fileTooltip(node, explained);
-      it.contextValue = `setupFile${drift ? "-drift" : ""}${node.scope.global ? "" : "-repo"}${item.update ? "-update" : ""}`;
+      it.contextValue = `setupFile${drift ? "-drift" : ""}${node.scope.global ? "" : "-repo"}${item.update ? "-update" : ""}${item.compare ? "-upstream" : ""}`;
       it.iconPath = state
         ? new vscode.ThemeIcon(KIND_ICONS[item.kind] ?? "file", new vscode.ThemeColor(state === "new" ? "gitDecoration.addedResourceForeground" : "gitDecoration.modifiedResourceForeground"))
         : new vscode.ThemeIcon(KIND_ICONS[item.kind] ?? "file");
@@ -419,6 +431,10 @@ function registerSetupView(ctx, roots, counts) {
     view.onDidChangeVisibility((e) => e.visible && soon()),
     vscode.window.onDidChangeWindowState((s) => s.focused && view.visible && soon()),
     vscode.commands.registerCommand("imprimatur.setup.refresh", () => provider.refresh()),
+    vscode.commands.registerCommand("imprimatur.setup.showUpstream", (node) => {
+      const url = (node ?? view.selection[0])?.item?.compare;
+      if (typeof url === "string" && url.startsWith("https://github.com/")) vscode.env.openExternal(vscode.Uri.parse(url));
+    }),
     vscode.commands.registerCommand("imprimatur.setup.updatePlugin", (node) => updatePlugin((node ?? view.selection[0])?.item)),
     vscode.commands.registerCommand("imprimatur.setup.markSeen", () => provider.markSeen()),
     vscode.commands.registerCommand("imprimatur.setup.compareVariant", (node) => compareVariant(provider, node ?? view.selection[0])),
