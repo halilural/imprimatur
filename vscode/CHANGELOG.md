@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.102.0] - 2026-11-04
+
+### Added
+- Version history for plugins and hand-installed skills (#140). Each row in Agent Setup lists
+  the versions it had, with the day each was first seen (e.g. "versions: 4.10.0 (2026-09-30) →
+  5.3.3 (2026-11-04)"). There is no revert: Claude Code has no command that installs an older
+  version, and Imprimatur does not rewrite Claude Code's own files.
+
 ## [0.101.0] - 2026-11-04
 
 ### Added
