@@ -72,3 +72,21 @@ test("upstream (#140): a plugin pinned by commit or kept by files in the marketp
   assert.match(rows["files@mk"], /update available: newer files in the marketplace$/);
   assert.doesNotMatch(rows["same@mk"], /update/, "Claude Code's .in_use marker is not a difference");
 });
+
+test("upstream (#156): a skill's folder is downloaded with GETs only; paths cannot leave the folder; size is capped", async () => {
+  const { fetchSkillFolder } = require("../vscode/upstream.js");
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), "skill-dl-"));
+  const asked = [];
+  const api = async (e) => (asked.push(e), { tree: [
+    { type: "blob", path: "skills/etf/SKILL.md" }, { type: "blob", path: "skills/etf/ref/a.md" },
+    { type: "blob", path: "skills/other/SKILL.md" }, { type: "tree", path: "skills/etf/ref" }, { type: "blob", path: "skills/etf/../../evil" },
+  ] });
+  const raw = async (e) => (asked.push(e), `text of ${e}`);
+  const got = await fetchSkillFolder({ repo: "acme/s", path: "skills/etf" }, "11afdb9", dest, { api, raw });
+  assert.deepEqual(got, ["SKILL.md", "ref/a.md"]);
+  assert.equal(asked[0], "repos/acme/s/git/trees/11afdb9?recursive=1");
+  assert.match(fs.readFileSync(path.join(dest, "ref/a.md"), "utf8"), /contents\/skills\/etf\/ref\/a\.md\?ref=11afdb9/);
+  assert.ok(!fs.existsSync(path.join(dest, "..", "evil")));
+  await assert.rejects(fetchSkillFolder({ repo: "acme/s", path: "../x" }, "11afdb9", dest, { api, raw }), /not a plain/);
+  await assert.rejects(fetchSkillFolder({ repo: "acme/s", path: "skills/etf" }, "11afdb9", dest, { api, raw: async () => "x".repeat(3 << 20) }), /larger/);
+});

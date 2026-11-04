@@ -6,6 +6,7 @@
 "use strict";
 const vscode = require("vscode");
 const os = require("node:os");
+const fs = require("node:fs");
 const path = require("node:path");
 const { scanSetup, changesSince, snapshotOf, flatItems } = require("./agent-setup.js");
 const { readUpstream, checkUpstream, staleOf } = require("./upstream.js");
@@ -359,37 +360,58 @@ class SetupView {
 const inRepo = (node) => !node.scope.global && !!node.item.abs && path.resolve(node.item.abs).startsWith(path.resolve(node.scope.root) + path.sep);
 
 /**
- * Fix it (#156): Claude Code's CLI runs the fix in the background (`claude -p`, read and edit
- * only) with a progress notification, then shows the agent's answer; its edits are tracked
- * for review. Without the CLI: the Claude Code panel with the prompt written, else the clipboard.
+ * Fix it (#156): after the user confirms, Claude Code's CLI runs the fix in the background
+ * (`claude -p`: user settings only, no MCP, no commands, edits only the target files) under a
+ * progress notification, then shows the agent's answer; its edits are tracked for review.
+ * Untrusted workspace or no CLI: the prompt goes to the clipboard.
  * @param {SetupView} provider @param {any} node a checklist row or a recommendation row
  */
 async function fixWithClaude(provider, node) {
   const prompts = require("./fix-prompts.js");
+  const runner = require("./fix-runner.js");
   const db = require("./records.js").dbOf();
   const repo = provider.scopes.find((s) => !s.global)?.root ?? os.homedir();
-  /** @type {{prompt: string, label: string, files: string[], gh?: boolean}} */
-  let fix = { prompt: "", label: "", files: [] };
-  if (node?.fix?.kind === "skill") fix = { prompt: prompts.skillUpdatePrompt(node.fix.item), label: node.fix.item.label, files: [node.fix.item.abs], gh: true };
-  else if (node?.fix?.kind === "health") fix = { prompt: prompts.healthPrompt(node.fix.problem), label: path.basename(node.fix.problem.file), files: [node.fix.problem.file] };
-  else if (node?.fix?.kind === "findings") {
+  /** @type {{prompt: string, label: string, edit: string[], editDirs: string[], read: string[], audit?: boolean}} */
+  let fix = { prompt: "", label: "", edit: [], editDirs: [], read: [] };
+  const kind = node?.fix?.kind;
+  if (kind === "health") fix = { prompt: prompts.healthPrompt(node.fix.problem), label: path.basename(node.fix.problem.file), edit: [node.fix.problem.file], editDirs: [], read: [] };
+  else if (kind === "findings") {
     const open = provider.openFindings();
-    if (open.length) fix = { prompt: prompts.findingsPrompt(open), label: `${open.length} recommendations`, files: open.map((/** @type {any} */ r) => r.links?.audit?.file) };
-  } else if (node?.recordId && db) {
+    const files = open.map((/** @type {any} */ r) => r.links?.audit?.file).filter(Boolean);
+    if (open.length) fix = { prompt: prompts.findingsPrompt(open), label: `${open.length} recommendations`, edit: files, editDirs: [], read: [], audit: true };
+  } else if (!kind && node?.recordId && db) {
     const r = db.record(node.recordId);
-    if (r) fix = { prompt: prompts.findingPrompt(r), label: r.title.slice(0, 40), files: [r.links?.audit?.file] };
+    if (r) fix = { prompt: prompts.findingPrompt(r), label: r.title.slice(0, 40), edit: r.links?.audit?.file ? [r.links.audit.file] : [], editDirs: [], read: [], audit: true };
   }
-  if (!fix.prompt) return void vscode.window.showInformationMessage("Imprimatur: nothing to fix here.");
-  const runner = require("./fix-runner.js");
+  const skill = kind === "skill" ? node.fix.item : undefined;
+  if (skill && !prompts.skillUpdatePrompt(skill)) return void vscode.window.showWarningMessage("Imprimatur: this skill's SOURCE.txt is not a plain GitHub source; review the change by hand.");
+  if (!skill && !fix.prompt) return void vscode.window.showInformationMessage("Imprimatur: nothing to fix here.");
   const bin = runner.claudeBin();
-  if (!bin) {
-    if (vscode.extensions.getExtension("anthropic.claude-code")) return void (await vscode.commands.executeCommand("claude-vscode.editor.open", undefined, fix.prompt));
-    await vscode.env.clipboard.writeText(fix.prompt);
-    return void vscode.window.showInformationMessage("Imprimatur: no Claude Code CLI here; the fix prompt is on the clipboard.");
+  if (!vscode.workspace.isTrusted || !bin) {
+    const text = skill ? prompts.skillUpdatePrompt(skill, "(download it from the compare page)") : fix.prompt;
+    await vscode.env.clipboard.writeText(text);
+    return void vscode.window.showInformationMessage(`Imprimatur: ${!bin ? "no Claude Code CLI here" : "this folder is not trusted, so Fix it does not run an agent"}; the fix prompt is on the clipboard.`);
   }
+  if (skill) {
+    // The new version is downloaded here, with GET requests only: the agent gets no shell.
+    const dir = path.dirname(skill.abs);
+    const to = /\.\.\.([0-9a-f]+)$/.exec(skill.compare)?.[1] ?? "";
+    const dest = fs.mkdtempSync(path.join(os.tmpdir(), `imprimatur-skill-${skill.label}-`));
+    try {
+      await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Imprimatur: downloading ${skill.label} at ${to.slice(0, 7)}…` },
+        () => require("./upstream.js").fetchSkillFolder(skill.origin, to, dest));
+    } catch (e) {
+      return void vscode.window.showErrorMessage(`Imprimatur: could not download ${skill.label}: ${e instanceof Error ? e.message : e}`);
+    }
+    fix = { prompt: prompts.skillUpdatePrompt(skill, dest), label: skill.label, edit: [], editDirs: [dir], read: [dest] };
+  }
+  const may = [...fix.edit.map((f) => f.replace(os.homedir(), "~")), ...fix.editDirs.map((d) => `${d.replace(os.homedir(), "~")}/`)];
+  const go = await vscode.window.showWarningMessage(`Run Claude in the background to fix ${fix.label}?`,
+    { modal: true, detail: `It may edit only: ${may.join(", ") || "nothing"}. No commands, no web. Its edits wait for your review in Agent changes.\n\n${fix.prompt.slice(0, 1200)}` }, "Run");
+  if (go !== "Run") return;
   const out = (fixOutput ??= vscode.window.createOutputChannel("Imprimatur Fix it"));
   out.appendLine(`\n=== ${new Date().toLocaleString()} · Fix it: ${fix.label} (in ${repo})\n${fix.prompt}\n---`);
-  const args = runner.claudeArgs(fix.prompt, { gh: fix.gh, addDirs: runner.outside(repo, fix.files) });
+  const args = runner.claudeArgs(fix.prompt, { edit: fix.edit, editDirs: fix.editDirs, addDirs: runner.outside(repo, [...fix.edit, ...fix.editDirs.map((d) => path.join(d, "x")), ...fix.read.map((d) => path.join(d, "x"))]) });
   const res = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Imprimatur: Claude is fixing ${fix.label}…`, cancellable: true },
     (_p, token) => new Promise((resolve) => {
       const { spawn } = require("node:child_process");
@@ -405,12 +427,16 @@ async function fixWithClaude(provider, node) {
     }));
   const r = /** @type {{code: number, stdout: string, stderr: string}} */ (res);
   if (r.stderr) out.appendLine(`\n[stderr] ${r.stderr.trim()}`);
-  provider.refresh();
+  for (const d of fix.read) fs.rmSync(d, { recursive: true, force: true });
   if (r.code !== 0) {
+    provider.refresh();
     const pick = await vscode.window.showErrorMessage(`Imprimatur: Fix it stopped (${r.code === null ? "cancelled" : `exit ${r.code}`}). ${r.stderr.trim().split("\n")[0].slice(0, 160)}`, "Show output");
     if (pick) out.show();
     return;
   }
+  // The run has no MCP: the audit runs here, so the counts show what is left.
+  if (fix.audit) await runAudit(provider);
+  else provider.refresh();
   const first = r.stdout.trim().split("\n").find((l) => l.trim()) ?? "Done.";
   const pick = await vscode.window.showInformationMessage(`Imprimatur: Fix it finished: ${first.slice(0, 200)}`, "Show answer", "Review changes");
   if (pick === "Show answer") out.show();
