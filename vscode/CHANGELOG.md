@@ -4,6 +4,18 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.93.0] - 2026-11-04
+
+### Added
+- Agent setup shows what the repo's last Claude Code session was given, read from its
+  transcript (#139):
+  - the instruction files it loaded;
+  - each hook, with how often it ran, how long it took and how much text it added;
+  - each MCP server's instructions;
+  - tools by server, including servers that failed to connect or need sign-in;
+  - the skills and agents it was told about;
+  - the model and the mode.
+
 ## [0.92.0] - 2026-11-04
 
 ### Added
