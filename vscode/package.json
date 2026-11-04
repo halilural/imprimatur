@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.104.0",
+  "version": "0.105.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -184,6 +184,12 @@
         "title": "Mark all as seen",
         "category": "Imprimatur",
         "icon": "$(check-all)"
+      },
+      {
+        "command": "imprimatur.setup.fixWithClaude",
+        "title": "Fix It with Claude",
+        "category": "Imprimatur",
+        "icon": "$(sparkle)"
       },
       {
         "command": "imprimatur.setup.showUpstream",
@@ -406,6 +412,10 @@
     "menus": {
       "commandPalette": [
         {
+          "command": "imprimatur.setup.fixWithClaude",
+          "when": "false"
+        },
+        {
           "command": "imprimatur.setup.showUpstream",
           "when": "false"
         },
@@ -558,6 +568,16 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "imprimatur.setup.fixWithClaude",
+          "when": "view == imprimatur.setup && viewItem =~ /^(checkFix|auditFinding-open|bestFinding-open)$/",
+          "group": "inline@0"
+        },
+        {
+          "command": "imprimatur.setup.fixWithClaude",
+          "when": "view == imprimatur.setup && viewItem =~ /^(checkFix|auditFinding-open|bestFinding-open)$/",
+          "group": "1_setup@0"
+        },
         {
           "command": "imprimatur.setup.showUpstream",
           "when": "view == imprimatur.setup && viewItem =~ /-upstream$/",

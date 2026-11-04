@@ -19,6 +19,10 @@ test("checklist (#142): outdated plugins, upstream changes, health problems and 
   assert.deepEqual([h.label, h.abs, h.line, h.icon], ["Not valid JSON", "/r/.claude/settings.json", 3, "error"]);
   assert.deepEqual([recs.label, recs.command], ["2 open recommendations", "imprimatur.setup.audit"]);
   for (const row of node.children) assert.ok(row.tooltip && (row.command || row.abs), `${row.label} says what to do and has an action`);
+  // Fix it (#156): the upstream change, the health problem and the recommendations hand off to Claude; the update has its own button.
+  assert.deepEqual(node.children.map((x) => x.fix?.kind ?? "-"), ["-", "skill", "health", "findings"]);
+  const secret = checklistOf([{ label: "r", global: false, items: [], health: [{ file: "/r/a.md", level: "warn", message: "Line 3 looks like a password or token" }] }], 0);
+  assert.equal(secret.node.children[0].fix, undefined, "a secret has no Fix it");
   const none = checklistOf([{ label: "x", global: false, items: [{ label: "fine", summary: "v1" }], health: [] }], 0);
   assert.deepEqual([none.count, none.node.description], [0, "nothing to do"]);
 });
