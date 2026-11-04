@@ -6,7 +6,8 @@ const { checklistOf } = createRequire(import.meta.url)("../vscode/setup-checklis
 
 test("checklist (#142): outdated plugins, upstream changes, health problems and open recommendations, each with an action; empty says so", () => {
   const plugin = { label: "ponytail@ponytail", summary: "v4.10.0 · project scope · update available: v5.3.3", update: { id: "ponytail@ponytail" } };
-  const skill = { label: "etf", summary: "upstream changed 2026-10-24 · from x", compare: "https://github.com/a/b/compare/1...2" };
+  const skill = { label: "etf", abs: "/h/.claude/skills/etf/SKILL.md", summary: "upstream changed 2026-10-24 · from x", origin: { repo: "a/b", path: "skills/etf", commit: "1111111" },
+    compare: "https://github.com/a/b/compare/1111111aaa...2222222bbb" };
   const { count, node } = checklistOf([
     { label: "investment", global: false, items: [plugin], health: [{ file: "/r/.claude/settings.json", level: "error", message: "Not valid JSON", line: 3 }] },
     { label: "Global (~)", global: true, items: [{ label: "nested", summary: "", children: [skill] }], health: [] },
