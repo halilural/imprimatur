@@ -4,6 +4,15 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.96.0] - 2026-11-04
+
+### Added
+- An `issues` skill (#153): the agent opens, splits, triages, keeps in step and closes issues
+  the same way every time. Each issue gets a category and priority label, a board Status and
+  sprint, sub-issue and blocked-by links, and a brief with acceptance criteria. Its Imprimatur
+  task holds the detail. Built on mattpocock/skills, github/awesome-copilot and CCPM (MIT;
+  notices in `skills/issues/NOTICE.md`).
+
 ## [0.95.0] - 2026-11-04
 
 ### Changed
