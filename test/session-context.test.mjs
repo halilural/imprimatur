@@ -44,3 +44,16 @@ test("session context (#139): what the last session saw, from its transcript; ap
   fs.appendFileSync(file, att({ type: "hook_success", hookEvent: "SessionStart", command: 'node "/opt/hooks/run.mjs" md', durationMs: 100, stdout: "" }) + "\n");
   assert.equal(rows()["hook output|SessionStart: run.mjs"], "2 runs · 200 ms each · adds 22 chars");
 });
+
+test("session context (#139): memory servers are listed once as data sources, under the connector's name", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "session-mem-"));
+  const dir = path.join(home, ".claude", "projects", "p");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "s.jsonl"), [
+    att({ type: "mcp_instructions_delta", addedNames: ["claude.ai Nook", "imprimatur"], addedBlocks: ["Nook memory", "x"] }),
+    att({ type: "deferred_tools_delta", addedNames: ["mcp__claude_ai_Nook__add_memory", "mcp__imprimatur__search"] }),
+    "",
+  ].join("\n"));
+  const src = sessionItems(dir, home).filter((r) => r.kind === "data sources").map((r) => r.label);
+  assert.deepEqual(src, ["claude.ai Nook"]);
+});

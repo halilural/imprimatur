@@ -4,6 +4,16 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.98.0] - 2026-11-04
+
+### Added
+- Agent Setup shows which version of each MCP server runs (#139): a pinned package version or
+  image tag, "unpinned, newest at each start" for a runner without one, a remote server's host,
+  or a local file. The summary counts the unpinned ones.
+- Data sources (#139): memory systems connected in the last session (Nook, Notion and the like)
+  and other memory systems' folders on this machine (mem0, claude-mem, context-mode). They are
+  listed with their last change, never read, because what they return reaches the agent unvetted.
+
 ## [0.97.0] - 2026-11-04
 
 ### Added
