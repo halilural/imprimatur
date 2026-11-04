@@ -4,6 +4,13 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.95.0] - 2026-11-04
+
+### Changed
+- The panel takes the board look on dark and light themes (#148): a near-black board palette
+  (light variant on light themes), cards with a soft gradient and inner highlight, rounder
+  corners, and a translucent app bar. High-contrast themes keep VS Code's colours.
+
 ## [0.94.0] - 2026-11-04
 
 ### Added

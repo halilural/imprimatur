@@ -17,6 +17,30 @@ const THEME_CSS = `
     --pass: var(--vscode-testing-iconPassed, #73c991); --warn: var(--vscode-editorWarning-foreground, #cca700); --info: var(--vscode-charts-blue, #3794ff);
     background: var(--vscode-editor-background);
   }
+  /* The board look (#148, after the ponytail board): its palette in place of the editor theme's
+     colours, so every tab's cards, lines and text follow it; light themes get its light variant.
+     High-contrast themes keep VS Code's own colours. Body text never uses a faint grey. */
+  body.vscode-dark, body.vscode-light {
+    --b-bg: #070707; --b-panel: #0d0d0c; --b-card: linear-gradient(180deg, #111110, #0a0a09); --b-line: #1f1f1d; --b-line2: #2a2a27;
+    --b-text: #f3f2ee; --b-muted: #a3a19a; --b-hover: #171716; --b-input: #0f0f0e;
+    --vscode-editor-background: var(--b-bg); --vscode-foreground: var(--b-text); --vscode-descriptionForeground: var(--b-muted);
+    --vscode-panel-border: var(--b-line); --vscode-widget-border: var(--b-line2); --vscode-sideBar-background: var(--b-panel);
+    --vscode-editorWidget-background: var(--b-panel); --vscode-input-background: var(--b-input); --vscode-input-border: var(--b-line2);
+    --vscode-list-hoverBackground: var(--b-hover); --vscode-toolbar-hoverBackground: var(--b-hover); --vscode-textCodeBlock-background: #121211;
+    --surface: var(--b-panel); --surface-2: var(--b-bg); --line: var(--b-line); --muted: var(--b-muted);
+    --shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 18px 44px -12px rgba(0,0,0,.55);
+    --r-md: 10px; --r-lg: 16px;
+    --mono: "JetBrains Mono", var(--vscode-editor-font-family), ui-monospace, monospace;
+    background: var(--b-bg); color: var(--b-text); font-variant-numeric: tabular-nums;
+  }
+  body.vscode-light {
+    --b-bg: #f5f5f3; --b-panel: #ffffff; --b-card: #ffffff; --b-line: #e6e5e0; --b-line2: #d9d7d0;
+    --b-text: #1d1c1a; --b-muted: #5f5d57; --b-hover: #efeeea; --b-input: #ffffff; --vscode-textCodeBlock-background: #f0efeb;
+    --shadow: 0 1px 2px rgba(0,0,0,.05), 0 10px 28px -14px rgba(0,0,0,.18);
+  }
+  /* Cards: the board's gradient and inner highlight. */
+  body.vscode-dark :is(.card, .bucket, .etable, .tablewrap), body.vscode-light :is(.card, .bucket, .etable, .tablewrap) { background: var(--b-card); border-color: var(--b-line); }
+  body.vscode-dark header.appbar, body.vscode-light header.appbar { background: color-mix(in srgb, var(--b-bg) 88%, transparent); backdrop-filter: blur(8px); }
   body.vscode-light { --acc: #c2410c; --acc-ink: #ffffff; --shadow: 0 1px 2px rgba(0,0,0,.06), 0 6px 16px -8px rgba(0,0,0,.18); }
   body.vscode-high-contrast { --acc: #ffa94d; --acc-ink: #000000; --shadow: none; --line: var(--vscode-contrastBorder, #6fc3df); }
   body.vscode-high-contrast-light { --acc: #9a3412; --acc-ink: #ffffff; --shadow: none; --line: var(--vscode-contrastBorder, #0f4a85); }
