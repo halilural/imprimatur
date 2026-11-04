@@ -4,6 +4,16 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.106.0] - 2026-11-04
+
+### Changed
+- Fix it runs Claude Code's CLI in the background (`claude -p`) instead of opening a chat with
+  the prompt (#156). A notification shows while it works and can cancel it; at the end it shows
+  the agent's first line, with Show answer (the full answer in the "Imprimatur Fix it" output)
+  and Review changes. The run may only read and edit files, and for a skill update also call
+  `gh api`; Bash, WebFetch and WebSearch are shut for it. Its edits are tracked for review.
+  Without the CLI, Fix it opens the Claude Code panel as before, else copies the prompt.
+
 ## [0.105.1] - 2026-11-04
 
 ### Security

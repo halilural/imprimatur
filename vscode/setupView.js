@@ -11,6 +11,8 @@ const { scanSetup, changesSince, snapshotOf, flatItems } = require("./agent-setu
 const { readUpstream, checkUpstream, staleOf } = require("./upstream.js");
 const { recordVersions, versionLine } = require("./version-history.js");
 const { checklistOf } = require("./setup-checklist.js");
+/** @type {vscode.OutputChannel | undefined} Fix it's answers (#156). */
+let fixOutput;
 const { DriftScanner, driftLabel, DEFAULT_EXCLUDE } = require("./setup-drift.js");
 const { SetupHistory, historyLines } = require("./setup-history.js");
 const { trustGate } = require("./trust.js");
@@ -357,30 +359,62 @@ class SetupView {
 const inRepo = (node) => !node.scope.global && !!node.item.abs && path.resolve(node.item.abs).startsWith(path.resolve(node.scope.root) + path.sep);
 
 /**
- * Fix it (#156): a new Claude Code session that opens with the fix's prompt; the user reads it
- * and presses Enter. Without the Claude Code extension the prompt goes to the clipboard.
+ * Fix it (#156): Claude Code's CLI runs the fix in the background (`claude -p`, read and edit
+ * only) with a progress notification, then shows the agent's answer; its edits are tracked
+ * for review. Without the CLI: the Claude Code panel with the prompt written, else the clipboard.
  * @param {SetupView} provider @param {any} node a checklist row or a recommendation row
  */
 async function fixWithClaude(provider, node) {
   const prompts = require("./fix-prompts.js");
   const db = require("./records.js").dbOf();
-  let prompt = "";
-  if (node?.fix?.kind === "skill") prompt = prompts.skillUpdatePrompt(node.fix.item);
-  else if (node?.fix?.kind === "health") prompt = prompts.healthPrompt(node.fix.problem);
+  const repo = provider.scopes.find((s) => !s.global)?.root ?? os.homedir();
+  /** @type {{prompt: string, label: string, files: string[], gh?: boolean}} */
+  let fix = { prompt: "", label: "", files: [] };
+  if (node?.fix?.kind === "skill") fix = { prompt: prompts.skillUpdatePrompt(node.fix.item), label: node.fix.item.label, files: [node.fix.item.abs], gh: true };
+  else if (node?.fix?.kind === "health") fix = { prompt: prompts.healthPrompt(node.fix.problem), label: path.basename(node.fix.problem.file), files: [node.fix.problem.file] };
   else if (node?.fix?.kind === "findings") {
     const open = provider.openFindings();
-    if (open.length) prompt = prompts.findingsPrompt(open);
+    if (open.length) fix = { prompt: prompts.findingsPrompt(open), label: `${open.length} recommendations`, files: open.map((/** @type {any} */ r) => r.links?.audit?.file) };
   } else if (node?.recordId && db) {
     const r = db.record(node.recordId);
-    if (r) prompt = prompts.findingPrompt(r);
+    if (r) fix = { prompt: prompts.findingPrompt(r), label: r.title.slice(0, 40), files: [r.links?.audit?.file] };
   }
-  if (!prompt) return void vscode.window.showInformationMessage("Imprimatur: nothing to fix here.");
-  if (vscode.extensions.getExtension("anthropic.claude-code")) {
-    await vscode.commands.executeCommand("claude-vscode.editor.open", undefined, prompt);
+  if (!fix.prompt) return void vscode.window.showInformationMessage("Imprimatur: nothing to fix here.");
+  const runner = require("./fix-runner.js");
+  const bin = runner.claudeBin();
+  if (!bin) {
+    if (vscode.extensions.getExtension("anthropic.claude-code")) return void (await vscode.commands.executeCommand("claude-vscode.editor.open", undefined, fix.prompt));
+    await vscode.env.clipboard.writeText(fix.prompt);
+    return void vscode.window.showInformationMessage("Imprimatur: no Claude Code CLI here; the fix prompt is on the clipboard.");
+  }
+  const out = (fixOutput ??= vscode.window.createOutputChannel("Imprimatur Fix it"));
+  out.appendLine(`\n=== ${new Date().toLocaleString()} · Fix it: ${fix.label} (in ${repo})\n${fix.prompt}\n---`);
+  const args = runner.claudeArgs(fix.prompt, { gh: fix.gh, addDirs: runner.outside(repo, fix.files) });
+  const res = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Imprimatur: Claude is fixing ${fix.label}…`, cancellable: true },
+    (_p, token) => new Promise((resolve) => {
+      const { spawn } = require("node:child_process");
+      // stdin closed: -p reads it when it is a pipe.
+      const child = spawn(bin, args, { cwd: repo, stdio: ["ignore", "pipe", "pipe"], env: process.env });
+      let stdout = "", stderr = "";
+      child.stdout.on("data", (d) => ((stdout += d), out.append(String(d))));
+      child.stderr.on("data", (d) => (stderr += d));
+      const timer = setTimeout(() => child.kill(), 20 * 60 * 1000);
+      token.onCancellationRequested(() => child.kill());
+      child.on("error", (e) => resolve({ code: -1, stdout, stderr: String(e.message) }));
+      child.on("close", (code) => (clearTimeout(timer), resolve({ code, stdout, stderr })));
+    }));
+  const r = /** @type {{code: number, stdout: string, stderr: string}} */ (res);
+  if (r.stderr) out.appendLine(`\n[stderr] ${r.stderr.trim()}`);
+  provider.refresh();
+  if (r.code !== 0) {
+    const pick = await vscode.window.showErrorMessage(`Imprimatur: Fix it stopped (${r.code === null ? "cancelled" : `exit ${r.code}`}). ${r.stderr.trim().split("\n")[0].slice(0, 160)}`, "Show output");
+    if (pick) out.show();
     return;
   }
-  await vscode.env.clipboard.writeText(prompt);
-  vscode.window.showInformationMessage("Imprimatur: the fix prompt is on the clipboard. Paste it into your agent.");
+  const first = r.stdout.trim().split("\n").find((l) => l.trim()) ?? "Done.";
+  const pick = await vscode.window.showInformationMessage(`Imprimatur: Fix it finished: ${first.slice(0, 200)}`, "Show answer", "Review changes");
+  if (pick === "Show answer") out.show();
+  if (pick === "Review changes") vscode.commands.executeCommand("imprimatur.openGraph");
 }
 
 /**
