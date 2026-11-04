@@ -76,4 +76,44 @@ async function checkUpstream(origins, file, { now = Date.now(), api = ghApi } = 
   return true;
 }
 
-module.exports = { readUpstream, checkUpstream, staleOf, DAY };
+/** One file's raw text through gh (a GET). @param {string} endpoint @returns {Promise<string>} */
+const ghRaw = (endpoint) =>
+  new Promise((resolve, reject) =>
+    execFile("gh", ["api", "-H", "Accept: application/vnd.github.raw", endpoint], { timeout: 20_000, maxBuffer: 4 << 20, encoding: "utf8" }, (err, out) =>
+      err ? reject(new Error(String(err.message).split("\n")[0].slice(0, 120))) : resolve(out)));
+
+/** Caps on a downloaded skill folder: a skill is a few text files. */
+const MAX_FILES = 60;
+const MAX_BYTES = 2 << 20;
+
+/**
+ * Downloads a skill's folder at a commit into dest (#156), for Fix it to compare and copy.
+ * Only GET requests; every path is checked to stay inside the folder and dest.
+ * @param {{repo: string, path: string}} origin @param {string} ref a commit sha @param {string} dest an empty folder
+ * @param {{api?: typeof ghApi, raw?: typeof ghRaw}} [o] @returns {Promise<string[]>} the files written, relative to dest
+ */
+async function fetchSkillFolder(origin, ref, dest, { api = ghApi, raw = ghRaw } = {}) {
+  if (!/^[\w.-]+\/[\w.-]+$/.test(origin.repo) || !/^[0-9a-f]{7,40}$/i.test(ref) || /(^|\/)\.\.(\/|$)/.test(origin.path)) throw new Error("not a plain GitHub source");
+  const base = origin.path ? `${origin.path.replace(/\/+$/, "")}/` : "";
+  const tree = await api(`repos/${origin.repo}/git/trees/${ref}?recursive=1`);
+  const files = (Array.isArray(tree?.tree) ? tree.tree : []).filter((e) => e?.type === "blob" && typeof e.path === "string" && e.path.startsWith(base));
+  if (!files.length) throw new Error(`no files under ${origin.path || "the root"} at ${ref.slice(0, 7)}`);
+  if (files.length > MAX_FILES) throw new Error(`${files.length} files: more than a skill should have`);
+  const root = path.resolve(dest);
+  const written = [];
+  let bytes = 0;
+  for (const f of files) {
+    const rel = f.path.slice(base.length);
+    const out = path.resolve(root, rel);
+    if (!rel || rel.split("/").includes("..") || !out.startsWith(root + path.sep)) continue;
+    const text = await raw(`repos/${origin.repo}/contents/${f.path.split("/").map(encodeURIComponent).join("/")}?ref=${ref}`);
+    bytes += Buffer.byteLength(text);
+    if (bytes > MAX_BYTES) throw new Error("the folder is larger than a skill should be");
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, text);
+    written.push(rel);
+  }
+  return written;
+}
+
+module.exports = { readUpstream, checkUpstream, staleOf, fetchSkillFolder, DAY };

@@ -4,6 +4,16 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.106.1] - 2026-11-04
+
+### Security
+- Fix it asks before it runs, listing the only files Claude may edit (#156). The background run
+  loads only your user settings (a repo's hooks and permissions do not apply) and no MCP
+  servers, runs no commands, and can edit only the finding's files, or a skill's own folder for
+  a skill update. Imprimatur downloads a skill's new version itself (GET requests, paths checked,
+  size capped), so the agent needs no shell. In an untrusted folder, Fix it copies the prompt
+  instead of running an agent. After a fix, Imprimatur runs the audit again itself.
+
 ## [0.106.0] - 2026-11-04
 
 ### Changed
