@@ -17,8 +17,8 @@ const PR_EXTENSION = "github.vscode-pull-request-github";
 const issueWebview = (url) =>
   vscode.Uri.from({ scheme: vscode.env.uriScheme, authority: PR_EXTENSION, path: "/open-issue-webview", query: new URLSearchParams({ uri: url }).toString() });
 
-/** @param {vscode.ExtensionContext} ctx @param {() => string[]} roots */
-function registerIssueSymbols(ctx, roots) {
+/** @param {vscode.ExtensionContext} ctx @param {() => string[]} roots @param {vscode.LogOutputChannel} [log] */
+function registerIssueSymbols(ctx, roots, log) {
   /** Where the cursor was, so a pick goes back there: Quick Open always moves to a location. */
   let last = vscode.window.activeTextEditor;
   ctx.subscriptions.push(vscode.window.onDidChangeActiveTextEditor((e) => e && (last = e)));
@@ -43,11 +43,16 @@ function registerIssueSymbols(ctx, roots) {
             out.push(s);
           }
         }
+        log?.info(`issue search "${query}": ${out.length} issues from ${roots().length} repos`);
         return out;
       },
       async resolveWorkspaceSymbol(s) {
         const url = urls.get(s);
-        if (url) await vscode.env.openExternal(vscode.extensions.getExtension(PR_EXTENSION) ? issueWebview(url) : vscode.Uri.parse(url));
+        if (url) {
+          const target = vscode.extensions.getExtension(PR_EXTENSION) ? issueWebview(url) : vscode.Uri.parse(url);
+          const ok = await vscode.env.openExternal(target);
+          log?.info(`issue pick ${url}: opened ${target.toString(true)} → ${ok}`);
+        }
         const ed = last && !last.document.isClosed ? last : undefined;
         s.location = ed ? new vscode.Location(ed.document.uri, ed.selection.active) : new vscode.Location(s.location.uri, new vscode.Position(0, 0));
         return s;
