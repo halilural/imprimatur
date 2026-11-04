@@ -4,6 +4,13 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.100.0] - 2026-11-04
+
+### Added
+- "#140" in Quick Open (Ctrl+P) or Go to Symbol in Workspace (Ctrl+T) lists that GitHub issue
+  from Imprimatur's tasks (#154), and words find issues by title. Picking one opens the issue
+  page of the GitHub Pull Requests extension, or the browser without it; the cursor stays put.
+
 ## [0.99.1] - 2026-11-04
 
 ### Changed
