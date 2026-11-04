@@ -1027,6 +1027,8 @@ function activate(ctx) {
   }
   // Its graph row moved to the launcher (#69): no counts to keep.
   setupView = registerSetupView(ctx, () => [...roots], () => ({ edits: 0, waiting: 0 }));
+  // "#140" in Ctrl+P / Ctrl+T opens that GitHub issue (#154).
+  require("./issueSymbols.js").registerIssueSymbols(ctx, () => [...roots]);
   renderAll();
   updateGraphButton();
   // Load the markdown extension's plugins now, so Accept units use its parser before any preview opens.
