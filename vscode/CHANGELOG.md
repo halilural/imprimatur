@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.92.0] - 2026-11-04
+
+### Added
+- Agent setup lists installed Claude Code plugins with their version, scope (every repo,
+  or this project) and where they came from. A plugin installed both for every repo and
+  for this one says so, because its hooks may run twice (#139).
+- Agent setup lists the skills synced from claude.ai, with their source and last update.
+
 ## [0.91.1] - 2026-11-04
 
 ### Fixed

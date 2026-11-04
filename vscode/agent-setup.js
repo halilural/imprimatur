@@ -341,7 +341,77 @@ function scanSetup(root, opts = {}) {
     if (kids.length) it.children = kids;
   };
   for (const it of items) if (readsImports(it)) addImports(it, 1, new Set([it.abs]));
+  items.push(...pluginItems(root, home, !!opts.global));
+  if (opts.global) items.push(...syncedSkills(home));
   return items;
+}
+
+/** A JSON file under ~/.claude, {} when missing or invalid. @param {string} home @param {string} rel @returns {any} */
+function readClaudeJson(home, rel) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(home, ".claude", rel), "utf8")) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+/** A day from an ISO time or ms, "" without. @param {unknown} t */
+const day = (t) => (typeof t === "string" || typeof t === "number" ? new Date(t).toISOString().slice(0, 10) : "");
+
+/**
+ * Claude Code plugins installed for this folder (#139): user scope in the global
+ * list, project and local scope in the repo they were installed for. The version
+ * is the row's hash, so an update shows as "changed". A plugin also installed for
+ * every repo says so: its hooks may run twice.
+ * @param {string} root @param {string} home @param {boolean} global @returns {SetupItem[]}
+ */
+function pluginItems(root, home, global) {
+  const installed = readClaudeJson(home, "plugins/installed_plugins.json").plugins ?? {};
+  const markets = readClaudeJson(home, "plugins/known_marketplaces.json");
+  /** @type {SetupItem[]} */
+  const out = [];
+  for (const [id, list] of Object.entries(installed)) {
+    const all = /** @type {any[]} */ (Array.isArray(list) ? list : []);
+    const mine = all.filter((e) => (global ? e.scope === "user" : e.scope !== "user" && typeof e.projectPath === "string" && path.resolve(e.projectPath) === path.resolve(root)));
+    for (const e of mine) {
+      const src = markets[id.split("@")[1]]?.source;
+      const from = src?.repo ? `github.com/${src.repo}` : src?.url ?? src?.path ?? id.split("@")[1] ?? "?";
+      const version = String(e.version ?? "?");
+      const manifest = path.join(String(e.installPath ?? ""), ".claude-plugin", "plugin.json");
+      out.push({
+        rel: `plugin ${id} (${e.scope})`, abs: fs.existsSync(manifest) ? manifest : String(e.installPath ?? ""),
+        tool: "Claude Code", kind: "installed plugin", label: id,
+        summary: [/^\d/.test(version) ? `v${version}` : version.slice(0, 12), global ? "every repo" : `${e.scope} scope`, `from ${from}`,
+          !global && all.some((x) => x.scope === "user") && "also installed for every repo"].filter(Boolean).join(" · "),
+        details: [`source: ${from}`, e.gitCommitSha && `commit ${String(e.gitCommitSha).slice(0, 12)}`, e.installedAt && `installed ${day(e.installedAt)}`, e.lastUpdated && `updated ${day(e.lastUpdated)}`].filter(Boolean),
+        hash: version,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Skills synced from claude.ai (#139): ~/.claude/skills/synced/<account>/manifest.json lists
+ * them with their source and last update, which becomes the row's hash.
+ * @param {string} home @returns {SetupItem[]}
+ */
+function syncedSkills(home) {
+  const dir = path.join(home, ".claude", "skills", "synced");
+  /** @type {SetupItem[]} */
+  const out = [];
+  for (const acct of listFiles(dir, 2).filter((f) => f.endsWith("/manifest.json"))) {
+    for (const sk of /** @type {any[]} */ (readClaudeJson(home, `skills/synced/${acct}`).skills ?? [])) {
+      if (typeof sk?.name !== "string") continue;
+      const abs = path.join(dir, path.dirname(acct), sk.name, "SKILL.md");
+      out.push({
+        rel: `~/.claude/skills/synced/${sk.name}`, abs, tool: "Claude Code", kind: "synced skill", label: sk.name,
+        summary: [sk.source, sk.updatedAt && `updated ${day(sk.updatedAt)}`, String(sk.description ?? "").slice(0, 100)].filter(Boolean).join(" · "),
+        details: [], hash: String(sk.updatedAt ?? ""),
+      });
+    }
+  }
+  return out;
 }
 
 /**

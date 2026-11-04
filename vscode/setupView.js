@@ -307,6 +307,9 @@ class SetupView {
 }
 
 // Kinds from the wider scan (#27): auto memory, @imports, managed policy, Cursor hooks.
+Object.assign(KIND_NAMES, { "installed plugin": "Installed plugins", "synced skill": "Skills synced from claude.ai" });
+Object.assign(KIND_ICONS, { "installed plugin": "extensions", "synced skill": "cloud" });
+KIND_ORDER.splice(KIND_ORDER.indexOf("plugin") + 1, 0, "installed plugin", "synced skill");
 Object.assign(KIND_NAMES, { memory: "Auto memory", import: "Imports", "managed policy": "Managed policy", hooks: "Hooks" });
 Object.assign(KIND_ICONS, { memory: "notebook", import: "references", "managed policy": "shield", hooks: "zap" });
 KIND_ORDER.splice(KIND_ORDER.indexOf("settings"), 0, "managed policy");
