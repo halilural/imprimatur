@@ -319,4 +319,24 @@ test("scan (#139): what a plugin brings, from its manifest (hook lists) or its m
   assert.equal(s.summary, "1 allow / 0 deny · mode acceptEdits · effort high · style Explanatory · sandbox on · 1 env");
   assert.ok(s.details.includes("env: SECRET_TOKEN"));
   assert.ok(!JSON.stringify(s).includes("s3cret"), "env values stay out");
+  put(".mem0/config.json", "{}");
+  const mem = scanSetup(home, { global: true, home, managedDir: null }).filter((i) => i.kind === "data sources");
+  assert.deepEqual(mem.map((i) => [i.label, i.abs]), [["~/.mem0", ""]]);
+  assert.match(mem[0].summary, /^memory store on this machine · changed \d{4}-\d\d-\d\d · not read by Imprimatur$/);
+});
+
+test("scan (#139): which version of an MCP server runs, from its definition", () => {
+  const { mcpVersion } = createRequire(import.meta.url)("../vscode/agent-setup.js");
+  const cases = [
+    [{ url: "https://mcp.linear.app/mcp" }, "remote mcp.linear.app, version set by the provider"],
+    [{ command: "npx", args: ["-y", "@qase/mcp-server"] }, "@qase/mcp-server unpinned, newest at each start"],
+    [{ command: "npx", args: ["-y", "@playwright/mcp@latest"] }, "@playwright/mcp unpinned, newest at each start"],
+    [{ command: "npx", args: ["-y", "@acme/mcp@1.4.2", "--port", "3"] }, "@acme/mcp 1.4.2"],
+    [{ command: "pnpm", args: ["dlx", "tool@2.0.0"] }, "tool 2.0.0"],
+    [{ command: "uvx", args: ["--from", "mcp-server-git==0.6.2", "mcp-server-git"] }, "mcp-server-git 0.6.2"],
+    [{ command: "docker", args: ["run", "-i", "--rm", "-e", "TOKEN", "ghcr.io/github/github-mcp-server:v1.2"] }, "image ghcr.io/github/github-mcp-server:v1.2"],
+    [{ command: "docker", args: ["run", "-i", "mcp/fetch"] }, "image mcp/fetch unpinned"],
+    [{ command: "node", args: ["/x/server.mjs"] }, "local file"],
+  ];
+  for (const [def, want] of cases) assert.equal(mcpVersion(def), want, JSON.stringify(def));
 });

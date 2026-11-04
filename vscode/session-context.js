@@ -158,6 +158,9 @@ function stateOf(file) {
   return r.state;
 }
 
+/** Servers and stores that hold memory across sessions (Nook, Notion memory, mem0, claude-mem, …). */
+const MEMORY = /nook|notion|mem0|claude-mem|supermemory|memory|letta|zep|context-mode/i;
+
 /** @param {number} n */
 const chars = (n) => (n >= 10_000 ? `${Math.round(n / 1000)}k chars` : `${n} chars`);
 
@@ -184,6 +187,10 @@ function sessionItems(projectDir, home) {
   for (const [server, set] of [...s.tools].sort((a, b) => b[1].size - a[1].size)) if (set.size) row("tools", server, `${set.size} tools`);
   for (const [n, why] of s.failed) row("tools", n, `failed to connect: ${why}`);
   for (const n of s.needsAuth) row("tools", n, "needs sign-in");
+  // Data sources (#139, PDR 9345): listed, never read — their content is not vetted.
+  // A connector is "claude_ai_Nook" in tool names and "claude.ai Nook" in its instructions.
+  for (const n of new Set([...s.tools.keys(), ...s.mcp.keys()].map((k) => k.replace(/^claude_ai_/, "claude.ai ").replace(/_/g, " "))))
+    if (MEMORY.test(n)) row("data sources", n, "memory connected in this session · what it returns reaches the agent unvetted");
   if (s.skills.names.size) row("listings", "skills", `${s.skills.names.size} skills · ${chars(s.skills.chars)}`);
   if (s.agents.size) row("listings", "agents", `${s.agents.size} agents: ${[...s.agents].join(", ")}`);
   if (s.model) row("model and mode", "model", s.model);
@@ -192,4 +199,4 @@ function sessionItems(projectDir, home) {
   return out;
 }
 
-module.exports = { sessionItems, stateOf, fold, empty, injected, hookScript, newestTranscript };
+module.exports = { MEMORY, sessionItems, stateOf, fold, empty, injected, hookScript, newestTranscript };

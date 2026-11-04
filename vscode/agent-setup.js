@@ -263,8 +263,11 @@ function summarize(abs, c) {
     try {
       const j = parseJson(abs, text);
       // .vscode/mcp.json keeps them under "servers"
-      const names = Object.keys(j.mcpServers ?? j.servers ?? {});
-      return { summary: names.length ? `${names.length} servers: ${names.slice(0, 5).join(", ")}` : "no servers", details: names };
+      const servers = Object.entries(j.mcpServers ?? j.servers ?? {});
+      const names = servers.map(([n]) => n);
+      const versions = servers.map(([n, def]) => `${n}: ${mcpVersion(def)}`);
+      const unpinned = versions.filter((v) => v.includes("unpinned")).length;
+      return { summary: names.length ? [`${names.length} servers: ${names.slice(0, 5).join(", ")}`, unpinned && `${unpinned} unpinned`].filter(Boolean).join(" · ") : "no servers", details: versions };
     } catch {
       return { summary: "not valid JSON", details: [] };
     }
@@ -283,6 +286,43 @@ function summarize(abs, c) {
     return { summary: `${when} · ${(fm.description || firstLine(text)).slice(0, 100)}`, details: [] };
   }
   return { summary: `${lines} lines · ${firstLine(text)}`, details: [] };
+}
+
+/** Package runners whose first non-flag argument is the package that runs. */
+const RUNNERS = new Set(["npx", "bunx", "uvx", "pipx", "dlx"]);
+
+/**
+ * Which version of an MCP server runs (#139), from its definition: a remote URL, a package
+ * a runner fetches (pinned "pkg@1.2.3" / "pkg==1.2", or unpinned: the newest at each start),
+ * a Docker image tag, or a local file. @param {any} def an mcpServers entry
+ */
+function mcpVersion(def) {
+  if (typeof def?.url === "string") {
+    try {
+      return `remote ${new URL(def.url).host}, version set by the provider`;
+    } catch {
+      return "remote";
+    }
+  }
+  const words = [String(def?.command ?? ""), ...(Array.isArray(def?.args) ? def.args.map(String) : [])];
+  const bin = (/** @type {string} */ w) => path.basename(w).replace(/\.(cmd|exe)$/, "");
+  const at = words.findIndex((w) => RUNNERS.has(bin(w)));
+  if (at >= 0) {
+    // "npx -y pkg", "pnpm dlx pkg": the first non-flag word; "uvx --from pkg cmd": the --from value.
+    const rest = words.slice(at + 1);
+    const from = rest.indexOf("--from");
+    const pkg = from >= 0 ? rest[from + 1] : rest.find((w) => !w.startsWith("-"));
+    if (!pkg) return "unpinned";
+    const m = /^(@?[^@=\s]+)(?:@|==)(.+)$/.exec(pkg);
+    return m && m[2] !== "latest" ? `${m[1]} ${m[2]}` : `${m ? m[1] : pkg} unpinned, newest at each start`;
+  }
+  const d = words.indexOf("run");
+  if (bin(words[0]) === "docker" && d >= 0) {
+    const image = words.slice(d + 1).find((w, i, a) => !w.startsWith("-") && !(i > 0 && /^-(e|v|p|-name|-env|-volume)$/.test(a[i - 1])));
+    if (image) return image.includes(":") && !image.endsWith(":latest") ? `image ${image}` : `image ${image.replace(/:latest$/, "")} unpinned`;
+  }
+  const file = words.find((w) => /\.(m?js|cjs|ts|py)$/.test(w));
+  return file ? "local file" : words[0] ? `runs ${bin(words[0])}` : "?";
 }
 
 /**
@@ -425,7 +465,7 @@ function scanSetup(root, opts = {}) {
   };
   for (const it of items) if (readsImports(it)) addImports(it, 1, new Set([it.abs]));
   items.push(...pluginItems(root, home, !!opts.global));
-  if (opts.global) items.push(...syncedSkills(home));
+  if (opts.global) items.push(...syncedSkills(home), ...memoryStores(home));
   // What the repo's last Claude Code session was given (#139): read from its transcript.
   else items.push(...sessionItems(path.join(home, ".claude", "projects", projectSlug(gitRootOf(root))), home));
   return items;
@@ -502,6 +542,34 @@ function syncedSkills(home) {
     }
   }
   return out;
+}
+
+/** Folders other memory systems keep on this machine. */
+const MEMORY_STORES = [".mem0", ".claude-mem", ".claude/context-mode", ".supermemory", ".letta"];
+
+/**
+ * Other memory systems' local stores (#139, PDR 9345): listed as data sources with their last
+ * change, never read, because what they hold reaches the agent unvetted. @param {string} home
+ * @returns {SetupItem[]}
+ */
+function memoryStores(home) {
+  return MEMORY_STORES.flatMap((rel) => {
+    let st;
+    try {
+      st = fs.statSync(path.join(home, rel));
+    } catch {
+      return [];
+    }
+    if (!st.isDirectory()) return [];
+    // The newest change one level down: a folder's own time moves only when entries come and go.
+    let ms = st.mtimeMs;
+    try {
+      for (const n of fs.readdirSync(path.join(home, rel))) ms = Math.max(ms, fs.statSync(path.join(home, rel, n)).mtimeMs);
+    } catch {}
+    const changed = day(ms);
+    return [{ rel: `~/${rel}`, abs: "", tool: "Claude Code", kind: "data sources", label: `~/${rel}`,
+      summary: `memory store on this machine · changed ${changed} · not read by Imprimatur`, details: [], hash: changed }];
+  });
 }
 
 /**
@@ -658,4 +726,4 @@ function changesSince(items, seen) {
 /** A snapshot to remember as seen. @param {Array<{rel: string, hash: string}>} items */
 const snapshotOf = (items) => Object.fromEntries(flatItems(items).map((i) => [i.rel, i.hash]));
 
-module.exports = { classify, findAgentFiles, scanSetup, changesSince, snapshotOf, hooksOf, summarize, importsOf, gitRootOf, projectSlug, autoMemoryDir, managedDir, flatItems, parseJson, allowsComments, stripJsonc };
+module.exports = { mcpVersion, classify, findAgentFiles, scanSetup, changesSince, snapshotOf, hooksOf, summarize, importsOf, gitRootOf, projectSlug, autoMemoryDir, managedDir, flatItems, parseJson, allowsComments, stripJsonc };

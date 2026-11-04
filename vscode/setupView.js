@@ -312,11 +312,12 @@ class SetupView {
 // Kinds from the wider scan (#27): auto memory, @imports, managed policy, Cursor hooks.
 Object.assign(KIND_NAMES, { "installed plugin": "Installed plugins", "synced skill": "Skills synced from claude.ai",
   "loaded instructions": "Instructions loaded", "hook output": "Hooks: what they added and how long they took", "MCP instructions": "MCP server instructions",
-  tools: "Tools by server", listings: "Skills and agents listed", "model and mode": "Model, mode and context" });
+  tools: "Tools by server", listings: "Skills and agents listed", "model and mode": "Model, mode and context",
+  "data sources": "Data sources: memory the agent can read (not vetted)" });
 Object.assign(KIND_ICONS, { "installed plugin": "extensions", "synced skill": "cloud", "loaded instructions": "book", "hook output": "zap",
-  "MCP instructions": "plug", tools: "tools", listings: "list-unordered", "model and mode": "hubot" });
+  "MCP instructions": "plug", tools: "tools", listings: "list-unordered", "model and mode": "hubot", "data sources": "database" });
 KIND_ORDER.splice(KIND_ORDER.indexOf("plugin") + 1, 0, "installed plugin", "synced skill");
-KIND_ORDER.push("loaded instructions", "hook output", "MCP instructions", "tools", "listings", "model and mode");
+KIND_ORDER.push("loaded instructions", "hook output", "MCP instructions", "tools", "listings", "data sources", "model and mode");
 Object.assign(KIND_NAMES, { memory: "Auto memory", import: "Imports", "managed policy": "Managed policy", hooks: "Hooks" });
 Object.assign(KIND_ICONS, { memory: "notebook", import: "references", "managed policy": "shield", hooks: "zap" });
 KIND_ORDER.splice(KIND_ORDER.indexOf("settings"), 0, "managed policy");
