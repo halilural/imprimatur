@@ -929,6 +929,10 @@ The panel's look comes from three small modules. All are plain CommonJS; they ne
 
 vscode-elements was deliberately not used; the reason is in the linked ADR.
 
+#### The board look (#148, 0.95.0)
+
+On dark and light themes, `theme.js` defines board tokens (`--b-bg`, `--b-panel`, `--b-card` gradient, `--b-line`, `--b-text`, `--b-muted`). It points the `--vscode-*` colours the panel uses (editor background, foreground, description, borders, inputs, hover) and its own tokens (`--surface`, `--line`, `--muted`, `--shadow`, radii) at them. Every tab follows without component edits. Cards (`.card`, `.bucket`, `.etable`, `.tablewrap`) get the board gradient, and the app bar blurs. Muted text stays legible: #a3a19a on dark, #5f5d57 on light. High-contrast themes keep VS Code’s colours.
+
 <a id="chapter-decisions"></a>
 
 ## Decisions

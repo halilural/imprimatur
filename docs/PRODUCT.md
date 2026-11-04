@@ -23,8 +23,9 @@
   12. [/exercise: practise any topic in small steps (#108)](#exercise)
   13. [Social media: /social-post and the Social document (#109)](#social)
   14. [The agent's toolset: seen, versioned, installed, found (#138)](#agent-toolset)
+  15. [The panel as a board, with analytics (#147)](#board)
 - [Metrics](#chapter-metrics)
-  15. [Success metrics](#metrics)
+  16. [Success metrics](#metrics)
 
 <a id="chapter-problem"></a>
 
@@ -354,13 +355,29 @@ Epic #138, opened 2026-11-04 and the top priority. Imprimatur becomes the place 
 
 Anything brought in is vetted first: its license allows redistribution, its hooks and network calls have been read, and it adds no second task store, memory store or context injector.
 
+<a id="board"></a>
+
+### 15. The panel as a board, with analytics (#147)
+
+Epic #147, opened 2026-11-04. The Imprimatur panel looks and works like the ponytail board. The VS Code side bar stays as it is.
+
+- **Board look on every tab (#148).** *Shipped in 0.95.0:* a near-black board palette, with a light variant on light themes. Cards have a soft gradient and an inner highlight, corners are rounder, and the app bar is translucent. High-contrast themes keep VS Code's colours, and text stays legible.
+- **Session numbers (#149):** each Claude Code session's cost, time, lines and tokens.
+- **One stats module (#150):** daily series, shared by the panel and `/imprimatur-stats`.
+- **Board landing (#151):**
+  - cards with sparklines;
+  - a large chart with a metric switch and a 7d/30d/90d/All range;
+  - a sessions table;
+  - a 12-week activity heatmap with active days and streak.
+- **Analytics on each tab (#152):** tasks over time, agent edits per day and the most edited files, document chapters filled, and hook cost.
+
 <a id="chapter-metrics"></a>
 
 ## Metrics
 
 <a id="metrics"></a>
 
-### 15. Success metrics
+### 16. Success metrics
 
 The metrics are values measured in real repositories of different sizes.
 
