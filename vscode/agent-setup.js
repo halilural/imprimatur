@@ -251,8 +251,13 @@ function summarize(abs, c) {
     const allow = s.permissions?.allow?.length ?? 0;
     const deny = s.permissions?.deny?.length ?? 0;
     const plugins = Object.entries(s.enabledPlugins ?? {}).filter(([, on]) => on).length;
-    const parts = [hooks.length && `${hooks.length} hooks`, (allow || deny) && `${allow} allow / ${deny} deny`, plugins && `${plugins} plugins`, s.model && `model ${s.model}`].filter(Boolean);
-    return { summary: parts.join(" · ") || "no hooks or permissions", details: hooks };
+    // env: names only, values can be secrets.
+    const env = Object.keys(s.env ?? {});
+    const auto = (s.autoMode?.allow?.length ?? 0) + (s.autoMode?.environment?.length ?? 0);
+    const parts = [hooks.length && `${hooks.length} hooks`, (allow || deny) && `${allow} allow / ${deny} deny`, plugins && `${plugins} plugins`,
+      s.permissions?.defaultMode && `mode ${s.permissions.defaultMode}`, s.model && `model ${s.model}`, s.effortLevel && `effort ${s.effortLevel}`,
+      s.outputStyle && `style ${s.outputStyle}`, s.sandbox?.enabled && "sandbox on", env.length && `${env.length} env`, auto && `${auto} auto-mode rules`].filter(Boolean);
+    return { summary: parts.join(" · ") || "no hooks or permissions", details: [...hooks, ...(env.length ? [`env: ${env.join(", ")}`] : [])] };
   }
   if (isMcp) {
     try {
@@ -266,13 +271,90 @@ function summarize(abs, c) {
   }
   const fm = frontMatter(text);
   const lines = text.split(/\r?\n/).length;
-  if (c.kind === "skill" || c.kind === "agent" || c.kind === "command")
+  if (c.kind === "skill") {
+    const desc = (fm.description || firstLine(text)).slice(0, 140);
+    const { from, details } = skillOrigin(path.dirname(abs));
+    return { summary: from ? `from ${from} · ${desc}` : desc, details };
+  }
+  if (c.kind === "agent" || c.kind === "command")
     return { summary: (fm.description || firstLine(text)).slice(0, 140), details: [] };
   if (abs.endsWith(".mdc")) {
     const when = fm.alwaysApply === "true" ? "always" : fm.globs ? `for ${fm.globs}` : "on request";
     return { summary: `${when} · ${(fm.description || firstLine(text)).slice(0, 100)}`, details: [] };
   }
   return { summary: `${lines} lines · ${firstLine(text)}`, details: [] };
+}
+
+/**
+ * Where a hand-installed skill came from (#139): its SOURCE.txt ("source: <url>", "commit: <sha>"),
+ * or the folder a symlinked skill points to. @param {string} dir the skill's folder
+ * @returns {{from: string, details: string[]}}
+ */
+function skillOrigin(dir) {
+  try {
+    const lines = fs.readFileSync(path.join(dir, "SOURCE.txt"), "utf8").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const field = (/** @type {string} */ k) => lines.find((l) => l.toLowerCase().startsWith(`${k}:`))?.slice(k.length + 1).trim() ?? "";
+    const src = field("source").replace(/^https?:\/\//, "").replace(/\s.*$/, "");
+    const commit = field("commit");
+    return { from: [src, commit && `@${commit.slice(0, 12)}`].filter(Boolean).join(" ") || "SOURCE.txt", details: lines };
+  } catch {}
+  try {
+    if (fs.lstatSync(dir).isSymbolicLink()) {
+      const target = fs.realpathSync(dir);
+      return { from: `linked from ${target.replace(os.homedir(), "~")}`, details: [] };
+    }
+  } catch {}
+  return { from: "", details: [] };
+}
+
+/**
+ * What a plugin brings (#139): hooks, MCP servers, skills, agents and commands, from its
+ * manifest's fields or the default folders. A plugin without a manifest ("strict": false)
+ * is described by its marketplace entry. @param {string} dir the plugin's install path
+ * @param {any} [entry] the plugin's entry in its marketplace.json
+ * @returns {string[]} e.g. ["3 hooks", "1 MCP server: context-mode", "5 skills"]
+ */
+function pluginContents(dir, entry = {}) {
+  /** @type {any} */
+  let m = {};
+  try {
+    m = JSON.parse(fs.readFileSync(path.join(dir, ".claude-plugin", "plugin.json"), "utf8")) ?? {};
+  } catch {}
+  m = { ...entry, ...m };
+  /** @param {unknown} v @param {string} fallback a JSON file under dir, or inline object */
+  const json = (v, fallback) => {
+    if (v && typeof v === "object" && !Array.isArray(v)) return v;
+    try {
+      return JSON.parse(fs.readFileSync(path.join(dir, typeof v === "string" ? v : fallback), "utf8")) ?? {};
+    } catch {
+      return {};
+    }
+  };
+  /** Names in the default folder plus the manifest's extra paths. @param {string} key @param {(e: fs.Dirent) => boolean} pick */
+  const count = (key, pick) => {
+    const dirs = new Set([key, ...[m[key]].flat().filter((p) => typeof p === "string").map((p) => path.normalize(p))]);
+    const names = new Set();
+    for (const d of dirs) {
+      try {
+        for (const e of fs.readdirSync(path.join(dir, d), { withFileTypes: true })) if (pick(e)) names.add(e.name);
+      } catch {}
+    }
+    return names.size;
+  };
+  // "hooks" is a file, an inline object, or a list of either; a hooks file wraps the events in "hooks".
+  const hooks = (Array.isArray(m.hooks) ? m.hooks : [m.hooks]).reduce((sum, v) => {
+    const h = json(v, "hooks/hooks.json");
+    return sum + hooksOf(h.hooks ? h : { hooks: h }).length;
+  }, 0);
+  const mcpJson = json(m.mcpServers, ".mcp.json");
+  const mcp = Object.keys(mcpJson.mcpServers ?? mcpJson);
+  const lsp = Object.keys(m.lspServers && typeof m.lspServers === "object" ? m.lspServers : json(m.lspServers, ".lsp.json"));
+  const skills = count("skills", (e) => e.isDirectory() || e.isSymbolicLink());
+  const agents = count("agents", (e) => e.name.endsWith(".md"));
+  const commands = count("commands", (e) => e.name.endsWith(".md"));
+  /** @param {number} k @param {string} what */
+  const n = (k, what) => k && `${k} ${what}${k === 1 ? "" : "s"}`;
+  return [n(hooks, "hook"), mcp.length && `${n(mcp.length, "MCP server")}: ${mcp.join(", ")}`, lsp.length && `${n(lsp.length, "LSP server")}: ${lsp.join(", ")}`, n(skills, "skill"), n(agents, "agent"), n(commands, "command")].filter(Boolean);
 }
 
 /**
@@ -349,14 +431,17 @@ function scanSetup(root, opts = {}) {
   return items;
 }
 
-/** A JSON file under ~/.claude, {} when missing or invalid. @param {string} home @param {string} rel @returns {any} */
-function readClaudeJson(home, rel) {
+/** A JSON file, {} when missing or invalid. @param {string} abs @returns {any} */
+function readJson(abs) {
   try {
-    return JSON.parse(fs.readFileSync(path.join(home, ".claude", rel), "utf8")) ?? {};
+    return JSON.parse(fs.readFileSync(abs, "utf8")) ?? {};
   } catch {
     return {};
   }
 }
+
+/** A JSON file under ~/.claude, {} when missing or invalid. @param {string} home @param {string} rel @returns {any} */
+const readClaudeJson = (home, rel) => readJson(path.join(home, ".claude", rel));
 
 /** A day from an ISO time or ms, "" without. @param {unknown} t */
 const day = (t) => (typeof t === "string" || typeof t === "number" ? new Date(t).toISOString().slice(0, 10) : "");
@@ -381,12 +466,14 @@ function pluginItems(root, home, global) {
       const from = src?.repo ? `github.com/${src.repo}` : src?.url ?? src?.path ?? id.split("@")[1] ?? "?";
       const version = String(e.version ?? "?");
       const manifest = path.join(String(e.installPath ?? ""), ".claude-plugin", "plugin.json");
+      const market = markets[id.split("@")[1]]?.installLocation;
+      const entry = market ? (/** @type {any[]} */ (readJson(path.join(market, ".claude-plugin", "marketplace.json")).plugins ?? [])).find((p) => p?.name === id.split("@")[0]) : undefined;
       out.push({
         rel: `plugin ${id} (${e.scope})`, abs: fs.existsSync(manifest) ? manifest : String(e.installPath ?? ""),
         tool: "Claude Code", kind: "installed plugin", label: id,
         summary: [/^\d/.test(version) ? `v${version}` : version.slice(0, 12), global ? "every repo" : `${e.scope} scope`, `from ${from}`,
           !global && all.some((x) => x.scope === "user") && "also installed for every repo"].filter(Boolean).join(" · "),
-        details: [`source: ${from}`, e.gitCommitSha && `commit ${String(e.gitCommitSha).slice(0, 12)}`, e.installedAt && `installed ${day(e.installedAt)}`, e.lastUpdated && `updated ${day(e.lastUpdated)}`].filter(Boolean),
+        details: [...pluginContents(String(e.installPath ?? ""), entry), `source: ${from}`, e.gitCommitSha && `commit ${String(e.gitCommitSha).slice(0, 12)}`, e.installedAt && `installed ${day(e.installedAt)}`, e.lastUpdated && `updated ${day(e.lastUpdated)}`].filter(Boolean),
         hash: version,
       });
     }

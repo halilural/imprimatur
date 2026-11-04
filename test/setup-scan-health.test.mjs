@@ -288,3 +288,35 @@ test("scan (#139): installed plugins by scope with version and source; synced sk
   const r = scanSetup(repo, { home }).filter((i) => i.kind === "installed plugin");
   assert.deepEqual(r.map((i) => i.summary), ["v1.1.0 · project scope · from github.com/acme/tidy · also installed for every repo"]);
 });
+
+test("scan (#139): what a plugin brings, from its manifest (hook lists) or its marketplace entry; a skill's SOURCE.txt; settings by scope", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "setup-contents-"));
+  const put = (rel, v) => {
+    fs.mkdirSync(path.dirname(path.join(home, rel)), { recursive: true });
+    fs.writeFileSync(path.join(home, rel), typeof v === "string" ? v : JSON.stringify(v));
+  };
+  const hook = (cmd) => ({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: cmd }] }] } });
+  put(".claude/plugins/installed_plugins.json", { plugins: {
+    "tidy@mk": [{ scope: "user", installPath: path.join(home, "p/tidy"), version: "1.0.0" }],
+    "lsp@mk": [{ scope: "user", installPath: path.join(home, "p/lsp"), version: "1.0.0" }],
+  } });
+  put(".claude/plugins/known_marketplaces.json", { mk: { source: { source: "github", repo: "acme/mk" }, installLocation: path.join(home, "m") } });
+  put("m/.claude-plugin/marketplace.json", { plugins: [{ name: "lsp", strict: false, lspServers: { typescript: { command: "tsls" } } }] });
+  put("p/tidy/.claude-plugin/plugin.json", { name: "tidy", hooks: ["./hooks/a.json", "./hooks/b.json"], mcpServers: { db: { command: "x" } } });
+  put("p/tidy/hooks/a.json", hook("node a.js"));
+  put("p/tidy/hooks/b.json", { hooks: {} });
+  put("p/tidy/skills/one/SKILL.md", "# one");
+  put("p/tidy/agents/helper.md", "# helper");
+  put(".claude/skills/etf/SKILL.md", "---\ndescription: ETF checks\n---\n");
+  put(".claude/skills/etf/SOURCE.txt", "source: https://github.com/acme/skills (skills/etf)\ncommit: 5456da3\nlicense: MIT\n");
+  put(".claude/settings.json", { permissions: { defaultMode: "acceptEdits", allow: ["Bash(ls)"] }, effortLevel: "high", outputStyle: "Explanatory", sandbox: { enabled: true }, env: { SECRET_TOKEN: "s3cret" } });
+  const g = scanSetup(home, { global: true, home, managedDir: null });
+  const brings = (label) => g.find((i) => i.label === label).details.filter((d) => !/^(source|commit|installed|updated)/.test(d));
+  assert.deepEqual(brings("tidy@mk"), ["1 hook", "1 MCP server: db", "1 skill", "1 agent"]);
+  assert.deepEqual(brings("lsp@mk"), ["1 LSP server: typescript"]);
+  assert.match(g.find((i) => i.label === "etf").summary, /^from github\.com\/acme\/skills @5456da3 · ETF checks$/);
+  const s = g.find((i) => i.rel === ".claude/settings.json");
+  assert.equal(s.summary, "1 allow / 0 deny · mode acceptEdits · effort high · style Explanatory · sandbox on · 1 env");
+  assert.ok(s.details.includes("env: SECRET_TOKEN"));
+  assert.ok(!JSON.stringify(s).includes("s3cret"), "env values stay out");
+});

@@ -4,6 +4,17 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.97.0] - 2026-11-04
+
+### Added
+- Agent Setup shows what each installed plugin brings (#139): its hooks, MCP and LSP servers,
+  skills, agents and commands, read from its manifest or, for a plugin without one, its
+  marketplace entry.
+- A hand-installed skill shows where it came from: the source and commit in its SOURCE.txt, or
+  the folder a symlinked skill points to.
+- A Claude settings file's summary adds the permission mode, effort, output style, sandbox,
+  env (names only, never values) and the auto-mode rule count.
+
 ## [0.96.0] - 2026-11-04
 
 ### Added
