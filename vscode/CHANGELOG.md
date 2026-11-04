@@ -4,6 +4,12 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.102.1] - 2026-11-04
+
+### Fixed
+- An Agent Setup row that is not a file in the repo (an installed plugin, a session row, auto
+  memory) no longer says "Not committed yet." in its tooltip.
+
 ## [0.102.0] - 2026-11-04
 
 ### Added

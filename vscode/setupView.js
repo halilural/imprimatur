@@ -154,13 +154,14 @@ class SetupView {
     const d = node.scope.global ? undefined : this.drift.driftFor(item.rel, item.abs);
     const lines = [`**${item.rel}** · ${item.tool} ${item.kind}${item.scope ? ` · ${item.scope.label}` : ""}${state ? ` · _${state} since you last looked_` : ""}`, item.summary];
     if (d) lines.push(`${driftLabel(d)}: ${d.others.map((v) => `${v.repos.join(", ")} (\`${v.hash.slice(0, 7)}\`)`).join(" · ")}`);
-    if (!node.scope.global) lines.push(historyLines(this.history.info(node.scope.root, item.rel), explained).join("  \n"));
+    // Git history only for a file in the repo: a plugin, a session row or auto memory has none.
+    if (inRepo(node)) lines.push(historyLines(this.history.info(node.scope.root, item.rel), explained).join("  \n"));
     return new vscode.MarkdownString(lines.join("\n\n"));
   }
 
   /** Hover on a file: explain its last change (lazy, cached; not in an untrusted folder). @param {vscode.TreeItem} it @param {Node} node */
   async resolveTreeItem(it, node) {
-    if (node.type === "file" && !it.tooltip) it.tooltip = this.fileTooltip(node, await this.history.explain(node.scope.root, node.item.rel));
+    if (node.type === "file" && !it.tooltip) it.tooltip = this.fileTooltip(node, inRepo(node) ? await this.history.explain(node.scope.root, node.item.rel) : undefined);
     return it;
     /** @type {string | undefined} the active editor's file, for "For <file>" */
     this.activeFile = undefined;
@@ -306,7 +307,7 @@ class SetupView {
       // A committed repo file not yet explained gets its tooltip on hover (resolveTreeItem).
       // A file with problems builds its tooltip now: the problems are appended to it (markHealth).
       const problems = (node.scope.health ?? []).filter((p) => p.file === item.abs);
-      const lazy = !problems.length && !node.scope.global && !explained && this.history.info(node.scope.root, item.rel);
+      const lazy = !problems.length && inRepo(node) && !explained && this.history.info(node.scope.root, item.rel);
       it.tooltip = lazy ? undefined : this.fileTooltip(node, explained);
       it.contextValue = `setupFile${drift ? "-drift" : ""}${node.scope.global ? "" : "-repo"}${item.update ? "-update" : ""}${item.compare ? "-upstream" : ""}`;
       it.iconPath = state
@@ -332,6 +333,9 @@ class SetupView {
     return it;
   }
 }
+
+/** Whether a row is a file inside its repo, so git knows it. @param {any} node */
+const inRepo = (node) => !node.scope.global && !!node.item.abs && path.resolve(node.item.abs).startsWith(path.resolve(node.scope.root) + path.sep);
 
 /**
  * Updates a plugin that is behind its marketplace (#140) in a terminal, at the scope it was
