@@ -22,7 +22,7 @@
   11. [/study: studying a topic (#95)](#study)
   12. [/exercise: practise any topic in small steps (#108)](#exercise)
   13. [Social media: /social-post and the Social document (#109)](#social)
-  14. [The agent's toolset: seen, versioned, installed, found (#138, planned)](#agent-toolset)
+  14. [The agent's toolset: seen, versioned, installed, found (#138)](#agent-toolset)
 - [Metrics](#chapter-metrics)
   15. [Success metrics](#metrics)
 
@@ -338,11 +338,13 @@ Announcing a project means a different post for each channel, and each channel h
 
 <a id="agent-toolset"></a>
 
-### 14. The agent's toolset: seen, versioned, installed, found (#138, planned)
+### 14. The agent's toolset: seen, versioned, installed, found (#138)
 
-Planned in epic #138 (opened 2026-11-04). Imprimatur becomes the place where everything the agent uses is seen and managed. It builds on the Agent setup view, which already shows every agent file per repo and globally, the drift between copies, the effective settings, and the audit findings.
+Epic #138, opened 2026-11-04 and the top priority. Imprimatur becomes the place where everything the agent uses is seen and managed. It builds on the Agent setup view, which already shows every agent file per repo and globally, the drift between copies, the effective settings, and the audit findings.
 
-- **Seen (#139):** every third-party skill, plugin, MCP server and hook script, with its source, installed version or commit, and scope. An item installed at more than one scope is flagged.
+- **Seen (#139):**
+  - *Shipped in 0.92.0:* Agent setup lists installed Claude Code plugins with their version, scope (every repo, or this project) and source marketplace. A plugin installed both for every repo and for this one is flagged. Skills synced from claude.ai are listed with their source and last update.
+  - *Next:* hand-copied skills and MCP servers with their source and version.
 - **Versioned (#140):** "update available" with what changed, a one-click update, and a lock so an update can be undone.
 - **Installed (#141):** a must-have set ships with Imprimatur and goes into every repo, and a repo can turn an item off. Imprimatur changes only what it installed. Repo-specific agent files stay in the repo.
 - **Checklist (#142):** the panel lists what this repo is missing or has out of date. Each item has an action, and Home shows the count.
