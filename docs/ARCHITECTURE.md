@@ -29,17 +29,18 @@
   19. [/study: study mode (#95)](#study)
   20. [/exercise: exercise mode (#108)](#exercise)
   21. [Social document: a per-repo opt-in document kind (#109)](#social)
+  22. [Agent setup inventory: plugins, synced skills and the session's context (#139)](#agent-inventory)
 - [Deployment](#chapter-deployment)
-  22. [Installation and distribution](#deployment)
+  23. [Installation and distribution](#deployment)
 - [Crosscutting concepts](#chapter-crosscutting)
-  23. [Security](#security)
-  24. [Model calls and cost](#model-calls)
-  25. [Process checks](#process-checks)
-  26. [Test strategy](#testing)
-  27. [Panel design layer: theme variables, icons, mascot](#ui-design)
+  24. [Security](#security)
+  25. [Model calls and cost](#model-calls)
+  26. [Process checks](#process-checks)
+  27. [Test strategy](#testing)
+  28. [Panel design layer: theme variables, icons, mascot](#ui-design)
 - [Decisions](#chapter-decisions)
 - [Risks and technical debt](#chapter-risks)
-  28. [Known limits](#limits)
+  29. [Known limits](#limits)
 
 <a id="chapter-goals"></a>
 
@@ -728,13 +729,33 @@ The `documents.kind` CHECK takes `social`. SQLite cannot alter a CHECK, so the m
 ### Lesson from building it
 The migration was first saved in the live main checkout: a hook opened the database with the new code and migrated it at once, and processes on the old code (the installed extension, a running MCP server) saw a newer schema and went read-only until rebuilt. Schema changes are made in a worktree or branch and land together with the install.
 
+<a id="agent-inventory"></a>
+
+### 22. Agent setup inventory: plugins, synced skills and the session's context (#139)
+
+Agent setup (`agent-setup.js` `scanSetup`) lists the agent's files, and three more sources besides them. All of it is read only; nothing is written.
+
+- **Installed plugins (`pluginItems`, 0.92.0):**
+  - Read from `~/.claude/plugins/installed_plugins.json`: the user scope goes in the global list, a project or local install in the repo it was made for.
+  - The source comes from `known_marketplaces.json`.
+  - The version is the row's hash, so an update shows as "changed".
+  - A repo install of a plugin that is also installed for every repo is flagged.
+- **Synced skills (`syncedSkills`):** each claude.ai account's `~/.claude/skills/synced/<account>/manifest.json`. The row's hash is the skill's `updatedAt`.
+- **This session (`session-context.js`, 0.93.0):**
+  - Source: the attachments of the repo's newest transcript in `~/.claude/projects/<slug>/`: instructions, hook_success, mcp_instructions_delta, deferred_tools_delta, skill and agent listings, model, auto mode and session context.
+  - Rows: the loaded files; each hook with its runs, ms each and the size and first line of the text it added; MCP server instructions; tools per server, with failed and needs-sign-in servers; listings; model and mode.
+  - Reading: a transcript is read from the offset of the last read, so a growing file costs only its new lines. At most 8 transcripts are kept.
+  - The row's hash is its summary.
+
+Rows with no file (MCP, tools, listings) have an empty `abs` and open nothing.
+
 <a id="chapter-deployment"></a>
 
 ## Deployment
 
 <a id="deployment"></a>
 
-### 22. Installation and distribution
+### 23. Installation and distribution
 
 ### Installing on a machine: `npm run setup`
 
@@ -782,7 +803,7 @@ One version number (`vscode/package.json`) is shared by the extension and the pl
 
 <a id="security"></a>
 
-### 23. Security
+### 24. Security
 
 ### VS Code extension
 
@@ -809,7 +830,7 @@ One version number (`vscode/package.json`) is shared by the extension and the pl
 
 <a id="model-calls"></a>
 
-### 24. Model calls and cost
+### 25. Model calls and cost
 
 Imprimatur turns to a small model (Haiku) only where verbal judgment is needed; where a rule is enough, no model is called.
 
@@ -837,7 +858,7 @@ Imprimatur turns to a small model (Haiku) only where verbal judgment is needed; 
 
 <a id="process-checks"></a>
 
-### 25. Process checks
+### 26. Process checks
 
 The development process rules (formerly `.claude/hooks/*.sh` copied into every repo) run in one place, Imprimatur's global hook (`hooks/process.mjs` → `vscode/process.js`).
 
@@ -867,7 +888,7 @@ Repo-specific rules (an em dash ban, deploy, migrations, etc.) are out of scope 
 
 <a id="testing"></a>
 
-### 26. Test strategy
+### 27. Test strategy
 
 ### Unit tests (`npm test`)
 
@@ -887,7 +908,7 @@ Manual tests of visual behavior such as the editor marks and the preview are kep
 
 <a id="ui-design"></a>
 
-### 27. Panel design layer: theme variables, icons, mascot
+### 28. Panel design layer: theme variables, icons, mascot
 
 The panel's look comes from three small modules. All are plain CommonJS; they need no build step and do not trip the CSP.
 
@@ -920,7 +941,7 @@ _Not written yet._
 
 <a id="limits"></a>
 
-### 28. Known limits
+### 29. Known limits
 
 ### Review
 
