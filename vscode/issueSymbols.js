@@ -2,8 +2,7 @@
 // "#140" in Go to File (Ctrl+P) or Go to Symbol in Workspace (Ctrl+T) lists the repo's GitHub
 // issues from Imprimatur's tasks; picking one opens the issue's page in the GitHub Pull
 // Requests extension, or in the browser without it. Typing "#" there searches workspace
-// symbols, so the issues come in as symbols: the pick opens the issue and leaves the cursor
-// where it was.
+// symbols, so the issues come in as symbols: the pick opens the issue and nothing else.
 "use strict";
 const vscode = require("vscode");
 const path = require("node:path");
@@ -19,9 +18,6 @@ const issueWebview = (url) =>
 
 /** @param {vscode.ExtensionContext} ctx @param {() => string[]} roots @param {vscode.LogOutputChannel} [log] */
 function registerIssueSymbols(ctx, roots, log) {
-  /** Where the cursor was, so a pick goes back there: Quick Open always moves to a location. */
-  let last = vscode.window.activeTextEditor;
-  ctx.subscriptions.push(vscode.window.onDidChangeActiveTextEditor((e) => e && (last = e)));
   /** @type {WeakMap<vscode.SymbolInformation, string>} */
   const urls = new WeakMap();
   ctx.subscriptions.push(
@@ -36,8 +32,8 @@ function registerIssueSymbols(ctx, roots, log) {
           if (!gh || !id) continue;
           for (const t of issueMatches(db.tasksOf(id, { limit: 2000 }), query)) {
             const s = new vscode.SymbolInformation(`${t.key} ${t.title}`, vscode.SymbolKind.Event, `${t.status} · ${path.basename(root)}`,
-              new vscode.Location(last?.document.uri ?? vscode.Uri.file(path.join(root, "README.md")), new vscode.Position(0, 0)));
-            // No range: VS Code calls resolveWorkspaceSymbol when it is picked.
+              new vscode.Location(vscode.Uri.file(path.join(root, "README.md")), new vscode.Position(0, 0)));
+            // No range: VS Code calls resolveWorkspaceSymbol when it is picked, which opens the issue instead.
             s.location = /** @type {any} */ ({ uri: s.location.uri });
             urls.set(s, `${gh}/issues/${t.key.slice(1)}`);
             out.push(s);
@@ -48,25 +44,13 @@ function registerIssueSymbols(ctx, roots, log) {
       },
       async resolveWorkspaceSymbol(s) {
         const url = urls.get(s);
-        const ed = last && !last.document.isClosed ? last : undefined;
-        const spot = ed ? new vscode.Location(ed.document.uri, ed.selection.active) : new vscode.Location(s.location.uri, new vscode.Position(0, 0));
-        // Quick Open goes to the returned location after this: a file that was not open is
-        // closed again, and the issue opens after it, so the issue page is the tab in front.
-        const wasOpen = vscode.window.tabGroups.all.some((g) => g.tabs.some((t) => /** @type {any} */ (t.input)?.uri?.toString() === spot.uri.toString()));
-        if (url)
-          setTimeout(async () => {
-            try {
-              if (!wasOpen && vscode.window.activeTextEditor?.document.uri.toString() === spot.uri.toString())
-                await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
-              const target = vscode.extensions.getExtension(PR_EXTENSION) ? issueWebview(url) : vscode.Uri.parse(url);
-              const ok = await vscode.env.openExternal(target);
-              log?.info(`issue pick ${url}: opened ${target.toString(true)} → ${ok}`);
-            } catch (e) {
-              log?.error(`issue pick ${url}: ${e instanceof Error ? e.message : e}`);
-            }
-          }, 250);
-        s.location = spot;
-        return s;
+        if (!url) return s;
+        const target = vscode.extensions.getExtension(PR_EXTENSION) ? issueWebview(url) : vscode.Uri.parse(url);
+        const ok = await vscode.env.openExternal(target);
+        log?.info(`issue pick ${url}: opened ${target.toString(true)} → ${ok}`);
+        // Quick Open would now go to the symbol's file; a cancellation stops that, and VS Code
+        // drops a cancellation silently, so only the issue page opens.
+        throw new vscode.CancellationError();
       },
     }),
   );
