@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.94.0] - 2026-11-04
+
+### Added
+- `/imprimatur-stats` shows the repo's scoreboard as ASCII bars: the last 7 days next to the
+  7 before them (#146). It covers tasks finished and opened, decisions, records, agent edits
+  marked, turn-end asks, what is waiting on you, the median time to answer, and the last
+  session's hooks. `--days N` changes the period.
+
 ## [0.93.0] - 2026-11-04
 
 ### Added
