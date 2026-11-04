@@ -48,13 +48,24 @@ function registerIssueSymbols(ctx, roots, log) {
       },
       async resolveWorkspaceSymbol(s) {
         const url = urls.get(s);
-        if (url) {
-          const target = vscode.extensions.getExtension(PR_EXTENSION) ? issueWebview(url) : vscode.Uri.parse(url);
-          const ok = await vscode.env.openExternal(target);
-          log?.info(`issue pick ${url}: opened ${target.toString(true)} → ${ok}`);
-        }
         const ed = last && !last.document.isClosed ? last : undefined;
-        s.location = ed ? new vscode.Location(ed.document.uri, ed.selection.active) : new vscode.Location(s.location.uri, new vscode.Position(0, 0));
+        const spot = ed ? new vscode.Location(ed.document.uri, ed.selection.active) : new vscode.Location(s.location.uri, new vscode.Position(0, 0));
+        // Quick Open goes to the returned location after this: a file that was not open is
+        // closed again, and the issue opens after it, so the issue page is the tab in front.
+        const wasOpen = vscode.window.tabGroups.all.some((g) => g.tabs.some((t) => /** @type {any} */ (t.input)?.uri?.toString() === spot.uri.toString()));
+        if (url)
+          setTimeout(async () => {
+            try {
+              if (!wasOpen && vscode.window.activeTextEditor?.document.uri.toString() === spot.uri.toString())
+                await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
+              const target = vscode.extensions.getExtension(PR_EXTENSION) ? issueWebview(url) : vscode.Uri.parse(url);
+              const ok = await vscode.env.openExternal(target);
+              log?.info(`issue pick ${url}: opened ${target.toString(true)} → ${ok}`);
+            } catch (e) {
+              log?.error(`issue pick ${url}: ${e instanceof Error ? e.message : e}`);
+            }
+          }, 250);
+        s.location = spot;
         return s;
       },
     }),
