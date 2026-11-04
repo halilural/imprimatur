@@ -504,21 +504,50 @@ function pluginItems(root, home, global) {
     for (const e of mine) {
       const src = markets[id.split("@")[1]]?.source;
       const from = src?.repo ? `github.com/${src.repo}` : src?.url ?? src?.path ?? id.split("@")[1] ?? "?";
-      const version = String(e.version ?? "?");
-      const manifest = path.join(String(e.installPath ?? ""), ".claude-plugin", "plugin.json");
       const market = markets[id.split("@")[1]]?.installLocation;
       const entry = market ? (/** @type {any[]} */ (readJson(path.join(market, ".claude-plugin", "marketplace.json")).plugins ?? [])).find((p) => p?.name === id.split("@")[0]) : undefined;
+      const version = String(e.version ?? "?");
+      const latest = latestVersion(market, entry);
+      const behind = !!latest && isNewer(latest, version);
+      const manifest = path.join(String(e.installPath ?? ""), ".claude-plugin", "plugin.json");
       out.push({
         rel: `plugin ${id} (${e.scope})`, abs: fs.existsSync(manifest) ? manifest : String(e.installPath ?? ""),
         tool: "Claude Code", kind: "installed plugin", label: id,
         summary: [/^\d/.test(version) ? `v${version}` : version.slice(0, 12), global ? "every repo" : `${e.scope} scope`, `from ${from}`,
-          !global && all.some((x) => x.scope === "user") && "also installed for every repo"].filter(Boolean).join(" · "),
-        details: [...pluginContents(String(e.installPath ?? ""), entry), `source: ${from}`, e.gitCommitSha && `commit ${String(e.gitCommitSha).slice(0, 12)}`, e.installedAt && `installed ${day(e.installedAt)}`, e.lastUpdated && `updated ${day(e.lastUpdated)}`].filter(Boolean),
+          !global && all.some((x) => x.scope === "user") && "also installed for every repo", behind && `update available: v${latest}`].filter(Boolean).join(" · "),
+        details: [...pluginContents(String(e.installPath ?? ""), entry), `source: ${from}`, e.gitCommitSha && `commit ${String(e.gitCommitSha).slice(0, 12)}`, e.installedAt && `installed ${day(e.installedAt)}`, e.lastUpdated && `updated ${day(e.lastUpdated)}`,
+          markets[id.split("@")[1]]?.lastUpdated && `marketplace refreshed ${day(markets[id.split("@")[1]].lastUpdated)}`].filter(Boolean),
         hash: version,
+        ...(behind ? { update: { id, scope: String(e.scope), cwd: typeof e.projectPath === "string" ? e.projectPath : "" } } : {}),
       });
     }
   }
   return out;
+}
+
+/**
+ * The version a plugin's marketplace offers (#140): its entry's version, or the manifest of a
+ * plugin kept in the marketplace itself. Read from the local copy of the marketplace, which
+ * Claude Code refreshes; a plugin fetched from its own repo has no version here.
+ * shortcut: no network check, so a plugin pinned by commit or fetched by URL shows no update;
+ * upgrade with git ls-remote on a schedule when that matters.
+ * @param {string | undefined} market the marketplace's folder @param {any} entry @returns {string}
+ */
+function latestVersion(market, entry) {
+  if (!market || !entry) return "";
+  if (typeof entry.version === "string") return entry.version;
+  if (typeof entry.source !== "string") return "";
+  const v = readJson(path.join(market, entry.source, ".claude-plugin", "plugin.json")).version;
+  return typeof v === "string" ? v : "";
+}
+
+/** Whether version a is newer than b, both dotted numbers ("5.3.3" > "4.10.0"); anything else is not. @param {string} a @param {string} b */
+function isNewer(a, b) {
+  const num = (/** @type {string} */ v) => (/^\d+(\.\d+)*$/.test(v) ? v.split(".").map(Number) : null);
+  const x = num(a), y = num(b);
+  if (!x || !y) return false;
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+  return false;
 }
 
 /**
@@ -574,7 +603,7 @@ function memoryStores(home) {
 
 /**
  * @typedef {{rel: string, abs: string, tool: string, kind: string, label: string, summary: string, details: string[], hash: string,
- *   parent?: string, children?: SetupItem[]}} SetupItem
+ *   parent?: string, children?: SetupItem[], update?: {id: string, scope: string, cwd: string}}} SetupItem
  */
 
 /** Imported files load recursively up to four hops (Claude Code memory docs). */
@@ -726,4 +755,4 @@ function changesSince(items, seen) {
 /** A snapshot to remember as seen. @param {Array<{rel: string, hash: string}>} items */
 const snapshotOf = (items) => Object.fromEntries(flatItems(items).map((i) => [i.rel, i.hash]));
 
-module.exports = { mcpVersion, classify, findAgentFiles, scanSetup, changesSince, snapshotOf, hooksOf, summarize, importsOf, gitRootOf, projectSlug, autoMemoryDir, managedDir, flatItems, parseJson, allowsComments, stripJsonc };
+module.exports = { isNewer, mcpVersion, classify, findAgentFiles, scanSetup, changesSince, snapshotOf, hooksOf, summarize, importsOf, gitRootOf, projectSlug, autoMemoryDir, managedDir, flatItems, parseJson, allowsComments, stripJsonc };

@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.98.0",
+  "version": "0.99.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -184,6 +184,12 @@
         "title": "Mark all as seen",
         "category": "Imprimatur",
         "icon": "$(check-all)"
+      },
+      {
+        "command": "imprimatur.setup.updatePlugin",
+        "title": "Update Plugin",
+        "category": "Imprimatur",
+        "icon": "$(cloud-download)"
       },
       {
         "command": "imprimatur.setup.compareVariant",
@@ -394,6 +400,10 @@
     "menus": {
       "commandPalette": [
         {
+          "command": "imprimatur.setup.updatePlugin",
+          "when": "false"
+        },
+        {
           "command": "imprimatur.setup.dismissFinding",
           "when": "false"
         },
@@ -538,6 +548,16 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "imprimatur.setup.updatePlugin",
+          "when": "view == imprimatur.setup && viewItem =~ /-update$/",
+          "group": "inline@0"
+        },
+        {
+          "command": "imprimatur.setup.updatePlugin",
+          "when": "view == imprimatur.setup && viewItem =~ /-update$/",
+          "group": "1_setup@0"
+        },
         {
           "command": "imprimatur.setup.compareVariant",
           "when": "view == imprimatur.setup && viewItem =~ /^setupFile-drift/",

@@ -340,3 +340,27 @@ test("scan (#139): which version of an MCP server runs, from its definition", ()
   ];
   for (const [def, want] of cases) assert.equal(mcpVersion(def), want, JSON.stringify(def));
 });
+
+test("scan (#140): a plugin behind its marketplace's version says so and carries what the update needs", () => {
+  const { isNewer } = createRequire(import.meta.url)("../vscode/agent-setup.js");
+  assert.ok(isNewer("5.3.3", "4.10.0") && isNewer("1.10", "1.9.9") && !isNewer("1.0.0", "1.0") && !isNewer("fa4eb54397ee", "1.0.0"));
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "setup-update-"));
+  const repo = path.join(home, "proj");
+  const put = (rel, v) => {
+    fs.mkdirSync(path.dirname(path.join(home, rel)), { recursive: true });
+    fs.writeFileSync(path.join(home, rel), JSON.stringify(v));
+  };
+  put(".claude/plugins/installed_plugins.json", { plugins: {
+    "tail@pt": [{ scope: "project", projectPath: repo, installPath: path.join(home, "c/tail/4.10.0"), version: "4.10.0" }],
+    "same@pt": [{ scope: "project", projectPath: repo, installPath: path.join(home, "c/same"), version: "2.0.0" }],
+  } });
+  put(".claude/plugins/known_marketplaces.json", { pt: { source: { source: "github", repo: "acme/pt" }, installLocation: path.join(home, "m"), lastUpdated: "2026-11-03T00:00:00Z" } });
+  put("m/.claude-plugin/marketplace.json", { plugins: [{ name: "tail", source: "./" }, { name: "same", version: "2.0.0" }] });
+  put("m/.claude-plugin/plugin.json", { name: "tail", version: "5.3.3" });
+  const rows = Object.fromEntries(scanSetup(repo, { home }).filter((i) => i.kind === "installed plugin").map((i) => [i.label, i]));
+  assert.match(rows["tail@pt"].summary, / · update available: v5\.3\.3$/);
+  assert.deepEqual(rows["tail@pt"].update, { id: "tail@pt", scope: "project", cwd: repo });
+  assert.ok(rows["tail@pt"].details.includes("marketplace refreshed 2026-11-03"));
+  assert.equal(rows["same@pt"].update, undefined);
+  assert.doesNotMatch(rows["same@pt"].summary, /update/);
+});
