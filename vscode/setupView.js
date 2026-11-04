@@ -115,6 +115,17 @@ class SetupView {
     this.auditing = false;
   }
 
+  /** The open recommendations Claude Code loads, in every scanned scope, for Fix it (#156). */
+  openFindings() {
+    const db = require("./records.js").dbOf();
+    if (!db) return [];
+    return this.scopes.flatMap((s) => {
+      const repo = db.repoByRoot(s.root);
+      const task = repo && require("./recs.js").recsTask(db, repo.id);
+      return task ? db.recordsOf(task.id).filter((/** @type {any} */ r) => r.status === "open" && ((r.links?.audit && r.links.audit.effect !== "inactive") || r.links?.best)) : [];
+    });
+  }
+
   /** The AUDIT records of the window's repos and of the home, as the Recommendations row (#77). */
   loadAudit() {
     try {
@@ -346,6 +357,33 @@ class SetupView {
 const inRepo = (node) => !node.scope.global && !!node.item.abs && path.resolve(node.item.abs).startsWith(path.resolve(node.scope.root) + path.sep);
 
 /**
+ * Fix it (#156): a new Claude Code session that opens with the fix's prompt; the user reads it
+ * and presses Enter. Without the Claude Code extension the prompt goes to the clipboard.
+ * @param {SetupView} provider @param {any} node a checklist row or a recommendation row
+ */
+async function fixWithClaude(provider, node) {
+  const prompts = require("./fix-prompts.js");
+  const db = require("./records.js").dbOf();
+  let prompt = "";
+  if (node?.fix?.kind === "skill") prompt = prompts.skillUpdatePrompt(node.fix.item);
+  else if (node?.fix?.kind === "health") prompt = prompts.healthPrompt(node.fix.problem);
+  else if (node?.fix?.kind === "findings") {
+    const open = provider.openFindings();
+    if (open.length) prompt = prompts.findingsPrompt(open);
+  } else if (node?.recordId && db) {
+    const r = db.record(node.recordId);
+    if (r) prompt = prompts.findingPrompt(r);
+  }
+  if (!prompt) return void vscode.window.showInformationMessage("Imprimatur: nothing to fix here.");
+  if (vscode.extensions.getExtension("anthropic.claude-code")) {
+    await vscode.commands.executeCommand("claude-vscode.editor.open", undefined, prompt);
+    return;
+  }
+  await vscode.env.clipboard.writeText(prompt);
+  vscode.window.showInformationMessage("Imprimatur: the fix prompt is on the clipboard. Paste it into your agent.");
+}
+
+/**
  * Updates a plugin that is behind its marketplace (#140) in a terminal, at the scope it was
  * installed and in its repo for project and local scope: Claude Code's own update, after a
  * marketplace refresh. @param {any} item a SetupItem with update
@@ -455,6 +493,7 @@ function registerSetupView(ctx, roots, counts) {
     view.onDidChangeVisibility((e) => e.visible && soon()),
     vscode.window.onDidChangeWindowState((s) => s.focused && view.visible && soon()),
     vscode.commands.registerCommand("imprimatur.setup.refresh", () => provider.refresh()),
+    vscode.commands.registerCommand("imprimatur.setup.fixWithClaude", (node) => fixWithClaude(provider, node ?? view.selection[0])),
     vscode.commands.registerCommand("imprimatur.setup.showUpstream", (node) => {
       const url = (node ?? view.selection[0])?.item?.compare;
       if (typeof url === "string" && url.startsWith("https://github.com/")) vscode.env.openExternal(vscode.Uri.parse(url));

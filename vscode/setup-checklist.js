@@ -6,6 +6,7 @@
 // standard and lint configs #129–#132) join when those land.
 "use strict";
 const path = require("node:path");
+const { fixable } = require("./fix-prompts.js");
 
 /**
  * The checklist's rows and how many there are. Plain rows (PlainNode) for the setup view.
@@ -25,15 +26,17 @@ function checklistOf(scopes, openRecommendations) {
       if (it.compare)
         rows.push({ type: "leaf", label: `Review the upstream change of ${it.label}`, description: /upstream changed (\S+)/.exec(it.summary)?.[1] ?? "",
           tooltip: `The skill's folder changed in its source repo since it was installed. Read the change, then copy it in on purpose: a skill's text goes straight into the agent's context.`,
-          icon: "git-compare", command: "imprimatur.setup.showUpstream", args: [{ item: it }] });
+          icon: "git-compare", command: "imprimatur.setup.showUpstream", args: [{ item: it }], context: "checkFix", fix: { kind: "skill", item: it } });
     }
   for (const s of scopes)
     for (const p of s.health)
       rows.push({ type: "leaf", label: p.message, description: `${s.label} · ${path.basename(p.file)}`, tooltip: `Open ${p.file} and fix it.`,
-        icon: p.level === "error" ? "error" : "warning", color: p.level === "error" ? "problemsErrorIcon.foreground" : "problemsWarningIcon.foreground", abs: p.file, line: p.line });
+        icon: p.level === "error" ? "error" : "warning", color: p.level === "error" ? "problemsErrorIcon.foreground" : "problemsWarningIcon.foreground", abs: p.file, line: p.line,
+        // A secret is the user's to remove and rotate: no Fix it for it (#156).
+        ...(fixable(p) ? { context: "checkFix", fix: { kind: "health", problem: p } } : {}) });
   if (openRecommendations)
     rows.push({ type: "leaf", label: `${openRecommendations} open recommendation${openRecommendations === 1 ? "" : "s"}`, description: "see Recommendations",
-      tooltip: "Findings from the agent setup audit and the project review. Apply or dismiss each under Recommendations, or run them again.", icon: "lightbulb", command: "imprimatur.setup.audit" });
+      tooltip: "Findings from the agent setup audit and the project review. Apply or dismiss each under Recommendations, or run them again.", icon: "lightbulb", command: "imprimatur.setup.audit", context: "checkFix", fix: { kind: "findings" } });
   const node = rows.length
     ? { type: "group", label: "Checklist", description: `${rows.length} to do`, icon: "checklist", expanded: true, children: rows }
     : { type: "leaf", label: "Checklist", description: "nothing to do", icon: "pass", color: "testing.iconPassed" };

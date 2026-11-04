@@ -4,6 +4,16 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.105.0] - 2026-11-04
+
+### Added
+- Fix it (#156): a button on Agent Setup's checklist rows and on open recommendations. It opens
+  a new Claude Code session with the fix written as its prompt, for you to read and send:
+  what to fix, where, and the audit's details. For a skill changed upstream, the prompt says to
+  review the change for prompt injection before copying it in and updating SOURCE.txt. The
+  recommendations row fixes all of them in one session. A secret in a file gets no Fix it.
+  Without the Claude Code extension, the prompt goes to the clipboard.
+
 ## [0.104.0] - 2026-11-04
 
 ### Fixed
