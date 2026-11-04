@@ -4,6 +4,13 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.99.1] - 2026-11-04
+
+### Changed
+- The `issues` skill ends every closing comment, and every shipped slice's comment, with
+  **How to try it**: numbered steps (setup, do, see, an edge case, undo) that someone who did not
+  build the change can follow. The same steps go on the task as a `test` record for the user.
+
 ## [0.99.0] - 2026-11-04
 
 ### Added

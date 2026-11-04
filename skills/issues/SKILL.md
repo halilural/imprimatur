@@ -100,13 +100,15 @@ When you come back to an issue, read the earlier notes first and never ask again
 - **While working:** decisions, ADRs and notes go to Imprimatur records, and `pointer_set` keeps 👉 on the next step. Do not narrate progress in GitHub comments. A comment is for something a reader of the issue needs: a changed scope, a found blocker, a question.
 - **If the scope changes:** edit the issue body's brief and acceptance criteria, keep the title equal to the task's (`gh issue edit --title`), and record why.
 - **Review:** an open PR or a step for the user to check moves the board to In Review.
+- **A slice shipped, the issue still open:** comment the version, what this slice does, and its **How to try it** steps. The user can check each slice as it lands.
 
 ## 5. Close it with what shipped
 
 1. Check the acceptance criteria one by one against the code and the tests. An unchecked one is either done now or moved to a new issue that links back.
 2. Set the task `done` (`task_upsert`), with the result in its summary and the closing record's body. Imprimatur's tracker sync closes the GitHub issue. If it is not set up for this repo, close it with `gh issue close`.
-3. Leave one closing comment with what a reader needs: the version or commit, what changed for the user, what was left out, and the follow-up issues.
-4. Set the board to Done. If this was an epic's last open child, say so and offer to close the epic.
+3. Leave one closing comment with what a reader needs: the version or commit, what changed for the user, what was left out, and the follow-up issues. End it with **How to try it**: numbered steps a person follows to see the change work, written so someone who did not build it can do them ([the format](#how-to-try-it)).
+4. Add the same steps as a `test` record (owner K) on the task, so the panel shows the check still waiting on the user. When the user reports back, set it `done` with what they saw, or open a fixme.
+5. Set the board to Done. If this was an epic's last open child, say so and offer to close the epic.
 
 Won't do: the task goes `dropped` with the reason in a record. On GitHub the issue gets the `wontfix` label and is closed as not planned, with a polite comment that gives the reason.
 
@@ -134,6 +136,23 @@ Put this in the issue body. When an issue becomes ready, refresh the body; do no
 
 Part of #EPIC
 ```
+
+## How to try it
+
+Steps a person follows to see the change work, in the closing comment (and in a slice's comment):
+
+```markdown
+**How to try it** (0.99.0)
+1. Setup: what to install, reload or open first (e.g. "Reload Window", "open the investment repo").
+2. Do: the exact click, command or input (e.g. "Agent Setup → Installed plugins → ponytail@ponytail").
+3. See: what should appear, in words that can be checked (e.g. "the row ends with 'update available: v5.3.3'").
+4. Edge: one case that should not trigger it (e.g. "imprimatur's ponytail 5.3.3 shows no update").
+5. Undo: how to put things back, if the steps changed anything.
+```
+
+- Each step is one action and what it shows. Name the real button, view, command or file, and use data the user has, not a made-up example.
+- Cover each acceptance criterion with at least one "See" step, and add one negative case.
+- If a step cannot be run on this machine, say so and why (another OS, a paid account).
 
 ---
 
