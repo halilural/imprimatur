@@ -288,8 +288,11 @@ class SetupView {
       it.iconPath = state
         ? new vscode.ThemeIcon(KIND_ICONS[item.kind] ?? "file", new vscode.ThemeColor(state === "new" ? "gitDecoration.addedResourceForeground" : "gitDecoration.modifiedResourceForeground"))
         : new vscode.ThemeIcon(KIND_ICONS[item.kind] ?? "file");
-      it.resourceUri = vscode.Uri.file(item.abs);
-      it.command = { command: "vscode.open", title: "Open", arguments: [vscode.Uri.file(item.abs)] };
+      // A session row (#139) may have no file: an MCP server's instructions, a tool count.
+      if (item.abs) {
+        it.resourceUri = vscode.Uri.file(item.abs);
+        it.command = { command: "vscode.open", title: "Open", arguments: [vscode.Uri.file(item.abs)] };
+      }
       markHealth(it, node.scope.health.filter((p) => p.file === item.abs));
       return it;
     }
@@ -307,9 +310,13 @@ class SetupView {
 }
 
 // Kinds from the wider scan (#27): auto memory, @imports, managed policy, Cursor hooks.
-Object.assign(KIND_NAMES, { "installed plugin": "Installed plugins", "synced skill": "Skills synced from claude.ai" });
-Object.assign(KIND_ICONS, { "installed plugin": "extensions", "synced skill": "cloud" });
+Object.assign(KIND_NAMES, { "installed plugin": "Installed plugins", "synced skill": "Skills synced from claude.ai",
+  "loaded instructions": "Instructions loaded", "hook output": "Hooks: what they added and how long they took", "MCP instructions": "MCP server instructions",
+  tools: "Tools by server", listings: "Skills and agents listed", "model and mode": "Model, mode and context" });
+Object.assign(KIND_ICONS, { "installed plugin": "extensions", "synced skill": "cloud", "loaded instructions": "book", "hook output": "zap",
+  "MCP instructions": "plug", tools: "tools", listings: "list-unordered", "model and mode": "hubot" });
 KIND_ORDER.splice(KIND_ORDER.indexOf("plugin") + 1, 0, "installed plugin", "synced skill");
+KIND_ORDER.push("loaded instructions", "hook output", "MCP instructions", "tools", "listings", "model and mode");
 Object.assign(KIND_NAMES, { memory: "Auto memory", import: "Imports", "managed policy": "Managed policy", hooks: "Hooks" });
 Object.assign(KIND_ICONS, { memory: "notebook", import: "references", "managed policy": "shield", hooks: "zap" });
 KIND_ORDER.splice(KIND_ORDER.indexOf("settings"), 0, "managed policy");

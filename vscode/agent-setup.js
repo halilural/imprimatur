@@ -9,6 +9,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const os = require("node:os");
+const { sessionItems } = require("./session-context.js");
 
 /** Folders never walked. */
 const SKIP = new Set(["node_modules", ".git", "dist", "build", "out", ".next", "vendor", "target", ".venv", "venv", "__pycache__", ".terraform"]);
@@ -343,6 +344,8 @@ function scanSetup(root, opts = {}) {
   for (const it of items) if (readsImports(it)) addImports(it, 1, new Set([it.abs]));
   items.push(...pluginItems(root, home, !!opts.global));
   if (opts.global) items.push(...syncedSkills(home));
+  // What the repo's last Claude Code session was given (#139): read from its transcript.
+  else items.push(...sessionItems(path.join(home, ".claude", "projects", projectSlug(gitRootOf(root))), home));
   return items;
 }
 
