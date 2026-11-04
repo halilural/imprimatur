@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.99.0] - 2026-11-04
+
+### Added
+- A plugin behind the version its marketplace offers says "update available" in Agent Setup
+  (#140), and its row gets an Update Plugin button. The button refreshes the marketplace and runs
+  Claude Code's own `claude plugin update` at the scope the plugin was installed, in its repo
+  for project scope. Each plugin row also says when its marketplace was last refreshed.
+
 ## [0.98.0] - 2026-11-04
 
 ### Added

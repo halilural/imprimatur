@@ -284,7 +284,7 @@ class SetupView {
       const problems = (node.scope.health ?? []).filter((p) => p.file === item.abs);
       const lazy = !problems.length && !node.scope.global && !explained && this.history.info(node.scope.root, item.rel);
       it.tooltip = lazy ? undefined : this.fileTooltip(node, explained);
-      it.contextValue = `setupFile${drift ? "-drift" : ""}${node.scope.global ? "" : "-repo"}`;
+      it.contextValue = `setupFile${drift ? "-drift" : ""}${node.scope.global ? "" : "-repo"}${item.update ? "-update" : ""}`;
       it.iconPath = state
         ? new vscode.ThemeIcon(KIND_ICONS[item.kind] ?? "file", new vscode.ThemeColor(state === "new" ? "gitDecoration.addedResourceForeground" : "gitDecoration.modifiedResourceForeground"))
         : new vscode.ThemeIcon(KIND_ICONS[item.kind] ?? "file");
@@ -307,6 +307,20 @@ class SetupView {
     it.iconPath = new vscode.ThemeIcon("debug-breakpoint-log");
     return it;
   }
+}
+
+/**
+ * Updates a plugin that is behind its marketplace (#140) in a terminal, at the scope it was
+ * installed and in its repo for project and local scope: Claude Code's own update, after a
+ * marketplace refresh. @param {any} item a SetupItem with update
+ */
+function updatePlugin(item) {
+  const u = item?.update;
+  // The id and scope go into a shell line: only plain names.
+  if (!u || !/^[\w.-]+@[\w.-]+$/.test(u.id) || !/^(user|project|local)$/.test(u.scope)) return;
+  const t = vscode.window.createTerminal({ name: `Update ${u.id}`, cwd: u.cwd || undefined });
+  t.show();
+  t.sendText(`claude plugin marketplace update ${u.id.split("@")[1]} && claude plugin update ${u.id} --scope ${u.scope} && echo "Updated: restart Claude Code sessions to load it."`);
 }
 
 // Kinds from the wider scan (#27): auto memory, @imports, managed policy, Cursor hooks.
@@ -405,6 +419,7 @@ function registerSetupView(ctx, roots, counts) {
     view.onDidChangeVisibility((e) => e.visible && soon()),
     vscode.window.onDidChangeWindowState((s) => s.focused && view.visible && soon()),
     vscode.commands.registerCommand("imprimatur.setup.refresh", () => provider.refresh()),
+    vscode.commands.registerCommand("imprimatur.setup.updatePlugin", (node) => updatePlugin((node ?? view.selection[0])?.item)),
     vscode.commands.registerCommand("imprimatur.setup.markSeen", () => provider.markSeen()),
     vscode.commands.registerCommand("imprimatur.setup.compareVariant", (node) => compareVariant(provider, node ?? view.selection[0])),
     vscode.commands.registerCommand("imprimatur.setup.explainLastChange", (node) => explainLastChange(provider, node ?? view.selection[0])),
