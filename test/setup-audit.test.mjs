@@ -327,3 +327,29 @@ test("audit (#113): no allow rule for Imprimatur's MCP server is a warning of it
     db.close();
   }
 });
+
+test("audit (#155): only what the user can fix — plugin and synced findings are not recorded; their old open records are dropped, not applied", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "audit-mine-"));
+  const db = openDb({ path: path.join(dir, "imprimatur.db") });
+  const h = fs.mkdtempSync(path.join(os.tmpdir(), "audit-mine-home-"));
+  const spawn = /** @type {any} */ ((_bin, args) => ({ status: 0, stdout: JSON.stringify({ id: args[1], name: "Rule" }) }));
+  const plugin = d("CC-PL-001", path.join(h, ".claude/plugins/cache/mk/tail/5.3.3/plugin.json"), "plugin.json must be in .claude-plugin/");
+  const synced = d("AS-016", path.join(h, ".claude/skills/synced/acct/docx/SKILL.md"), "bad yaml");
+  const own = d("CC-HK-010", path.join(h, ".claude/settings.json"), "timeout 60s");
+  try {
+    // Records an older Imprimatur made for the plugin's and the synced skill's files.
+    const t = require("../vscode/recs.js").recsTask(db, db.repoOf(h, { name: "~" }).id, { create: true, actor: { kind: "import" } });
+    const { findingsOf: fo } = require("../vscode/setup-audit.js");
+    for (const f of fo({ diagnostics: [plugin, synced] }, { root: h, home: h, global: true, plugins: [] }))
+      db.addRecord(t.id, { kind: "fixme", title: `${f.rule}: ${f.message}`, links: { audit: { fp: f.fp, group: f.group, line: f.line } } }, { kind: "import" });
+    const s = auditRoot(db, { root: h, home: h, global: true, plugins: [] }, { bin: "agnix", spawn, report: { diagnostics: [plugin, synced, own] } });
+    assert.equal(s.added, 1, "only the user's own finding is added");
+    assert.equal(s.dropped, 2);
+    assert.equal(s.resolved, 0, "not counted as applied");
+    const recs = db.recordsOf(t.id, { dropped: true });
+    assert.deepEqual(recs.filter((r) => r.status === "open").map((r) => r.title.split(":")[0]), ["CC-HK-010"]);
+    for (const r of recs.filter((x) => x.status === "dropped")) assert.match(r.body, /Not yours to fix/);
+  } finally {
+    db.close();
+  }
+});
