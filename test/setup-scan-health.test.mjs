@@ -267,3 +267,24 @@ test("health: checkHealth runs every check over a scope, import rows included, e
   ]);
   assert.equal(summarize(path.join(root, ".mcp.json"), { kind: "MCP servers" }).summary, "not valid JSON");
 });
+
+test("scan (#139): installed plugins by scope with version and source; synced skills; a plugin also installed for every repo says so", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "setup-plugins-"));
+  const repo = path.join(home, "proj");
+  fs.mkdirSync(path.join(home, ".claude", "plugins"), { recursive: true });
+  const put = (rel, v) => fs.writeFileSync(path.join(home, ".claude", rel), JSON.stringify(v));
+  put("plugins/installed_plugins.json", { version: 2, plugins: {
+    "tidy@mk": [{ scope: "user", installPath: "/x", version: "1.2.0", gitCommitSha: "abcdef1234567890" }, { scope: "project", projectPath: repo, installPath: "/y", version: "1.1.0" }],
+    "other@mk": [{ scope: "project", projectPath: path.join(home, "elsewhere"), version: "9.0.0" }],
+  } });
+  put("plugins/known_marketplaces.json", { mk: { source: { source: "github", repo: "acme/tidy" } } });
+  fs.mkdirSync(path.join(home, ".claude", "skills", "synced", "acct"), { recursive: true });
+  put("skills/synced/acct/manifest.json", { skills: [{ name: "docs", source: "anthropic", updatedAt: "2026-10-01T00:00:00Z", description: "Docs" }] });
+  const g = scanSetup(home, { global: true, home, managedDir: null });
+  const plug = g.find((i) => i.kind === "installed plugin");
+  assert.deepEqual([plug.label, plug.summary, plug.hash], ["tidy@mk", "v1.2.0 · every repo · from github.com/acme/tidy", "1.2.0"]);
+  assert.ok(plug.details.includes("commit abcdef123456"));
+  assert.deepEqual(g.filter((i) => i.kind === "synced skill").map((i) => [i.label, i.summary]), [["docs", "anthropic · updated 2026-10-01 · Docs"]]);
+  const r = scanSetup(repo, { home }).filter((i) => i.kind === "installed plugin");
+  assert.deepEqual(r.map((i) => i.summary), ["v1.1.0 · project scope · from github.com/acme/tidy · also installed for every repo"]);
+});
