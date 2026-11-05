@@ -92,7 +92,9 @@ function chaptered(doc, sections, chapters) {
   let n = 0;
   const num = new Map(sections.map((s) => [s.key, ++n]));
   const toc = groups.map((g) => [`- [${g.title}](#${CHAPTER_ANCHOR}${g.id})`,
-    ...g.list.map((s) => `  ${num.get(s.key)}. [${link(s.title)}](#${s.key})`)].join("\n")).join("\n");
+    // A bullet, the number in the link: an ordered item starting above 1 cannot open a nested list in
+    // CommonMark, so "2. …" under a chapter ran on into its line.
+    ...g.list.map((s) => `  - [${num.get(s.key)}. ${link(s.title)}](#${s.key})`)].join("\n")).join("\n");
   const out = [frontMatter(doc.kind), HEADER, `# ${inline(doc.title)}`, "## Contents", toc];
   for (const g of groups) {
     out.push(`<a id="${CHAPTER_ANCHOR}${g.id}"></a>`, `## ${g.title}`);
