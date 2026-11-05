@@ -151,7 +151,8 @@ class SetupView {
         const mcp = JSON.parse(safeRead(path.join(dir, ".mcp.json")) || "{}");
         return { hooks: require("./agent-setup.js").pluginHookDefs(dir).length, mcp: Object.keys(mcp.mcpServers ?? mcp) };
       };
-      sg.refreshSuggestions({ components, installed, file, claude, home, partsOf })
+      const marketRepoOf = (/** @type {string} */ n) => String(markets[n]?.source?.repo ?? "");
+      sg.refreshSuggestions({ components, installed, file, claude, home, partsOf, marketRepoOf })
         .then((ran) => ran && this.refresh())
         .catch(() => {})
         .finally(() => (this.suggesting = false));
@@ -168,6 +169,8 @@ class SetupView {
           !i.repo && "kept in the marketplace"].filter(Boolean).join(" · "),
         tooltip: `${i.id}\n\n${i.description}\n\nWhy: it fits ${i.fits.join(", ")}.\nIt brings: ${i.reads}.${i.flags.length ? `\n\n⚠ ${i.flags.join("\n⚠ ")}` : ""}${i.repo ? `\n\ngithub.com/${i.repo}` : ""}`,
         context: "suggestion", installId: i.id, repoRoot: root, flags: i.flags, reads: i.reads,
+        // A click opens its repo; the download button installs it.
+        ...(typeof i.page === "string" && i.page.startsWith("https://github.com/") ? { command: "vscode.open", args: [vscode.Uri.parse(i.page)] } : {}),
       })) };
   }
 
