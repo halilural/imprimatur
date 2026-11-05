@@ -405,8 +405,14 @@ function inboxModel(db, root, { all = false, waiting = [], now = Date.now(), pla
 /** A turn-end ask's kind as a card's: what you answer, do or check by eye. */
 const TURN_KIND = /** @type {Record<string, string>} */ ({ question: "question", verify: "test", command: "todo", input: "todo" });
 
-/** Turn-end asks still open; the todo-files log only mirrors records, which count themselves. @param {Array<{session: string, state: string}>} waiting */
-const openTurn = (waiting) => waiting.filter((w) => w.session !== "todo-files" && w.state === "open");
+/** Turn-end asks older than this no longer wait on the user: the work went on without them. */
+const STALE_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * Turn-end asks still open; the todo-files log only mirrors records, which count themselves.
+ * One older than a week is stale and not counted (it stays in its session's log and list).
+ * @param {Array<{session: string, state: string, t?: string}>} waiting @param {number} [now]
+ */
+const openTurn = (waiting, now = Date.now()) => waiting.filter((w) => w.session !== "todo-files" && w.state === "open" && !(now - Date.parse(w.t ?? "") > STALE_MS));
 
 /**
  * How many things wait on the user: the one count the launcher's badge, the status
