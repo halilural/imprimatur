@@ -24,8 +24,8 @@ test("suggestions (#143): fit the stack by whole words, best first, installed an
   assert.equal(repoOf(available[0].source), "cloudflare/skills");
   assert.equal(repoOf("./plugins/terraform"), "");
   assert.deepEqual(vet({ description: "x" }, { license: "MIT" }, { hooks: 0, mcp: [] }), { flags: [], reads: "no hooks or MCP servers" });
-  assert.deepEqual(vet({ description: "keeps a memory of sessions" }, { license: "" }, undefined).flags, ["no license: it cannot be redistributed", "brings its own memory or tasks: a second store next to Imprimatur's"]);
-  assert.match(vet({}, { license: "Elastic-2.0" }, { hooks: 2, mcp: ["ctx"] }).flags[0], /Elastic-2\.0: check/);
+  assert.deepEqual(vet({ description: "keeps a memory of sessions" }, { license: "" }, undefined).flags, ["brings its own memory or tasks: a second store next to Imprimatur's"]);
+  assert.deepEqual(vet({ description: "x" }, { license: "" }, undefined).flags, [], "no license is shown, not flagged: installing is not redistributing");
   assert.equal(vet({}, { license: "MIT" }, { hooks: 2, mcp: ["ctx"] }).reads, "2 hooks, MCP server ctx (network)");
 });
 

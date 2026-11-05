@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.113.1] - 2026-11-05
+
+### Fixed
+- Suggested plugins no longer get a warning for having no license, or an unusual one (#143).
+  Installing a plugin to use it does not need the right to redistribute it; that rule is for
+  what Imprimatur ships itself. The license is still shown on the row. The warning now means
+  one thing: the plugin brings its own memory or tasks.
+
 ## [0.113.0] - 2026-11-05
 
 ### Added
