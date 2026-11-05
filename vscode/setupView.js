@@ -612,6 +612,8 @@ async function fixWithClaude(provider, node) {
   provider.fixing = false;
   const r = /** @type {{code: number, stdout: string, stderr: string}} */ (res);
   if (r.stderr) out.appendLine(`\n[stderr] ${r.stderr.trim()}`);
+  // The outcome in the channel too: a missed notification or dialog leaves a trace here.
+  out.appendLine(`\n[Imprimatur] Claude exited ${r.code === null ? "(cancelled)" : r.code}`);
   // A reviewed skill: copied here on SAFE, before the download goes.
   /** @type {string | undefined} */
   let applied;
@@ -650,6 +652,7 @@ async function fixWithClaude(provider, node) {
     // "other" (not fixed by an edit) is work for the user, not a false alarm: it stays open.
     const drops = said.filter((d) => d.reason !== "other");
     const yours = said.filter((d) => d.reason === "other");
+    out.appendLine(`[Imprimatur] ${plan.files.size} file change(s) to apply${plan.skipped.length ? `, ${plan.skipped.length} left out (${plan.skipped.map((x) => x.why).join("; ")})` : ""}; ${drops.length} finding(s) to dismiss, ${yours.length} left for you. ${plan.files.size || drops.length ? "Asking to apply." : "Nothing to apply."}`);
     const skippedNote = plan.skipped.length ? `\n\nLeft out: ${plan.skipped.map((x) => `${x.file.replace(os.homedir(), "~")} (${x.why})`).join("; ")}` : "";
     const dropNote = (drops.length ? `\n\nDismiss ${drops.length}:\n${drops.map((d) => `• ${d.rec.title.slice(0, 80)} (${d.reason}): ${d.why}`).join("\n")}` : "")
       + (yours.length ? `\n\nNeeds you (stays open):\n${yours.map((d) => `• ${d.rec.title.slice(0, 80)}: ${d.why}`).join("\n")}` : "");
@@ -672,6 +675,7 @@ async function fixWithClaude(provider, node) {
     const what = [files.length && `change ${files.length} file${files.length === 1 ? "" : "s"}`, drops.length && `dismiss ${drops.length} finding${drops.length === 1 ? "" : "s"}`].filter(Boolean).join(" and ");
     const ok = await vscode.window.showWarningMessage(`Apply Claude's fix: ${what}?`,
       { modal: true, detail: `${files.join("\n")}${dropNote}${skippedNote}\n\n${files.length ? "The diffs are open. " : ""}Nothing has changed yet.` }, "Apply");
+    out.appendLine(`[Imprimatur] ${ok === "Apply" ? "Apply chosen." : "Apply dialog closed: nothing applied."}`);
     let wrote = 0;
     if (ok === "Apply")
       for (const [file, c] of plan.files) {
