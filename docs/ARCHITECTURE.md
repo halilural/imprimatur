@@ -35,20 +35,22 @@ type: explanation
   - [21. Social document: a per-repo opt-in document kind (#109)](#social)
   - [22. Agent setup inventory: plugins, synced skills and the session's context (#139)](#agent-inventory)
   - [23. Agent files: AGENTS.md, CLAUDE.md and the docs rule (#133)](#agent-files)
+  - [24. One-time backfill of design documents and glossary](#docs-backfill-live)
+  - [25. /imprimatur-stats: scoreboard skill (#146)](#imprimatur-stats)
 - [Deployment](#chapter-deployment)
-  - [24. Installation and distribution](#deployment)
+  - [26. Installation and distribution](#deployment)
 - [Crosscutting concepts](#chapter-crosscutting)
-  - [25. Security](#security)
-  - [26. Model calls and cost](#model-calls)
-  - [27. Process checks](#process-checks)
-  - [28. Test strategy](#testing)
-  - [29. Panel design layer: theme variables, icons, mascot](#ui-design)
-  - [30. Context budget: what a session loads, in estimated tokens](#context-budget)
-  - [31. Documentation rules in the audit (IMP-DOC, #131)](#doc-rules)
+  - [27. Security](#security)
+  - [28. Model calls and cost](#model-calls)
+  - [29. Process checks](#process-checks)
+  - [30. Test strategy](#testing)
+  - [31. Panel design layer: theme variables, icons, mascot](#ui-design)
+  - [32. Context budget: what a session loads, in estimated tokens](#context-budget)
+  - [33. Documentation rules in the audit (IMP-DOC, #131)](#doc-rules)
 - [Decisions](#chapter-decisions)
-  - [32. Decision records: ADR and PDR as MADR 4 files](#decision-records)
+  - [34. Decision records: ADR and PDR as MADR 4 files](#decision-records)
 - [Risks and technical debt](#chapter-risks)
-  - [33. Known limits](#limits)
+  - [35. Known limits](#limits)
 
 <a id="chapter-goals"></a>
 
@@ -186,6 +188,12 @@ flowchart TB
 
 The shared modules (`vscode/diff.js`, `waiting.js`, `audit.js`, `tasks.js`, `records.js`, `model.js`, `config.js`, `stats.js`, `sessions.js`) are used both by the hooks (through `createRequire`) and by the extension. That is why the hooks depend on the source files in the repo, not on the extension's bundle.
 
+#### Decisions settled
+
+- 5524 (reversed; see #106 in *Installation and distribution*): device sync was first designed as `outbox`/`clock` tables pushing field-level last-write-wins changes straight to a Cloudflare Worker + D1 from this repo. That design is superseded: sync now runs only through the generic plugin hook described above, so the Worker, its D1 id and the sync logic itself live in a private plugin, not in this repo.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0060](decisions/0060-senkron-yerel-node-sqlite-asil-kaynak-kalir-degisiklikler-al.md)
+
 <a id="database"></a>
 
 ### 5. Local database and data model
@@ -243,7 +251,18 @@ The `MIGRATIONS` array is applied in order inside a single `BEGIN IMMEDIATE`; a 
 
 Panel queries are indexed and `LIMIT`ed: < 1 ms at 10,000 records; opening (pragmas + version check) < 5 ms; prepared statements are cached per connection. Every write produces a change stamp that can be read with `PRAGMA data_version`; the panel uses it for live updates.
 
-<!-- imprimatur:decisions --> Decisions: [ADR 0089](decisions/0089-the-database-bounds-its-wal-to-4-mb-and-gets-a-daily-upkeep.md), [ADR 0094](decisions/0094-version-tables-are-compacted-losslessly-option-a-drop-only-w.md)
+#### Decisions settled
+
+- 621: Imprimatur's own database becomes the sole source of truth for tasks, questions, decisions, notes, ADRs and PDRs; no record view is generated from Markdown.
+- 622: `node:sqlite` is the engine; if it fails to load, the error is explicit, with no JSON fallback and no silent degradation.
+- 623: one database file per device, outside every repo (so branch switches never touch records) and never opened under a Windows-mounted path.
+- 624: WAL plus `BEGIN IMMEDIATE` transactions give safe concurrent writes across hooks, the MCP server and the extension.
+- 625: the core schema is `repos`/`tasks`/`records`/`record_versions`, with `uid` as the cross-device identity and JSON link fields for structured extras.
+- 626: schema migrations run once, in order, inside a single transaction, gated by `PRAGMA user_version`; a newer-than-known database opens read-only.
+- 627: all reads and writes go through `vscode/db.js`; no other file in the codebase issues SQL.
+- 628: panel queries stay indexed and `LIMIT`ed for sub-millisecond latency even at 10,000 records.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0044](decisions/0044-kayit-veritabani-hedef-hal-57.md), [ADR 0045](decisions/0045-motor.md), [ADR 0046](decisions/0046-yer.md), [ADR 0047](decisions/0047-eszamanlilik.md), [ADR 0048](decisions/0048-sema.md), [ADR 0049](decisions/0049-surum.md), [ADR 0050](decisions/0050-erisim-katmani-vscode-db-js-commonjs-hook-lar-createrequire.md), [ADR 0051](decisions/0051-gecikme.md), [ADR 0089](decisions/0089-the-database-bounds-its-wal-to-4-mb-and-gets-a-daily-upkeep.md), [ADR 0094](decisions/0094-version-tables-are-compacted-losslessly-option-a-drop-only-w.md)
 
 <a id="review-data"></a>
 
@@ -293,7 +312,20 @@ The old folder keeps `.gitignore` and `MOVED.md`. What an older release still wr
 - self-learning: 275 and 637;
 - investment: 551 and 158.
 
-<!-- imprimatur:decisions --> Decisions: [ADR 0096](decisions/0096-per-repo-data-lives-at-database-folder-repos-name-hash-not-i.md), [ADR 0098](decisions/0098-waiting-logs-are-parsed-once-per-file-version-an-in-process.md)
+#### Decisions settled
+
+- 579: `hooks/baseline.mjs` writes the pre-edit copy and a history line before every Edit/Write/Bash change to a tracked file, without looking at git.
+- 605: a turn-ending line becomes a `verify` step when it carries an action phrase (test this, Reload Window, …) and a `question` step when it only asks for an answer; `verify` steps stay open until marked done or all other items are, not closed by the next event.
+- 606: a second hook (`waiting.mjs`) appends `question`/`command`/`verify`/`input` lines per session; any later event in that session closes its own earlier open items, since the agent has moved on whether permission was granted or denied.
+- 609: a failing Bash command's edit is still recorded (on `PostToolUseFailure`), and task binding moved from session to step.
+- 610: a Bash edit's branch is read in `PreToolUse` as well as after, so an edit-then-commit-then-switch sequence lands on the right branch; an Edit/Write's real result is rebuilt from its transcript call, and any later mismatch becomes a separate "Outside change" row rather than being blamed on the agent.
+- 611: old or inconsistent history data heals itself at read time (e.g. by replaying `calls.jsonl`) instead of being rewritten by a repair script.
+- 612: a history line with no `toolUseId` (written by an older hook) is linked after the fact to the transcript call that most likely produced it.
+- 614: a per-file cache keyed by size and mtime, plus dropping word-level diffing from counts, removed the full-history re-diff on every panel redraw.
+- 615: edits and waiting logs older than the retention window move into a gzip archive (default 7 days) without ever closing an open request.
+- 5519: an async `PostToolUse` hook writes one short activity line per tool call to `activity/<session>.jsonl`, with sub-agent calls grouped under their parent Agent row in the graph.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0002](decisions/0002-hooks-baseline-mjs.md), [ADR 0028](decisions/0028-acik-kalan-isler-0-21-0-kullanici-2026-10-05-sonraki-prompt.md), [ADR 0029](decisions/0029-waiting-on-you-0-19-0-11.md), [ADR 0032](decisions/0032-veri-denetimi-duzeltmeleri-0-30-3-45-2026-10-07-de-5-reponun.md), [ADR 0033](decisions/0033-grafik-dogrulugu-0-30-4-46-grafik-denetimi.md), [ADR 0034](decisions/0034-eski-veri-kendiliginden-duzelir-0-30-5-47-veri-yeniden-yazil.md), [ADR 0035](decisions/0035-eski-satirlar-cagrilarina-baglanir-0-30-7-49-interview-ve-gr.md), [ADR 0037](decisions/0037-performans-0-31-1-51-olcum-iki-pencerenin-extension-host-u-1.md), [ADR 0038](decisions/0038-arsiv-0-32-0-52-kullanici-sikistirilmis-arsiv-7-gun-inceleme.md), [ADR 0059](decisions/0059-ajanin-her-isi-async-posttooluse-hook-u-her-cagriyi.md), [ADR 0096](decisions/0096-per-repo-data-lives-at-database-folder-repos-name-hash-not-i.md), [ADR 0098](decisions/0098-waiting-logs-are-parsed-once-per-file-version-an-in-process.md)
 
 <a id="hooks"></a>
 
@@ -380,7 +412,16 @@ A result is a short text summary plus `structuredContent` (and `outputSchema` in
 - Repo: the `repo` argument, otherwise `CLAUDE_PROJECT_DIR`, otherwise the server's working folder; resolved to the git root. MCP `roots` is not used.
 - Claude Code does not tell the MCP server the session: the dispatcher's mcp step (`hooks/run.mjs`, #118) adds `_session` to the input on PreToolUse (by copying, since `updatedInput` replaces the whole input) and returns `allow`, because the tools touch only the Imprimatur database. The actor of a version row becomes `<clientInfo.name>:<session>` (e.g. `claude-code:adddf…`).
 
-<!-- imprimatur:decisions --> Decisions: [ADR 0092](decisions/0092-mcp-tool-profiles-imprimatur-tools-or-mcp-tools-in-claude-im.md), [ADR 0093](decisions/0093-search-answers-with-an-index-no-bodies-titles-cut-to-160-8-h.md)
+#### Decisions settled
+
+- 629: agents read and write tasks/records only through the Imprimatur MCP server; Claude Code, Cursor and Codex all see the same tool set.
+- 630: `mcp/server.mjs` is a dependency-free stdio JSON-RPC server, supporting both the 2026-07-28 discovery handshake and the older `initialize` handshake so older clients keep working.
+- 631: the tool set stays small and general (few, general tools) because every tool definition enters the agent's context.
+- 632: the repo is resolved from the `repo` argument, then `CLAUDE_PROJECT_DIR`, then the server's own working folder; MCP `roots` was dropped from the spec and is not used.
+- 633: since Claude Code does not pass session identity to MCP servers, the dispatcher's mcp hook step injects `_session` into the tool input on `PreToolUse` and allows the call, because the tools touch only Imprimatur's own database.
+- 5572: tool profiles (core/standard/all) and lean results (dropping `outputSchema` for small profiles, `structuredContent` sized to need) keep both the tool list and the responses small, matching the 2026-07-28 MCP spec's discovery caching and `_meta` fields.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0052](decisions/0052-mcp-sunucusu-58.md), [ADR 0053](decisions/0053-mcp-server-mjs.md), [ADR 0054](decisions/0054-araclar-az-ve-genel-kullanici-2026-10-09-her-tanim-ajanin-ba.md), [ADR 0055](decisions/0055-repo.md), [ADR 0056](decisions/0056-kim.md), [ADR 0062](decisions/0062-mcp-araclari-spec-2026-07-28-e-ve-ajanlara-uygun-64-72-disco.md), [ADR 0092](decisions/0092-mcp-tool-profiles-imprimatur-tools-or-mcp-tools-in-claude-im.md), [ADR 0093](decisions/0093-search-answers-with-an-index-no-bodies-titles-cut-to-160-8-h.md)
 
 <a id="panel"></a>
 
@@ -418,6 +459,36 @@ The view builders are pure: they take a database connection and return a model o
 
 The Imprimatur icon in the activity bar: rows that open the panel in a tab (the badge counts the items waiting on you) and the **Agent setup** tree: every file in the repo and in home that affects the agent (Claude Code, Cursor, Copilot, AGENTS.md, Gemini, Windsurf, Cline, Aider, git hooks), grouped by tool and type, with new/changed/deleted since the last look marked; when each one takes effect, health checks, drift between repos, git history and merged settings (hook order, effective permissions). It is read-only.
 
+#### Decisions settled
+
+- 580: the extension compares a file to its baseline copy with a line LCS and a word LCS, marking single-word changes at word level and multi-word changes at sentence level.
+- 581: Accept works per Markdown unit, using VS Code's own markdown-it to find block boundaries, so a table or a run of added list items accepts as one group.
+- 582: the preview carries overview-ruler-like marker notches on the right edge, one per marked block.
+- 583: `imprimatur.showIn` controls where marks are drawn (preview by default, `both`, or `editor`); `imprimatur.editorAlsoFor` opts specific Markdown globs into editor marks too.
+- 584: marks, CodeLenses, the status bar and the graph redraw themselves after review-data writes, debounced (0.5s/2s); the preview only reloads after copy/history changes or an Accept, not on every document edit.
+- 585: no marks are drawn on either side of a diff tab (Working Tree, git compare).
+- 586: the Mermaid diagram diff defaults off, because two other Mermaid preview extensions already compete for the same webview.
+- 587: a numbered list's renumbering after a deletion is not treated as a change; only the deleted item is marked.
+- 588: changes inside fenced code blocks are not marked, in the editor, the preview or the status bar count.
+- 589: a changed sentence's old text shows above the line via a CodeLens, since the extension API cannot insert a real view-zone line in the editor.
+- 590: there is one single view of an edit; the earlier "latest edit bright, older ones faded" distinction was removed because the faded box's opacity hid the Accept button.
+- 591: a status-bar history button lists a file's agent edits like `git log`, each opened as a built-in `vscode.diff`.
+- 592: the Agent Change Graph is a webview panel, laid out like Git Graph, built from `history/**.jsonl` across the repo.
+- 593: the Agent Change Graph's description column follows this order: the model's one sentence → the Bash tool's own description → the agent's words in the same chat turn → the nearest heading plus the first changed line; it stopped being the user's own request text because short replies like "sure" were meaningless there.
+- 594: a Graph lane is a task, not a Claude session, because one session can work on several different things.
+- 595: the Graph's status column carries the Accept control; the hover popup opens only from the status cell (hovering elsewhere made the row hard to read), and the right-click menu is VS Code's own context menu.
+- 596: Agent Setup lists every file that affects the agent, for the repo and for home, grouped by tool and kind, read-only.
+- 597: the Waiting on you tab keeps every step's full history (open/done/replaced/answered/closed) rather than only the currently-open items, so a resolved question is not lost.
+- 607: a mark disappears only with Accept or Accept all; staging, committing or reopening the file never touches it.
+- 608: Accept in the preview updates instantly (removes the mark and the button client-side) instead of reloading the whole page.
+- 613: hovering a Markdown edit in the Graph shows it rendered through the preview's own review view, not as a raw text diff.
+- 616: if annotating a block throws, the preview falls back to drawing it unmarked rather than failing to render at all.
+- 617: the preview gets its marks through a markdown-it plugin that annotates the already-cached token tree at render time, at block level.
+- 618: editor marks are word/sentence level and preview marks are block level; this split, not full parity, is the accepted limit.
+- 5577: the panel is one webview with tabs, each tab's view builder a pure function (db in, model/HTML out) so it is unit-testable without VS Code; the sidebar's narrow record trees were replaced by this because they were "unreadable".
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0003](decisions/0003-vscode.md), [ADR 0004](decisions/0004-blok-blok-accept-0-7-0-5.md), [ADR 0005](decisions/0005-onizleme-isaret-seridi-0-10-0-5.md), [ADR 0006](decisions/0006-nerede-gosterilir-0-8-0-5.md), [ADR 0007](decisions/0007-kendiliginden-yenileme-0-7-2-0-10-4.md), [ADR 0008](decisions/0008-fark-sekmeleri-0-7-3.md), [ADR 0009](decisions/0009-mermaid-farki-0-11-0-0-17-0-dan-beri-varsayilan-kapali-ayar.md), [ADR 0010](decisions/0010-liste-numaralari-0-17-1.md), [ADR 0011](decisions/0011-kod-bloklari.md), [ADR 0012](decisions/0012-editorde-eski-cumle-ustte-0-14-0.md), [ADR 0013](decisions/0013-tek-gorunum-0-12-0.md), [ADR 0014](decisions/0014-tarihce-dugmesi-0-5-0-7.md), [ADR 0015](decisions/0015-agent-change-graph-0-6-0-8.md), [ADR 0016](decisions/0016-graph-aciklamasi-0-19-0-8.md), [ADR 0017](decisions/0017-gorev-seritleri-0-30-0-39-kullanici-2026-10-06-graphlari-tas.md), [ADR 0018](decisions/0018-graph-etkilesimi-0-20-0-kullanici-2026-10-05.md), [ADR 0019](decisions/0019-agent-setup-0-27-0-kullanici-2026-10-05-projede-ajani-etkile.md), [ADR 0020](decisions/0020-duz-adim-listesi-0-24-0-kullanici-2026-10-05-hepsi-tikli-ols.md), [ADR 0030](decisions/0030-kalicilik.md), [ADR 0031](decisions/0031-onizlemede-aninda-accept-0-16-0.md), [ADR 0036](decisions/0036-grafik-hover-i-review-gorunumunde-0-31-0-50-kullanici-md-sou.md), [ADR 0039](decisions/0039-onizleme-hatasi-onizlemeyi-bosaltmaz-0-15-2.md), [ADR 0040](decisions/0040-onizleme-0-4-1-5-6.md), [ADR 0041](decisions/0041-sinirlar.md), [ADR 0067](decisions/0067-imprimatur-paneli-69-tek-webview-sekmeler-ana-sayfa-gorevler.md)
+
 <a id="live"></a>
 
 ### 10. Live updates
@@ -448,7 +519,11 @@ A burst of 20 tool calls built the panel 146 times before this and 1–2 times a
 
 Only the visible tab is drawn. A write by a plugin goes through the same change gate, so it is drawn like any other write.
 
-<!-- imprimatur:decisions --> Decisions: [ADR 0088](decisions/0088-the-panel-updates-by-line-diff-the-host-posts-changed-lines.md)
+#### Decisions settled
+
+- 5575: live updates combine a leading-edge-plus-50ms local file watcher, a shared `PRAGMA data_version` change gate, a 500ms backstop poll while the panel is visible, a SQLite-backed Durable Object over WebSocket for cross-device push, and a signed GitHub webhook in place of the earlier 5-minute poll.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0065](decisions/0065-canli-guncellemeler-71-yerel-izleyici-ilk-olay-hemen-50-ms-d.md), [ADR 0088](decisions/0088-the-panel-updates-by-line-diff-the-host-posts-changed-lines.md)
 
 <a id="tracker"></a>
 
@@ -483,6 +558,12 @@ When a task becomes `done` or `dropped`, in the same write the epic's open recor
 
 At startup, every 5 minutes, a few seconds after a status change; the Sync with Issue Tracker command (`Imprimatur: Sync with Issue Tracker`) forces it; it does not run in an untrusted folder. `npm run tracker` (`--all`, `--dry-run`, `--no-create`) runs it from a terminal. A plugin that listens for tracker events can also trigger a run through `vscode/loop.js` `runLoop`.
 
+#### Decisions settled
+
+- 5576: epic rows close in the same database write as their task, and GitHub/Jira sync is two-way through a per-device outbox queue with a fixed, content-free comment, so a task's own text never leaves the machine.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0066](decisions/0066-takip-araci-esitlemesi-70-epic-satirlari-gorevle-ayni-yazmad.md)
+
 <a id="docs-sync"></a>
 
 ### 12. Design documents ↔ Markdown files (docs sync)
@@ -502,7 +583,15 @@ At startup, every 5 minutes, a few seconds after a status change; the Sync with 
 
 Architecture and product sections each sit in a fixed chapter (`doc_sections.chapter`, ids in `CHAPTERS` in `db.js`), the same in every repo. The file shows every chapter as `<a id="chapter-<id>"></a>` + `## Title` (an empty one says "_Not written yet._") and the sections under it as `### n. Title`, numbered through the document; sections with no chapter come last under "Unsorted". `parseManaged` reads `##` or `###` after a section anchor and skips chapter blocks, so old flat files still parse. A section moved to another chapter by editing the file is not read back: change `chapter` in the panel or with `doc_section_upsert`.
 
-<!-- imprimatur:decisions --> Decisions: [ADR 0101](decisions/0101-architecture-and-product-sections-carry-a-fixed-chapter-doc.md)
+#### Decisions settled
+
+- 677: the Markdown importer (`vscode/import.js`) maps TODO.md's prefixed lines, `docs/design/*.md`, `PRODUCT.md`/`docs/product/*.md` and `docs/testing/*.md` to tasks and record kinds (todo/done/fixme/canceled/question+answer/decision/note, adr/pdr/test).
+- 5696: docs sync is two-way between the database and `docs/*.md`; a hand-written file is adopted only on opt-in or by hand, the original goes to a local backup, a conflict (no common base, both sides changed) is never silently overwritten, and `--rev` lets a past commit be re-imported for repair.
+- 5698: `docUpdate` warns on a section that is linked but did not actually change after the linked record, decisions are in scope alongside ADR/PDR, and `where_we_left_off` reports empty documents, unlinked records and sync conflicts.
+- 5578: architecture/product documents live in the database as chaptered, versioned sections with contributing records, generated into `docs/*.md`; a section body is capped near 40,000 characters, set by the sync Worker's 100,000-character value limit after JSON escaping roughly doubles it.
+- 9326: the plan to keep managed documents only inside Imprimatur, with no generated or hand-written docs in the repo at all, was reversed (decision 9328): documents stay in the repo too, generated from the database and kept in sync two-way as described above.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0058](decisions/0058-markdown-aktarimi-59.md), [ADR 0068](decisions/0068-tasarim-dokumanlari-72-repo-basina-bir-mimari-ve-bir-urun-do.md), [ADR 0069](decisions/0069-adr-tasarim-dokumanlari-hedef-hal.md), [ADR 0070](decisions/0070-adr-docupdate-dokuman-sagligi-hedef-hal.md), [PDR 0097](decisions/0097-managed-documents-live-only-in-imprimatur-and-open-there-as.md), [ADR 0101](decisions/0101-architecture-and-product-sections-carry-a-fixed-chapter-doc.md)
 
 <a id="history-scan-todo"></a>
 
@@ -542,6 +631,15 @@ The panel's "Scan history" button (and, once, automatically the first time the p
 - `todoFiles(root)` returns the root TODO.md and the folders in both layouts; `todoOfKey(root, key)` picks the new one if both exist; `taskOfFile(file)` extracts the task strip (`(docs/)todos/<key>/…`).
 - Task strips, the title, the Jira address, the `TODO: (K)` requests and closing when TODO.md finishes use these paths. Only README.md, CLAUDE.md, AGENTS.md and LICENSE stay at the root.
 
+#### Decisions settled
+
+- 599: Scan history turns past transcripts' 👉 lines and `TODO: (K)` lines into steps, skipping sessions whose hook already logged or that were already scanned.
+- 600: `audit()` asks Haiku for a week-later-understandable step text and a task key; task folders live under `docs/todos/<key>/TODO.md`.
+- 602: task folders moved to `docs/todos/<key>/TODO.md`, with the old `todos/<key>/` layout still read for compatibility.
+- 603: a task's open steps close across every session once its TODO.md's Status section says done, and a user message naming a task also evaluates that task's open steps in other sessions.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0022](decisions/0022-gecmis-taramasi-kullanici-2026-10-05-projeye-imprimaturu-son.md), [ADR 0023](decisions/0023-acik-adimlar-is-numarasi-ve-todo-md-satiri-0-29-0-34-kullani.md), [ADR 0025](decisions/0025-gorev-klasorlerinin-yeri-54-kullanici-2026-10-09-todos-docs.md), [ADR 0026](decisions/0026-oturumlar-arasi-kapanis-43-kullanici-2026-10-06-baska-bir-re.md)
+
 <a id="task-analysis"></a>
 
 ### 14. Task analyses
@@ -563,6 +661,12 @@ flowchart LR
 - **History:** each state in the transcript is a version at the time it was written; if the document has a newer section of that file (hook, another machine, MCP), the older state is skipped. At SessionStart once per repo (`analysis-backfill:<repo>` claim), by hand with `npm run analysis` or the command.
 - **Opt out:** `"analysis": {"sync": false}` → `analysis:nosync:<repo>` meta; analysis sections are then not passed to a plugin's `onChange` listener.
 - **MCP:** `doc_get` / `doc_section_upsert` with `kind: "analysis"` + `task`. The analysis document has no file of its own: sources are read, never written.
+
+#### Decisions settled
+
+- 7077: a task's analysis is its own document kind (`documents.scope` = the task key, not a foreign key, so a placeholder repo merge never breaks the reference), with sections carrying a `source` file and `doc_sources` hashes so a file's text is not re-ingested once it is unchanged.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0078](decisions/0078-gorev-analizi-dorduncu-belge-turu-documents-scope-gorev-anah.md)
 
 <a id="agent-setup-audit"></a>
 
@@ -592,6 +696,12 @@ One grouping: **status** (Open / Applied / Dismissed) → [for dismissed, **reas
 
 - Agent Setup: Recommendations → the audited root → groups; Open and Project / Your setup start expanded. A finding opens the file at its line, the tooltip is the record's body. On an open finding **Dismiss…** lets the user pick the reason from a list (the one suggested by source first) and take an optional note; on a closed one **Reopen** deletes the reason. If there has been no audit, the row starts one.
 - Tasks tab: on the AUDIT page, instead of a flat "To-dos" list, "Audit findings" as nested collapsible sections (`<details>`), with labels in the UI language.
+
+#### Decisions settled
+
+- 5735: agnix's Rust binary is located with a one-time `npx` call and then cached; every finding becomes a `fixme` record in the per-root `AUDIT` task, fingerprinted by rule+path+message (no line number) so an unrelated line added above a finding does not make it look new.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0072](decisions/0072-agent-setup-denetimi-agnix-binary-si-npx-ile-bulunur-bulgula.md)
 
 <a id="audit-effect"></a>
 
@@ -636,6 +746,13 @@ By `claude auth status`: subscription (claude.ai) → the plan's usage limits; A
 ### View
 
 The Agent Setup light bulb opens a menu: audit the agent setup (agnix), review the project (Claude), both. In the Recommendations tree: root → "Agent setup" / "Project" → status → (reason for dismissed) → category → subcategory → recommendation. In the Tasks tab, a single RECS page: "Agent setup" and "Project" sections, the source map; Applied / Dismiss… / Reopen work for both producers (`recs-ui.js`): the reason is chosen from one list (those that fit the producer, the likely one first), including the "Decided not to do it" decision.
+
+#### Decisions settled
+
+- 6809: the project best-practice review has a model build a source map, code gather and gate the evidence (public https sources, in-repo evidence lines), and a per-category `claude -p` call decide, each call budget-capped.
+- 6812: Recommendations (`RECS`) is a single per-repo task combining agnix findings (`links.audit`) and project-review findings (`links.best`), classified with ISO/IEC 25010 and NIST SSDF categories, replacing the separate `AUDIT`/`BEST` tasks.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0073](decisions/0073-best-practice-review-model-kaynak-haritasini-kurar-kod-dogru.md), [ADR 0074](decisions/0074-tek-recommendations-recs-kabi-iki-ureticiye-best-practice-bo.md)
 
 <a id="unread"></a>
 
@@ -794,13 +911,45 @@ A second run writes nothing: the templates are skipped once their files exist, a
 
 <!-- imprimatur:decisions --> Decisions: [ADR 0110](decisions/0110-agents-md-through-the-checklist-templates-for-a-repo-with-no.md)
 
+<a id="docs-backfill-live"></a>
+
+### 24. One-time backfill of design documents and glossary
+
+A repo's empty design documents and glossary are filled once, in the background, by a read-only `claude -p` agent run, rather than left empty or backfilled by hand.
+
+SessionStart checks, for every known repo (whether or not it has a `.claude/imprimatur.json`): has it already been backfilled once, does it have at least 10 records, and does at least one document stand empty or have ADR/PDR records with no linked section (the home directory is excluded). If so, a separate process starts `claude -p`: Sonnet, a $3 budget, up to 120 turns, read-only `Read`/`Glob`/`Grep` tools plus Imprimatur's MCP document tools. The agent writes sections from the existing records and the code, and links records to the sections it writes. The one-time claim keeps a repo from being backfilled twice; the superseded `docs-backfill` section (which predates the chaptered, decision-linked document structure) described the document shape before #129/#131 and no longer reflects the current rule set.
+
+#### Decisions settled
+
+- 6928: empty design documents and the glossary are backfilled once per repo, in the background, by a budget-capped, read-only `claude -p` run triggered at SessionStart, instead of leaving them empty or requiring a manual pass.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0076](decisions/0076-bos-tasarim-dokumanlari-ve-sozluk-her-repo-icin-bir-kez-arka.md)
+
+<a id="imprimatur-stats"></a>
+
+### 25. /imprimatur-stats: scoreboard skill (#146)
+
+`skills/imprimatur-stats/stats.mjs` is a Node ESM script run by the `/imprimatur-stats` skill: it maps a repo folder to its git root, takes `--days N` (default 7), and prints one ASCII bar per measure — now vs. the period before, scaled to the larger of the two, with ▲/▼ % or "new" (equal values show no trend).
+
+- **Measures:** tasks finished/opened, decisions (adr/pdr/decision) and records written, agent edits marked (history lines plus the gzipped archive for days in range), turn-end asks recorded (live and archived waiting logs, deduplicated by session and time), waiting on you now (`inboxCount`, the same figure as the Home badge), median time to answer, tasks open/active, the last session's hook rows (`session-context.js`).
+- **Skill:** runs the script, shows its output verbatim in a code block, and adds at most three lines of its own (the biggest change, what is waiting, a slow hook).
+- **Why a skill, not a panel page:** it reuses the terminal pattern the user pointed at (ponytail's `/ponytail-gain`) and needs no UI code; a panel page can come later from the same numbers (see "The panel as a board", #150).
+- Writes nothing; a run takes about 0.28 s.
+- **Limits:** "tasks finished" uses `updated_at`, so a done task edited later counts in the later period; the archive is read only for days archived within the three periods compared.
+
+#### Decisions settled
+
+- 9347: `/imprimatur-stats` is a skill whose script prints an ASCII scoreboard (now vs. the period before) from the database, the review data (archive included) and the last session's transcript, and the agent shows the script's output verbatim rather than re-summarizing it.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0105](decisions/0105-imprimatur-stats-is-a-skill-whose-script-prints-an-ascii-sco.md)
+
 <a id="chapter-deployment"></a>
 
 ## Deployment
 
 <a id="deployment"></a>
 
-### 24. Installation and distribution
+### 26. Installation and distribution
 
 ### Installing on a machine: `npm run setup`
 
@@ -838,11 +987,22 @@ With the plugin installed, the status line imports the plugin's own `hooks/statu
 
 `db.js` has an optional plugin hook (config.json "plugins"; a plugin hears every write through `onChange` in a savepoint, can answer `adoptRepo`, hears `onOrigin`, its `activate` gets the extension's API, and its `secrets` export names the keys it reads from `secrets.json`; `vscode/loop.js` `runLoop` runs timed jobs). Plugins are installed and deployed on their own, outside this repo.
 
+Device sync is one such plugin: the public repo (`halilural/imprimatur`) carries only this generic plugin hook, never the sync code itself. The user's own Cloudflare Worker, its D1 database id, and the outbox/LWW sync logic live in a private repo (`halilural/imprimatur-private`) loaded through `config.json`'s `plugins` list. Going to the Marketplace made this split necessary: the public code and its history disclose nothing about the private backend.
+
 ### Versioning
 
 One version number (`vscode/package.json`) is shared by the extension and the plugin. Work is done on a short-lived branch and, when quality is green, merged straight into main (no PR).
 
-<!-- imprimatur:decisions --> Decisions: [ADR 0095](decisions/0095-one-imprimatur-version-per-machine-the-status-line-runs-the.md)
+#### Decisions settled
+
+- 578: the review module is independent and lives in its own public repo, separate from git's staging/commit mechanics.
+- 619: the product and extension are named "Imprimatur", with the `imprimatur.` prefix used everywhere (settings, commands, colors, URI handler).
+- 620: this repo is reached only from outside; review data lives outside the repo, and the hook is installed machine-wide (not per-project).
+- 634: `npm run setup` registers the MCP server with Claude Code/Cursor/Codex and needs Node ≥ 22.13.
+- 5574: the Claude Code plugin's `hooks.json`/`plugin.json` are generated from the same hook list `npm run setup` uses, so the settings-file path and the plugin path never both write the same hook.
+- 8625: device sync stays a private plugin; the public repo keeps only the generic plugin hook, so the Cloudflare Worker, its D1 id and the sync logic never appear in public code.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0001](decisions/0001-modul.md), [ADR 0042](decisions/0042-ad-10.md), [ADR 0043](decisions/0043-bu-repoya-baglanti-yalniz-disaridan-gitignore-da-claude-impr.md), [ADR 0057](decisions/0057-kurulum.md), [ADR 0064](decisions/0064-claude-code-plugin-i-67-hooks-json-plugin-json-kurulumla-ayn.md), [ADR 0085](decisions/0085-device-sync-leaves-the-public-repo-as-a-private-plugin-the-p.md), [ADR 0095](decisions/0095-one-imprimatur-version-per-machine-the-status-line-runs-the.md)
 
 <a id="chapter-crosscutting"></a>
 
@@ -850,7 +1010,7 @@ One version number (`vscode/package.json`) is shared by the extension and the pl
 
 <a id="security"></a>
 
-### 25. Security
+### 27. Security
 
 ### VS Code extension
 
@@ -875,11 +1035,15 @@ One version number (`vscode/package.json`) is shared by the extension and the pl
 - The repo's own scripts (e.g. `scripts/docs-toc.mjs` for `docsToc`) run only in repos the user trusted with a VS Code command: the list is outside the repo, in the database folder (`trusted-repos.json`). The script path must be a real file inside the repo (links are resolved, a path starting with `-` is rejected).
 - Document export does not write outside the repo (if `docs/` or the file is a link that leads outside the repo) and does not overwrite a hand-written file.
 
-<!-- imprimatur:decisions --> Decisions: [ADR 0091](decisions/0091-keys-and-tokens-move-from-config-json-to-secrets-json-0600-d.md)
+#### Decisions settled
+
+- 5573: the extension runs with `extensionKind: ["workspace"]` (so it runs where the files and database are, even remote/WSL), `untrustedWorkspaces: limited` (no model/`gh`/repo script in an untrusted folder), and a webview with no local resource roots and a nonce-based CSP allowing no network or inline resources.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0063](decisions/0063-eklenti-guvenligi-ve-paketleme-65-extensionkind-workspace-wo.md), [ADR 0091](decisions/0091-keys-and-tokens-move-from-config-json-to-secrets-json-0600-d.md)
 
 <a id="model-calls"></a>
 
-### 26. Model calls and cost
+### 28. Model calls and cost
 
 Imprimatur turns to a small model (Haiku) only where verbal judgment is needed; where a rule is enough, no model is called.
 
@@ -905,9 +1069,18 @@ Imprimatur turns to a small model (Haiku) only where verbal judgment is needed; 
 - In an untrusted folder the extension starts no model call.
 - `--bare` or the API directly was evaluated and is not used: it needs an API key and does not work with a subscription.
 
+#### Decisions settled
+
+- 598: the end-of-turn audit calls Haiku only when there is an open step or the reply asks for something, after the model reasons one line per step before writing its JSON; Haiku was kept over Sonnet because it closed steps more consistently and cautiously in testing.
+- 601: the chat-sync pass (`resolve.mjs`) asks Haiku which open steps a user message settled, after every user message, including steps opened by other sessions on the same task.
+- 604: an edit's one-sentence description is requested from Haiku only when the agent's own words are too short to describe the change.
+- 5571: model calls happen only where a rule cannot decide (Haiku, via `claude -p`); this is the cost principle the rows above follow.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0021](decisions/0021-haiku-denetimi-0-24-0-kullanici-2026-10-05-haiku-genel-olara.md), [ADR 0024](decisions/0024-chat-senkronu-0-23-0-kullanici-2026-10-05-chatte-karar-veriy.md), [ADR 0027](decisions/0027-model-aciklamasi-0-22-0-kullanici-2026-10-05-degisikligi-hal.md), [ADR 0061](decisions/0061-model-cagrilari-yalniz-gerektiginde-62-63-haiku-claude-p-kur.md)
+
 <a id="process-checks"></a>
 
-### 27. Process checks
+### 29. Process checks
 
 The development process rules (formerly `.claude/hooks/*.sh` copied into every repo) run in one place, Imprimatur's global hook (`hooks/process.mjs` → `vscode/process.js`).
 
@@ -937,7 +1110,7 @@ Repo-specific rules (an em dash ban, deploy, migrations, etc.) are out of scope 
 
 <a id="testing"></a>
 
-### 28. Test strategy
+### 30. Test strategy
 
 ### Unit tests (`npm test`)
 
@@ -957,7 +1130,7 @@ Manual tests of visual behavior such as the editor marks and the preview are kep
 
 <a id="ui-design"></a>
 
-### 29. Panel design layer: theme variables, icons, mascot
+### 31. Panel design layer: theme variables, icons, mascot
 
 The panel's look comes from three small modules. All are plain CommonJS; they need no build step and do not trip the CSP.
 
@@ -980,13 +1153,17 @@ vscode-elements was deliberately not used; the reason is in the linked ADR.
 
 #### The board look (#148, 0.95.0)
 
-On dark and light themes, `theme.js` defines board tokens (`--b-bg`, `--b-panel`, `--b-card` gradient, `--b-line`, `--b-text`, `--b-muted`). It points the `--vscode-*` colours the panel uses (editor background, foreground, description, borders, inputs, hover) and its own tokens (`--surface`, `--line`, `--muted`, `--shadow`, radii) at them. Every tab follows without component edits. Cards (`.card`, `.bucket`, `.etable`, `.tablewrap`) get the board gradient, and the app bar blurs. Muted text stays legible: #a3a19a on dark, #5f5d57 on light. High-contrast themes keep VS Code’s colours.
+On dark and light themes, `theme.js` defines board tokens (`--b-bg`, `--b-panel`, `--b-card` gradient, `--b-line`, `--b-text`, `--b-muted`). It points the `--vscode-*` colours the panel uses (editor background, foreground, description, borders, inputs, hover) and its own tokens (`--surface`, `--line`, `--muted`, `--shadow`, radii) at them. Every tab follows without component edits. Cards (`.card`, `.bucket`, `.etable`, `.tablewrap`) get the board gradient, and the app bar blurs. Muted text stays legible: #a3a19a on dark, #5f5d57 on light. High-contrast themes keep VS Code's colours.
 
-<!-- imprimatur:decisions --> Decisions: [ADR 0107](decisions/0107-the-board-look-comes-from-theme-js-on-dark-and-light-themes.md)
+#### Decisions settled
+
+- 6951: the panel's look is its own theme layer (a per-theme-type accent colour plus VS Code CSS variables) with Lucide icons, instead of adopting the vscode-elements component library.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0077](decisions/0077-panel-gorunumu-kendi-tasarim-katmanimiz-tema-basina-turuncu.md), [ADR 0107](decisions/0107-the-board-look-comes-from-theme-js-on-dark-and-light-themes.md)
 
 <a id="context-budget"></a>
 
-### 30. Context budget: what a session loads, in estimated tokens
+### 32. Context budget: what a session loads, in estimated tokens
 
 Agent Setup's **Context budget** group (#29) lists what the repo's last Claude Code session loaded into the model's context. Items are sorted biggest first.
 
@@ -1011,7 +1188,7 @@ The tools the agent called are counted per server from `tool_use` blocks.
 
 <a id="doc-rules"></a>
 
-### 31. Documentation rules in the audit (IMP-DOC, #131)
+### 33. Documentation rules in the audit (IMP-DOC, #131)
 
 `setup_audit` checks the documentation standard next to agnix's agent-setup rules. `vscode/doc-rules.js` reads the repo's documents (the database) and its agent files and returns findings in agnix's diagnostic shape. `auditRoot` adds them for a repo, not for the global scope, so they become Recommendations records with Fix it and dismiss like agnix's.
 
@@ -1032,7 +1209,7 @@ IMP-DOC-001..005 live in the database, and `docs/*.md` is generated from it, so 
 
 The run reads record bodies written by people and other agents, so its write access is narrowed. The MCP server gets `IMPRIMATUR_RECORD_UPDATE` (the ids `fixRecordIds` returns, the decisions the prompt lists). With it set, `record_update` refuses any other record and changes only `body` and `links`, never status, title or kind. `task_upsert` is not granted. A sequenceDiagram in a task analysis is left for the user. `doc_section_upsert` stays open to every section, as in the one-time backfill.
 
-<!-- imprimatur:decisions --> Decisions: [ADR 0111](decisions/0111-documentation-rules-in-setup-audit-as-imprimatur-s-own-imp-d.md)
+<!-- imprimatur:decisions --> Decisions: [ADR 0111](decisions/0111-documentation-rules-in-setup-audit-as-imprimatur-s-own-imp-d.md), [ADR 0112](decisions/0112-fix-it-on-imp-doc-001-005-runs-claude-with-imprimatur-s-mcp.md)
 
 <a id="chapter-decisions"></a>
 
@@ -1040,7 +1217,7 @@ The run reads record bodies written by people and other agents, so its write acc
 
 <a id="decision-records"></a>
 
-### 32. Decision records: ADR and PDR as MADR 4 files
+### 34. Decision records: ADR and PDR as MADR 4 files
 
 The decisions are the repo's adr and pdr records. Each one is also written as a MADR 4 file, `docs/decisions/NNNN-slug.md`, listed in `docs/decisions/README.md`. That index is the list this chapter would otherwise repeat.
 
@@ -1061,7 +1238,7 @@ The decisions are the repo's adr and pdr records. Each one is also written as a 
 
 <a id="limits"></a>
 
-### 33. Known limits
+### 35. Known limits
 
 ### Review
 

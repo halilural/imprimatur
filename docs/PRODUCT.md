@@ -29,8 +29,9 @@ type: explanation
   - [14. The agent's toolset: seen, versioned, installed, found (#138)](#agent-toolset)
   - [15. The panel as a board, with analytics (#147)](#board)
   - [16. The baseline every repo gets](#baseline)
+  - [17. Project glossary: a third living document (#91)](#glossary-feature)
 - [Metrics](#chapter-metrics)
-  - [17. Success metrics](#metrics)
+  - [18. Success metrics](#metrics)
 
 <a id="chapter-problem"></a>
 
@@ -262,6 +263,12 @@ STORY: I read a task's analyses, plans, spike results and research notes (wherev
 - What was written in past sessions comes in once per repo in the background; by hand: **Imprimatur: Take Task Analyses from Past Sessions** or `npm run analysis` (`--dry-run`, `--no-model`).
 - To turn it off: `"analysis": false` in `.claude/imprimatur.json`; to exclude a path: `{"exclude": ["drafts/"]}`.
 
+#### Decisions settled
+
+- 7078: the panel's Analysis tab shows a task's analysis/plan/spike files as one card per file, with the task page kept focused on to-dos; a file that cannot be placed in a task is listed with a one-click "link to this task" action rather than being dropped.
+
+<!-- imprimatur:decisions --> Decisions: [PDR 0079](decisions/0079-gorev-sayfasinda-analiz-gorev-icin-yazilan-analiz-plan-spike.md)
+
 <a id="agent-setup-audit"></a>
 
 ### 9. Agent setup audit (planned)
@@ -273,6 +280,12 @@ The agent setup (CLAUDE.md, AGENTS.md, `.claude/` settings, hooks, skills, subag
 - Later: an LLM layer (quality, contradiction, stale instruction), consistency across agents, context cost × usage (#29).
 
 Epic [#76](https://github.com/halilural/imprimatur/issues/76), first piece of work [#77](https://github.com/halilural/imprimatur/issues/77).
+
+#### Decisions settled
+
+- 5734: the agent setup audit takes agnix's full rule coverage with nothing cut, hides no finding, and keeps a per-suggestion accept/reject status history across scans — the feature's stated point of difference from competitors.
+
+<!-- imprimatur:decisions --> Decisions: [PDR 0071](decisions/0071-agent-setup-denetimi-agnix-in-tam-kapsamini-alir-bulgular-gi.md)
 
 <a id="unread"></a>
 
@@ -409,7 +422,21 @@ Imprimatur's own plugin brings its hooks, its MCP server and its skills: issues,
 
 Imprimatur only adds what it installs. It never edits or removes a hook, a plugin or a skill it did not install.
 
-<!-- imprimatur:decisions --> Decisions: [PDR 0108](decisions/0108-the-baseline-for-every-repo-imprimatur-s-own-skills-plus-fiv.md)
+#### Decisions settled
+
+- 9332: Imprimatur carries the community skills it adopts itself — its own plugin and marketplace bundle them, with license and source commit, and Imprimatur's setup installs them in every repo automatically; where a tool cannot be carried this way (a different app, a second store, an incompatible license), Imprimatur takes its ideas into its own features instead of adopting it directly.
+
+<!-- imprimatur:decisions --> Decisions: [PDR 0099](decisions/0099-imprimatur-carries-the-adopted-skills-itself-and-installs-th.md), [PDR 0108](decisions/0108-the-baseline-for-every-repo-imprimatur-s-own-skills-plus-fiv.md)
+
+<a id="glossary-feature"></a>
+
+### 17. Project glossary: a third living document (#91)
+
+#### Decisions settled
+
+- 6903: the project glossary became a third living document alongside Architecture and Product (`documents.kind = 'glossary'`), one section per term, sorted alphabetically; it is read and written through the same `doc_get`/`doc_section_upsert` MCP tools and generated to `docs/GLOSSARY.md`, and the agent is instructed to write a new or changed term there as it works.
+
+<!-- imprimatur:decisions --> Decisions: [PDR 0075](decisions/0075-proje-sozlugu-ucuncu-yasayan-dokuman-terim-basina-bir-bolum.md)
 
 <a id="chapter-metrics"></a>
 
@@ -417,7 +444,7 @@ Imprimatur only adds what it installs. It never edits or removes a hook, a plugi
 
 <a id="metrics"></a>
 
-### 17. Success metrics
+### 18. Success metrics
 
 The metrics are values measured in real repositories of different sizes.
 
