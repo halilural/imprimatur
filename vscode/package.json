@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.114.2",
+  "version": "0.115.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -385,9 +385,24 @@
       },
       {
         "command": "imprimatur.setup.rankSuggestions",
-        "title": "Ask Claude Which Plugins Fit This Repo",
+        "title": "Ask Claude to Judge the Suggestions",
         "category": "Imprimatur",
         "icon": "$(sparkle)"
+      },
+      {
+        "command": "imprimatur.setup.hideSuggestion",
+        "title": "Don't Suggest in This Repo",
+        "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.setup.hideSuggestionEverywhere",
+        "title": "Never Suggest",
+        "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.setup.restoreSuggestions",
+        "title": "Show Hidden Suggestions Again",
+        "category": "Imprimatur"
       },
       {
         "command": "imprimatur.setup.installSuggestion",
@@ -455,6 +470,18 @@
         },
         {
           "command": "imprimatur.setup.installSuggestion",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.setup.hideSuggestion",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.setup.hideSuggestionEverywhere",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.setup.restoreSuggestions",
           "when": "false"
         },
         {
@@ -622,6 +649,16 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "imprimatur.setup.hideSuggestion",
+          "when": "view == imprimatur.setup && viewItem =~ /^suggestion(Study)?$/",
+          "group": "2_hide@0"
+        },
+        {
+          "command": "imprimatur.setup.hideSuggestionEverywhere",
+          "when": "view == imprimatur.setup && viewItem =~ /^suggestion(Study)?$/",
+          "group": "2_hide@1"
+        },
         {
           "command": "imprimatur.setup.rankSuggestions",
           "when": "view == imprimatur.setup && viewItem == suggestions",

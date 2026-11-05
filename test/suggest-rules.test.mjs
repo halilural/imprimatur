@@ -1,0 +1,53 @@
+import { createRequire } from "node:module";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+const { globRe, safeRe, firedBy, ruleMatches, declaredBy, recentCommands } = createRequire(import.meta.url)("../vscode/suggest-rules.js");
+
+const repo = (files, manifests = [], commands = []) => ({ root: "/r/app", files, manifests, commands: new Map(commands) });
+
+test("suggestion rules (#143): globs, marketplace regexes kept safe, each signal names what fired it", () => {
+  assert.ok(globRe("**/*.tf").test("infra/main.tf"));
+  assert.ok(globRe("**/*.tf").test("main.tf"));
+  assert.ok(globRe("**/.claude-plugin/plugin.json").test(".claude-plugin/plugin.json"));
+  assert.ok(!globRe("*.tf").test("infra/main.tf"));
+  assert.ok(globRe("SRC/?.js").test("src/a.js"), "case-insensitive, as Claude Code matches");
+  assert.equal(safeRe("(a+)+$"), undefined, "a nested quantifier is refused");
+  assert.equal(safeRe("x".repeat(300)), undefined);
+  assert.ok(safeRe('"react"\\s*:'));
+  const r = repo([".claude-plugin/plugin.json", "infra/main.tf"], [{ file: "web/package.json", text: '{"dependencies":{"react": "^19"}}' }], [["wrangler", 3]]);
+  assert.equal(firedBy({ filesRead: ["**/*.tf"] }, r), "found infra/main.tf");
+  assert.equal(firedBy({ manifestDeps: [{ file: "package\\.json$", pattern: '"react"\\s*:' }] }, r), "web/package.json lists react");
+  assert.equal(firedBy({ cli: ["wrangler"] }, r), "recent Claude sessions here ran wrangler 3 times");
+  assert.equal(firedBy({ cwd: ["/r/**"] }, r), "this folder matches /r/**");
+  assert.equal(firedBy({ cli: ["terraform"], filesRead: ["**/*.go"] }, r), "");
+  assert.equal(firedBy({ manifestDeps: [{ file: "package\\.json$", pattern: "(a+)+b" }] }, r), "", "an unsafe pattern never runs");
+});
+
+test("suggestion rules (#143): the marketplace's own rule first, then the built-in table, by plugin name, each once", () => {
+  const available = [
+    { pluginId: "plugin-dev@claude-plugins-official", name: "plugin-dev", installCount: 70000 },
+    { pluginId: "plugin-dev@other", name: "plugin-dev", installCount: 90000 },
+    { pluginId: "tf@corp", name: "tf" },
+    { pluginId: "vercel@claude-plugins-official", name: "vercel" },
+  ];
+  const r = repo([".claude-plugin/plugin.json", "infra/main.tf"]);
+  const got = ruleMatches(available, r, { "tf@corp": { topic: "Terraform", signals: { filesRead: ["**/*.tf"] } } });
+  assert.deepEqual(got.map((m) => [m.id, m.rule]), [["tf@corp", "marketplace"], ["plugin-dev@claude-plugins-official", "built-in"]], "the official one of a name, no vercel without vercel.json");
+  assert.equal(got[1].why, "found .claude-plugin/plugin.json");
+});
+
+test("suggestion rules (#143): the repo's own enabledPlugins, and the commands of recent sessions", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "imp-rules-"));
+  fs.mkdirSync(path.join(dir, ".claude"));
+  fs.writeFileSync(path.join(dir, ".claude", "settings.json"), JSON.stringify({ enabledPlugins: { "a@m": true, "b@m": false, "c@m": true, "bad id": true } }));
+  assert.deepEqual(declaredBy(dir, ["c@m"]), ["a@m"]);
+  const t = path.join(dir, "s.jsonl");
+  fs.writeFileSync(t, [{ type: "assistant", message: { content: [{ type: "tool_use", name: "Bash", input: { command: "FOO=1 sudo wrangler deploy" } }] } },
+    { type: "assistant", message: { content: [{ type: "tool_use", name: "Bash", input: { command: "/usr/bin/gh issue list" } }] } }].map((x) => JSON.stringify(x)).join("\n"));
+  assert.deepEqual([...recentCommands(dir)], [["wrangler", 1], ["gh", 1]]);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

@@ -130,54 +130,66 @@ class SetupView {
   suggestionsRow(root) {
     if (!root) return undefined;
     const c = suggestContext(root, this.ctx);
-    if (!c.components.length)
-      return { type: "leaf", label: "Suggested for this repo", description: "run the project review first: it maps the stack", icon: "extensions", command: "imprimatur.bestPractices.run",
-        tooltip: "Suggestions come from the repo's stack, which the project review (Recommendations → Review the project) maps." };
     const sg = require("./suggest.js");
     const claude = require("./fix-runner.js").claudeBin();
     if (claude && !this.suggesting) {
       this.suggesting = true;
-      sg.refreshSuggestions({ components: c.components, installed: c.installed, file: c.file, claude, home: c.home, partsOf: c.partsOf, marketRepoOf: c.marketRepoOf, connected: c.connected })
+      sg.refreshSuggestions({ root, projectDir: c.projectDir, components: c.components, installed: c.installed, file: c.file, claude, home: c.home,
+        partsOf: c.partsOf, marketRepoOf: c.marketRepoOf, connected: c.connected, relevanceOf: c.relevanceOf })
         .then((ran) => ran && this.refresh())
         .catch(() => {})
         .finally(() => (this.suggesting = false));
     }
-    // Claude's picks (Ask Claude Which Fit) replace the word match while the stack is the same.
+    const s = sg.readSuggestions(c.file);
+    // Claude's verdicts (Ask Claude, the sparkle) apply by plugin, on top of the candidates.
     const ranked = sg.readSuggestions(c.rankedFile);
-    const byClaude = ranked?.stack === c.stack;
-    const s = byClaude ? ranked : sg.readSuggestions(c.file);
-    const items = (s?.items ?? []).filter((/** @type {any} */ i) => !c.installed.includes(i.id));
+    /** @type {Map<string, {verdict: string, why: string, n: number}>} */
+    const verdicts = new Map((ranked?.picks ?? []).map((/** @type {any} */ v, /** @type {number} */ n) => [v.id, { ...v, n }]));
+    const hidden = hiddenSuggestions(this.ctx, root);
+    const all = (s?.items ?? []).filter((/** @type {any} */ i) => !c.installed.includes(i.id) && !hidden.has(i.id));
+    const skipped = all.filter((/** @type {any} */ i) => verdicts.get(i.id)?.verdict === "skip");
+    const items = all.filter((/** @type {any} */ i) => verdicts.get(i.id)?.verdict !== "skip")
+      .map((/** @type {any} */ i, /** @type {number} */ n) => ({ i, n, v: verdicts.get(i.id) }))
+      .sort((a, b) => (a.v ? a.v.n : 1000 + a.n) - (b.v ? b.v.n : 1000 + b.n));
+    const extra = [
+      ...(skipped.length ? [{ type: "leaf", label: `${skipped.length} Claude said to skip`, description: skipped.map((/** @type {any} */ i) => i.name).join(", "), icon: "circle-slash",
+        tooltip: skipped.map((/** @type {any} */ i) => `${i.name}: ${verdicts.get(i.id)?.why}`).join("\n") }] : []),
+      ...(hidden.size ? [{ type: "leaf", label: `${hidden.size} hidden by you`, description: "click to show them again", icon: "eye-closed", command: "imprimatur.setup.restoreSuggestions", args: [root] }] : []),
+    ];
     if (!items.length)
-      return { type: "leaf", label: "Suggested for this repo", context: "suggestions", icon: "extensions",
-        description: byClaude ? "Claude found nothing that fits beyond what is installed" : s ? "nothing well-adopted fits its stack beyond what is installed" : "looking…" };
+      return { type: extra.length ? "group" : "leaf", label: "Suggested for this repo", context: "suggestions", icon: "extensions", children: extra,
+        description: s ? "nothing fits beyond what is installed" : "looking…" };
     const k = (/** @type {number} */ n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
+    const stale = ranked && ranked.fingerprint !== s?.fingerprint;
+    const SOURCE = { repo: "this repo turns it on", rule: "rule", words: "stack match" };
     return { type: "group", label: "Suggested for this repo", context: "suggestions", icon: "extensions",
-      description: byClaude ? `${items.length} picked by Claude on ${new Date(s.at).toISOString().slice(0, 10)}` : `${items.length} plugin${items.length === 1 ? "" : "s"} that fit its stack`,
-      tooltip: byClaude ? "Claude's picks from the marketplaces' catalog, for what this repo is and how it is worked on. \"study\": worth reading how it works, not worth installing (often because it does part of what Imprimatur or an installed plugin does). Vetted by the rules of #128."
-        : "Plugins from Claude Code's marketplaces whose name or purpose mentions the stack the project review mapped, the most widely installed first. Ask Claude Which Fit (the sparkle) judges by what the repo is instead. Vetted by the rules of #128.",
-      children: items.map((/** @type {any} */ i) => {
+      description: `${items.length} plugin${items.length === 1 ? "" : "s"}${ranked ? ` · Claude's verdicts of ${new Date(ranked.at).toISOString().slice(0, 10)}${stale ? " (the list changed since: ask again)" : ""}` : ""}`,
+      tooltip: "Plugins for this repo, each with what put it here: the repo's own .claude/settings.json, a rule (a file, a dependency or a command this repo shows, matched against the marketplaces' relevance rules and Anthropic's claude-code-setup table), or its stack's words. The sparkle asks Claude to order them and say install, study or skip. Vetted by the rules of #128.",
+      children: [...items.map(({ i, v }) => {
         const what = i.what ?? sg.whatOf(i.description);
-        const why = i.why ? i.why : `its name or purpose mentions ${i.fits.join(", ")}`;
-        const verdict = i.why ? (i.verdict === "study" ? "study, do not install" : "install") : `fits ${i.fits.join(", ")}`;
+        const trigger = i.trigger ?? `its name or purpose mentions ${(i.fits ?? []).join(", ")}`;
+        const study = v?.verdict === "study";
         const facts = [`${k(i.installs)} installs`, i.gh && `★ ${k(i.gh.stars)}`, i.gh?.pushed && `pushed ${i.gh.pushed}`, i.gh && (i.gh.license || "no license"), !i.repo && "kept in the marketplace"].filter(Boolean).join(" · ");
         /** @param {string} label @param {string} description @param {string} icon */
         const line = (label, description, icon) => ({ type: "leaf", label, description, icon, tooltip: `${label}: ${description}` });
         // The page opens on a double click of the plugin's row; its lines say what it is.
         const open = typeof i.page === "string" && i.page.startsWith("https://github.com/") ? { command: "imprimatur.setup.openOnDoubleClick", args: [i.page] } : {};
+        const tag = v ? v.verdict : /** @type {any} */ (SOURCE)[i.source] ?? "stack match";
         return {
-          type: "group", label: i.name, icon: i.verdict === "study" ? "book" : i.flags.length ? "warning" : "extensions", color: i.flags.length && i.verdict !== "study" ? "problemsWarningIcon.foreground" : undefined,
-          description: `${i.why ? `${i.verdict === "study" ? "study" : "install"} · ` : ""}${what}`,
-          tooltip: `${i.id}\n\n${i.description}\n\n${verdict}: ${why}\nIt brings: ${i.brings?.length ? i.brings.join(", ") : i.reads}.${i.flags.length ? `\n\n⚠ ${i.flags.join("\n⚠ ")}` : ""}${i.repo ? `\n\ngithub.com/${i.repo}` : ""}`,
-          context: i.verdict === "study" ? "suggestionStudy" : "suggestion", installId: i.id, repoRoot: root, flags: i.flags, reads: i.reads, study: i.verdict === "study" ? why : undefined, ...open,
+          type: "group", label: i.name, icon: study ? "book" : i.flags.length ? "warning" : "extensions", color: i.flags.length && !study ? "problemsWarningIcon.foreground" : undefined,
+          description: `${tag} · ${what}`,
+          tooltip: `${i.id}\n\n${i.description}\n\nWhy here: ${trigger}${v ? `\nClaude: ${v.verdict}, ${v.why}` : ""}\nIt brings: ${i.brings?.length ? i.brings.join(", ") : i.reads}.${i.flags.length ? `\n\n⚠ ${i.flags.join("\n⚠ ")}` : ""}${i.repo ? `\n\ngithub.com/${i.repo}` : ""}`,
+          context: study ? "suggestionStudy" : "suggestion", installId: i.id, repoRoot: root, flags: i.flags, reads: i.reads, study: study ? v?.why : undefined, ...open,
           children: [
             line("What it is", what || "no description", "info"),
-            line(i.verdict === "study" ? "Why study it" : "Why here", why, i.verdict === "study" ? "book" : "lightbulb"),
+            line("Why here", trigger, "lightbulb"),
+            ...(v ? [line(`Claude: ${v.verdict}`, v.why, study ? "book" : "sparkle")] : []),
             line("It brings", i.brings?.length ? i.brings.join(", ") : i.reads, "package"),
             ...i.flags.map((/** @type {string} */ f) => ({ ...line("Check", f, "warning"), color: "problemsWarningIcon.foreground" })),
             line("Adoption", facts, "graph"),
           ],
         };
-      }) };
+      }), ...extra] };
   }
 
   /** The open recommendations Claude Code loads, in every scanned scope, for Fix it (#156). */
@@ -655,20 +667,37 @@ function suggestContext(root, ctx) {
     const dir = path.join(loc, p.source);
     if (!path.resolve(dir).startsWith(path.resolve(loc))) return undefined;
     const mcp = JSON.parse(safeRead(path.join(dir, ".mcp.json")) || "{}");
-    return { hooks: as.pluginHookDefs(dir).length, mcp: Object.keys(mcp.mcpServers ?? mcp), brings: as.pluginContents(dir) };
+    /** @param {string} sub @param {(n: string) => boolean} keep */
+    const names = (sub, keep) => {
+      try {
+        return fs.readdirSync(path.join(dir, sub)).filter(keep).map((n) => n.replace(/\.md$/, ""));
+      } catch {
+        return [];
+      }
+    };
+    return { hooks: as.pluginHookDefs(dir).length, mcp: Object.keys(mcp.mcpServers ?? mcp), brings: as.pluginContents(dir),
+      names: [...names("skills", (n) => !n.startsWith(".")), ...names("agents", (n) => n.endsWith(".md")), ...names("commands", (n) => n.endsWith(".md"))] };
   };
+  /** The marketplaces' own relevance blocks (Claude Code's plugin suggestions), by plugin id, from their local copies. */
+  const relevanceOf = /** @type {Record<string, any>} */ ({});
+  for (const [name, m] of Object.entries(markets)) {
+    const list = JSON.parse(safeRead(path.join(String(/** @type {any} */ (m)?.installLocation ?? ""), ".claude-plugin", "marketplace.json")) || "{}").plugins;
+    for (const e of Array.isArray(list) ? list : []) if (e?.relevance && typeof e.name === "string") relevanceOf[`${e.name}@${name}`] = e.relevance;
+  }
   const marketRepoOf = (/** @type {string} */ n) => String(markets[n]?.source?.repo ?? "");
   // Servers and connectors the last session already had: a plugin for the same one is not suggested.
-  const connected = [...(require("./session-context.js").connectedServers?.(path.join(home, ".claude", "projects", as.projectSlug(as.gitRootOf(root))), home) ?? [])];
+  const projectDir = path.join(home, ".claude", "projects", as.projectSlug(as.gitRootOf(root)));
+  const connected = [...(require("./session-context.js").connectedServers?.(projectDir, home) ?? [])];
   const slug = as.projectSlug(root);
-  return { components, installed, connected, partsOf, marketRepoOf, home, stack: components.map((c) => c.name).sort().join("|"),
+  return { components, installed, connected, partsOf, marketRepoOf, relevanceOf, home, projectDir,
     file: path.join(ctx.globalStorageUri.fsPath, `suggestions-${slug}.json`), rankedFile: path.join(ctx.globalStorageUri.fsPath, `suggestions-claude-${slug}.json`) };
 }
 
 /**
- * Ask Claude Which Fit (#143): Claude, with no tools, reads what the repo is (its package.json
- * description and README opening), its stack and the marketplaces' catalog, and picks what
- * would help, each "install" or "study" with a reason. After a confirmation; a background run.
+ * Ask Claude (#143): Claude, with no tools, orders the candidates the rules and the stack found
+ * and says install, study or skip for each, with a reason; it adds none, so the list itself stays
+ * deterministic. Its verdicts are kept with the candidates they were made for, and a second ask
+ * gets them back. After a confirmation; a background run.
  * @param {SetupView} provider
  */
 async function rankSuggestions(provider) {
@@ -679,28 +708,24 @@ async function rankSuggestions(provider) {
   if (!root) return;
   if (!bin || !vscode.workspace.isTrusted) return void vscode.window.showInformationMessage(`Imprimatur: ${!bin ? "no Claude Code CLI here" : "this folder is not trusted, so no agent runs"}.`);
   const c = suggestContext(root, provider.ctx);
-  if (!c.components.length) return void vscode.window.showInformationMessage("Imprimatur: run the project review first (Recommendations → Review the project): it maps the stack.");
-  let available;
-  try {
-    available = (await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur: reading the plugin catalog…" },
-      () => sg.json(bin, ["plugin", "list", "--available", "--json"])))?.available ?? [];
-  } catch (e) {
-    return void vscode.window.showErrorMessage(`Imprimatur: could not read the plugin catalog: ${e instanceof Error ? e.message : e}`);
+  const s = sg.readSuggestions(c.file);
+  const candidates = (s?.items ?? []).filter((/** @type {any} */ i) => !c.installed.includes(i.id));
+  if (!candidates.length) return void vscode.window.showInformationMessage("Imprimatur: no suggestions to order yet for this repo.");
+  const last = sg.readSuggestions(c.rankedFile);
+  if (last?.fingerprint === s.fingerprint) {
+    const again = await vscode.window.showInformationMessage(`Imprimatur: the suggestions have not changed since Claude's verdicts of ${new Date(last.at).toISOString().slice(0, 10)}.`, "Ask again");
+    if (again !== "Ask again") return;
   }
   const pkg = JSON.parse(safeRead(path.join(root, "package.json")) || "{}");
   const about = [typeof pkg.description === "string" ? pkg.description : "", safeRead(path.join(root, "README.md")).slice(0, 2500)].filter(Boolean).join("\n");
-  const catalog = sg.catalogOf(available, c.installed, c.connected);
-  // The last picks go back in, so a second run keeps them unless one is wrong.
-  const last = sg.readSuggestions(c.rankedFile);
-  const previous = last?.stack === c.stack ? last.items ?? [] : [];
-  const prompt = sg.rankPrompt({ about, components: c.components, installed: c.installed, catalog, previous });
+  const prompt = sg.rankPrompt({ about, components: c.components, installed: c.installed, candidates, previous: last?.picks ?? [] });
   const tokens = Math.round(prompt.length / 4);
-  const go = await vscode.window.showWarningMessage(`Ask Claude which plugins fit ${path.basename(root)}?`, { modal: true,
-    detail: `Claude (Sonnet) runs in the background with no tools: it reads the repo's README opening, its stack and ${catalog.length} plugins from the catalog (about ${tokens.toLocaleString("en-US")} tokens), and answers with its picks. Nothing is installed; the picks stay until the stack changes.` }, "Ask");
+  const go = await vscode.window.showWarningMessage(`Ask Claude about the ${candidates.length} suggestions for ${path.basename(root)}?`, { modal: true,
+    detail: `Claude (Sonnet) runs in the background with no tools: it reads the repo's README opening, its stack and the ${candidates.length} candidates with what put each one there (about ${tokens.toLocaleString("en-US")} tokens). It orders them and says install, study or skip for each; it adds none. Nothing is installed.` }, "Ask");
   if (go !== "Ask") return;
   const out = (fixOutput ??= vscode.window.createOutputChannel("Imprimatur Fix it"));
-  out.appendLine(`\n=== ${new Date().toLocaleString()} · Ask Claude which plugins fit ${path.basename(root)}\n---`);
-  const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Imprimatur: Claude is picking plugins for ${path.basename(root)}…`, cancellable: true },
+  out.appendLine(`\n=== ${new Date().toLocaleString()} · Ask Claude about the suggestions for ${path.basename(root)}\n---`);
+  const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Imprimatur: Claude is judging the suggestions for ${path.basename(root)}…`, cancellable: true },
     (_p, token) => runner.runClaude(bin, runner.rankArgs(), { cwd: root, input: prompt, token, onData: (d) => out.append(d) }));
   if (r.code !== 0) {
     const pick = await vscode.window.showErrorMessage(`Imprimatur: Claude stopped (${r.code === null ? "cancelled" : `exit ${r.code}`}). ${r.stderr.trim().split("\n")[0].slice(0, 160)}`, "Show output");
@@ -709,19 +734,54 @@ async function rankSuggestions(provider) {
   }
   let picks;
   try {
-    picks = sg.parseRanked(r.stdout, new Set(catalog.map((x) => x.id)));
+    picks = sg.parseRanked(r.stdout, new Set(candidates.map((/** @type {any} */ i) => i.id)));
   } catch (e) {
     const pick = await vscode.window.showErrorMessage(`Imprimatur: Claude's answer could not be read: ${e instanceof Error ? e.message : e}`, "Show output");
     if (pick) out.show();
     return;
   }
-  const byId = new Map(available.map((/** @type {any} */ p) => [p.pluginId, p]));
-  const items = [];
-  for (const pk of picks) items.push(await sg.itemOf(byId.get(pk.id), pk, { partsOf: c.partsOf, marketRepoOf: c.marketRepoOf }));
   fs.mkdirSync(path.dirname(c.rankedFile), { recursive: true });
-  fs.writeFileSync(c.rankedFile, JSON.stringify({ at: Date.now(), stack: c.stack, items }, null, 1));
+  fs.writeFileSync(c.rankedFile, JSON.stringify({ at: Date.now(), fingerprint: s.fingerprint, picks }, null, 1));
   provider.refresh();
-  vscode.window.showInformationMessage(`Imprimatur: Claude picked ${items.length} plugin${items.length === 1 ? "" : "s"} for ${path.basename(root)}: Agent Setup → Suggested for this repo.`);
+  const n = (/** @type {string} */ v) => picks.filter((p) => p.verdict === v).length;
+  vscode.window.showInformationMessage(`Imprimatur: Claude says install ${n("install")}, study ${n("study")}, skip ${n("skip")}: Agent Setup → Suggested for this repo.`);
+}
+
+/** The key of the suggestions the user hid (#143): {"*": ids hidden everywhere, [repo root]: ids hidden there}. */
+const HIDDEN = "imprimatur.suggestions.hidden";
+
+/** The plugins hidden for a repo: there, or everywhere. @param {vscode.ExtensionContext} ctx @param {string} root @returns {Set<string>} */
+function hiddenSuggestions(ctx, root) {
+  const h = /** @type {Record<string, string[]>} */ (ctx.globalState.get(HIDDEN) ?? {});
+  return new Set([...(h["*"] ?? []), ...(h[root] ?? [])]);
+}
+
+/**
+ * Hides a suggestion (#143), for this repo or every repo; the row's "hidden by you" line brings them back.
+ * @param {SetupView} provider @param {any} node a suggestion row @param {boolean} everywhere
+ */
+async function hideSuggestion(provider, node, everywhere) {
+  const id = node?.installId;
+  const root = node?.repoRoot;
+  if (typeof id !== "string" || typeof root !== "string") return;
+  const h = /** @type {Record<string, string[]>} */ ({ ...(provider.ctx.globalState.get(HIDDEN) ?? {}) });
+  const key = everywhere ? "*" : root;
+  h[key] = [...new Set([...(h[key] ?? []), id])];
+  await provider.ctx.globalState.update(HIDDEN, h);
+  provider.refresh();
+}
+
+/** Shows a repo's hidden suggestions again, the ones hidden everywhere among them. @param {SetupView} provider @param {string} root */
+async function restoreSuggestions(provider, root) {
+  const h = /** @type {Record<string, string[]>} */ ({ ...(provider.ctx.globalState.get(HIDDEN) ?? {}) });
+  const ids = [...hiddenSuggestions(provider.ctx, root)];
+  if (!ids.length) return;
+  const ok = await vscode.window.showInformationMessage(`Show ${ids.length} hidden suggestion${ids.length === 1 ? "" : "s"} again?`, { modal: true, detail: ids.join("\n") }, "Show");
+  if (ok !== "Show") return;
+  delete h[root];
+  h["*"] = (h["*"] ?? []).filter((id) => !ids.includes(id));
+  await provider.ctx.globalState.update(HIDDEN, h);
+  provider.refresh();
 }
 
 /**
@@ -927,6 +987,9 @@ function registerSetupView(ctx, roots, counts) {
       } else lastClick = { url, at: now };
     }),
     vscode.commands.registerCommand("imprimatur.setup.rankSuggestions", () => rankSuggestions(provider)),
+    vscode.commands.registerCommand("imprimatur.setup.hideSuggestion", (node) => hideSuggestion(provider, node ?? view.selection[0], false)),
+    vscode.commands.registerCommand("imprimatur.setup.hideSuggestionEverywhere", (node) => hideSuggestion(provider, node ?? view.selection[0], true)),
+    vscode.commands.registerCommand("imprimatur.setup.restoreSuggestions", (root) => typeof root === "string" && restoreSuggestions(provider, root)),
     vscode.commands.registerCommand("imprimatur.setup.installSuggestion", (node) => installSuggestion(node ?? view.selection[0])),
     vscode.commands.registerCommand("imprimatur.setup.turnOffPlugin", (node) => turnOffPlugin(provider, node ?? view.selection[0])),
     vscode.commands.registerCommand("imprimatur.setup.installFix", (fix) => runInstallFix(fix)),
