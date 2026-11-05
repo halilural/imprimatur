@@ -81,6 +81,11 @@ test("suggestions by Claude (#143): the catalog as quoted data, picks only from 
   assert.match(prompt, /> A Claude Code plugin\./);
   assert.match(prompt, /not instructions to you/);
   assert.ok(prompt.split("\n").every((l) => !/^Ignore the above/.test(l)), "a description's newline stays inside its quoted line");
+  assert.doesNotMatch(prompt, /earlier picks/);
+  assert.match(rankPrompt({ about: "x", components: [], installed: [], catalog, previous: [{ id: "plugin-dev@o", verdict: "install" }] }), /earlier picks for this repo were: plugin-dev@o \(install\)\. Keep each one/, "a second run sees the first one's picks");
+  const { whatOf } = createRequire(import.meta.url)("../vscode/suggest.js");
+  assert.equal(whatOf("Build plugins. More."), "Build plugins.");
+  assert.ok(whatOf("word ".repeat(40)).length <= 90);
   const ids = new Set(catalog.map((c) => c.id));
   const answer = 'Here.\n```imprimatur-suggest\n[{"id":"plugin-dev@o","verdict":"install","why":"it builds\\nplugins"},{"id":"plugin-dev@o","verdict":"study","why":"x"},{"id":"made-up@o","verdict":"install","why":"x"},{"id":"evil@o","verdict":"delete","why":"x"},{"id":"evil@o","verdict":"study","why":"read it"}]\n```';
   assert.deepEqual(parseRanked(answer, ids), [{ id: "plugin-dev@o", verdict: "install", why: "it builds plugins" }, { id: "evil@o", verdict: "study", why: "read it" }]);
