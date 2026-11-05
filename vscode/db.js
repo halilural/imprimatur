@@ -1176,6 +1176,12 @@ class Db {
     });
   }
 
+  /** The repo's current design-document sections per document and chapter (#152). @param {number} repoId @returns {Array<{kind: string, chapter: string | null, n: number}>} */
+  sectionsPerChapter(repoId) {
+    return this.q(`SELECT d.kind, s.chapter, count(*) AS n FROM doc_sections s JOIN documents d ON d.id = s.doc_id
+                   WHERE d.repo_id = ? AND s.status = 'current' GROUP BY d.kind, s.chapter`).all(repoId);
+  }
+
   /** @param {number} repoId @param {{status?: string, limit?: number}} [o] */
   tasksOf(repoId, { status, limit = 200 } = {}) {
     return status

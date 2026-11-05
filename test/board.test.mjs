@@ -44,3 +44,26 @@ test("board (#151): the heatmap has 12 weeks, active days and the streak; the he
   assert.equal(sparkline([]), "");
   assert.ok(!/require\(|import /.test(BOARD_SCRIPT), "the page script uses no library");
 });
+
+test("tab analytics (#152): tasks done per week and open at each week's end; edits per day and per file; hooks; sections per chapter", () => {
+  const { tasksPanel, editsPanel, hooksPanel, docsPanel, barsSvg } = createRequire(import.meta.url)("../vscode/board.js");
+  const now = new Date("2026-11-05T12:00:00").getTime(), D = 86400e3;
+  const tasks = [
+    { status: "done", created_at: now - 20 * D, done_at: now - 1 * D, updated_at: now },
+    { status: "done", created_at: now - 30 * D, done_at: now - 9 * D, updated_at: now },
+    { status: "open", created_at: now - 10 * D, updated_at: now },
+    { status: "dropped", created_at: now - 40 * D, updated_at: now - 35 * D },
+  ];
+  const t = tasksPanel(tasks, now);
+  assert.match(t, /2 done in 12 weeks · 1 open now/);
+  assert.equal((t.match(/class="bb"/g) ?? []).length, 12, "twelve weeks");
+  const e = editsPanel({ days, series: { edits: series((i) => i % 3) }, editsByFile: [{ file: "README.md", n: 4 }, { file: "<x>.md", n: 2 }] });
+  assert.match(e, /Files edited most/);
+  assert.match(e, /&lt;x&gt;\.md/, "a file name is escaped");
+  assert.equal(hooksPanel([]), "");
+  assert.match(hooksPanel([{ label: "SessionStart: run.mjs", summary: "4.0 s in all · 23 runs · 174 ms each · adds ~11,800 tokens" }]), /23 runs · 174 ms each/);
+  const d = docsPanel([{ kind: "architecture", chapter: "goals", n: 2 }], { architecture: ["goals", "decisions"] });
+  assert.match(d, /1 empty/);
+  assert.match(d, /class="tf none"><span>decisions<\/span>/);
+  assert.equal(barsSvg([], []), "");
+});

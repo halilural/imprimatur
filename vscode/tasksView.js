@@ -837,6 +837,26 @@ function inboxHtml(m) {
 }
 
 /**
+ * A tab's analytics in the board style (#152), folded into a <details> so the tab's own layout
+ * stays as it is: tasks done per week and open (Tasks, closed by default: its list is sticky),
+ * the design documents' sections per chapter (Analysis). "" when they cannot be read.
+ * @param {"tasks" | "docs"} which @param {any} db @param {string} root
+ */
+function tabAnalytics(which, db, root) {
+  try {
+    const board = require("./board.js");
+    const repo = repoOfRoot(db, root);
+    if (!repo) return "";
+    if (which === "tasks")
+      return `<details class="bdet" data-k="bdet-tasks"><summary>Tasks over time</summary>${board.tasksPanel(db.tasksOf(repo.id, { limit: 100000 }))}</details>`;
+    const chapters = Object.fromEntries(Object.entries(require("./db.js").CHAPTERS).map(([k, v]) => [k, Object.keys(v)]));
+    return `<details class="bdet" data-k="bdet-docs" open><summary>Design documents, by chapter</summary>${board.docsPanel(db.sectionsPerChapter(repo.id), chapters)}</details>`;
+  } catch {
+    return "";
+  }
+}
+
+/**
  * The board landing (#151) for the top of Home; "" when its numbers cannot be read (Home still draws).
  * @param {any} db @param {string} root
  */
@@ -873,7 +893,7 @@ function homeHtml(m, board = "") {
 function paneHtml(db, root, view, o = {}) {
   if (!db) return `<p class="empty" data-k="nodb">Could not open the Imprimatur database: ${esc(o.error ?? "unavailable")}. Run <span class="mono">Imprimatur: Check Setup</span> to see what is missing; if another window holds it, Reload Window.</p>`;
   if (view.tab === "home") return homeHtml(homeModel(db, root, o), boardOf(db, root));
-  if (view.tab === "tasks") return tasksHtml(tasksPage(db, root, view, o));
+  if (view.tab === "tasks") return tabAnalytics("tasks", db, root) + tasksHtml(tasksPage(db, root, view, o));
   if (view.tab === "inbox") return inboxHtml(inboxModel(db, root, { all: view.all, waiting: o.waiting, now: o.now, placeOf: o.placeOf }));
   if (view.tab === "social" && !require("./docs-export.js").socialOn(root)) {
     return hubNav(db, root, "social") + `<div class="card dempty emptyhero" data-k="social-off">${require("./mascot.js").mascot(56)}<div><p><b>Social media tracking is off in this repo.</b> Turn it on with the command <span class="mono">Imprimatur: Turn on social media tracking</span>: a Social page appears here, one section per channel, kept in docs/SOCIAL.md.</p></div></div>`;
@@ -882,7 +902,7 @@ function paneHtml(db, root, view, o = {}) {
     const docs = require("./docsView.js");
     return hubNav(db, root, view.tab) + docs.docHtml(docs.docModel(db, root, view.tab, view));
   }
-  if (view.tab === "analysis") return hubNav(db, root, "analysis") + analysisHubHtml(analysisHub(db, root));
+  if (view.tab === "analysis") return hubNav(db, root, "analysis") + tabAnalytics("docs", db, root) + analysisHubHtml(analysisHub(db, root));
   if (view.tab === "exercises") {
     const x = require("./exerciseView.js");
     return x.exerciseHtml(x.exerciseModel(db));
