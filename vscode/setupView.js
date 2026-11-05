@@ -129,53 +129,44 @@ class SetupView {
    */
   suggestionsRow(root) {
     if (!root) return undefined;
-    const db = require("./records.js").dbOf();
-    const repo = db?.repoByRoot(root);
-    const task = repo && require("./recs.js").recsTask(db, repo.id);
-    const components = task ? require("./best-practice.js").sourceMapRecord(db, task.id)?.links?.bestSources?.components ?? [] : [];
-    if (!components.length)
+    const c = suggestContext(root, this.ctx);
+    if (!c.components.length)
       return { type: "leaf", label: "Suggested for this repo", description: "run the project review first: it maps the stack", icon: "extensions", command: "imprimatur.bestPractices.run",
         tooltip: "Suggestions come from the repo's stack, which the project review (Recommendations → Review the project) maps." };
     const sg = require("./suggest.js");
-    const file = path.join(this.ctx.globalStorageUri.fsPath, `suggestions-${require("./agent-setup.js").projectSlug(root)}.json`);
-    const home = os.homedir();
-    const installed = Object.keys(JSON.parse(safeRead(path.join(home, ".claude", "plugins", "installed_plugins.json")) || "{}").plugins ?? {});
     const claude = require("./fix-runner.js").claudeBin();
     if (claude && !this.suggesting) {
       this.suggesting = true;
-      const markets = JSON.parse(safeRead(path.join(home, ".claude", "plugins", "known_marketplaces.json")) || "{}");
-      /** What a plugin kept in its marketplace brings, read from the local copy. @param {any} p */
-      const partsOf = (p) => {
-        const loc = markets[p.marketplaceName]?.installLocation;
-        if (typeof p.source !== "string" || !loc) return undefined;
-        const dir = path.join(loc, p.source);
-        if (!path.resolve(dir).startsWith(path.resolve(loc))) return undefined;
-        const mcp = JSON.parse(safeRead(path.join(dir, ".mcp.json")) || "{}");
-        return { hooks: require("./agent-setup.js").pluginHookDefs(dir).length, mcp: Object.keys(mcp.mcpServers ?? mcp) };
-      };
-      const marketRepoOf = (/** @type {string} */ n) => String(markets[n]?.source?.repo ?? "");
-      // Servers and connectors the last session already had: a plugin for the same one is not suggested.
-      const connected = [...(require("./session-context.js").connectedServers?.(path.join(home, ".claude", "projects", require("./agent-setup.js").projectSlug(require("./agent-setup.js").gitRootOf(root))), home) ?? [])];
-      sg.refreshSuggestions({ components, installed, file, claude, home, partsOf, marketRepoOf, connected })
+      sg.refreshSuggestions({ components: c.components, installed: c.installed, file: c.file, claude, home: c.home, partsOf: c.partsOf, marketRepoOf: c.marketRepoOf, connected: c.connected })
         .then((ran) => ran && this.refresh())
         .catch(() => {})
         .finally(() => (this.suggesting = false));
     }
-    const s = sg.readSuggestions(file);
-    const items = (s?.items ?? []).filter((/** @type {any} */ i) => !installed.includes(i.id));
-    if (!items.length) return { type: "leaf", label: "Suggested for this repo", description: s ? "nothing well-adopted fits its stack beyond what is installed" : "looking…", icon: "extensions" };
+    // Claude's picks (Ask Claude Which Fit) replace the word match while the stack is the same.
+    const ranked = sg.readSuggestions(c.rankedFile);
+    const byClaude = ranked?.stack === c.stack;
+    const s = byClaude ? ranked : sg.readSuggestions(c.file);
+    const items = (s?.items ?? []).filter((/** @type {any} */ i) => !c.installed.includes(i.id));
+    if (!items.length)
+      return { type: "leaf", label: "Suggested for this repo", context: "suggestions", icon: "extensions",
+        description: byClaude ? "Claude found nothing that fits beyond what is installed" : s ? "nothing well-adopted fits its stack beyond what is installed" : "looking…" };
     const k = (/** @type {number} */ n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
-    return { type: "group", label: "Suggested for this repo", description: `${items.length} plugin${items.length === 1 ? "" : "s"} that fit its stack`, icon: "extensions",
-      tooltip: "Plugins from Claude Code's marketplaces that fit the stack the project review mapped, the most widely installed first. Vetted by the rules of #128.",
-      children: items.map((/** @type {any} */ i) => ({
-        type: "leaf", label: i.name, icon: i.flags.length ? "warning" : "extensions", color: i.flags.length ? "problemsWarningIcon.foreground" : undefined,
-        description: [`fits ${i.fits.join(", ")}`, `${k(i.installs)} installs`, i.gh && `★ ${k(i.gh.stars)}`, i.gh?.pushed && `pushed ${i.gh.pushed}`, i.gh && (i.gh.license || "no license"),
-          !i.repo && "kept in the marketplace"].filter(Boolean).join(" · "),
-        tooltip: `${i.id}\n\n${i.description}\n\nWhy: it fits ${i.fits.join(", ")}.\nIt brings: ${i.reads}.${i.flags.length ? `\n\n⚠ ${i.flags.join("\n⚠ ")}` : ""}${i.repo ? `\n\ngithub.com/${i.repo}` : ""}`,
-        context: "suggestion", installId: i.id, repoRoot: root, flags: i.flags, reads: i.reads,
-        // A double click opens its repo (a single click only selects it); the download button installs it.
-        ...(typeof i.page === "string" && i.page.startsWith("https://github.com/") ? { command: "imprimatur.setup.openOnDoubleClick", args: [i.page] } : {}),
-      })) };
+    return { type: "group", label: "Suggested for this repo", context: "suggestions", icon: "extensions",
+      description: byClaude ? `${items.length} picked by Claude on ${new Date(s.at).toISOString().slice(0, 10)}` : `${items.length} plugin${items.length === 1 ? "" : "s"} that fit its stack`,
+      tooltip: byClaude ? "Claude's picks from the marketplaces' catalog, for what this repo is and how it is worked on. \"study\": worth reading how it works, not worth installing (often because it does part of what Imprimatur or an installed plugin does). Vetted by the rules of #128."
+        : "Plugins from Claude Code's marketplaces whose name or purpose mentions the stack the project review mapped, the most widely installed first. Ask Claude Which Fit (the sparkle) judges by what the repo is instead. Vetted by the rules of #128.",
+      children: items.map((/** @type {any} */ i) => {
+        const why = i.why ? `${i.verdict === "study" ? "Study, do not install: " : ""}${i.why}` : `it fits ${i.fits.join(", ")}.`;
+        return {
+          type: "leaf", label: i.name, icon: i.verdict === "study" ? "book" : i.flags.length ? "warning" : "extensions", color: i.flags.length && i.verdict !== "study" ? "problemsWarningIcon.foreground" : undefined,
+          description: [i.why ? (i.verdict === "study" ? "study" : "install") : `fits ${i.fits.join(", ")}`, `${k(i.installs)} installs`, i.gh && `★ ${k(i.gh.stars)}`, i.gh?.pushed && `pushed ${i.gh.pushed}`, i.gh && (i.gh.license || "no license"),
+            !i.repo && "kept in the marketplace"].filter(Boolean).join(" · "),
+          tooltip: `${i.id}\n\n${i.description}\n\nWhy: ${why}\nIt brings: ${i.reads}.${i.flags.length ? `\n\n⚠ ${i.flags.join("\n⚠ ")}` : ""}${i.repo ? `\n\ngithub.com/${i.repo}` : ""}`,
+          context: i.verdict === "study" ? "suggestionStudy" : "suggestion", installId: i.id, repoRoot: root, flags: i.flags, reads: i.reads,
+          // A double click opens its repo (a single click only selects it); the download button installs it.
+          ...(typeof i.page === "string" && i.page.startsWith("https://github.com/") ? { command: "imprimatur.setup.openOnDoubleClick", args: [i.page] } : {}),
+        };
+      }) };
   }
 
   /** The open recommendations Claude Code loads, in every scanned scope, for Fix it (#156). */
@@ -631,6 +622,95 @@ function budgetRow(root) {
 }
 
 /**
+ * What suggestions for a repo need (#143): its stack from the project review's source map,
+ * the installed plugins, the servers its last session had, the marketplaces' local copies, and
+ * the two cache files (the word match, refreshed daily; Claude's picks, kept until the stack changes).
+ * @param {string} root @param {vscode.ExtensionContext} ctx
+ */
+function suggestContext(root, ctx) {
+  const as = require("./agent-setup.js");
+  const db = require("./records.js").dbOf();
+  const repo = db?.repoByRoot(root);
+  const task = repo && require("./recs.js").recsTask(db, repo.id);
+  /** @type {Array<{name: string}>} */
+  const components = task ? require("./best-practice.js").sourceMapRecord(db, task.id)?.links?.bestSources?.components ?? [] : [];
+  const home = os.homedir();
+  const installed = Object.keys(JSON.parse(safeRead(path.join(home, ".claude", "plugins", "installed_plugins.json")) || "{}").plugins ?? {});
+  const markets = JSON.parse(safeRead(path.join(home, ".claude", "plugins", "known_marketplaces.json")) || "{}");
+  /** What a plugin kept in its marketplace brings, read from the local copy. @param {any} p */
+  const partsOf = (p) => {
+    const loc = markets[p.marketplaceName]?.installLocation;
+    if (typeof p.source !== "string" || !loc) return undefined;
+    const dir = path.join(loc, p.source);
+    if (!path.resolve(dir).startsWith(path.resolve(loc))) return undefined;
+    const mcp = JSON.parse(safeRead(path.join(dir, ".mcp.json")) || "{}");
+    return { hooks: as.pluginHookDefs(dir).length, mcp: Object.keys(mcp.mcpServers ?? mcp) };
+  };
+  const marketRepoOf = (/** @type {string} */ n) => String(markets[n]?.source?.repo ?? "");
+  // Servers and connectors the last session already had: a plugin for the same one is not suggested.
+  const connected = [...(require("./session-context.js").connectedServers?.(path.join(home, ".claude", "projects", as.projectSlug(as.gitRootOf(root))), home) ?? [])];
+  const slug = as.projectSlug(root);
+  return { components, installed, connected, partsOf, marketRepoOf, home, stack: components.map((c) => c.name).sort().join("|"),
+    file: path.join(ctx.globalStorageUri.fsPath, `suggestions-${slug}.json`), rankedFile: path.join(ctx.globalStorageUri.fsPath, `suggestions-claude-${slug}.json`) };
+}
+
+/**
+ * Ask Claude Which Fit (#143): Claude, with no tools, reads what the repo is (its package.json
+ * description and README opening), its stack and the marketplaces' catalog, and picks what
+ * would help, each "install" or "study" with a reason. After a confirmation; a background run.
+ * @param {SetupView} provider
+ */
+async function rankSuggestions(provider) {
+  const root = provider.scopes.find((s) => !s.global)?.root;
+  const runner = require("./fix-runner.js");
+  const sg = require("./suggest.js");
+  const bin = runner.claudeBin();
+  if (!root) return;
+  if (!bin || !vscode.workspace.isTrusted) return void vscode.window.showInformationMessage(`Imprimatur: ${!bin ? "no Claude Code CLI here" : "this folder is not trusted, so no agent runs"}.`);
+  const c = suggestContext(root, provider.ctx);
+  if (!c.components.length) return void vscode.window.showInformationMessage("Imprimatur: run the project review first (Recommendations → Review the project): it maps the stack.");
+  let available;
+  try {
+    available = (await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur: reading the plugin catalog…" },
+      () => sg.json(bin, ["plugin", "list", "--available", "--json"])))?.available ?? [];
+  } catch (e) {
+    return void vscode.window.showErrorMessage(`Imprimatur: could not read the plugin catalog: ${e instanceof Error ? e.message : e}`);
+  }
+  const pkg = JSON.parse(safeRead(path.join(root, "package.json")) || "{}");
+  const about = [typeof pkg.description === "string" ? pkg.description : "", safeRead(path.join(root, "README.md")).slice(0, 2500)].filter(Boolean).join("\n");
+  const catalog = sg.catalogOf(available, c.installed, c.connected);
+  const prompt = sg.rankPrompt({ about, components: c.components, installed: c.installed, catalog });
+  const tokens = Math.round(prompt.length / 4);
+  const go = await vscode.window.showWarningMessage(`Ask Claude which plugins fit ${path.basename(root)}?`, { modal: true,
+    detail: `Claude (Sonnet) runs in the background with no tools: it reads the repo's README opening, its stack and ${catalog.length} plugins from the catalog (about ${tokens.toLocaleString("en-US")} tokens), and answers with its picks. Nothing is installed; the picks stay until the stack changes.` }, "Ask");
+  if (go !== "Ask") return;
+  const out = (fixOutput ??= vscode.window.createOutputChannel("Imprimatur Fix it"));
+  out.appendLine(`\n=== ${new Date().toLocaleString()} · Ask Claude which plugins fit ${path.basename(root)}\n---`);
+  const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Imprimatur: Claude is picking plugins for ${path.basename(root)}…`, cancellable: true },
+    (_p, token) => runner.runClaude(bin, runner.rankArgs(), { cwd: root, input: prompt, token, onData: (d) => out.append(d) }));
+  if (r.code !== 0) {
+    const pick = await vscode.window.showErrorMessage(`Imprimatur: Claude stopped (${r.code === null ? "cancelled" : `exit ${r.code}`}). ${r.stderr.trim().split("\n")[0].slice(0, 160)}`, "Show output");
+    if (pick) out.show();
+    return;
+  }
+  let picks;
+  try {
+    picks = sg.parseRanked(r.stdout, new Set(catalog.map((x) => x.id)));
+  } catch (e) {
+    const pick = await vscode.window.showErrorMessage(`Imprimatur: Claude's answer could not be read: ${e instanceof Error ? e.message : e}`, "Show output");
+    if (pick) out.show();
+    return;
+  }
+  const byId = new Map(available.map((/** @type {any} */ p) => [p.pluginId, p]));
+  const items = [];
+  for (const pk of picks) items.push(await sg.itemOf(byId.get(pk.id), pk, { partsOf: c.partsOf, marketRepoOf: c.marketRepoOf }));
+  fs.mkdirSync(path.dirname(c.rankedFile), { recursive: true });
+  fs.writeFileSync(c.rankedFile, JSON.stringify({ at: Date.now(), stack: c.stack, items }, null, 1));
+  provider.refresh();
+  vscode.window.showInformationMessage(`Imprimatur: Claude picked ${items.length} plugin${items.length === 1 ? "" : "s"} for ${path.basename(root)}: Agent Setup → Suggested for this repo.`);
+}
+
+/**
  * Install a suggested plugin for one repo (#143), after a confirmation that shows the vetting:
  * Claude Code's own `claude plugin install --scope project`, in a terminal in that repo.
  * @param {any} node a Suggested row
@@ -832,6 +912,7 @@ function registerSetupView(ctx, roots, counts) {
         vscode.env.openExternal(vscode.Uri.parse(url));
       } else lastClick = { url, at: now };
     }),
+    vscode.commands.registerCommand("imprimatur.setup.rankSuggestions", () => rankSuggestions(provider)),
     vscode.commands.registerCommand("imprimatur.setup.installSuggestion", (node) => installSuggestion(node ?? view.selection[0])),
     vscode.commands.registerCommand("imprimatur.setup.turnOffPlugin", (node) => turnOffPlugin(provider, node ?? view.selection[0])),
     vscode.commands.registerCommand("imprimatur.setup.installFix", (fix) => runInstallFix(fix)),

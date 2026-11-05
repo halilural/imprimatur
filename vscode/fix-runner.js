@@ -51,4 +51,30 @@ function claudeBin(env = process.env) {
   return "";
 }
 
-module.exports = { claudeArgs, outside, claudeBin, rulePath, PLAIN };
+/**
+ * The CLI's arguments for a run that only answers (#143): no tools at all, the user's settings
+ * only, no MCP servers or hooks; the prompt comes on stdin (a catalog is too long for one argument).
+ */
+const rankArgs = () => ["-p", "--setting-sources", "user", "--strict-mcp-config", "--settings", JSON.stringify({ disableAllHooks: true }), "--tools", "", "--model", "sonnet", "--output-format", "text"];
+
+/**
+ * Runs the CLI and collects its output; stdin gets input (or is closed). Killed after 20 minutes or on cancel.
+ * @param {string} bin @param {string[]} args
+ * @param {{cwd: string, input?: string, token?: {onCancellationRequested: (f: () => void) => any}, onData?: (d: string) => void}} o
+ * @returns {Promise<{code: number | null, stdout: string, stderr: string}>}
+ */
+function runClaude(bin, args, { cwd, input, token, onData }) {
+  return new Promise((resolve) => {
+    const child = require("node:child_process").spawn(bin, args, { cwd, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], env: process.env });
+    let stdout = "", stderr = "";
+    child.stdout?.on("data", (d) => ((stdout += d), onData?.(String(d))));
+    child.stderr?.on("data", (d) => (stderr += d));
+    const timer = setTimeout(() => child.kill(), 20 * 60 * 1000);
+    token?.onCancellationRequested(() => child.kill());
+    child.on("error", (e) => resolve({ code: -1, stdout, stderr: String(e.message) }));
+    child.on("close", (code) => (clearTimeout(timer), resolve({ code, stdout, stderr })));
+    if (input !== undefined) child.stdin?.end(input);
+  });
+}
+
+module.exports = { claudeArgs, rankArgs, runClaude, outside, claudeBin, rulePath, PLAIN };

@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.113.4",
+  "version": "0.114.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -384,6 +384,12 @@
         "icon": "$(circle-slash)"
       },
       {
+        "command": "imprimatur.setup.rankSuggestions",
+        "title": "Ask Claude Which Plugins Fit This Repo",
+        "category": "Imprimatur",
+        "icon": "$(sparkle)"
+      },
+      {
         "command": "imprimatur.setup.installSuggestion",
         "title": "Install for This Repo",
         "category": "Imprimatur",
@@ -616,6 +622,11 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "imprimatur.setup.rankSuggestions",
+          "when": "view == imprimatur.setup && viewItem == suggestions",
+          "group": "inline@0"
+        },
         {
           "command": "imprimatur.setup.installSuggestion",
           "when": "view == imprimatur.setup && viewItem == suggestion",
