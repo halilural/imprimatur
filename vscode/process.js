@@ -1,5 +1,5 @@
 // @ts-check
-// Process checks (#56): what dev-workflow used to copy into every repo as
+// Process checks (#56): the repo hooks that used to be copied into every repo as
 // .claude/hooks/*.sh, run once from Imprimatur's global hook (hooks/process.mjs).
 // A repo turns them on with a committed .claude/imprimatur.json; without the
 // file nothing here runs. Each check is "block" (stop the tool or the turn),
