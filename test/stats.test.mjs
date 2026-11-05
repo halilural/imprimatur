@@ -1,35 +1,44 @@
-import { execFileSync } from "node:child_process";
-import fs from "node:fs";
 import { createRequire } from "node:module";
-import os from "node:os";
-import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 const require = createRequire(import.meta.url);
-const { openDb } = require("../vscode/db.js");
+const { statsOf, dayOf, cachedRead, DAY } = require("../vscode/stats.js");
 
-test("stats: the scoreboard counts this period against the one before", () => {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), "stats-"));
-  const root = path.join(base, "proj");
-  fs.mkdirSync(path.join(root, ".git"), { recursive: true });
-  const env = { ...process.env, IMPRIMATUR_DB: path.join(base, "imprimatur.db"), HOME: base };
-  delete env.NODE_TEST_CONTEXT;
-  const db = openDb({ path: env.IMPRIMATUR_DB });
-  const repo = db.repoOf(root);
-  const agent = { kind: "agent", id: "t" };
-  const t = db.upsertTask(repo.id, "#1", { title: "One", status: "done" }, agent);
-  db.addRecord(t.id, { kind: "adr", title: "Use SQLite" }, agent);
-  db.upsertTask(repo.id, "#2", { title: "Two" }, agent);
-  // One task finished in the period before this one.
-  const old = Date.now() - 9 * 86_400_000;
-  db.sqlite.prepare("UPDATE tasks SET created_at = ?, updated_at = ? WHERE key = '#2'").run(old, old);
-  db.sqlite.prepare("UPDATE tasks SET status = 'done' WHERE key = '#2'").run();
-  db.sqlite.close?.();
-  const out = execFileSync(process.execPath, [new URL("../skills/imprimatur-stats/stats.mjs", import.meta.url).pathname, root], { env, encoding: "utf8" });
-  const line = (label) => out.split("\n").find((l) => l.includes(label)).replace(/[█·]/g, "").replace(/\s+/g, " ").trim();
-  assert.match(out, /imprimatur stats\s+proj · last 7 days vs the 7 before/);
-  assert.equal(line("Tasks finished"), "Tasks finished 1 1");
-  assert.equal(line("Tasks opened"), "Tasks opened 1 1");
-  assert.equal(line("Decisions"), "Decisions (ADR/PDR/decision) 1 0 new");
+test("stats (#150): per-day series for a range; sessions' cost, time and tokens on the day they started", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "imp-stats-"));
+  const { sessionsFile } = require("../vscode/sessions.js");
+  const now = new Date("2026-11-05T15:00:00").getTime();
+  const f = sessionsFile(root);
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, [
+    { session: "a", started: now - 1 * DAY, cost: 1.5, apiMs: 60000, tokens: { input: 1, output: 2, cacheWrite: 3, cacheRead: 4 } },
+    { session: "b", started: now - 1 * DAY, cost: 0.5, apiMs: 30000, tokens: { output: 10 } },
+    { session: "c", started: now - 30 * DAY, cost: 9 },
+  ].map((r) => JSON.stringify(r)).join("\n") + "\n");
+  const s = statsOf(root, { days: 3, now });
+  assert.deepEqual(s.days, [dayOf(now - 2 * DAY), dayOf(now - DAY), dayOf(now)]);
+  assert.deepEqual(s.series.sessions, [0, 2, 0]);
+  assert.deepEqual(s.series.cost, [0, 2, 0], "a session out of the range is left out");
+  assert.deepEqual(s.series.agentMs, [0, 90000, 0]);
+  assert.deepEqual(s.series.tokens, [0, 20, 0]);
+  for (const k of ["tasksDone", "tasksOpened", "decisions", "records", "edits", "asks"]) assert.equal(s.series[k].length, 3);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("stats (#150): a file is read again only when it changed", () => {
+  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "imp-cache-")), "x.jsonl");
+  fs.writeFileSync(f, "a\n");
+  let reads = 0;
+  const parse = (t) => (reads++, t.trim());
+  assert.equal(cachedRead(f, parse), "a");
+  assert.equal(cachedRead(f, parse), "a");
+  assert.equal(reads, 1, "the same version comes from the cache");
+  fs.appendFileSync(f, "b\n");
+  assert.equal(cachedRead(f, parse), "a\nb");
+  assert.equal(reads, 2);
+  assert.equal(cachedRead(path.join(path.dirname(f), "none"), parse), undefined);
 });
