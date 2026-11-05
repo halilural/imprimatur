@@ -154,7 +154,9 @@ class SetupView {
         return { hooks: require("./agent-setup.js").pluginHookDefs(dir).length, mcp: Object.keys(mcp.mcpServers ?? mcp) };
       };
       const marketRepoOf = (/** @type {string} */ n) => String(markets[n]?.source?.repo ?? "");
-      sg.refreshSuggestions({ components, installed, file, claude, home, partsOf, marketRepoOf })
+      // Servers and connectors the last session already had: a plugin for the same one is not suggested.
+      const connected = [...(require("./session-context.js").connectedServers?.(path.join(home, ".claude", "projects", require("./agent-setup.js").projectSlug(require("./agent-setup.js").gitRootOf(root))), home) ?? [])];
+      sg.refreshSuggestions({ components, installed, file, claude, home, partsOf, marketRepoOf, connected })
         .then((ran) => ran && this.refresh())
         .catch(() => {})
         .finally(() => (this.suggesting = false));
