@@ -24,8 +24,9 @@
   13. [Social media: /social-post and the Social document (#109)](#social)
   14. [The agent's toolset: seen, versioned, installed, found (#138)](#agent-toolset)
   15. [The panel as a board, with analytics (#147)](#board)
+  16. [The baseline every repo gets](#baseline)
 - [Metrics](#chapter-metrics)
-  16. [Success metrics](#metrics)
+  17. [Success metrics](#metrics)
 
 <a id="chapter-problem"></a>
 
@@ -371,13 +372,34 @@ Epic #147, opened 2026-11-04. The Imprimatur panel looks and works like the pony
   - a 12-week activity heatmap with active days and streak.
 - **Analytics on each tab (#152):** tasks over time, agent edits per day and the most edited files, document chapters filled, and hook cost.
 
+<a id="baseline"></a>
+
+### 16. The baseline every repo gets
+
+Imprimatur's own plugin brings its hooks, its MCP server and its skills: issues, study, exercise, imprimatur-stats and social-post. It installs at user scope. Beyond that, every repo should have five third-party items. Imprimatur does not ship them: each is installed from its own marketplace or repo, at user scope, after the user confirms.
+
+| Item | Why | Source |
+|---|---|---|
+| The repo's language server | exact go-to-definition, references and type errors | an LSP plugin chosen by the repo's files (typescript-lsp, pyright-lsp, gopls-lsp…) |
+| security-guidance | warns about security problems while Claude edits | claude-plugins-official |
+| ponytail | the smallest change that fully solves a task | DietrichGebert/ponytail |
+| context-mode | keeps large tool output out of the context window | mksglu/context-mode. ⚠ It keeps its own session store next to Imprimatur's records |
+| humanizer | clears AI tells from prose | blader/humanizer, downloaded into ~/.claude/skills with a SOURCE.txt for the upstream check |
+
+**In Agent Setup → Checklist:**
+- A missing item is a **Baseline: install …** row; one the user turned off is a **Baseline: turn on …** row. The button shows a confirmation, then runs `claude plugin install|enable <id> --scope user` in a terminal, or downloads the skill.
+- **Not in This Repo**, on a row's menu, opts the repo out of that item. The choice is kept in the repo's Imprimatur data. Setting a plugin's `enabledPlugins` entry to `false` in the repo's `.claude` settings counts as opting out too.
+- A **Baseline: N off in this repo** row brings an item back.
+
+Imprimatur only adds what it installs. It never edits or removes a hook, a plugin or a skill it did not install.
+
 <a id="chapter-metrics"></a>
 
 ## Metrics
 
 <a id="metrics"></a>
 
-### 16. Success metrics
+### 17. Success metrics
 
 The metrics are values measured in real repositories of different sizes.
 
