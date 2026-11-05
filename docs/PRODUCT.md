@@ -30,8 +30,9 @@ type: explanation
   - [15. The panel as a board, with analytics (#147)](#board)
   - [16. The baseline every repo gets](#baseline)
   - [17. Project glossary: a third living document (#91)](#glossary-feature)
+  - [18. Skills Imprimatur carries](#bundled-skills)
 - [Metrics](#chapter-metrics)
-  - [18. Success metrics](#metrics)
+  - [19. Success metrics](#metrics)
 
 <a id="chapter-problem"></a>
 
@@ -444,13 +445,30 @@ Imprimatur only adds what it installs. It never edits or removes a hook, a plugi
 
 <!-- imprimatur:decisions --> Decisions: [PDR 0075](decisions/0075-proje-sozlugu-ucuncu-yasayan-dokuman-terim-basina-bir-bolum.md)
 
+<a id="bundled-skills"></a>
+
+### 18. Skills Imprimatur carries
+
+Imprimatur brings its skills to every repo with no manual step: setup links each folder of `skills/` into `~/.claude/skills` (or the plugin carries them), and an Imprimatur update brings their new versions.
+
+| Skill | What it is for | From |
+|---|---|---|
+| issues, study, exercise, social-post, imprimatur-stats | Imprimatur's own workflows | this repo |
+| documentation-writer | Writing a tutorial, how-to, reference or explanation (Diátaxis), outline first | github/awesome-copilot, MIT |
+| docs-sync-audit | A read-only check of where the docs no longer match the code, P0–P3 findings with path:line | github/awesome-copilot, MIT |
+| writing-clearly-and-concisely | Strunk's rules and the AI patterns to avoid, for any prose people read | softaworks/agent-toolkit, MIT |
+
+A skill taken from elsewhere is read in full before it ships, keeps its LICENSE, and records its source commit and every change in `SOURCE.txt`. The three above are changed so they never write Imprimatur's generated documents by hand, and run no bundled code. A skill that would keep a second task, decision or memory store next to Imprimatur's is not carried; its useful ideas go into Imprimatur's own features instead.
+
+<!-- imprimatur:decisions --> Decisions: [PDR 0099](decisions/0099-imprimatur-carries-the-adopted-skills-itself-and-installs-th.md)
+
 <a id="chapter-metrics"></a>
 
 ## Metrics
 
 <a id="metrics"></a>
 
-### 18. Success metrics
+### 19. Success metrics
 
 The metrics are values measured in real repositories of different sizes.
 

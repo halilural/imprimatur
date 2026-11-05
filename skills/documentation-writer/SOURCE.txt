@@ -1,0 +1,5 @@
+source: https://github.com/github/awesome-copilot (skills/documentation-writer)
+commit: caab1f623bb68a330f294a11279597d7ae7be737
+license: MIT
+installed: 2026-11-05, reviewed (no scripts, no network, no injection)
+note: changed: license front matter; a section on Imprimatur's generated documents and Diátaxis type: front matter (#134)

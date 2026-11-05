@@ -1,0 +1,5 @@
+source: https://github.com/github/awesome-copilot (skills/docs-sync-audit)
+commit: f32d7c320dea21594952931b67841b596dece208
+license: MIT
+installed: 2026-11-05, reviewed (no network, no injection)
+note: changed: scripts/docs_drift.py and the steps that run it removed (no bundled code runs); "Related Skills" with its external link removed; Imprimatur named as the generator of docs/ (#134)
