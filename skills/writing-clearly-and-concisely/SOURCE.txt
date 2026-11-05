@@ -1,0 +1,5 @@
+source: https://github.com/softaworks/agent-toolkit (skills/writing-clearly-and-concisely)
+commit: 32d7e8aad4f452b9865f5d1b2443d14038fdb2a2
+license: MIT
+installed: 2026-11-05, reviewed (no scripts, no network, no injection)
+note: changed: SKILL.md only; elements-of-style/ section files and README left out; signs-of-ai-writing.md left out (a copy of a CC-BY-SA-4.0 Wikipedia page the MIT license does not cover) (#134)
