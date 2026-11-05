@@ -235,7 +235,7 @@ function effectOf(abs, { group }, plugins) {
 
 /**
  * The report's diagnostics as findings, every one kept. The fingerprint is rule + file +
- * message + which occurrence: a line number is left out so an edit above it does not
+ * message (an IMP-DOC message without its numbers) + which occurrence: a line number is left out so an edit above it does not
  * make a finding look new.
  * @param {{diagnostics?: Diagnostic[]}} report @param {{root: string, home?: string, global?: boolean, plugins?: ReturnType<typeof pluginsOf>}} scope @returns {Finding[]}
  */
@@ -245,7 +245,9 @@ function findingsOf(report, { root, home = os.homedir(), global = false, plugins
   return (report.diagnostics ?? []).map((d) => {
     const abs = d.file ? path.resolve(root, d.file) : root;
     const rel = d.file ? path.relative(root, abs) || path.basename(abs) : "";
-    const base = `${d.rule}\u0000${fpPath(abs, rel)}\u0000${d.message}`;
+    // An IMP-DOC finding counts decisions in its message: a new count is the same finding, not a new one.
+    const said = /^IMP-DOC-/.test(d.rule) ? d.message.replace(/\d+/g, "#") : d.message;
+    const base = `${d.rule}\u0000${fpPath(abs, rel)}\u0000${said}`;
     const n = (seen.get(base) ?? 0) + 1;
     seen.set(base, n);
     const fp = crypto.createHash("sha1").update(`${base}\u0000${n}`).digest("hex").slice(0, 16);
