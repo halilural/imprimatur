@@ -4,6 +4,30 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.130.0] - 2026-11-05
+
+Everything since 0.113.4.
+
+### Added
+- One documentation standard in every repo (#128):
+  - Generated documents carry Diátaxis `type:` front matter, and arc42-lite chapters show in the panel.
+  - ADR and PDR records are written as numbered MADR 4 files in `docs/decisions/`, linked both ways with their sections.
+  - Agent Setup's checklist writes AGENTS.md as the canonical agent file, with CLAUDE.md importing it, or proposes the split with Fix it.
+  - `setup_audit` checks the documentation rules (IMP-DOC-001..006): decision numbering, considered options, section links, the arc42 chapters and C4 views, sequence diagrams, agent-file length.
+- Fix it on a documentation finding runs Claude in the background with Imprimatur's tools. It links decisions to their sections, adds the alternatives the records show and numbers unnumbered decisions, then audits again.
+- Documentation linters: a checklist row writes `.markdownlint-cli2.jsonc`, `cspell.json`, `lychee.toml` and `.vale.ini` plus `lint:docs`, `lint:links` and `lint:prose` scripts, never overwriting. Generated documents pass markdownlint as written.
+- Three documentation skills ship with Imprimatur: documentation-writer, docs-sync-audit and writing-clearly-and-concisely, each adapted to Imprimatur's documents, with its license and source commit.
+- The board on Home: seven KPI cards with sparklines, a chart, your sessions and a 12-week heatmap. Analytics on Tasks, Agent changes and Analysis.
+- Stats from one module: sessions, cost, time and tokens per day. The status line keeps each session's numbers.
+- Agent Setup: the baseline every repo gets, as checklist rows with install, turn on and a per-repo opt-out. "Suggested for this repo" comes from rules first, each naming what fired it, with Claude judging them; a prompt naming an uncovered technology gets vetted candidates, installed only on a yes.
+
+### Fixed
+- A documentation finding keeps its identity when the counts in its message change, so fixing one no longer opens a new one.
+- A background Fix it run may change only the decisions it lists, and only their body and links.
+- Fix it writes its outcome to its output channel: Claude's exit code, what it would apply and what you chose.
+- Agent-file writes refuse a symbolic link on their way and never overwrite a file.
+- A closed task's open asks, and a turn-end ask older than a week, no longer wait on you.
+
 ## [0.113.4] - 2026-11-05
 
 ### Fixed
