@@ -45,6 +45,10 @@ test("audit: every diagnostic is a finding; the fingerprint ignores the line, co
   // The same finding a few lines lower is the same finding.
   const moved = findingsOf({ diagnostics: [d("XP-003", "docs/a.md", "Hard-coded path '.claude/'", { line: 30 })] }, { root: "/r", home });
   assert.equal(moved[0].fp, fs1[0].fp);
+  // An IMP-DOC count that changes is the same finding (#131); another rule's message is not normalised.
+  const doc = (m) => findingsOf({ diagnostics: [d("IMP-DOC-003", "docs/decisions/README.md", m)] }, { root: "/r", home })[0].fp;
+  assert.equal(doc("83 of 111 decisions are linked to no section: 0001, 0002"), doc("80 of 112 decisions are linked to no section: 0003, 0004"));
+  assert.notEqual(findingsOf({ diagnostics: [d("XP-003", "a.md", "line 1")] }, { root: "/r", home })[0].fp, findingsOf({ diagnostics: [d("XP-003", "a.md", "line 2")] }, { root: "/r", home })[0].fp);
   // Under the global root a file is the user's, unless it is a plugin's.
   const g = findingsOf({ diagnostics: [d("CC-HK-010", "/home/u/.claude/settings.json", "no timeout"), d("CC-HK-010", "/home/u/.claude/plugins/cache/m/p/1/hooks/hooks.json", "no timeout")] }, { root: home, home, global: true });
   assert.deepEqual(g.map((f) => f.group), ["user", "plugin"]);
