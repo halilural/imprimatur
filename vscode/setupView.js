@@ -156,15 +156,26 @@ class SetupView {
       tooltip: byClaude ? "Claude's picks from the marketplaces' catalog, for what this repo is and how it is worked on. \"study\": worth reading how it works, not worth installing (often because it does part of what Imprimatur or an installed plugin does). Vetted by the rules of #128."
         : "Plugins from Claude Code's marketplaces whose name or purpose mentions the stack the project review mapped, the most widely installed first. Ask Claude Which Fit (the sparkle) judges by what the repo is instead. Vetted by the rules of #128.",
       children: items.map((/** @type {any} */ i) => {
-        const why = i.why ? `${i.verdict === "study" ? "Study, do not install: " : ""}${i.why}` : `it fits ${i.fits.join(", ")}.`;
+        const what = i.what ?? sg.whatOf(i.description);
+        const why = i.why ? i.why : `its name or purpose mentions ${i.fits.join(", ")}`;
+        const verdict = i.why ? (i.verdict === "study" ? "study, do not install" : "install") : `fits ${i.fits.join(", ")}`;
+        const facts = [`${k(i.installs)} installs`, i.gh && `★ ${k(i.gh.stars)}`, i.gh?.pushed && `pushed ${i.gh.pushed}`, i.gh && (i.gh.license || "no license"), !i.repo && "kept in the marketplace"].filter(Boolean).join(" · ");
+        /** @param {string} label @param {string} description @param {string} icon */
+        const line = (label, description, icon) => ({ type: "leaf", label, description, icon, tooltip: `${label}: ${description}` });
+        // The page opens on a double click of the plugin's row; its lines say what it is.
+        const open = typeof i.page === "string" && i.page.startsWith("https://github.com/") ? { command: "imprimatur.setup.openOnDoubleClick", args: [i.page] } : {};
         return {
-          type: "leaf", label: i.name, icon: i.verdict === "study" ? "book" : i.flags.length ? "warning" : "extensions", color: i.flags.length && i.verdict !== "study" ? "problemsWarningIcon.foreground" : undefined,
-          description: [i.why ? (i.verdict === "study" ? "study" : "install") : `fits ${i.fits.join(", ")}`, `${k(i.installs)} installs`, i.gh && `★ ${k(i.gh.stars)}`, i.gh?.pushed && `pushed ${i.gh.pushed}`, i.gh && (i.gh.license || "no license"),
-            !i.repo && "kept in the marketplace"].filter(Boolean).join(" · "),
-          tooltip: `${i.id}\n\n${i.description}\n\nWhy: ${why}\nIt brings: ${i.reads}.${i.flags.length ? `\n\n⚠ ${i.flags.join("\n⚠ ")}` : ""}${i.repo ? `\n\ngithub.com/${i.repo}` : ""}`,
-          context: i.verdict === "study" ? "suggestionStudy" : "suggestion", installId: i.id, repoRoot: root, flags: i.flags, reads: i.reads,
-          // A double click opens its repo (a single click only selects it); the download button installs it.
-          ...(typeof i.page === "string" && i.page.startsWith("https://github.com/") ? { command: "imprimatur.setup.openOnDoubleClick", args: [i.page] } : {}),
+          type: "group", label: i.name, icon: i.verdict === "study" ? "book" : i.flags.length ? "warning" : "extensions", color: i.flags.length && i.verdict !== "study" ? "problemsWarningIcon.foreground" : undefined,
+          description: `${i.why ? `${i.verdict === "study" ? "study" : "install"} · ` : ""}${what}`,
+          tooltip: `${i.id}\n\n${i.description}\n\n${verdict}: ${why}\nIt brings: ${i.brings?.length ? i.brings.join(", ") : i.reads}.${i.flags.length ? `\n\n⚠ ${i.flags.join("\n⚠ ")}` : ""}${i.repo ? `\n\ngithub.com/${i.repo}` : ""}`,
+          context: i.verdict === "study" ? "suggestionStudy" : "suggestion", installId: i.id, repoRoot: root, flags: i.flags, reads: i.reads, ...open,
+          children: [
+            line("What it is", what || "no description", "info"),
+            line(i.verdict === "study" ? "Why study it" : "Why here", why, i.verdict === "study" ? "book" : "lightbulb"),
+            line("It brings", i.brings?.length ? i.brings.join(", ") : i.reads, "package"),
+            ...i.flags.map((/** @type {string} */ f) => ({ ...line("Check", f, "warning"), color: "problemsWarningIcon.foreground" })),
+            line("Adoption", facts, "graph"),
+          ],
         };
       }) };
   }
@@ -644,7 +655,7 @@ function suggestContext(root, ctx) {
     const dir = path.join(loc, p.source);
     if (!path.resolve(dir).startsWith(path.resolve(loc))) return undefined;
     const mcp = JSON.parse(safeRead(path.join(dir, ".mcp.json")) || "{}");
-    return { hooks: as.pluginHookDefs(dir).length, mcp: Object.keys(mcp.mcpServers ?? mcp) };
+    return { hooks: as.pluginHookDefs(dir).length, mcp: Object.keys(mcp.mcpServers ?? mcp), brings: as.pluginContents(dir) };
   };
   const marketRepoOf = (/** @type {string} */ n) => String(markets[n]?.source?.repo ?? "");
   // Servers and connectors the last session already had: a plugin for the same one is not suggested.
@@ -679,7 +690,10 @@ async function rankSuggestions(provider) {
   const pkg = JSON.parse(safeRead(path.join(root, "package.json")) || "{}");
   const about = [typeof pkg.description === "string" ? pkg.description : "", safeRead(path.join(root, "README.md")).slice(0, 2500)].filter(Boolean).join("\n");
   const catalog = sg.catalogOf(available, c.installed, c.connected);
-  const prompt = sg.rankPrompt({ about, components: c.components, installed: c.installed, catalog });
+  // The last picks go back in, so a second run keeps them unless one is wrong.
+  const last = sg.readSuggestions(c.rankedFile);
+  const previous = last?.stack === c.stack ? last.items ?? [] : [];
+  const prompt = sg.rankPrompt({ about, components: c.components, installed: c.installed, catalog, previous });
   const tokens = Math.round(prompt.length / 4);
   const go = await vscode.window.showWarningMessage(`Ask Claude which plugins fit ${path.basename(root)}?`, { modal: true,
     detail: `Claude (Sonnet) runs in the background with no tools: it reads the repo's README opening, its stack and ${catalog.length} plugins from the catalog (about ${tokens.toLocaleString("en-US")} tokens), and answers with its picks. Nothing is installed; the picks stay until the stack changes.` }, "Ask");
