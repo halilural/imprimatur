@@ -32,7 +32,8 @@ function claudeArgs(prompt, { edit = [], editDirs = [], addDirs = [] } = {}) {
   const allow = ["Read", "Glob", "Grep",
     ...[...new Set(edit)].map((f) => `Edit(${rulePath(f)})`),
     ...[...new Set(editDirs)].flatMap((d) => [`Edit(${rulePath(d)}/**)`, `Write(${rulePath(d)}/**)`])];
-  return ["-p", prompt, "--setting-sources", "user", "--strict-mcp-config",
+  // No hooks: the run edits nothing, and the user's hooks (Imprimatur's own among them) would add their context to its answer.
+  return ["-p", prompt, "--setting-sources", "user", "--strict-mcp-config", "--settings", JSON.stringify({ disableAllHooks: true }),
     // One argument per rule: a rule is never split or joined on a comma.
     "--allowedTools", ...allow, "--disallowedTools", "Bash", "WebFetch", "WebSearch", "Task", "NotebookEdit",
     ...[...new Set(addDirs)].flatMap((d) => ["--add-dir", d]), "--output-format", "text"];

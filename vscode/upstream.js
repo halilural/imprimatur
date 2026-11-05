@@ -140,10 +140,13 @@ function applySkillUpdate(from, to, files, commit, note, day) {
   fs.writeFileSync(src, `${next.replace(/\n?$/, "\n")}${line}\n`);
 }
 
+/** The review's one-line summary, its last "SUMMARY:" line ("" without). @param {string} answer */
+const summaryOf = (answer) => ([...String(answer).matchAll(/^\s*\**SUMMARY:\**\s*(.+)$/gim)].at(-1)?.[1] ?? "").trim();
+
 /** The review's verdict, its last "VERDICT:" line: SAFE, or STOP with a reason. @param {string} answer */
 function verdictOf(answer) {
   const m = [...String(answer).matchAll(/^\s*\**VERDICT:\**\s*(SAFE|STOP)\b[:\s-]*(.*)$/gim)].at(-1);
   return m ? { safe: m[1].toUpperCase() === "SAFE", reason: m[2].trim() } : { safe: false, reason: "the review gave no verdict" };
 }
 
-module.exports = { readUpstream, checkUpstream, staleOf, fetchSkillFolder, applySkillUpdate, verdictOf, DAY };
+module.exports = { readUpstream, checkUpstream, staleOf, fetchSkillFolder, applySkillUpdate, verdictOf, summaryOf, DAY };
