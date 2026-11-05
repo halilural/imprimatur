@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.116.1",
+  "version": "0.117.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -390,6 +390,21 @@
         "icon": "$(sparkle)"
       },
       {
+        "command": "imprimatur.setup.installBaseline",
+        "title": "Install Baseline Item",
+        "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.setup.baselineOut",
+        "title": "Not in This Repo",
+        "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.setup.baselineBack",
+        "title": "Bring Back a Baseline Item",
+        "category": "Imprimatur"
+      },
+      {
         "command": "imprimatur.setup.hideSuggestion",
         "title": "Don't Suggest in This Repo",
         "category": "Imprimatur"
@@ -470,6 +485,18 @@
         },
         {
           "command": "imprimatur.setup.installSuggestion",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.setup.installBaseline",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.setup.baselineOut",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.setup.baselineBack",
           "when": "false"
         },
         {
@@ -649,6 +676,11 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "imprimatur.setup.baselineOut",
+          "when": "view == imprimatur.setup && viewItem == baseline",
+          "group": "2_hide@0"
+        },
         {
           "command": "imprimatur.setup.hideSuggestion",
           "when": "view == imprimatur.setup && viewItem =~ /^suggestion(Study)?$/",

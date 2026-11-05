@@ -308,7 +308,12 @@ class SetupView {
     this.installs = installChecksNow();
     this.budget = budgetRow(this.scopes.find((s) => !s.global)?.root);
     this.suggestions = this.suggestionsRow(this.scopes.find((s) => !s.global)?.root);
-    this.checklist = checklistOf(this.scopes, /** @type {any} */ (this.audit)?.open ?? 0, this.installs);
+    const repoRoot = this.scopes.find((s) => !s.global)?.root;
+    let baseline;
+    try {
+      baseline = repoRoot ? { root: repoRoot, items: require("./baseline.js").baselineOf(repoRoot, { trusted: vscode.workspace.isTrusted }) } : undefined;
+    } catch {}
+    this.checklist = checklistOf(this.scopes, /** @type {any} */ (this.audit)?.open ?? 0, this.installs, baseline);
     this.onScanned?.(this.checklist.count);
     this.extras();
     if (this.view) this.view.badge = fresh ? { value: fresh, tooltip: `${fresh} agent setup change${fresh === 1 ? "" : "s"} since you last looked` } : undefined;
@@ -795,6 +800,79 @@ async function restoreSuggestions(provider, root) {
 }
 
 /**
+ * A baseline item (#141), after a confirmation: a plugin installed (its marketplace added first
+ * when Claude Code does not know it) or turned on at user scope with Claude Code's CLI in a
+ * terminal; a skill downloaded from its GitHub repo (GET only) into ~/.claude/skills with a
+ * SOURCE.txt that names its source, commit and license and that Imprimatur installed it.
+ * @param {SetupView} provider @param {{root: string, item: any}} arg
+ */
+async function installBaseline(provider, arg) {
+  const it = arg?.item;
+  if (!it || typeof arg.root !== "string") return;
+  const warn = it.warn ? `\n\n⚠ ${it.warn}.` : "";
+  if (it.kind === "skill") {
+    const repo = String(it.repo ?? "");
+    const name = repo.split("/")[1] ?? "";
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !/^[\w.-]+$/.test(name)) return;
+    const dest = path.join(os.homedir(), ".claude", "skills", name);
+    if (fs.existsSync(dest)) return void vscode.window.showInformationMessage(`Imprimatur: ~/.claude/skills/${name} already exists; it is left as it is.`);
+    const ok = await vscode.window.showWarningMessage(`Install the ${name} skill for every repo?`, { modal: true,
+      detail: `${it.why}.${warn}\n\nDownloads github.com/${repo} at its newest commit into ~/.claude/skills/${name} (GET requests only), with a SOURCE.txt for the upstream check (#140). Read SKILL.md after: a skill's text goes straight into the agent's context.` }, "Install");
+    if (ok !== "Install") return;
+    try {
+      const up = require("./upstream.js");
+      const gh = (/** @type {string} */ e) => new Promise((resolve, reject) => require("node:child_process").execFile("gh", ["api", e], { timeout: 20_000 }, (err, out) => (err ? reject(err) : resolve(JSON.parse(out)))));
+      const meta = /** @type {any} */ (await gh(`repos/${repo}`));
+      const head = /** @type {any} */ (await gh(`repos/${repo}/commits/${encodeURIComponent(meta.default_branch ?? "HEAD")}`));
+      const sha = String(head.sha ?? "");
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), `imprimatur-baseline-${name}-`));
+      await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Imprimatur: downloading ${name}…` }, () => up.fetchSkillFolder({ repo, path: "" }, sha, tmp));
+      if (!fs.existsSync(path.join(tmp, "SKILL.md"))) throw new Error("the repo has no SKILL.md at its root");
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.cpSync(tmp, dest, { recursive: true, errorOnExist: true, force: false });
+      fs.rmSync(tmp, { recursive: true, force: true });
+      fs.writeFileSync(path.join(dest, "SOURCE.txt"), `source: https://github.com/${repo}\ncommit: ${sha.slice(0, 7)}\nlicense: ${String(meta.license?.spdx_id ?? "unknown")}\ninstalled: ${new Date().toISOString().slice(0, 10)} by Imprimatur's baseline (#141)\n`);
+      provider.refresh();
+      vscode.window.showInformationMessage(`Imprimatur: ${name} is in ~/.claude/skills from the next Claude Code session.`, "Open SKILL.md").then((p) => p && vscode.window.showTextDocument(vscode.Uri.file(path.join(dest, "SKILL.md"))));
+    } catch (e) {
+      vscode.window.showErrorMessage(`Imprimatur: could not install ${name}: ${e instanceof Error ? e.message : e}`);
+    }
+    return;
+  }
+  const id = String(it.target ?? it.id ?? "");
+  if (!/^[\w.-]+@[\w.-]+$/.test(id)) return;
+  const markets = JSON.parse(safeRead(path.join(os.homedir(), ".claude", "plugins", "known_marketplaces.json")) || "{}");
+  const market = id.split("@")[1];
+  const add = !markets[market] && /^[\w.-]+\/[\w.-]+$/.test(String(it.market ?? "")) ? `claude plugin marketplace add ${it.market} && ` : "";
+  const cmd = it.state === "enable" ? `claude plugin enable ${id} --scope user` : `${add}claude plugin install ${id} --scope user`;
+  const ok = await vscode.window.showWarningMessage(`${it.state === "enable" ? "Turn on" : "Install"} ${id} for every repo?`, { modal: true,
+    detail: `${it.why}.${warn}\n\nRuns in a terminal: ${cmd}\nA repo that should not have it: the row's menu → Not in This Repo. Restart Claude Code sessions afterwards.` }, it.state === "enable" ? "Turn on" : "Install");
+  if (!ok) return;
+  const t = vscode.window.createTerminal({ name: `Imprimatur baseline: ${id}`, cwd: arg.root });
+  t.show();
+  t.sendText(cmd);
+}
+
+/** Opts this repo out of a baseline item (#141). @param {SetupView} provider @param {any} node a baseline row */
+function baselineOut(provider, node) {
+  if (typeof node?.repoRoot !== "string" || typeof node?.baselineKey !== "string") return;
+  require("./baseline.js").setOptOut(node.repoRoot, node.baselineKey, true);
+  provider.refresh();
+}
+
+/** Brings a baseline item back into this repo: a pick among the ones it is out of. @param {SetupView} provider @param {{root: string, items: any[]}} arg */
+async function baselineBack(provider, arg) {
+  const own = (arg?.items ?? []).filter((b) => require("./baseline.js").optedOut(arg.root).includes(b.key));
+  const byRepo = (arg?.items ?? []).filter((b) => !own.includes(b));
+  if (!own.length)
+    return void vscode.window.showInformationMessage(`Imprimatur: ${byRepo.map((b) => b.label).join(", ")} ${byRepo.length === 1 ? "is" : "are"} turned off in this repo's .claude settings (enabledPlugins); turn ${byRepo.length === 1 ? "it" : "them"} on there.`);
+  const pick = await vscode.window.showQuickPick(own.map((b) => ({ label: b.label, description: b.why, key: b.key })), { placeHolder: "Bring back into this repo's baseline" });
+  if (!pick) return;
+  require("./baseline.js").setOptOut(arg.root, pick.key, false);
+  provider.refresh();
+}
+
+/**
  * Install a suggested plugin for one repo (#143), after a confirmation that shows the vetting:
  * Claude Code's own `claude plugin install --scope project`, in a terminal in that repo.
  * @param {any} node a Suggested row
@@ -1002,6 +1080,9 @@ function registerSetupView(ctx, roots, counts) {
         vscode.env.openExternal(vscode.Uri.parse(url));
       } else lastClick = { url, at: now };
     }),
+    vscode.commands.registerCommand("imprimatur.setup.installBaseline", (arg) => installBaseline(provider, arg)),
+    vscode.commands.registerCommand("imprimatur.setup.baselineOut", (node) => baselineOut(provider, node ?? view.selection[0])),
+    vscode.commands.registerCommand("imprimatur.setup.baselineBack", (arg) => baselineBack(provider, arg)),
     vscode.commands.registerCommand("imprimatur.setup.rankSuggestions", () => rankSuggestions(provider)),
     vscode.commands.registerCommand("imprimatur.setup.hideSuggestion", (node) => hideSuggestion(provider, node ?? view.selection[0], false)),
     vscode.commands.registerCommand("imprimatur.setup.hideSuggestionEverywhere", (node) => hideSuggestion(provider, node ?? view.selection[0], true)),
