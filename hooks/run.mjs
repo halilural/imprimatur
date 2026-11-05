@@ -85,6 +85,12 @@ export async function dispatch(data, argv = []) {
       } else if (step === "process") {
         const { check, reply } = require("../vscode/process.js");
         outs.push(reply(event, check(event, data)));
+      } else if (step === "ondemand") {
+        // A technology the prompt names and nothing installed covers (#144): the candidates for the agent.
+        if (child || process.env.IMPRIMATUR_ON_DEMAND === "off") continue;
+        const root = require("../vscode/process.js").repoOf(data.cwd ?? process.cwd());
+        const context = root ? require("../vscode/on-demand.js").onDemand(String(data.prompt ?? "").slice(0, 8000), root) : "";
+        if (context) outs.push({ stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: context } }) });
       } else if (step === "activity") {
         if (child) continue;
         const { repoOf } = require("../vscode/process.js");

@@ -13,7 +13,7 @@ const recordWrite = (t) => imprimaturTool(t) && /__(?:task_upsert|record_add|rec
 const oneOf = (names) => (/** @type {string} */ t) => names.includes(t);
 
 /**
- * @typedef {"baseline" | "waiting" | "mcp" | "process" | "activity"} Work
+ * @typedef {"baseline" | "waiting" | "mcp" | "process" | "activity" | "ondemand"} Work
  * @typedef {{work: Work, tools?: (tool: string) => boolean}} Step
  */
 /** Per event, the work in order; `tools` limits a step to some tools (tool events only). @type {Record<string, Step[]>} */
@@ -32,7 +32,7 @@ const PLAN = {
   PostToolUseFailure: [{ work: "baseline", tools: oneOf(["Bash"]) }],
   PermissionRequest: [{ work: "waiting" }],
   Notification: [{ work: "waiting" }],
-  UserPromptSubmit: [{ work: "waiting" }],
+  UserPromptSubmit: [{ work: "waiting" }, { work: "ondemand" }],
   SessionStart: [{ work: "process" }],
   Stop: [{ work: "waiting" }, { work: "process" }],
 };
