@@ -66,16 +66,24 @@ function filesUnder(dir) {
   return out;
 }
 
-/** The times of the agent edits marked for review: one history line each, the archive's too. @param {string} data the repo's data folder @param {number} since */
-function editTimes(data, since) {
-  const files = [...filesUnder(path.join(data, "history"))];
+/**
+ * The agent edits marked for review: one history line each, the archive's too, as their time
+ * and the repo file they changed (the history file's path under history/, without .jsonl).
+ * @param {string} data the repo's data folder @param {number} since @returns {Array<{t: number, file: string}>}
+ */
+function editsOf(data, since) {
+  /** @type {Array<{base: string, f: string}>} */
+  const files = filesUnder(path.join(data, "history")).map((f) => ({ base: path.join(data, "history"), f }));
   let days = [];
   try {
     days = fs.readdirSync(path.join(data, "archive"));
   } catch {}
   // An archive day is named by when it was archived: only the days that can hold the range.
-  for (const day of days) if (Date.parse(day) > since - DAY) files.push(...filesUnder(path.join(data, "archive", day, "history")));
-  return files.filter((f) => /\.jsonl(\.gz)?$/.test(f)).flatMap((f) => cachedRead(f, (text) => text.split("\n").map((l) => Date.parse(/"t":"([^"]+)"/.exec(l)?.[1] ?? "")).filter(Boolean)) ?? []);
+  for (const day of days) if (Date.parse(day) > since - DAY) files.push(...filesUnder(path.join(data, "archive", day, "history")).map((f) => ({ base: path.join(data, "archive", day, "history"), f })));
+  return files.filter((x) => /\.jsonl(\.gz)?$/.test(x.f)).flatMap(({ base, f }) => {
+    const file = path.relative(base, f).replace(/\.jsonl(\.gz)?$/, "").split(path.sep).join("/");
+    return (cachedRead(f, (text) => text.split("\n").map((l) => Date.parse(/"t":"([^"]+)"/.exec(l)?.[1] ?? "")).filter(Boolean)) ?? []).map((t) => ({ t, file }));
+  });
 }
 
 /** Turn-end asks: the live logs and the archived ones; the same item in both counts once. @param {string} root @param {string} data @param {number} since */
@@ -118,7 +126,7 @@ const median = (xs) => {
 /**
  * The repo's per-day series for the days ending today (#150).
  * @param {string} root the repo @param {{days?: number, now?: number, db?: any}} [o]
- * @returns {{days: string[], series: Record<string, number[]>, answerHours: Array<number | undefined>, answered: Array<{t: number, hours: number}>, open: number, waiting: number, hooks: any[], sessionList: any[]}}
+ * @returns {{days: string[], series: Record<string, number[]>, answerHours: Array<number | undefined>, answered: Array<{t: number, hours: number}>, open: number, waiting: number, hooks: any[], sessionList: any[], editsByFile: Array<{file: string, n: number}>, tasks: any[]}}
  */
 function statsOf(root, { days = 7, now = Date.now(), db } = {}) {
   db ??= require("./db.js").openDb();
@@ -148,7 +156,13 @@ function statsOf(root, { days = 7, now = Date.now(), db } = {}) {
     add("records", r.created_at);
     if (["adr", "pdr", "decision"].includes(r.kind)) add("decisions", r.created_at);
   }
-  for (const t of editTimes(data, since)) add("edits", t);
+  /** Edits per repo file in the range, most first (#152). @type {Map<string, number>} */
+  const byFile = new Map();
+  for (const e of editsOf(data, since)) {
+    add("edits", e.t);
+    if (e.t >= since && e.t <= now) byFile.set(e.file, (byFile.get(e.file) ?? 0) + 1);
+  }
+  const editsByFile = [...byFile].sort((a, b) => b[1] - a[1]).map(([file, n]) => ({ file, n }));
   const asks = askItems(root, data, since);
   for (const a of asks) add("asks", Date.parse(a.t));
   const answered = asks.filter((a) => !a.open && a.answeredAt).map((a) => ({ t: Date.parse(a.t), hours: (Date.parse(a.answeredAt) - Date.parse(a.t)) / 3_600_000 })).filter((a) => a.hours >= 0);
@@ -212,7 +226,7 @@ function statsOf(root, { days = 7, now = Date.now(), db } = {}) {
   const home = require("node:os").homedir();
   const hooks = require("./session-context.js").sessionItems(path.join(home, ".claude", "projects", projectSlug(gitRootOf(root))), home).filter((/** @type {any} */ r) => r.kind === "hook output");
   sessionList.sort((a, b) => b.last - a.last);
-  return { days: list, series, answerHours, answered, open, waiting, hooks, sessionList };
+  return { days: list, series, answerHours, answered, open, waiting, hooks, sessionList, editsByFile, tasks };
 }
 
 module.exports = { statsOf, dayOf, median, cachedRead, DAY };

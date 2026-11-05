@@ -87,6 +87,21 @@ const LOADING = (cols) => `<tr class="loading"><td colspan="${cols}" class="empt
 
 const { THEME_CSS } = require("./theme.js");
 const { mascot } = require("./mascot.js");
+/**
+ * Agent changes' analytics (#152): edits per day, the files edited most and the last session's
+ * hooks, in the board style, folded into a <details>; "" when they cannot be read.
+ * @param {string} root
+ */
+function editsAnalytics(root) {
+  try {
+    const board = require("./board.js");
+    const s = require("./stats.js").statsOf(root, { days: 30 });
+    return `<details class="bdet" data-k="bdet-edits" open><summary>Agent changes, last 30 days</summary>${board.editsPanel(s)}${board.hooksPanel(s.hooks)}</details>`;
+  } catch {
+    return "";
+  }
+}
+
 /** The panel's tabs: key (also its icon) and label. */
 // No Waiting on you tab: a task's asks are on its page, the ones with no task on Home (its badge counts them all).
 const TAB_BUTTONS = [["home", "Home"], ["tasks", "Tasks"], ["analysis", "Analysis"], ["exercises", "Exercises"], ["edits", "Agent changes"]];
@@ -346,7 +361,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
 <header class="appbar"><span class="brand">${mascot(26)}<strong>Imprimatur</strong><span class="repo">${esc(opts.repoName ?? path.basename(root))}</span></span>
 <nav class="tabs" aria-label="Views">${TAB_BUTTONS.map(([t, label]) => `<button data-tab="${t}">${tasksView.icon(/** @type {any} */ (t), 15)}${label}${t === "home" && inbox ? ` <span class="badge" title="${inbox} waiting on you">${inbox}</span>` : t === "edits" && pending ? ` <span class="badge">${pending}</span>` : ""}</button>`).join("")}</nav>
 <span class="tools-r"><label class="searchbox">${tasksView.icon("search", 14)}<input id="filter" type="search" aria-label="Search" placeholder="Search… (/)"></label><button id="audit" class="tbtn" hidden title="Haiku reviews the open list: closes what is done, answered or asked again">${tasksView.icon("audit", 14)}Audit</button><button id="scan" class="tbtn" hidden title="Find what waited on you before Imprimatur was set up: past Claude sessions (last 30 days) and (K) to-dos in TODO.md">${tasksView.icon("scan", 14)}Scan history</button></span></header>
-<section id="edits"${tab === "edits" ? "" : " hidden"}><div class="ehead"><div id="kinds">${chips}</div><span class="n" id="count-edits">${data.rows.filter((r) => !r.record && !r.activity).length} edits · ${data.rows.filter((r) => r.activity).length} other calls · ${data.rows.filter((r) => r.record).length} record changes · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span></div><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><div class="etable"><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
+<section id="edits"${tab === "edits" ? "" : " hidden"}><div id="eana">${tab === "edits" ? editsAnalytics(root) : ""}</div><div class="ehead"><div id="kinds">${chips}</div><span class="n" id="count-edits">${data.rows.filter((r) => !r.record && !r.activity).length} edits · ${data.rows.filter((r) => r.activity).length} other calls · ${data.rows.filter((r) => r.record).length} record changes · ${pending} under review · ${data.lanes.filter((l) => l.task).length} tasks</span></div><div class="legend"><span><span class="badge-open">●</span> under review</span><span><span class="badge-ok">✓</span> accepted</span><span><span class="badge-gone">replaced</span> later edits rewrote or removed all of it</span></div><div class="etable"><table><thead><tr><th>Status</th>${lanes ? "<th>Graph</th>" : ""}<th>Description</th><th>Task</th><th>File</th><th>Date</th><th>Session</th><th>Changes</th></tr></thead>
 <tbody>${body}</tbody></table></div>
 <script type="application/json" id="rows">${`{${(tab === "edits" ? drawnRows : []).map((r, i) => `\n${JSON.stringify(String(rid(i)))}:${JSON.stringify(r.preview ? { prompt: r.prompt && `Request: ${r.prompt}`, preview: r.preview, file: r.file, n: r.n, md: /\.mdx?$/i.test(r.file) } : null)}`).join(",")}\n}`.replace(/</g, "\\u003c")}</script></section>
 <section id="pane" data-tab="${tab}"${tab === "edits" ? " hidden" : ""}>${tab === "edits" ? '<p class="empty loading" data-k="loading">Loading…</p>' : opts.pane ?? ""}</section>
@@ -1036,7 +1051,8 @@ ${require("./board.js").BOARD_SCRIPT}
     const doc = new DOMParser().parseFromString(next, "text/html");
     next = undefined;
     const t1 = performance.now();
-    for (const sel of ["nav", "#audit", "#scan", "#count-edits", "#edits thead"]) {
+    // #eana: Agent changes' analytics (#152), drawn when that tab is the one rendered.
+    for (const sel of ["nav", "#audit", "#scan", "#count-edits", "#edits thead", "#eana"]) {
       const fresh = doc.querySelector(sel);
       if (fresh && html(fresh) !== drawn.get(sel)) {
         drawn.set(sel, html(fresh));

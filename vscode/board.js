@@ -115,6 +115,92 @@ function boardHtml(b) {
 <div class="grid2 bgrid" data-k="bgrid">${table}${heat}</div><script type="application/json" id="board-data">${data}</script></div>`;
 }
 
+
+/**
+ * Vertical bars, one per label, an optional line over them (another series on its own scale).
+ * @param {string[]} labels @param {number[]} bars @param {{line?: number[], w?: number, h?: number, every?: number}} [o]
+ */
+function barsSvg(labels, bars, { line, w = 520, h = 120, every = 1 } = {}) {
+  const n = bars.length;
+  if (!n) return "";
+  const max = Math.max(...bars, 0) || 1;
+  const bw = w / n;
+  const rects = bars.map((v, i) => {
+    const bh = (v / max) * (h - 22);
+    return `<rect x="${(i * bw + bw * 0.15).toFixed(1)}" y="${(h - 16 - bh).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${bh.toFixed(1)}" rx="2" class="bb"><title>${esc(labels[i])}: ${v}</title></rect>`;
+  }).join("");
+  // The last label ends at the right edge, the first starts at the left: none is cut.
+  const anchor = (/** @type {number} */ i) => (i === n - 1 ? "end" : i === 0 ? "start" : "middle");
+  const tx = (/** @type {number} */ i) => (i === n - 1 ? w : i === 0 ? 0 : i * bw + bw / 2);
+  const text = labels.map((l, i) => (i % every === 0 || i === n - 1 ? `<text x="${tx(i).toFixed(1)}" y="${h - 3}" text-anchor="${anchor(i)}">${esc(l)}</text>` : "")).join("");
+  let path = "";
+  if (line?.length === n) {
+    const lm = Math.max(...line, 0) || 1;
+    path = `<path class="bl" d="${line.map((v, i) => `${i ? "L" : "M"}${(i * bw + bw / 2).toFixed(1)},${(h - 16 - (v / lm) * (h - 22)).toFixed(1)}`).join("")}"/>`;
+  }
+  return `<svg class="bars" viewBox="0 0 ${w} ${h}" role="img">${rects}${path}${text}</svg>`;
+}
+
+/** A Monday-started week's label, "Nov 3". @param {number} t */
+const weekLabel = (t) => new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+
+/**
+ * Tasks (#152): the last 12 weeks, tasks done each week (bars) and the tasks still open at
+ * each week's end (the line), from when each was opened and finished.
+ * @param {Array<{status: string, created_at: number, done_at?: number | null, updated_at: number}>} tasks @param {number} [now]
+ */
+function tasksPanel(tasks, now = Date.now()) {
+  const d = new Date(now);
+  const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7)).getTime();
+  const weeks = Array.from({ length: 12 }, (_, i) => monday - (11 - i) * 7 * 86_400_000);
+  const closedAt = (/** @type {any} */ t) => (t.status === "done" ? t.done_at ?? t.updated_at : t.status === "dropped" ? t.updated_at : Infinity);
+  const done = weeks.map((w) => tasks.filter((t) => t.status === "done" && closedAt(t) >= w && closedAt(t) < w + 7 * 86_400_000).length);
+  const open = weeks.map((w) => tasks.filter((t) => t.created_at < w + 7 * 86_400_000 && closedAt(t) >= w + 7 * 86_400_000).length);
+  const total = done.reduce((a, b) => a + b, 0);
+  return `<section class="card banal" data-k="ana-tasks" aria-label="Tasks over time"><h2 class="cap row"><span>Done per week · open at the week's end</span><span class="dim">${total} done in 12 weeks · ${open[open.length - 1]} open now</span></h2>${barsSvg(weeks.map(weekLabel), done, { line: open, every: 2 })}<div class="hlegend dim"><i class="lg-b"></i> done that week <i class="lg-l"></i> open at its end</div></section>`;
+}
+
+/**
+ * Agent changes (#152): the agent's edits marked for review per day (30 days) and the files
+ * edited most.
+ * @param {{days: string[], series: Record<string, number[]>, editsByFile: Array<{file: string, n: number}>}} s
+ */
+function editsPanel(s) {
+  const xs = (s.series.edits ?? []).slice(-30), ds = s.days.slice(-30);
+  const top = s.editsByFile.slice(0, 8);
+  const max = top[0]?.n || 1;
+  const files = top.map((f) => `<div class="tf"><span class="mono" title="${esc(f.file)}">${esc(f.file)}</span><span class="tbar"><i style="width: ${Math.max(4, Math.round((f.n / max) * 100))}%"></i></span><span class="n">${f.n}</span></div>`).join("") || '<p class="empty">No agent edits in this range.</p>';
+  return `<div class="grid2 banalg" data-k="ana-edits"><section class="card banal" aria-label="Edits per day"><h2 class="cap row"><span>Agent edits per day</span><span class="dim">${xs.reduce((a, b) => a + b, 0)} in 30 days</span></h2>${barsSvg(ds.map((x) => x.slice(5)), xs, { every: 5 })}</section><section class="card banal" aria-label="Files edited most"><h2 class="cap row"><span>Files edited most</span><span class="dim">${s.days.length} days</span></h2>${files}</section></div>`;
+}
+
+/**
+ * The last session's hooks (#152, from the Context budget's numbers, #29/#145): time each and
+ * what each adds to the context.
+ * @param {Array<{label: string, summary: string, tokens?: number}>} hooks
+ */
+function hooksPanel(hooks) {
+  if (!hooks.length) return "";
+  const ms = (/** @type {string} */ sum) => Number(/(\d+) ms each/.exec(sum)?.[1] ?? 0);
+  const max = Math.max(...hooks.map((h) => ms(h.summary)), 1);
+  const rows = hooks.slice(0, 8).map((h) => `<div class="tf"><span title="${esc(h.label)}">${esc(h.label)}</span><span class="tbar"><i style="width: ${Math.max(4, Math.round((ms(h.summary) / max) * 100))}%"></i></span><span class="n dim">${esc(h.summary.replace(/^.*?·\s*/, ""))}</span></div>`).join("");
+  return `<section class="card banal" data-k="ana-hooks" aria-label="Hooks"><h2 class="cap row"><span>Hooks, last session</span><span class="dim">runs that left output · ms each · what they add</span></h2>${rows}</section>`;
+}
+
+/**
+ * Analysis (#152): the design documents' sections per chapter, an empty chapter marked.
+ * @param {Array<{kind: string, chapter: string | null, n: number}>} counts sections per document and chapter
+ * @param {Record<string, string[]>} chapters each document's chapters, in order
+ */
+function docsPanel(counts, chapters) {
+  const docs = Object.entries(chapters).map(([kind, list]) => {
+    const n = (/** @type {string} */ ch) => counts.find((c) => c.kind === kind && c.chapter === ch)?.n ?? 0;
+    const max = Math.max(...list.map(n), 1);
+    const empty = list.filter((ch) => !n(ch)).length;
+    return `<section class="card banal" aria-label="${esc(kind)}"><h2 class="cap row"><span>${esc(kind[0].toUpperCase() + kind.slice(1))}: sections per chapter</span><span class="dim">${empty ? `${empty} empty` : "every chapter has sections"}</span></h2>${list.map((ch) => `<div class="tf${n(ch) ? "" : " none"}"><span>${esc(ch)}</span><span class="tbar"><i style="width: ${n(ch) ? Math.max(4, Math.round((n(ch) / max) * 100)) : 0}%"></i></span><span class="n">${n(ch) || "empty"}</span></div>`).join("")}</section>`;
+  }).join("");
+  return `<div class="grid2 banalg" data-k="ana-docs">${docs}</div>`;
+}
+
 const BOARD_CSS = `
   .board { display: flex; flex-direction: column; gap: 14px; }
   .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
@@ -139,7 +225,17 @@ const BOARD_CSS = `
   .heat .h3, .hlegend .h3 { fill: color-mix(in srgb, var(--acc) 78%, transparent); background: color-mix(in srgb, var(--acc) 78%, transparent); }
   .heat .h4, .hlegend .h4 { fill: var(--acc); background: var(--acc); }
   .hlegend { display: flex; align-items: center; gap: 3px; font-size: var(--fs-xs); margin-top: 6px; } .hlegend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-  @media (max-width: 760px) { .bgrid { grid-template-columns: 1fr; } }
+  .bdet { margin: 0 0 14px; } .bdet > summary { cursor: pointer; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; color: var(--muted); padding: 6px 0; }
+  .bdet[open] > summary { margin-bottom: 8px; }
+  .banal { padding: 12px; } .banalg { margin-bottom: 14px; } section.banal { margin-bottom: 14px; } .banalg section.banal { margin-bottom: 0; }
+  .bars { width: 100%; height: auto; max-height: 200px; display: block; }
+  .banal h2.cap.row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; } .bars .bb { fill: var(--acc); opacity: .85; } .bars .bl { fill: none; stroke: var(--info); stroke-width: 2; } .bars text { fill: var(--muted); font-size: 8px; }
+  .hlegend .lg-b { background: var(--acc); } .hlegend .lg-l { background: var(--info); height: 3px; }
+  .tf { display: grid; grid-template-columns: minmax(0, 2fr) minmax(60px, 2fr) auto; gap: 8px; align-items: center; padding: 3px 0; font-size: var(--fs-sm); }
+  .tf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .tf .n { font-family: var(--mono, inherit); text-align: right; }
+  .tbar { height: 6px; background: var(--b-hover, var(--line)); border-radius: 3px; overflow: hidden; } .tbar i { display: block; height: 100%; background: var(--acc); }
+  .tf.none > span:first-child, .tf.none .n { color: var(--warn); }
+  @media (max-width: 760px) { .bgrid, .banalg { grid-template-columns: 1fr; } }
 `;
 
 /**
@@ -172,4 +268,4 @@ const BOARD_SCRIPT = `
   }
 `;
 
-module.exports = { boardModel, boardHtml, sparkline, heatmap, delta, fmtValue, BOARD_CSS, BOARD_SCRIPT, RANGE_DAYS, METRICS };
+module.exports = { barsSvg, tasksPanel, editsPanel, hooksPanel, docsPanel, boardModel, boardHtml, sparkline, heatmap, delta, fmtValue, BOARD_CSS, BOARD_SCRIPT, RANGE_DAYS, METRICS };
