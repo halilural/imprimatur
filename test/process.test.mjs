@@ -170,8 +170,14 @@ test("SessionStart: the repo's tasks and their 👉 from the database", () => {
   assert.match(r.context[0], /Where we left off[\s\S]*- #56 Process \[active\] 👉 process\.mjs \(2 open\)/);
   const long = { ...records, dbOf: () => ({ whereWeLeftOff: () => Array.from({ length: 15 }, (_, i) => ({ key: `#${i}`, title: "t".repeat(500), status: "active", pointer_title: "p".repeat(500) })) }) };
   const big = check("SessionStart", { cwd: root }, { records: long }).context[0];
-  assert.ok(big.length <= 4100, `${big.length} characters`);
-  assert.match(big, /t{79}…/);
+  assert.ok(big.length <= 1500, `${big.length} characters: short enough for every session start (#29)`);
+  assert.match(big, /t{59}…/);
+  assert.match(big, /\(7 more open tasks: where_we_left_off lists them all\.\)$/, "at most 8 listed");
+  const mixed = { ...records, dbOf: () => ({ whereWeLeftOff: () => [{ key: "#1", title: "Idle epic", status: "open" }, { key: "#2", title: "Busy", status: "open", pointer_title: "next" }] }) };
+  const m = check("SessionStart", { cwd: root }, { records: mixed }).context[0];
+  assert.match(m, /- #2 Busy \[open\] 👉 next/);
+  assert.doesNotMatch(m, /Idle epic/, "a task with no work in hand is left to the count");
+  assert.match(m, /\(1 more open task: /);
 });
 
 test("bypasses: real flags only, not quoted text, heredocs or other tools", () => {

@@ -408,12 +408,18 @@ function check(event, input, deps = {}) {
     const cut = (t, n) => (t && t.length > n ? `${t.slice(0, n - 1)}…` : t);
     const lines = ["Where we left off (Imprimatur; read and write records with the imprimatur MCP tools; task_get for a task's records):"];
     let size = lines[0].length;
-    for (const t of tasks.slice(0, 15)) {
-      const line = `- ${t.key}${t.title ? ` ${cut(t.title, 80)}` : ""} [${t.status}]${t.pointer_title ? ` 👉 ${cut(t.pointer_title, 100)}` : ""}${t.open_records ? ` (${t.open_records} open)` : ""}`;
+    // Context budget (#29): this goes into every session start, so only the tasks with work in
+    // hand (a 👉 or active), short; the rest is one line, and where_we_left_off lists all.
+    const busy = tasks.filter((/** @type {any} */ t) => t.pointer_title || t.status === "active");
+    const shown = (busy.length ? busy : tasks).slice(0, 8);
+    for (const t of shown) {
+      const line = `- ${t.key}${t.title ? ` ${cut(t.title, 60)}` : ""} [${t.status}]${t.pointer_title ? ` 👉 ${cut(t.pointer_title, 80)}` : ""}${t.open_records ? ` (${t.open_records} open)` : ""}`;
       if (size + line.length > 4000) break;
       lines.push(line);
       size += line.length + 1;
     }
+    const more = tasks.length - (lines.length - 1);
+    if (more > 0) lines.push(`(${more} more open task${more === 1 ? "" : "s"}: where_we_left_off lists them all.)`);
     context.push(tasks.length ? lines.join("\n") : "No unfinished tasks in Imprimatur for this repo. Record work with the imprimatur MCP tools (task_upsert, record_add, pointer_set).");
     // Design documents that need attention (#74): records no section links, conflicts with the file.
     try {
