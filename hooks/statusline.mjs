@@ -16,6 +16,8 @@
 // hooks and the MCP server), and a version other than the extension's is flagged: "⚠ 0.73.0 ≠
 // extension 0.75.0".
 //
+// #149: it also keeps the session's cost, time, lines and tokens (vscode/sessions.js).
+//
 // Never fails: any error prints nothing and exits 0.
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -99,6 +101,10 @@ function main() {
   const root = repoOf(dir);
   if (!root) return;
   const session = typeof input.session_id === "string" ? input.session_id : undefined;
+  // #149: the session's cost, time, lines and tokens, its row kept current.
+  try {
+    require("../vscode/sessions.js").recordSession(root, input);
+  } catch {}
   const id = crypto.createHash("sha1").update(`${root}\0${session ?? ""}\0${process.env.IMPRIMATUR_DB ?? ""}\0${plain}`).digest("hex").slice(0, 16);
   const file = path.join(os.tmpdir(), `imprimatur-statusline-${id}.json`);
   let line = cached(file);
