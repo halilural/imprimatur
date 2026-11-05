@@ -18,6 +18,28 @@ const read = (f) => {
   }
 };
 
+/**
+ * Whether a file may be written for a repo (#133): inside it, with no symbolic link on the way,
+ * the file itself included. A repo can plant a link (.claude/rules → elsewhere, a dangling
+ * AGENTS.md) to make a write land outside it.
+ * @param {string} root @param {string} file
+ */
+function safeTarget(root, file) {
+  const base = path.resolve(root), target = path.resolve(file);
+  const rel = path.relative(base, target);
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return false;
+  let cur = base;
+  for (const part of rel.split(path.sep)) {
+    cur = path.join(cur, part);
+    try {
+      if (fs.lstatSync(cur).isSymbolicLink()) return false;
+    } catch {
+      return true; // the rest does not exist yet: mkdir makes plain folders
+    }
+  }
+  return true;
+}
+
 /** Whether a CLAUDE.md imports AGENTS.md: a line that is `@AGENTS.md` (or `@./AGENTS.md`). @param {string | undefined} text */
 const importsAgents = (text) => /^\s*@(?:\.\/)?AGENTS\.md\s*$/m.test(text ?? "");
 
@@ -82,10 +104,13 @@ function writeMissing(root) {
   const written = [];
   /** @param {string} f @param {string} text */
   const put = (f, text) => {
-    if (fs.existsSync(f)) return;
+    if (!safeTarget(root, f)) return;
     fs.mkdirSync(path.dirname(f), { recursive: true });
-    fs.writeFileSync(f, text, { flag: "wx" });
-    written.push(f);
+    // O_EXCL: an existing file, or a dangling link, is never written through.
+    try {
+      fs.writeFileSync(f, text, { flag: "wx" });
+      written.push(f);
+    } catch {}
   };
   if (!s.claude && !s.agents) {
     put(s.agentsFile, AGENTS_TEMPLATE);
@@ -115,4 +140,4 @@ function agentRows(s) {
   return rows;
 }
 
-module.exports = { agentFiles, importsAgents, writeMissing, agentRows, AGENTS_TEMPLATE, CLAUDE_TEMPLATE, DOCS_RULE };
+module.exports = { safeTarget, agentFiles, importsAgents, writeMissing, agentRows, AGENTS_TEMPLATE, CLAUDE_TEMPLATE, DOCS_RULE };
