@@ -4,6 +4,18 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.109.0] - 2026-11-05
+
+### Added
+- First run (#81): a Get Started walkthrough that opens once. It checks the install, shows
+  the agent's first edit, Agent Setup with the audit, and tasks and records.
+- Imprimatur: Check Setup looks for the Claude Code CLI, the hooks, the MCP server (from the
+  plugin or `npm run setup`) and the database, then says what is missing and how to fix it.
+  When nothing is missing, it says so. A missing part also comes first in Agent Setup's
+  Checklist, with its fix.
+- The empty states guide you: no database (run Check Setup or reload), no folder open (open
+  the repo you work on), and no agent edits yet (ask Claude Code to edit a Markdown file).
+
 ## [0.108.0] - 2026-11-05
 
 ### Added

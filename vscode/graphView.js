@@ -245,7 +245,7 @@ function html(data, root, nonce, waiting = [], opts = {}) {
 </tr>`,
         )
         .join("\n") + more
-    : `<tr><td colspan="8" class="empty">No agent edits recorded in ${esc(root)} yet.</td></tr>`;
+    : `<tr><td colspan="8" class="empty">No agent edits recorded in ${esc(root)} yet. Ask Claude Code to edit a Markdown file here: the edit shows up in this list and stays marked in the editor until you accept it.</td></tr>`;
   const pending = data.rows.filter((r) => !r.accepted).length;
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'${opts.mermaid ? ` ${esc(opts.mermaid.csp)}` : ""};${opts.mermaid ? ` img-src ${esc(opts.mermaid.csp)};` : ""} form-action 'none'; base-uri 'none';">

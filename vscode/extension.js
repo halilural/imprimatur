@@ -268,7 +268,7 @@ function graphRoot() {
 function showGraph(at) {
   // A task of a repo not open in this window shows in this window's panel (with every repo on).
   const root = (at?.root && roots.has(norm(at.root)) ? at.root : undefined) ?? graphRoot();
-  if (!root) return void vscode.window.showInformationMessage("Imprimatur: no folder open.");
+  if (!root) return void vscode.window.showInformationMessage("Imprimatur: open a folder first, the repo you work on with Claude Code (File → Open Folder).");
   openGraph(root, openEditDiff, currentText, acceptEditOf, goToEdit, renderEdit, undefined, at);
 }
 
@@ -301,7 +301,7 @@ let bestRunning = false;
  */
 async function runBestPractices() {
   const root = graphRoot();
-  if (!root) return void vscode.window.showInformationMessage("Imprimatur: no folder open.");
+  if (!root) return void vscode.window.showInformationMessage("Imprimatur: open a folder first, the repo you work on with Claude Code (File → Open Folder).");
   if (!vscode.workspace.isTrusted) return void vscode.window.showInformationMessage("Imprimatur: the review runs Claude on this repo; trust this folder first.");
   if (bestRunning) return void vscode.window.showInformationMessage("Imprimatur: a project review is already running.");
   const db = records.dbOf();
@@ -1027,6 +1027,11 @@ function activate(ctx) {
   }
   // Its graph row moved to the launcher (#69): no counts to keep.
   setupView = registerSetupView(ctx, () => [...roots], () => ({ edits: 0, waiting: 0 }));
+  // First run (#81): the Get Started walkthrough, once per machine.
+  if (!ctx.globalState.get("imprimatur.welcomed")) {
+    ctx.globalState.update("imprimatur.welcomed", true);
+    vscode.commands.executeCommand("workbench.action.openWalkthrough", `${ctx.extension.id}#start`, false);
+  }
   // The launcher shows the setup checklist's count (#142).
   setupView.onScanned = (n) => launcher?.setChecklist(n);
   launcher?.setChecklist(setupView.checklist.count);
