@@ -38,9 +38,10 @@
   26. [Process checks](#process-checks)
   27. [Test strategy](#testing)
   28. [Panel design layer: theme variables, icons, mascot](#ui-design)
+  29. [Context budget: what a session loads, in estimated tokens](#context-budget)
 - [Decisions](#chapter-decisions)
 - [Risks and technical debt](#chapter-risks)
-  29. [Known limits](#limits)
+  30. [Known limits](#limits)
 
 <a id="chapter-goals"></a>
 
@@ -933,6 +934,31 @@ vscode-elements was deliberately not used; the reason is in the linked ADR.
 
 On dark and light themes, `theme.js` defines board tokens (`--b-bg`, `--b-panel`, `--b-card` gradient, `--b-line`, `--b-text`, `--b-muted`). It points the `--vscode-*` colours the panel uses (editor background, foreground, description, borders, inputs, hover) and its own tokens (`--surface`, `--line`, `--muted`, `--shadow`, radii) at them. Every tab follows without component edits. Cards (`.card`, `.bucket`, `.etable`, `.tablewrap`) get the board gradient, and the app bar blurs. Muted text stays legible: #a3a19a on dark, #5f5d57 on light. High-contrast themes keep VS Code’s colours.
 
+<a id="context-budget"></a>
+
+### 29. Context budget: what a session loads, in estimated tokens
+
+Agent Setup's **Context budget** group (#29) lists what the repo's last Claude Code session loaded into the model's context. Items are sorted biggest first.
+
+**Source.** The session transcript, not the files on disk. Claude Code writes what it gave the model as attachments, and `session-context.js` reads them incrementally. The attachments read are:
+- instruction files with their loaded text (`instructions`)
+- each hook run's added text (`hook_success`: `additionalContext`, `systemMessage`, or plain stdout for SessionStart and UserPromptSubmit)
+- MCP server instructions (`mcp_instructions_delta`)
+- the skill listing (`skill_listing`)
+- Claude Code's own session context
+
+The tools the agent called are counted per server from `tool_use` blocks.
+
+**Estimate.** Tokens are characters ÷ 4, rounded. This is Anthropic's rule of thumb for English prose and code with Claude's tokenizer. Every number is shown with "~", and Claude Code's `/context` gives the exact count. A hook's tokens are the sum of the text it added on each run, not its last output times its runs.
+
+**Not counted.** Tool definitions (their schemas are not in the transcript) and agent descriptions are shown as "Not counted", with how many there are. They are never guessed.
+
+**Warnings and suggestions.** An item of 5,000 tokens or more is marked as large. Each suggestion names the item it shrinks and what it saves:
+- An instruction file of 2,000 tokens or more: move the sections the agent needs only now and then into a skill or an on-demand file; halving it saves half its tokens.
+- A hook that adds 100 tokens or more on several runs: make its output shorter, or add text only when something changed.
+- An MCP server that was not called in the session: turn it off where it is not needed, which saves its instructions and its tool definitions.
+- A skill listing of 2,000 tokens or more: turn off plugins whose skills the repo never uses.
+
 <a id="chapter-decisions"></a>
 
 ## Decisions
@@ -945,7 +971,7 @@ _Not written yet._
 
 <a id="limits"></a>
 
-### 29. Known limits
+### 30. Known limits
 
 ### Review
 

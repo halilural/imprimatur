@@ -4,6 +4,18 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.111.0] - 2026-11-05
+
+### Added
+- Context budget (#29), a group at the top of Agent Setup. It lists what this repo's last
+  Claude Code session loaded into the model's context: instruction files, each hook's added
+  text summed over its runs, MCP server instructions, the skill listing and Claude Code's own
+  context. Items run biggest first, with estimated tokens (characters ÷ 4) and a session
+  total. An item of 5,000 tokens or more is marked; a big or unused item's tooltip says how to
+  shrink it and what that saves, for example an MCP server the session never called. Tool
+  definitions are listed as not counted, never guessed.
+- Agent Setup's session rows show estimated tokens instead of characters.
+
 ## [0.110.1] - 2026-11-05
 
 ### Security
