@@ -9,44 +9,45 @@ type: explanation
 ## Contents
 
 - [Goals](#chapter-goals)
-  1. [Overview and purpose](#overview)
+  - [1. Overview and purpose](#overview)
 - [Context and scope](#chapter-context)
-  2. [System context](#context)
+  - [2. System context](#context)
 - [Solution strategy](#chapter-strategy)
-  3. [Key choices](#strategy)
+  - [3. Key choices](#strategy)
 - [Building blocks](#chapter-building-blocks)
-  4. [Components and their boundaries](#components)
-  5. [Local database and data model](#database)
-  6. [File-based review data](#review-data)
-  7. [Hooks and flows](#hooks)
-  8. [MCP server](#mcp)
-  9. [Panel and views](#panel)
-  10. [Live updates](#live)
-  11. [Issue tracker sync](#tracker)
-  12. [Design documents ↔ Markdown files (docs sync)](#docs-sync)
-  13. [History scan and TODO.md task tracking](#history-scan-todo)
-  14. [Task analyses](#task-analysis)
-  15. [Agent setup audit (agnix)](#agent-setup-audit)
-  16. [Audit: is the finding in effect (#78)](#audit-effect)
-  17. [Recommendations: project best-practice review (#86, #87)](#best-practice-review)
-  18. [Understanding debt: read marks and the unread count (#92)](#unread)
-  19. [/study: study mode (#95)](#study)
-  20. [/exercise: exercise mode (#108)](#exercise)
-  21. [Social document: a per-repo opt-in document kind (#109)](#social)
-  22. [Agent setup inventory: plugins, synced skills and the session's context (#139)](#agent-inventory)
+  - [4. Components and their boundaries](#components)
+  - [5. Local database and data model](#database)
+  - [6. File-based review data](#review-data)
+  - [7. Hooks and flows](#hooks)
+  - [8. MCP server](#mcp)
+  - [9. Panel and views](#panel)
+  - [10. Live updates](#live)
+  - [11. Issue tracker sync](#tracker)
+  - [12. Design documents ↔ Markdown files (docs sync)](#docs-sync)
+  - [13. History scan and TODO.md task tracking](#history-scan-todo)
+  - [14. Task analyses](#task-analysis)
+  - [15. Agent setup audit (agnix)](#agent-setup-audit)
+  - [16. Audit: is the finding in effect (#78)](#audit-effect)
+  - [17. Recommendations: project best-practice review (#86, #87)](#best-practice-review)
+  - [18. Understanding debt: read marks and the unread count (#92)](#unread)
+  - [19. /study: study mode (#95)](#study)
+  - [20. /exercise: exercise mode (#108)](#exercise)
+  - [21. Social document: a per-repo opt-in document kind (#109)](#social)
+  - [22. Agent setup inventory: plugins, synced skills and the session's context (#139)](#agent-inventory)
+  - [23. Agent files: AGENTS.md, CLAUDE.md and the docs rule (#133)](#agent-files)
 - [Deployment](#chapter-deployment)
-  23. [Installation and distribution](#deployment)
+  - [24. Installation and distribution](#deployment)
 - [Crosscutting concepts](#chapter-crosscutting)
-  24. [Security](#security)
-  25. [Model calls and cost](#model-calls)
-  26. [Process checks](#process-checks)
-  27. [Test strategy](#testing)
-  28. [Panel design layer: theme variables, icons, mascot](#ui-design)
-  29. [Context budget: what a session loads, in estimated tokens](#context-budget)
+  - [25. Security](#security)
+  - [26. Model calls and cost](#model-calls)
+  - [27. Process checks](#process-checks)
+  - [28. Test strategy](#testing)
+  - [29. Panel design layer: theme variables, icons, mascot](#ui-design)
+  - [30. Context budget: what a session loads, in estimated tokens](#context-budget)
 - [Decisions](#chapter-decisions)
-  30. [Decision records: ADR and PDR as MADR 4 files](#decision-records)
+  - [31. Decision records: ADR and PDR as MADR 4 files](#decision-records)
 - [Risks and technical debt](#chapter-risks)
-  31. [Known limits](#limits)
+  - [32. Known limits](#limits)
 
 <a id="chapter-goals"></a>
 
@@ -771,13 +772,32 @@ Rows with no file (MCP, tools, listings) have an empty `abs` and open nothing.
 
 <!-- imprimatur:decisions --> Decisions: [ADR 0102](decisions/0102-agent-setup-lists-installed-claude-code-plugins-from-claude.md), [ADR 0104](decisions/0104-agent-setup-shows-what-the-repo-s-last-claude-code-session-w.md)
 
+<a id="agent-files"></a>
+
+### 23. Agent files: AGENTS.md, CLAUDE.md and the docs rule (#133)
+
+AGENTS.md holds the rules every coding agent follows in a repo, at most 200 lines. CLAUDE.md starts with `@AGENTS.md` and keeps only what is Claude Code's own. `.claude/rules/docs.md`, scoped to `docs/**` by its `paths:` front matter, holds the documentation standard (decision 9331). `vscode/agent-files.js` reads how a repo stands and puts rows in Agent Setup's checklist:
+
+| Repo has | Row | Action |
+|---|---|---|
+| neither file | Agent files: write AGENTS.md and CLAUDE.md | templates, written with `wx` (never over a file) |
+| AGENTS.md only | Agent files: write CLAUDE.md | the one-line `@AGENTS.md` |
+| no `.claude/rules/docs.md` | (the same row) | the docs-rule template |
+| a CLAUDE.md that does not import AGENTS.md | Agent files: CLAUDE.md does not import AGENTS.md | Fix it |
+
+**Fix it** for this row gives Claude the three file names, never their text (Claude reads the files and is told their text is data). Claude hands each file back whole: AGENTS.md with the shared rules, CLAUDE.md with `@AGENTS.md` and the Claude-only items, and the docs rule only if CLAUDE.md had any. `fix-edits.js` `planEdits` takes these as `whole` files: an empty old text creates the file or rewrites it as a whole. For every other fix, an edit still needs an old text found exactly once. The diffs open first, a new file against an empty one. Apply writes a new file only if it is still missing, and an existing one only if it did not change since Claude read it.
+
+A second run writes nothing: the templates are skipped once their files exist, and the Fix it row goes once CLAUDE.md imports AGENTS.md.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0110](decisions/0110-agents-md-through-the-checklist-templates-for-a-repo-with-no.md)
+
 <a id="chapter-deployment"></a>
 
 ## Deployment
 
 <a id="deployment"></a>
 
-### 23. Installation and distribution
+### 24. Installation and distribution
 
 ### Installing on a machine: `npm run setup`
 
@@ -827,7 +847,7 @@ One version number (`vscode/package.json`) is shared by the extension and the pl
 
 <a id="security"></a>
 
-### 24. Security
+### 25. Security
 
 ### VS Code extension
 
@@ -856,7 +876,7 @@ One version number (`vscode/package.json`) is shared by the extension and the pl
 
 <a id="model-calls"></a>
 
-### 25. Model calls and cost
+### 26. Model calls and cost
 
 Imprimatur turns to a small model (Haiku) only where verbal judgment is needed; where a rule is enough, no model is called.
 
@@ -884,7 +904,7 @@ Imprimatur turns to a small model (Haiku) only where verbal judgment is needed; 
 
 <a id="process-checks"></a>
 
-### 26. Process checks
+### 27. Process checks
 
 The development process rules (formerly `.claude/hooks/*.sh` copied into every repo) run in one place, Imprimatur's global hook (`hooks/process.mjs` → `vscode/process.js`).
 
@@ -914,7 +934,7 @@ Repo-specific rules (an em dash ban, deploy, migrations, etc.) are out of scope 
 
 <a id="testing"></a>
 
-### 27. Test strategy
+### 28. Test strategy
 
 ### Unit tests (`npm test`)
 
@@ -934,7 +954,7 @@ Manual tests of visual behavior such as the editor marks and the preview are kep
 
 <a id="ui-design"></a>
 
-### 28. Panel design layer: theme variables, icons, mascot
+### 29. Panel design layer: theme variables, icons, mascot
 
 The panel's look comes from three small modules. All are plain CommonJS; they need no build step and do not trip the CSP.
 
@@ -963,7 +983,7 @@ On dark and light themes, `theme.js` defines board tokens (`--b-bg`, `--b-panel`
 
 <a id="context-budget"></a>
 
-### 29. Context budget: what a session loads, in estimated tokens
+### 30. Context budget: what a session loads, in estimated tokens
 
 Agent Setup's **Context budget** group (#29) lists what the repo's last Claude Code session loaded into the model's context. Items are sorted biggest first.
 
@@ -992,7 +1012,7 @@ The tools the agent called are counted per server from `tool_use` blocks.
 
 <a id="decision-records"></a>
 
-### 30. Decision records: ADR and PDR as MADR 4 files
+### 31. Decision records: ADR and PDR as MADR 4 files
 
 The decisions are the repo's adr and pdr records. Each one is also written as a MADR 4 file, `docs/decisions/NNNN-slug.md`, listed in `docs/decisions/README.md`. That index is the list this chapter would otherwise repeat.
 
@@ -1013,7 +1033,7 @@ The decisions are the repo's adr and pdr records. Each one is also written as a 
 
 <a id="limits"></a>
 
-### 31. Known limits
+### 32. Known limits
 
 ### Review
 

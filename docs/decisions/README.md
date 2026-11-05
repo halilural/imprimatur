@@ -119,3 +119,4 @@ Architecture (ADR) and product (PDR) decisions, one file each in MADR 4 form. A 
 | [0107](0107-the-board-look-comes-from-theme-js-on-dark-and-light-themes.md) | The board look comes from theme.js: on dark and light themes the panel redefines the --vscode-*… | ADR | accepted | 2026-11-04 | #148 |
 | [0108](0108-the-baseline-for-every-repo-imprimatur-s-own-skills-plus-fiv.md) | The baseline for every repo: Imprimatur's own skills plus five third-party items the user chose | PDR | accepted | 2026-11-05 | #141 |
 | [0109](0109-decisions-as-madr-4-files-numbered-once-in-the-record-s-link.md) | Decisions as MADR 4 files: numbered once in the record's links, generated beside the documents,… | ADR | accepted | 2026-11-05 | #130 |
+| [0110](0110-agents-md-through-the-checklist-templates-for-a-repo-with-no.md) | AGENTS.md through the checklist: templates for a repo with none, Fix it for splitting an existing… | ADR | accepted | 2026-11-05 | #133 |
