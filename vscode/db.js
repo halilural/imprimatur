@@ -1349,6 +1349,7 @@ class Db {
   openAsks({ repoId, limit = 50 } = {}) {
     const sql = `SELECT r.*, t.key AS task_key, t.repo_id FROM records r JOIN tasks t ON t.id = r.task_id
                  WHERE r.status = 'open' AND r.owner = 'K' AND r.kind IN ('todo', 'question')
+                   AND t.status NOT IN ('done', 'dropped')
                  ${repoId == null ? "" : "AND t.repo_id = ?"} ORDER BY r.created_at DESC LIMIT ?`;
     return (repoId == null ? this.q(sql).all(limit) : this.q(sql).all(repoId, limit)).map(recordOf);
   }
@@ -1405,6 +1406,7 @@ class Db {
   openTests({ repoId, limit = 200 } = {}) {
     const sql = `SELECT r.*, t.key AS task_key, t.repo_id FROM records r JOIN tasks t ON t.id = r.task_id
                  WHERE r.status = 'open' AND r.kind = 'test' AND (r.owner IS NULL OR r.owner = 'K')
+                   AND t.status NOT IN ('done', 'dropped')
                  ${repoId == null ? "" : "AND t.repo_id = ?"} ORDER BY r.created_at DESC LIMIT ?`;
     return (repoId == null ? this.q(sql).all(limit) : this.q(sql).all(repoId, limit)).map(recordOf);
   }

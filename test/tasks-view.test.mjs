@@ -6,6 +6,8 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+/** A turn-end ask from an hour ago: one older than a week is stale and not counted. */
+const RECENT = new Date(Date.now() - 3600e3).toISOString();
 
 const req = createRequire(import.meta.url);
 const { openDb } = req("../vscode/db.js");
@@ -105,10 +107,10 @@ test("#69 Tasks: this repo by default, every repo when asked", () => {
 test("#69 Waiting on you: buckets, groups by task, turn-end asks counted, today's done", () => {
   const s = seed();
   const waiting = [
-    { kind: "question", state: "open", session: "a", item: "t1", i: 0, t: "2026-01-01T10:00:00Z", text: "Which one?" },
-    { kind: "verify", state: "open", session: "a", item: "t1", i: 1, t: "2026-01-01T10:00:00Z", text: "Bak" },
-    { kind: "verify", state: "open", session: "todo-files", item: "t2", i: 0, t: "2026-01-01T10:00:00Z", text: "x" },
-    { kind: "command", state: "done", session: "a", by: "audit", item: "t3", i: 0, t: "2026-01-01T10:00:00Z", text: "y" },
+    { kind: "question", state: "open", session: "a", item: "t1", i: 0, t: RECENT, text: "Which one?" },
+    { kind: "verify", state: "open", session: "a", item: "t1", i: 1, t: RECENT, text: "Bak" },
+    { kind: "verify", state: "open", session: "todo-files", item: "t2", i: 0, t: RECENT, text: "x" },
+    { kind: "command", state: "done", session: "a", by: "audit", item: "t3", i: 0, t: RECENT, text: "y" },
   ];
   let m = tv.inboxModel(s.db, s.root, { waiting });
   const n = Object.fromEntries(m.buckets.map((b) => [b.id, b.n]));
@@ -132,7 +134,7 @@ test("#69 Waiting on you: buckets, groups by task, turn-end asks counted, today'
 test("turn-end asks are cards under their task; the button ticks the step; ticked today shows done", () => {
   const s = seed();
   const now = Date.now();
-  const w = (/** @type {any} */ o) => ({ kind: "command", session: "s9", item: "2026-01-01T10:00:00Z", t: "2026-01-01T10:00:00Z", prompt: "deploy", ...o });
+  const w = (/** @type {any} */ o) => ({ kind: "command", session: "s9", item: "2026-01-01T10:00:00Z", t: RECENT, prompt: "deploy", ...o });
   const waiting = [
     w({ i: 0, state: "open", text: "#1: Deploy it", why: "waiting for prod", detail: "long message" }),
     w({ i: 1, state: "open", kind: "verify", text: "Check by eye" }),
