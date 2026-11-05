@@ -86,3 +86,17 @@ test("session context (#145): a hook logged as \"command hook\" is named from th
   assert.deepEqual(labels, ["PreToolUse: guard.mjs", "PostToolUse: one of a.mjs, b.mjs"]);
   assert.deepEqual(sessionItems(dir, home).filter((r) => r.kind === "hook output").map((r) => r.label), ["PreToolUse: command hook", "PostToolUse: command hook"], "unchanged without config");
 });
+
+test("session context (#145): matchers are never compiled as regex; a pathological one only widens the candidates", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "session-redos-"));
+  const dir = path.join(home, ".claude", "projects", "p");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "s.jsonl"), att({ type: "hook_success", hookEvent: "PreToolUse", hookName: `PreToolUse:${"a".repeat(40)}!`, command: "command hook", durationMs: 5, stdout: "" }) + "\n");
+  const started = Date.now();
+  const labels = sessionItems(dir, home, [
+    { event: "PreToolUse", matcher: "(a+)+$", script: "evil.mjs" }, { event: "PreToolUse", matcher: "mcp__imprimatur__.*", script: "mcp.mjs" },
+    { event: "PreToolUse", matcher: "Edit|Write", script: "edit.mjs" },
+  ]).filter((r) => r.kind === "hook output").map((r) => r.label);
+  assert.ok(Date.now() - started < 500, "no catastrophic backtracking");
+  assert.deepEqual(labels, ["PreToolUse: evil.mjs"], "a pattern it cannot read may fit; a prefix or exact name that does not fit is left out");
+});

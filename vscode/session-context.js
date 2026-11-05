@@ -170,13 +170,15 @@ const MEMORY = /nook|notion|mem0|claude-mem|supermemory|memory|letta|zep|context
  * whose matcher fits the tools it ran for; unchanged when none fits. @param {{event: string, script: string, tools: Set<string>}} h @param {Array<{event: string, matcher: string, script: string}>} configured
  */
 function nameOf(h, configured) {
+  // No regex is compiled: a matcher comes from settings files a repo may hold (ReDoS). Exact
+  // names split on "|", a trailing ".*" or "*" as a prefix; any other pattern may fit.
   const fits = (/** @type {string} */ m, /** @type {string} */ t) => {
-    if (!m || m === "*") return true;
-    try {
-      return new RegExp(`^(?:${m})$`).test(t);
-    } catch {
-      return m === t;
-    }
+    if (!m || m === "*" || m.length > 300) return true;
+    return m.split("|").some((alt) => {
+      const prefix = /^([\w.:-]*?)(?:\.\*|\*)$/.exec(alt);
+      if (prefix) return t.startsWith(prefix[1]);
+      return /^[\w:-]+$/.test(alt) ? alt === t : true;
+    });
   };
   const tools = [...h.tools];
   const names = [...new Set(configured.filter((c) => c.event === h.event && (!tools.length || tools.some((t) => fits(c.matcher, t)))).map((c) => c.script))];

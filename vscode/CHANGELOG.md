@@ -4,6 +4,13 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.110.1] - 2026-11-05
+
+### Security
+- Naming a "command hook" no longer compiles hook matchers as regular expressions: a repo's
+  settings could hold a pattern that hangs the extension host. Matchers are read as exact
+  names split on "|" or as a prefix ending in ".*"; anything else may fit (#145).
+
 ## [0.110.0] - 2026-11-05
 
 ### Added
