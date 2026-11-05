@@ -140,3 +140,13 @@ test("a fix run's record_update (#131): only the listed decisions, only body and
     delete process.env.IMPRIMATUR_RECORD_UPDATE;
   }
 });
+
+test("registeredServer (#131): the user's imprimatur MCP server from ~/.claude.json; claudeArgs runs it as given", () => {
+  const home = tmpDir();
+  assert.equal(bf.registeredServer(home), undefined);
+  fs.writeFileSync(path.join(home, ".claude.json"), JSON.stringify({ mcpServers: { imprimatur: { type: "stdio", command: "node", args: ["/repo/mcp/server.mjs"] } } }));
+  const s = bf.registeredServer(home);
+  assert.deepEqual(s, { command: "node", args: ["/repo/mcp/server.mjs"] });
+  const args = bf.claudeArgs(s, [], { A: "1" });
+  assert.deepEqual(JSON.parse(args[args.indexOf("--mcp-config") + 1]).mcpServers.imprimatur, { type: "stdio", command: "node", args: ["/repo/mcp/server.mjs"], env: { A: "1" } });
+});
