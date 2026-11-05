@@ -979,6 +979,12 @@ function registerSetupView(ctx, roots, counts) {
   };
   const pattern = "{**/CLAUDE.md,**/CLAUDE.local.md,**/AGENTS.md,**/GEMINI.md,**/CONVENTIONS.md,.claude/**,.cursor/**,.cursorrules,.github/**,.mcp.json,.husky/**,.windsurf/**,.windsurfrules,.clinerules,.clinerules/**,commitlint.config.*,.pre-commit-config.yaml}";
   const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+  // The prompt hook writes the technologies it brought up (#144) outside the workspace, in the repo's data folder.
+  for (const f of vscode.workspace.workspaceFolders ?? []) {
+    const od = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(require("./data-dir.js").dataDir(f.uri.fsPath)), "on-demand.json"));
+    const redraw = () => soon();
+    ctx.subscriptions.push(od, od.onDidCreate(redraw), od.onDidChange(redraw));
+  }
   ctx.subscriptions.push(
     view,
     watcher,
