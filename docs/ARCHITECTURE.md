@@ -1026,6 +1026,10 @@ The tools the agent called are counted per server from `tool_use` blocks.
 
 The decision rules (001–003) report one finding per rule. Each names up to 12 decisions, then "and N more": one finding per decision would bury the panel. 002 and 003 are info, because they describe what the records lack, not a broken setup.
 
+#### Fix it on a documentation finding
+
+IMP-DOC-001..005 live in the database, and `docs/*.md` is generated from it, so the usual Fix it (a file diff) would be lost at the next export. On these findings Fix it (`fixDocs` in `vscode/setupView.js`) runs a background `claude -p` with docs-backfill's settings (sonnet, $3 cap, Read/Glob/Grep and Imprimatur's MCP server only) plus `record_update` and `task_upsert`. The prompt (`fixPrompt` in `vscode/docs-backfill.js`) lists the decisions 002 and 003 name (`decisionGaps` in `doc-rules.js`). The agent links decisions to sections with `doc_section_upsert`. It adds an "Alternative: …" line only when the decision's task records show the option was weighed, and never invents one. The audit then runs again, so what the agent left stays open. The bulk Fix it takes this path when every open finding is a docs one; in a mixed list it fixes the file findings, and each docs finding has its own Fix it. IMP-DOC-006 stays a file finding.
+
 <!-- imprimatur:decisions --> Decisions: [ADR 0111](decisions/0111-documentation-rules-in-setup-audit-as-imprimatur-s-own-imp-d.md)
 
 <a id="chapter-decisions"></a>

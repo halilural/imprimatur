@@ -455,6 +455,54 @@ class SetupView {
 /** Whether a row is a file inside its repo, so git knows it. @param {any} node */
 const inRepo = (node) => !node.scope.global && !!node.item.abs && path.resolve(node.item.abs).startsWith(path.resolve(node.scope.root) + path.sep);
 
+/** IMP-DOC-001..005 are about the database's documents; 006 (agent file length) is a file finding. @param {any} r */
+const isDocFinding = (r) => /^IMP-DOC-00[1-5]$/.test(r.links?.audit?.rule ?? "");
+
+/**
+ * Fix it on documentation findings (#131): after the user confirms, a background `claude -p`
+ * with Imprimatur's MCP server (docs-backfill's tools plus record_update and task_upsert) links
+ * decisions to sections, adds the alternatives the records show and writes missing sections;
+ * then the audit runs again, so what is left stays open.
+ * @param {SetupView} provider @param {any[]} findings @param {string} repo
+ */
+async function fixDocs(provider, findings, repo) {
+  const db = require("./records.js").dbOf();
+  const r0 = db?.repoByRoot(repo);
+  if (!db || !r0) return void vscode.window.showInformationMessage("Imprimatur: this folder has no records.");
+  const bf = require("./docs-backfill.js");
+  const bp = require("./best-practice.js");
+  const prompt = bf.fixPrompt(db, r0.id, repo, findings);
+  const bin = require("./fix-runner.js").claudeBin();
+  if (!vscode.workspace.isTrusted || !bin) {
+    await vscode.env.clipboard.writeText(prompt);
+    return void vscode.window.showInformationMessage("Imprimatur: Claude cannot run here (no CLI or untrusted folder); the fix prompt is on the clipboard.");
+  }
+  const go = await vscode.window.showWarningMessage(`Run Claude in the background to fix ${findings.length} documentation finding${findings.length === 1 ? "" : "s"}?`,
+    { modal: true, detail: `It changes no file: it writes Imprimatur's records and document sections through its MCP tools (doc_section_upsert, record_update), with sonnet, at most $3. Alternatives are added only where the records show one; none is invented. The audit runs again after it.\n\n${prompt.slice(0, 1200)}` }, "Run");
+  if (go !== "Run") return;
+  if (provider.fixing) return void vscode.window.showInformationMessage("Imprimatur: a Fix it is already running.");
+  provider.fixing = true;
+  const out = (fixOutput ??= vscode.window.createOutputChannel("Imprimatur Fix it"));
+  out.appendLine(`\n=== ${new Date().toLocaleString()} · Fix it: documentation (in ${repo})\n${prompt}\n---`);
+  // Tool search off: deferred MCP tools are hidden behind ToolSearch, which --tools leaves out (docs-backfill.js).
+  const env = { ...bp.childEnv(), ENABLE_TOOL_SEARCH: "false" };
+  // shortcut: not cancellable (bp.run has no kill); the run stops at its turn, budget and time caps.
+  const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur: Claude is fixing the documentation findings…" },
+    () => bp.run(bin, bf.claudeArgs(path.join(__dirname, "..", "mcp", "server.mjs"), ["record_update", "task_upsert"]), { cwd: repo, timeout: bf.TIMEOUT_MS, env, input: prompt }));
+  provider.fixing = false;
+  let res = /** @type {any} */ ({});
+  try {
+    res = JSON.parse(r.stdout);
+  } catch {}
+  const answer = String(res.result ?? r.stderr ?? "").trim();
+  out.appendLine(answer || r.stdout);
+  await runAudit(provider);
+  const failed = r.code !== 0 || res.is_error;
+  const pick = await (failed ? vscode.window.showErrorMessage : vscode.window.showInformationMessage)(
+    `Imprimatur: ${failed ? "documentation fix stopped" : "documentation fix finished"}: ${(answer.split("\n").find((l) => l.trim()) ?? "").slice(0, 200)}`, "Show answer");
+  if (pick) out.show();
+}
+
 /**
  * Fix it (#156): after the user confirms, Claude Code's CLI runs the fix in the background
  * (`claude -p`: user settings only, no MCP, no commands, edits only the target files) under a
@@ -470,9 +518,14 @@ async function fixWithClaude(provider, node) {
   /** @type {{prompt: string, label: string, edit: string[], editDirs: string[], read: string[], whole?: string[], audit?: boolean, records?: any[], apply?: {from: string, to: string, files: string[], commit: string}}} */
   let fix = { prompt: "", label: "", edit: [], editDirs: [], read: [] };
   const kind = node?.fix?.kind;
+  // Documentation findings live in the database (docs/*.md is generated): an MCP run, not a file diff.
+  const docs = kind === "findings" ? provider.openFindings().filter(isDocFinding)
+    : !kind && node?.recordId && db ? [db.record(node.recordId)].filter((r) => r && isDocFinding(r)) : [];
+  if (docs.length && (kind !== "findings" || provider.openFindings().every(isDocFinding))) return fixDocs(provider, docs, repo);
   if (kind === "health") fix = { prompt: prompts.healthPrompt(node.fix.problem), label: path.basename(node.fix.problem.file), edit: [node.fix.problem.file], editDirs: [], read: [] };
   else if (kind === "findings") {
-    const open = provider.openFindings();
+    // shortcut: a mixed list fixes the file findings only; each docs finding has its own Fix it.
+    const open = provider.openFindings().filter((/** @type {any} */ r) => !isDocFinding(r));
     const files = open.map((/** @type {any} */ r) => r.links?.audit?.file).filter(Boolean);
     if (open.length) fix = { prompt: prompts.findingsPrompt(open), label: `${open.length} recommendations`, edit: files, editDirs: [], read: [], audit: true, records: open };
   } else if (!kind && node?.recordId && db) {

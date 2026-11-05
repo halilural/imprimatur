@@ -34,6 +34,20 @@ const named = (recs) => {
 };
 
 /**
+ * The current decisions IMP-DOC-002 and 003 name: few, with no alternative; loose, linked to no section.
+ * @param {any} db @param {number} repoId @returns {{few: any[], loose: any[]}}
+ */
+function decisionGaps(db, repoId) {
+  const current = db.decisionRecords(repoId).filter((/** @type {any} */ r) => r.status !== "dropped");
+  const linked = db.sectionsOfRecords(repoId);
+  return {
+    // The chosen option is the decision itself: one line naming an alternative makes two.
+    few: current.filter((/** @type {any} */ r) => optionLines(`${r.title}\n${r.body ?? ""}`).length < 1),
+    loose: current.filter((/** @type {any} */ r) => !linked.has(r.id)),
+  };
+}
+
+/**
  * Each sequenceDiagram in a Markdown text that lacks autonumber, or the numbered list under it
  * with an item per arrow: its line and why.
  * @param {string} text @returns {Array<{line: number, why: string}>}
@@ -103,13 +117,10 @@ function docDiagnostics(db, root, { docsDir } = {}) {
           add("IMP-DOC-001", fileOf(`decisions/${n}`), `superseded by ${m[1]}, which has no file`, "Point it at the decision that replaced it.", 1);
       }
     } catch {}
-    // The chosen option is the decision itself: one line naming an alternative makes two.
-    const few = current.filter((/** @type {any} */ r) => optionLines(`${r.title}\n${r.body ?? ""}`).length < 1);
+    const { few, loose } = decisionGaps(db, repo.id);
     if (few.length)
       add("IMP-DOC-002", fileOf("decisions/README.md"), `${few.length} of ${current.length} decisions name no alternative to the option chosen: ${named(few)}`,
         'Add the options weighed to each record\'s body, one line each ("Alternative: …", "Rejected: …"), with record_update; the MADR file lists them under Considered Options.', 1, "info");
-    const linked = db.sectionsOfRecords(repo.id);
-    const loose = current.filter((/** @type {any} */ r) => !linked.has(r.id));
     if (loose.length)
       add("IMP-DOC-003", fileOf("decisions/README.md"), `${loose.length} of ${current.length} decisions are linked to no section: ${named(loose)}`,
         "Link each to the architecture or product section it shapes: doc_section_upsert with records: [id], updating the section's text.", 1, "info");
@@ -152,4 +163,4 @@ function docDiagnostics(db, root, { docsDir } = {}) {
   return out;
 }
 
-module.exports = { docDiagnostics, sequenceProblems, RULES, ruleInfo, LIMIT_LINES };
+module.exports = { docDiagnostics, decisionGaps, sequenceProblems, RULES, ruleInfo, LIMIT_LINES };
