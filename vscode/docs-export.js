@@ -70,6 +70,8 @@ function docMarkdown(db, docId) {
     out.push(`<a id="${s.key}"></a>`, terms ? `## ${inline(s.title)}` : `## ${i + 1}. ${inline(s.title)}`);
     const body = String(s.body ?? "").replace(/\r\n/g, "\n").trim();
     if (body) out.push(body);
+    const decided = require("./decisions.js").linksLine(s.contributors ?? []);
+    if (decided) out.push(decided);
   });
   return out.join("\n\n") + "\n";
 }
@@ -99,6 +101,9 @@ function chaptered(doc, sections, chapters) {
       out.push(`<a id="${s.key}"></a>`, `### ${num.get(s.key)}. ${inline(s.title)}`);
       const body = String(s.body ?? "").replace(/\r\n/g, "\n").trim();
       if (body) out.push(body);
+      // The decisions it is built on, as links to their MADR files (#130); docs-sync skips the line.
+      const decided = require("./decisions.js").linksLine(s.contributors ?? []);
+      if (decided) out.push(decided);
     }
   }
   return out.join("\n\n") + "\n";
@@ -215,6 +220,12 @@ function exportDocs(db, root) {
   }
   if (!repo) return [];
   const out = [];
+  // Decisions get their MADR numbers first (#130), so the documents' links name them on this export.
+  const decides = kindsOf(root).some((k) => k === "architecture" || k === "product");
+  if (decides)
+    try {
+      require("./decisions.js").numbered(db, repo.id);
+    } catch {}
   for (const kind of kindsOf(root)) {
     const name = /** @type {any} */ (FILES)[kind];
     const doc = db.docFind(repo.id, kind);
@@ -248,6 +259,12 @@ function exportDocs(db, root) {
     }
     out.push({ kind, file, written });
   }
+  // The decisions as MADR 4 files beside the documents (#130), when the repo keeps architecture or product in files.
+  // Side files: written, not listed (the list is the documents').
+  if (decides)
+    try {
+      require("./decisions.js").exportDecisions(db, repo, dirOf(root), { header: `${HEADER_START}; edit the decision's record in Imprimatur (its task, Tasks tab). -->`, generatedText, inside: (f) => inside(root, f) });
+    } catch {}
   return out;
 }
 
