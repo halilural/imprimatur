@@ -4,6 +4,19 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.113.0] - 2026-11-05
+
+### Added
+- **Suggested for this repo** in Agent Setup (#143) lists plugins from Claude Code's
+  marketplaces that fit the stack the project review mapped. Each row says which parts of the
+  stack it fits, its installs and, for a plugin with its own GitHub repo, its stars, last push
+  and license. A plugin kept in the marketplace says so. Ranking is installs times fits;
+  installed plugins and those under 500 installs are left out. The #128 vetting rules flag no
+  license, a license to check, and a plugin that brings its own memory or tasks. Hooks and MCP
+  servers are read when the marketplace has the files; otherwise the row says to read them first.
+  **Install for This Repo** confirms, then runs `claude plugin install --scope project`. The
+  list is refreshed in the background once a day or when the stack changes.
+
 ## [0.112.0] - 2026-11-05
 
 ### Added

@@ -120,6 +120,57 @@ class SetupView {
     this.auditing = false;
   }
 
+  /**
+   * Suggested for this repo (#143): plugins that fit its stack, from the last refresh; a stale
+   * one is refreshed in the background (the catalog, gh for repo facts) and the view redrawn.
+   * @param {string | undefined} root @returns {any}
+   */
+  suggestionsRow(root) {
+    if (!root) return undefined;
+    const db = require("./records.js").dbOf();
+    const repo = db?.repoByRoot(root);
+    const task = repo && require("./recs.js").recsTask(db, repo.id);
+    const components = task ? require("./best-practice.js").sourceMapRecord(db, task.id)?.links?.bestSources?.components ?? [] : [];
+    if (!components.length)
+      return { type: "leaf", label: "Suggested for this repo", description: "run the project review first: it maps the stack", icon: "extensions", command: "imprimatur.bestPractices.run",
+        tooltip: "Suggestions come from the repo's stack, which the project review (Recommendations → Review the project) maps." };
+    const sg = require("./suggest.js");
+    const file = path.join(this.ctx.globalStorageUri.fsPath, `suggestions-${require("./agent-setup.js").projectSlug(root)}.json`);
+    const home = os.homedir();
+    const installed = Object.keys(JSON.parse(safeRead(path.join(home, ".claude", "plugins", "installed_plugins.json")) || "{}").plugins ?? {});
+    const claude = require("./fix-runner.js").claudeBin();
+    if (claude && !this.suggesting) {
+      this.suggesting = true;
+      const markets = JSON.parse(safeRead(path.join(home, ".claude", "plugins", "known_marketplaces.json")) || "{}");
+      /** What a plugin kept in its marketplace brings, read from the local copy. @param {any} p */
+      const partsOf = (p) => {
+        const loc = markets[p.marketplaceName]?.installLocation;
+        if (typeof p.source !== "string" || !loc) return undefined;
+        const dir = path.join(loc, p.source);
+        if (!path.resolve(dir).startsWith(path.resolve(loc))) return undefined;
+        const mcp = JSON.parse(safeRead(path.join(dir, ".mcp.json")) || "{}");
+        return { hooks: require("./agent-setup.js").pluginHookDefs(dir).length, mcp: Object.keys(mcp.mcpServers ?? mcp) };
+      };
+      sg.refreshSuggestions({ components, installed, file, claude, home, partsOf })
+        .then((ran) => ran && this.refresh())
+        .catch(() => {})
+        .finally(() => (this.suggesting = false));
+    }
+    const s = sg.readSuggestions(file);
+    const items = (s?.items ?? []).filter((/** @type {any} */ i) => !installed.includes(i.id));
+    if (!items.length) return { type: "leaf", label: "Suggested for this repo", description: s ? "nothing well-adopted fits its stack beyond what is installed" : "looking…", icon: "extensions" };
+    const k = (/** @type {number} */ n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
+    return { type: "group", label: "Suggested for this repo", description: `${items.length} plugin${items.length === 1 ? "" : "s"} that fit its stack`, icon: "extensions",
+      tooltip: "Plugins from Claude Code's marketplaces that fit the stack the project review mapped, the most widely installed first. Vetted by the rules of #128.",
+      children: items.map((/** @type {any} */ i) => ({
+        type: "leaf", label: i.name, icon: i.flags.length ? "warning" : "extensions", color: i.flags.length ? "problemsWarningIcon.foreground" : undefined,
+        description: [`fits ${i.fits.join(", ")}`, `${k(i.installs)} installs`, i.gh && `★ ${k(i.gh.stars)}`, i.gh?.pushed && `pushed ${i.gh.pushed}`, i.gh && (i.gh.license || "no license"),
+          !i.repo && "kept in the marketplace"].filter(Boolean).join(" · "),
+        tooltip: `${i.id}\n\n${i.description}\n\nWhy: it fits ${i.fits.join(", ")}.\nIt brings: ${i.reads}.${i.flags.length ? `\n\n⚠ ${i.flags.join("\n⚠ ")}` : ""}${i.repo ? `\n\ngithub.com/${i.repo}` : ""}`,
+        context: "suggestion", installId: i.id, repoRoot: root, flags: i.flags, reads: i.reads,
+      })) };
+  }
+
   /** The open recommendations Claude Code loads, in every scanned scope, for Fix it (#156). */
   openFindings() {
     const db = require("./records.js").dbOf();
@@ -231,6 +282,7 @@ class SetupView {
     // The checklist (#142): what needs doing, from the scan, the health check and the audit.
     this.installs = installChecksNow();
     this.budget = budgetRow(this.scopes.find((s) => !s.global)?.root);
+    this.suggestions = this.suggestionsRow(this.scopes.find((s) => !s.global)?.root);
     this.checklist = checklistOf(this.scopes, /** @type {any} */ (this.audit)?.open ?? 0, this.installs);
     this.onScanned?.(this.checklist.count);
     this.extras();
@@ -259,7 +311,7 @@ class SetupView {
   getChildren(node) {
     if (!node) {
       const forFile = forFileNode(this.scopes, this.activeFile);
-      return [/** @type {Node} */ (this.checklist.node), ...(this.budget ? [/** @type {Node} */ (this.budget)] : []), ...healthRoot(this.scopes), ...(this.audit ? [/** @type {Node} */ (this.audit)] : []), ...(forFile ? [/** @type {Node} */ (forFile)] : []), ...this.scopes.map((scope) => /** @type {Node} */ ({ type: "scope", scope }))];
+      return [/** @type {Node} */ (this.checklist.node), ...(this.budget ? [/** @type {Node} */ (this.budget)] : []), ...(this.suggestions ? [/** @type {Node} */ (this.suggestions)] : []), ...healthRoot(this.scopes), ...(this.audit ? [/** @type {Node} */ (this.audit)] : []), ...(forFile ? [/** @type {Node} */ (forFile)] : []), ...this.scopes.map((scope) => /** @type {Node} */ ({ type: "scope", scope }))];
     }
     if (node.type === "group") return node.children;
     if (node.type === "health") return healthChildren(this.scopes);
@@ -571,6 +623,23 @@ function budgetRow(root) {
     tooltip: "What the last session in this repo loaded into the model's context, item by item. Tokens are estimated as characters ÷ 4; /context in Claude Code has the exact count." };
 }
 
+/**
+ * Install a suggested plugin for one repo (#143), after a confirmation that shows the vetting:
+ * Claude Code's own `claude plugin install --scope project`, in a terminal in that repo.
+ * @param {any} node a Suggested row
+ */
+async function installSuggestion(node) {
+  const id = node?.installId;
+  const root = node?.repoRoot;
+  if (typeof id !== "string" || !/^[\w.-]+@[\w.-]+$/.test(id) || typeof root !== "string") return;
+  const ok = await vscode.window.showWarningMessage(`Install ${id} for ${path.basename(root)}?`, { modal: true,
+    detail: `It brings: ${node.reads}.${node.flags?.length ? `\n\n⚠ ${node.flags.join("\n⚠ ")}` : ""}\n\nRuns: claude plugin install ${id} --scope project (in ${root}). Restart Claude Code sessions there afterwards.` }, "Install");
+  if (ok !== "Install") return;
+  const t = vscode.window.createTerminal({ name: `Install ${id}`, cwd: root });
+  t.show();
+  t.sendText(`claude plugin install ${id} --scope project`);
+}
+
 /** A file's text, "" when it cannot be read. @param {string} f */
 function safeRead(f) {
   try {
@@ -748,6 +817,7 @@ function registerSetupView(ctx, roots, counts) {
     view.onDidChangeVisibility((e) => e.visible && soon()),
     vscode.window.onDidChangeWindowState((s) => s.focused && view.visible && soon()),
     vscode.commands.registerCommand("imprimatur.setup.refresh", () => provider.refresh()),
+    vscode.commands.registerCommand("imprimatur.setup.installSuggestion", (node) => installSuggestion(node ?? view.selection[0])),
     vscode.commands.registerCommand("imprimatur.setup.turnOffPlugin", (node) => turnOffPlugin(provider, node ?? view.selection[0])),
     vscode.commands.registerCommand("imprimatur.setup.installFix", (fix) => runInstallFix(fix)),
     vscode.commands.registerCommand("imprimatur.checkSetup", () => checkSetup(provider)),
