@@ -23,6 +23,8 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { docMarkdown, fileOf, inside, docsSettings, kindsOf, FILES, generatedText } = require("./docs-export.js");
+/** The line of decision links export adds under a section (#130): not part of its body. */
+const { LINKS_MARK } = require("./decisions.js");
 const { fenceTracker, filesAt, importRepo, originOf } = require("./import.js");
 const { slugify } = require("./docsView.js");
 const { CHAPTER_ANCHOR } = require("./db.js");
@@ -73,7 +75,7 @@ function parseManaged(text) {
     } else if (a && h) {
       out.push((cur = { key: a[1], title: h[1], lines: [] }));
       i = j;
-    } else if (cur) cur.lines.push(lines[i]);
+    } else if (cur && !lines[i].startsWith(LINKS_MARK)) cur.lines.push(lines[i]);
   }
   return out.map((s) => ({ key: s.key, title: s.title, body: trimBlank(s.lines).join("\n") }));
 }

@@ -1178,6 +1178,22 @@ class Db {
     });
   }
 
+  /** The repo's adr and pdr records, dropped ones too (their MADR numbers stay taken, #130), oldest first, with their task. @param {number} repoId */
+  decisionRecords(repoId) {
+    return this.q(`SELECT r.*, t.key AS task_key, t.title AS task_title FROM records r JOIN tasks t ON t.id = r.task_id
+                   WHERE t.repo_id = ? AND r.kind IN ('adr', 'pdr') ORDER BY r.created_at, r.id`).all(repoId).map(recordOf);
+  }
+
+  /** The current sections each record contributes to: record id → [{kind, key, title}] (#130). @param {number} repoId */
+  sectionsOfRecords(repoId) {
+    /** @type {Map<number, Array<{kind: string, key: string, title: string}>>} */
+    const out = new Map();
+    for (const x of this.q(`SELECT l.record_id, d.kind, s.key, s.title FROM doc_section_records l JOIN doc_sections s ON s.id = l.section_id JOIN documents d ON d.id = s.doc_id
+                            WHERE d.repo_id = ? AND s.status = 'current' AND d.kind IN ('architecture', 'product')`).all(repoId))
+      out.set(x.record_id, [...(out.get(x.record_id) ?? []), { kind: x.kind, key: x.key, title: x.title }]);
+    return out;
+  }
+
   /** The repo's current design-document sections per document and chapter (#152). @param {number} repoId @returns {Array<{kind: string, chapter: string | null, n: number}>} */
   sectionsPerChapter(repoId) {
     return this.q(`SELECT d.kind, s.chapter, count(*) AS n FROM doc_sections s JOIN documents d ON d.id = s.doc_id
@@ -1506,7 +1522,7 @@ class Db {
    * @param {number} docId
    */
   docSections(docId) {
-    const links = this.q(`SELECT l.section_id, r.id, r.uid, r.kind, r.title, r.status, r.task_id, t.key AS task_key
+    const links = this.q(`SELECT l.section_id, r.id, r.uid, r.kind, r.title, r.status, r.task_id, json_extract(r.links, '$.madr') AS madr, t.key AS task_key
                           FROM doc_section_records l JOIN doc_sections s ON s.id = l.section_id
                           JOIN records r ON r.id = l.record_id JOIN tasks t ON t.id = r.task_id
                           WHERE s.doc_id = ? ORDER BY r.id`).all(docId);

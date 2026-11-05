@@ -31,6 +31,8 @@ type: explanation
 
 Generated after a change.
 
+<!-- imprimatur:decisions --> Decisions: [ADR 0001](decisions/0001-sqlite-is-the-source-of-truth.md)
+
 <a id="chapter-context"></a>
 
 ## Context and scope
@@ -56,6 +58,8 @@ SQLite in WAL mode.
 #### Why
 
 - one file per device
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0001](decisions/0001-sqlite-is-the-source-of-truth.md)
 
 <a id="chapter-deployment"></a>
 
