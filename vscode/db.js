@@ -432,6 +432,11 @@ const MIGRATIONS = [
   `,
   // #129: the fixed chapter a section of the architecture or product document sits in (CHAPTERS).
   `ALTER TABLE doc_sections ADD COLUMN chapter TEXT;`,
+  // #150: when a task became done (its updated_at moves on any edit, so it cannot say). Old
+  // done tasks get their records' latest change, else when they were opened: a later bulk edit
+  // of titles or labels does not count as finishing them.
+  `ALTER TABLE tasks ADD COLUMN done_at INTEGER;
+  UPDATE tasks SET done_at = coalesce((SELECT max(r.updated_at) FROM records r WHERE r.task_id = tasks.id), created_at) WHERE status = 'done';`,
 ];
 const VERSION = MIGRATIONS.length;
 
@@ -827,7 +832,12 @@ class Db {
         "epicId" in fields ? 1 : 0, fields.epicId ?? null,
         "summary" in fields ? 1 : 0, fields.summary ?? null, now,
       );
-      const after = this.q("SELECT * FROM tasks WHERE repo_id = ? AND key = ?").get(repoId, key);
+      let after = this.q("SELECT * FROM tasks WHERE repo_id = ? AND key = ?").get(repoId, key);
+      // #150: the moment it became done; leaving done clears it.
+      if (before?.status !== after.status && (after.status === "done" || before?.status === "done")) {
+        this.q("UPDATE tasks SET done_at = ? WHERE id = ?").run(after.status === "done" ? now : null, after.id);
+        after = this.q("SELECT * FROM tasks WHERE id = ?").get(after.id);
+      }
       const col = { title: "title", status: "status", summary: "summary", epic: "epic_id" };
       this.changed_("task", after, FIELDS.task.filter((f) => !before || before[col[f]] !== after[col[f]]), now);
       if (before?.status !== after.status && CLOSED.has(after.status)) this.closeEpicLines_(after, actor, now);

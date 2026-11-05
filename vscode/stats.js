@@ -137,10 +137,11 @@ function statsOf(root, { days = 7, now = Date.now(), db } = {}) {
   };
   const repo = db.repoByRoot?.(root) ?? db.repoOf(root);
   const q = (/** @type {string} */ sql, /** @type {any[]} */ ...p) => db.sqlite.prepare(sql).all(...p);
-  const tasks = repo ? q("SELECT status, created_at, updated_at FROM tasks WHERE repo_id = ?", repo.id) : [];
+  // done_at (#150) where the schema has it; a task pulled done from another machine may have none.
+  const tasks = repo ? q("SELECT * FROM tasks WHERE repo_id = ?", repo.id) : [];
   const records = repo ? q("SELECT r.kind, r.created_at FROM records r JOIN tasks t ON t.id = r.task_id WHERE t.repo_id = ? AND r.created_at >= ?", repo.id, since) : [];
   for (const t of tasks) {
-    if (t.status === "done") add("tasksDone", t.updated_at);
+    if (t.status === "done") add("tasksDone", t.done_at ?? t.updated_at);
     add("tasksOpened", t.created_at);
   }
   for (const r of records) {

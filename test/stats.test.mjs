@@ -42,3 +42,19 @@ test("stats (#150): a file is read again only when it changed", () => {
   assert.equal(reads, 2);
   assert.equal(cachedRead(path.join(path.dirname(f), "none"), parse), undefined);
 });
+
+test("stats (#150): a task counts as finished on the day it became done, not on a later edit", () => {
+  const { openDb } = require("../vscode/db.js");
+  const db = openDb();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "imp-done-"));
+  const repo = db.ensureRepo ? db.ensureRepo(root) : db.repoOf(root);
+  db.upsertTask(repo.id, "#1", { title: "a", status: "done" });
+  const t = db.sqlite.prepare("SELECT * FROM tasks WHERE repo_id = ? AND key = '#1'").get(repo.id);
+  assert.ok(t.done_at, "done_at is set when it becomes done");
+  db.sqlite.prepare("UPDATE tasks SET done_at = ? WHERE id = ?").run(Date.now() - 20 * DAY, t.id);
+  db.upsertTask(repo.id, "#1", { title: "a retitled" });
+  assert.equal(statsOf(root, { days: 7, db }).series.tasksDone.reduce((a, b) => a + b, 0), 0, "a retitle later is not a finish");
+  db.upsertTask(repo.id, "#1", { status: "open" });
+  assert.equal(db.sqlite.prepare("SELECT done_at FROM tasks WHERE id = ?").get(t.id).done_at, null, "reopening clears it");
+  fs.rmSync(root, { recursive: true, force: true });
+});
