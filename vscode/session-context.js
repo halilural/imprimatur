@@ -10,7 +10,7 @@ const path = require("node:path");
 
 /**
  * @typedef {{instructions: Map<string, {type: string, chars: number}>,
- *   hooks: Map<string, {event: string, script: string, abs: string, runs: number, ms: number, chars: number, first: string}>,
+ *   hooks: Map<string, {event: string, script: string, abs: string, runs: number, ms: number, chars: number, first: string, tools: Set<string>}>,
  *   mcp: Map<string, number>, tools: Map<string, Set<string>>, failed: Map<string, string>, needsAuth: Set<string>,
  *   skills: {names: Set<string>, chars: number}, agents: Set<string>, model: string, mode: Record<string, unknown>, context: Map<string, number>}} SessionState
  */
@@ -59,8 +59,12 @@ function fold(s, line) {
       break;
     case "hook_success": {
       const { abs, script } = hookScript(String(a.command ?? ""));
-      const key = `${a.hookEvent} ${script}`;
-      const h = s.hooks.get(key) ?? { event: String(a.hookEvent), script, abs, runs: 0, ms: 0, chars: 0, first: "" };
+      // Keyed by the script's path: two copies of one plugin (two scopes) stay two rows (#145).
+      const key = `${a.hookEvent} ${abs || script}`;
+      const h = s.hooks.get(key) ?? { event: String(a.hookEvent), script, abs, runs: 0, ms: 0, chars: 0, first: "", tools: new Set() };
+      // "PreToolUse:mcp__x__y": the tool it ran for, to name a hook Claude Code logged without its command.
+      const tool = String(a.hookName ?? "").split(":").slice(1).join(":");
+      if (tool) h.tools.add(tool);
       // Claude Code may log a hook's status message as its command and its output as content.
       const text = injected(a) || String(a.content ?? "");
       h.runs++;
@@ -161,6 +165,30 @@ function stateOf(file) {
 /** Servers and stores that hold memory across sessions (Nook, Notion memory, mem0, claude-mem, …). */
 const MEMORY = /nook|notion|mem0|claude-mem|supermemory|memory|letta|zep|context-mode/i;
 
+/**
+ * A hook Claude Code logged as "command hook": named by the configured hooks of its event
+ * whose matcher fits the tools it ran for; unchanged when none fits. @param {{event: string, script: string, tools: Set<string>}} h @param {Array<{event: string, matcher: string, script: string}>} configured
+ */
+function nameOf(h, configured) {
+  const fits = (/** @type {string} */ m, /** @type {string} */ t) => {
+    if (!m || m === "*") return true;
+    try {
+      return new RegExp(`^(?:${m})$`).test(t);
+    } catch {
+      return m === t;
+    }
+  };
+  const tools = [...h.tools];
+  const names = [...new Set(configured.filter((c) => c.event === h.event && (!tools.length || tools.some((t) => fits(c.matcher, t)))).map((c) => c.script))];
+  if (!names.length) return h.script;
+  return names.length === 1 ? names[0] : `one of ${names.join(", ")}`;
+}
+
+/** @param {number} ms */
+const secs = (ms) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${ms} ms`);
+/** @param {string} p @param {string} home */
+const tildeOf = (p, home) => (p && p.startsWith(home) ? `~${p.slice(home.length)}` : p || "?");
+
 /** @param {number} n */
 const chars = (n) => (n >= 10_000 ? `${Math.round(n / 1000)}k chars` : `${n} chars`);
 
@@ -168,9 +196,10 @@ const chars = (n) => (n >= 10_000 ? `${Math.round(n / 1000)}k chars` : `${n} cha
  * Agent setup rows for what the last session in this project saw (#139), tool "This session".
  * The hash is what the row says, so a change from one session to the next shows as "changed".
  * @param {string} projectDir ~/.claude/projects/<slug> @param {string} home
+ * @param {Array<{event: string, matcher: string, script: string}>} [configured] the hooks the settings and plugins define, to name the ones logged without a command
  * @returns {any[]} SetupItem rows; abs "" for a row with no file to open
  */
-function sessionItems(projectDir, home) {
+function sessionItems(projectDir, home, configured = []) {
   const file = newestTranscript(projectDir);
   const s = file && stateOf(file);
   if (!s) return [];
@@ -181,8 +210,15 @@ function sessionItems(projectDir, home) {
     out.push({ rel: `session: ${kind}: ${label}`, abs, tool: "This session", kind, label, summary, details, hash: summary });
   const tilde = (/** @type {string} */ p) => (p.startsWith(home) ? `~${p.slice(home.length)}` : p);
   for (const [p, f] of s.instructions) row("loaded instructions", tilde(p), `${f.type} · ${chars(f.chars)}`, p);
-  for (const h of [...s.hooks.values()].sort((a, b) => b.ms - a.ms))
-    row("hook output", `${h.event}: ${h.script}`, [`${h.runs} runs`, `${Math.round(h.ms / h.runs)} ms each`, h.chars && `adds ${chars(h.chars)}`].filter(Boolean).join(" · "), h.abs, h.first ? [h.first] : []);
+  const hooks = [...s.hooks.values()].map((h) => (h.abs || !/^command hook\b/.test(h.script) ? h : { ...h, script: nameOf(h, configured) }));
+  // The same hook from more than one file: a plugin installed at two scopes runs twice.
+  const copies = (/** @type {typeof hooks[number]} */ h) => hooks.filter((x) => x.event === h.event && x.script === h.script).length;
+  for (const h of hooks.sort((a, b) => b.ms - a.ms)) {
+    const twice = copies(h) > 1;
+    row("hook output", `${h.event}: ${h.script}${twice ? " (copy)" : ""}`,
+      [`${secs(h.ms)} in all`, `${h.runs} runs`, `${Math.round(h.ms / h.runs)} ms each`, h.chars && `adds ${chars(h.chars)}`, twice && `runs ${copies(h)} times: ${copies(h)} copies installed`].filter(Boolean).join(" · "),
+      h.abs, [...(twice ? [`from ${tildeOf(h.abs, home)}`] : []), ...(h.first ? [h.first] : [])]);
+  }
   for (const [n, c] of s.mcp) row("MCP instructions", n, chars(c));
   for (const [server, set] of [...s.tools].sort((a, b) => b[1].size - a[1].size)) if (set.size) row("tools", server, `${set.size} tools`);
   for (const [n, why] of s.failed) row("tools", n, `failed to connect: ${why}`);
