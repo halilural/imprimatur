@@ -116,4 +116,34 @@ async function fetchSkillFolder(origin, ref, dest, { api = ghApi, raw = ghRaw } 
   return written;
 }
 
-module.exports = { readUpstream, checkUpstream, staleOf, fetchSkillFolder, DAY };
+/**
+ * Takes a reviewed skill version in (#156): copies the downloaded files over the installed
+ * skill and records the new commit in its SOURCE.txt. Files only the installed copy has stay
+ * (SOURCE.txt among them). Done here, not by the agent: Claude Code does not let an agent
+ * edit ~/.claude/skills.
+ * @param {string} from the downloaded folder @param {string} to the installed skill's folder
+ * @param {string[]} files the downloaded files, relative @param {string} commit the new commit
+ * @param {string} note what the review checked, one line @param {string} day YYYY-MM-DD
+ */
+function applySkillUpdate(from, to, files, commit, note, day) {
+  const root = path.resolve(to);
+  for (const rel of files) {
+    const out = path.resolve(root, rel);
+    if (!rel || rel.split(/[\\/]/).includes("..") || !out.startsWith(root + path.sep) || path.basename(rel) === "SOURCE.txt") continue;
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.copyFileSync(path.join(from, rel), out);
+  }
+  const src = path.join(root, "SOURCE.txt");
+  const text = fs.existsSync(src) ? fs.readFileSync(src, "utf8") : "";
+  const line = `updated: ${day} to ${commit.slice(0, 7)}, reviewed by Claude through Imprimatur's Fix it: ${note.replace(/[\r\n]+/g, " ").slice(0, 200)}`;
+  const next = /^commit:.*$/m.test(text) ? text.replace(/^commit:.*$/m, `commit: ${commit.slice(0, 7)}`) : `${text}commit: ${commit.slice(0, 7)}\n`;
+  fs.writeFileSync(src, `${next.replace(/\n?$/, "\n")}${line}\n`);
+}
+
+/** The review's verdict, its last "VERDICT:" line: SAFE, or STOP with a reason. @param {string} answer */
+function verdictOf(answer) {
+  const m = [...String(answer).matchAll(/^\s*\**VERDICT:\**\s*(SAFE|STOP)\b[:\s-]*(.*)$/gim)].at(-1);
+  return m ? { safe: m[1].toUpperCase() === "SAFE", reason: m[2].trim() } : { safe: false, reason: "the review gave no verdict" };
+}
+
+module.exports = { readUpstream, checkUpstream, staleOf, fetchSkillFolder, applySkillUpdate, verdictOf, DAY };

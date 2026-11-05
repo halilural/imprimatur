@@ -26,7 +26,8 @@ function checklistOf(scopes, openRecommendations) {
       if (it.compare)
         rows.push({ type: "leaf", label: `Review the upstream change of ${it.label}`, description: /upstream changed (\S+)/.exec(it.summary)?.[1] ?? "",
           tooltip: `The skill's folder changed in its source repo since it was installed. Read the change, then copy it in on purpose: a skill's text goes straight into the agent's context.`,
-          icon: "git-compare", command: "imprimatur.setup.showUpstream", args: [{ item: it }], ...(skillUpdatePrompt(it) ? { context: "checkFix", fix: { kind: "skill", item: it } } : {}) });
+          // A click opens the skill; the compare page is on the row's menu, Fix it on its button.
+          icon: "git-compare", abs: it.abs, item: it, context: skillUpdatePrompt(it) ? "checkFix-upstream" : "check-upstream", ...(skillUpdatePrompt(it) ? { fix: { kind: "skill", item: it } } : {}) });
     }
   for (const s of scopes)
     for (const p of s.health)

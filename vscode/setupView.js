@@ -371,7 +371,7 @@ async function fixWithClaude(provider, node) {
   const runner = require("./fix-runner.js");
   const db = require("./records.js").dbOf();
   const repo = provider.scopes.find((s) => !s.global)?.root ?? os.homedir();
-  /** @type {{prompt: string, label: string, edit: string[], editDirs: string[], read: string[], audit?: boolean}} */
+  /** @type {{prompt: string, label: string, edit: string[], editDirs: string[], read: string[], audit?: boolean, apply?: {from: string, to: string, files: string[], commit: string}}} */
   let fix = { prompt: "", label: "", edit: [], editDirs: [], read: [] };
   const kind = node?.fix?.kind;
   if (kind === "health") fix = { prompt: prompts.healthPrompt(node.fix.problem), label: path.basename(node.fix.problem.file), edit: [node.fix.problem.file], editDirs: [], read: [] };
@@ -397,17 +397,21 @@ async function fixWithClaude(provider, node) {
     const dir = path.dirname(skill.abs);
     const to = /\.\.\.([0-9a-f]+)$/.exec(skill.compare)?.[1] ?? "";
     const dest = fs.mkdtempSync(path.join(os.tmpdir(), `imprimatur-skill-${skill.label}-`));
+    let files;
     try {
-      await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Imprimatur: downloading ${skill.label} at ${to.slice(0, 7)}…` },
+      files = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Imprimatur: downloading ${skill.label} at ${to.slice(0, 7)}…` },
         () => require("./upstream.js").fetchSkillFolder(skill.origin, to, dest));
     } catch (e) {
+      fs.rmSync(dest, { recursive: true, force: true });
       return void vscode.window.showErrorMessage(`Imprimatur: could not download ${skill.label}: ${e instanceof Error ? e.message : e}`);
     }
-    fix = { prompt: prompts.skillUpdatePrompt(skill, dest), label: skill.label, edit: [], editDirs: [dir], read: [dest] };
+    // The agent only reviews: Claude Code does not let it edit ~/.claude/skills, and Imprimatur copies on a SAFE verdict.
+    fix = { prompt: prompts.skillUpdatePrompt(skill, dest), label: skill.label, edit: [], editDirs: [], read: [dest], apply: { from: dest, to: dir, files, commit: to } };
   }
   let args;
   try {
-    args = runner.claudeArgs(fix.prompt, { edit: fix.edit, editDirs: fix.editDirs, addDirs: runner.outside(repo, [...fix.edit, ...fix.editDirs.map((d) => path.join(d, "x")), ...fix.read.map((d) => path.join(d, "x"))]) });
+    // Read only: the agent proposes edits; Imprimatur shows and applies them (fix-edits.js).
+    args = runner.claudeArgs(fix.prompt, { addDirs: runner.outside(repo, [...fix.edit, ...fix.editDirs.map((d) => path.join(d, "x")), ...fix.read.map((d) => path.join(d, "x"))]) });
   } catch (e) {
     // A target path with rule characters in it cannot be limited safely: no run.
     for (const d of fix.read) fs.rmSync(d, { recursive: true, force: true });
@@ -415,12 +419,19 @@ async function fixWithClaude(provider, node) {
     return void vscode.window.showWarningMessage(`Imprimatur: ${e instanceof Error ? e.message : e}. Fix it did not run; the prompt is on the clipboard.`);
   }
   const may = [...fix.edit.map((f) => f.replace(os.homedir(), "~")), ...fix.editDirs.map((d) => `${d.replace(os.homedir(), "~")}/`)];
-  const go = await vscode.window.showWarningMessage(`Run Claude in the background to fix ${fix.label}?`,
-    { modal: true, detail: `It may edit only: ${may.join(", ") || "nothing"}. No commands, no web. Its edits wait for your review in Agent changes.\n\n${fix.prompt.slice(0, 1200)}` }, "Run");
-  if (go !== "Run") return;
+  const scope = fix.apply
+    ? `It only reviews the new version; no commands, no web. If it says SAFE, Imprimatur copies the files into ${fix.apply.to.replace(os.homedir(), "~")}/ and updates SOURCE.txt.`
+    : `It only reads: no edits, no commands, no web. It proposes changes to ${may.join(", ") || "nothing"}, and you see the diff before anything is applied.`;
+  const go = await vscode.window.showWarningMessage(`Run Claude in the background to ${fix.apply ? "review" : "fix"} ${fix.label}?`, { modal: true, detail: `${scope}\n\n${fix.prompt.slice(0, 1200)}` }, "Run");
+  if (go !== "Run") {
+    for (const d of fix.read) fs.rmSync(d, { recursive: true, force: true });
+    return;
+  }
+  if (provider.fixing) return void vscode.window.showInformationMessage("Imprimatur: a Fix it is already running.");
+  provider.fixing = true;
   const out = (fixOutput ??= vscode.window.createOutputChannel("Imprimatur Fix it"));
   out.appendLine(`\n=== ${new Date().toLocaleString()} · Fix it: ${fix.label} (in ${repo})\n${fix.prompt}\n---`);
-  const res = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Imprimatur: Claude is fixing ${fix.label}…`, cancellable: true },
+  const res = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Imprimatur: Claude is ${fix.apply ? "reviewing" : "looking at"} ${fix.label}…`, cancellable: true },
     (_p, token) => new Promise((resolve) => {
       const { spawn } = require("node:child_process");
       // stdin closed: -p reads it when it is a pipe.
@@ -433,8 +444,31 @@ async function fixWithClaude(provider, node) {
       child.on("error", (e) => resolve({ code: -1, stdout, stderr: String(e.message) }));
       child.on("close", (code) => (clearTimeout(timer), resolve({ code, stdout, stderr })));
     }));
+  provider.fixing = false;
   const r = /** @type {{code: number, stdout: string, stderr: string}} */ (res);
   if (r.stderr) out.appendLine(`\n[stderr] ${r.stderr.trim()}`);
+  // A reviewed skill: copied here on SAFE, before the download goes.
+  /** @type {string | undefined} */
+  let applied;
+  if (r.code === 0 && fix.apply) {
+    const up = require("./upstream.js");
+    const v = up.verdictOf(r.stdout);
+    if (v.safe) {
+      try {
+        const note = r.stdout.trim().split("\n").find((l) => l.trim() && !/VERDICT/i.test(l)) ?? "no findings";
+        up.applySkillUpdate(fix.apply.from, fix.apply.to, fix.apply.files, fix.apply.commit, note, new Date().toISOString().slice(0, 10));
+        applied = `updated ${fix.label} to ${fix.apply.commit.slice(0, 7)}`;
+      } catch (e) {
+        applied = `could not copy ${fix.label}: ${e instanceof Error ? e.message : e}`;
+      }
+    } else {
+      for (const d of fix.read) fs.rmSync(d, { recursive: true, force: true });
+      provider.refresh();
+      const pick = await vscode.window.showWarningMessage(`Imprimatur: ${fix.label} was not taken in: ${v.reason.slice(0, 200)}`, "Show answer");
+      if (pick) out.show();
+      return;
+    }
+  }
   for (const d of fix.read) fs.rmSync(d, { recursive: true, force: true });
   if (r.code !== 0) {
     provider.refresh();
@@ -442,13 +476,44 @@ async function fixWithClaude(provider, node) {
     if (pick) out.show();
     return;
   }
+  // Proposed edits: shown as diffs, applied when the user says so.
+  if (!fix.apply) {
+    const edits = require("./fix-edits.js");
+    const plan = edits.planEdits(edits.parseEdits(r.stdout), fix.edit);
+    const skippedNote = plan.skipped.length ? `\n\nLeft out: ${plan.skipped.map((x) => `${x.file.replace(os.homedir(), "~")} (${x.why})`).join("; ")}` : "";
+    if (!plan.files.size) {
+      const pick = await vscode.window.showInformationMessage(`Imprimatur: Claude proposed no change for ${fix.label}.${skippedNote.replace(/\n+/g, " ")}`, "Show answer");
+      if (pick) out.show();
+      return;
+    }
+    const shown = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-fix-"));
+    let k = 0;
+    for (const [file, c] of plan.files) {
+      const proposed = path.join(shown, `${++k}-${path.basename(file)}`);
+      fs.writeFileSync(proposed, c.after);
+      await vscode.commands.executeCommand("vscode.diff", vscode.Uri.file(file), vscode.Uri.file(proposed), `Fix it: ${path.basename(file)} (now ↔ proposed)`, { preview: false });
+    }
+    const files = [...plan.files.keys()].map((f) => f.replace(os.homedir(), "~"));
+    const ok = await vscode.window.showWarningMessage(`Apply Claude's changes to ${files.length} file${files.length === 1 ? "" : "s"}?`,
+      { modal: true, detail: `${files.join("\n")}${skippedNote}\n\nThe diffs are open. Nothing has changed yet.` }, "Apply");
+    let wrote = 0;
+    if (ok === "Apply")
+      for (const [file, c] of plan.files) {
+        // A file that changed since Claude read it is left alone.
+        if (fs.readFileSync(file, "utf8") !== c.before) continue;
+        fs.writeFileSync(file, c.after);
+        wrote++;
+      }
+    fs.rmSync(shown, { recursive: true, force: true });
+    if (!wrote) return void vscode.window.showInformationMessage(`Imprimatur: nothing applied${ok === "Apply" ? " (the files changed meanwhile)" : ""}.`);
+    applied = `applied ${wrote} change${wrote === 1 ? "" : "s"} to ${fix.label}`;
+  }
   // The run has no MCP: the audit runs here, so the counts show what is left.
   if (fix.audit) await runAudit(provider);
   else provider.refresh();
-  const first = r.stdout.trim().split("\n").find((l) => l.trim()) ?? "Done.";
-  const pick = await vscode.window.showInformationMessage(`Imprimatur: Fix it finished: ${first.slice(0, 200)}`, "Show answer", "Review changes");
+  const first = applied ?? r.stdout.trim().split("\n").find((l) => l.trim()) ?? "Done.";
+  const pick = await vscode.window.showInformationMessage(`Imprimatur: Fix it finished: ${first.slice(0, 200)}`, "Show answer");
   if (pick === "Show answer") out.show();
-  if (pick === "Review changes") vscode.commands.executeCommand("imprimatur.openGraph");
 }
 
 /**

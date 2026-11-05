@@ -4,6 +4,19 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.107.0] - 2026-11-05
+
+### Changed
+- Fix it's background Claude only reads (#156). For a finding it proposes the edits, and
+  Imprimatur opens a diff for each file and applies them only when you say Apply (an edit is
+  left out when its file is not one of the fix's files, its old text is not found exactly
+  once, or the file changed meanwhile). For a skill changed upstream it reviews the new
+  version and ends with a verdict; on SAFE, Imprimatur copies the files in and records the
+  commit in SOURCE.txt, so the row leaves the checklist. This is needed because Claude Code
+  does not let an unattended agent edit anything under ~/.claude.
+- A click on a checklist row of a skill opens the skill instead of the browser; the compare
+  page is on the row's menu. Only one Fix it runs at a time.
+
 ## [0.106.2] - 2026-11-04
 
 ### Security

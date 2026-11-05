@@ -16,10 +16,10 @@ test("checklist (#142): outdated plugins, upstream changes, health problems and 
   assert.equal(node.description, "4 to do");
   const [u, r, h, recs] = node.children;
   assert.deepEqual([u.label, u.description, u.command, u.args[0].item], ["Update ponytail@ponytail", "investment · v5.3.3", "imprimatur.setup.updatePlugin", plugin]);
-  assert.deepEqual([r.label, r.description, r.command], ["Review the upstream change of etf", "2026-10-24", "imprimatur.setup.showUpstream"]);
+  assert.deepEqual([r.label, r.description, r.command, r.abs, r.context], ["Review the upstream change of etf", "2026-10-24", undefined, skill.abs, "checkFix-upstream"], "a click opens the skill, not the browser");
   assert.deepEqual([h.label, h.abs, h.line, h.icon], ["Not valid JSON", "/r/.claude/settings.json", 3, "error"]);
   assert.deepEqual([recs.label, recs.command], ["2 open recommendations", "imprimatur.setup.audit"]);
-  for (const row of node.children) assert.ok(row.tooltip && (row.command || row.abs), `${row.label} says what to do and has an action`);
+  for (const row of node.children) assert.ok(row.tooltip && (row.command || row.abs || row.fix), `${row.label} says what to do and has an action`);
   // Fix it (#156): the upstream change, the health problem and the recommendations hand off to Claude; the update has its own button.
   assert.deepEqual(node.children.map((x) => x.fix?.kind ?? "-"), ["-", "skill", "health", "findings"]);
   const secret = checklistOf([{ label: "r", global: false, items: [], health: [{ file: "/r/a.md", level: "warn", message: "Line 3 looks like a password or token" }] }], 0);
