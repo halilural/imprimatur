@@ -230,6 +230,7 @@ class SetupView {
     this.loadAudit();
     // The checklist (#142): what needs doing, from the scan, the health check and the audit.
     this.installs = installChecksNow();
+    this.budget = budgetRow(this.scopes.find((s) => !s.global)?.root);
     this.checklist = checklistOf(this.scopes, /** @type {any} */ (this.audit)?.open ?? 0, this.installs);
     this.onScanned?.(this.checklist.count);
     this.extras();
@@ -258,7 +259,7 @@ class SetupView {
   getChildren(node) {
     if (!node) {
       const forFile = forFileNode(this.scopes, this.activeFile);
-      return [/** @type {Node} */ (this.checklist.node), ...healthRoot(this.scopes), ...(this.audit ? [/** @type {Node} */ (this.audit)] : []), ...(forFile ? [/** @type {Node} */ (forFile)] : []), ...this.scopes.map((scope) => /** @type {Node} */ ({ type: "scope", scope }))];
+      return [/** @type {Node} */ (this.checklist.node), ...(this.budget ? [/** @type {Node} */ (this.budget)] : []), ...healthRoot(this.scopes), ...(this.audit ? [/** @type {Node} */ (this.audit)] : []), ...(forFile ? [/** @type {Node} */ (forFile)] : []), ...this.scopes.map((scope) => /** @type {Node} */ ({ type: "scope", scope }))];
     }
     if (node.type === "group") return node.children;
     if (node.type === "health") return healthChildren(this.scopes);
@@ -538,6 +539,29 @@ async function fixWithClaude(provider, node) {
   const first = applied ?? r.stdout.trim().split("\n").find((l) => l.trim()) ?? "Done.";
   const pick = await vscode.window.showInformationMessage(`Imprimatur: Fix it finished: ${first.slice(0, 200)}`, "Show answer");
   if (pick === "Show answer") out.show();
+}
+
+/**
+ * The context budget row (#29): what the repo's last session loaded into context, biggest
+ * first, with estimated tokens; a large item is marked and its tooltip says how to shrink it.
+ * @param {string | undefined} root @returns {any}
+ */
+function budgetRow(root) {
+  if (!root) return undefined;
+  const sc = require("./session-context.js");
+  const a = require("./agent-setup.js");
+  const home = os.homedir();
+  const b = sc.sessionBudget(path.join(home, ".claude", "projects", a.projectSlug(a.gitRootOf(root))), home, a.configuredHooks(root, home));
+  if (!b) return undefined;
+  const n = (/** @type {number} */ t) => `~${t.toLocaleString("en-US")} tokens`;
+  const rows = b.rows.map((r) => ({
+    type: "leaf", label: r.label, description: `${n(r.tokens)} · ${r.kind} · ${r.detail}`, abs: r.abs || undefined,
+    icon: r.tokens >= sc.LARGE ? "warning" : r.suggestion ? "lightbulb" : "circle-small", color: r.tokens >= sc.LARGE ? "problemsWarningIcon.foreground" : undefined,
+    tooltip: `${r.label}: ${n(r.tokens)} (${r.kind}). ${r.detail}.${r.tokens >= sc.LARGE ? " Large: it alone takes a noticeable part of every session." : ""}${r.suggestion ? `\n\n${r.suggestion}` : ""}`,
+  }));
+  for (const u of b.uncounted) rows.push({ type: "leaf", label: `Not counted: ${u}`, icon: "question", tooltip: "Not in the transcript, so not guessed. Claude Code's /context shows the exact numbers." });
+  return { type: "group", label: "Context budget", description: `${n(b.total)} a session (estimate)`, icon: "dashboard", children: rows,
+    tooltip: "What the last session in this repo loaded into the model's context, item by item. Tokens are estimated as characters ÷ 4; /context in Claude Code has the exact count." };
 }
 
 /** The install checks now (#81): the CLI, the plugin or npm run setup, the database. */

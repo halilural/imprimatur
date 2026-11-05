@@ -29,20 +29,20 @@ test("session context (#139): what the last session saw, from its transcript; ap
   ].join("\n"));
   const rows = () => Object.fromEntries(sessionItems(dir, home).map((r) => [`${r.kind}|${r.label}`, r.summary]));
   assert.deepEqual(rows(), {
-    "loaded instructions|~/.claude/CLAUDE.md": "User · 12 chars",
-    "hook output|SessionStart: run.mjs": "300 ms in all · 1 runs · 300 ms each · adds 22 chars",
-    "hook output|SessionStart: Loading tidy mode": "100 ms in all · 1 runs · 100 ms each · adds 7 chars",
-    "MCP instructions|imprimatur": "36 chars",
+    "loaded instructions|~/.claude/CLAUDE.md": "User · ~3 tokens",
+    "hook output|SessionStart: run.mjs": "300 ms in all · 1 runs · 300 ms each · adds ~6 tokens",
+    "hook output|SessionStart: Loading tidy mode": "100 ms in all · 1 runs · 100 ms each · adds ~2 tokens",
+    "MCP instructions|imprimatur": "~9 tokens",
     "tools|imprimatur": "2 tools",
     "tools|Claude Code": "1 tools",
     "tools|dd": "failed to connect: ENOTFOUND",
     "tools|linear": "needs sign-in",
-    "listings|skills": "3 skills · 10 chars",
+    "listings|skills": "3 skills · ~3 tokens",
     "model and mode|model": "Opus 5.5",
   });
   // The session goes on: only the new line is read, and runs add up.
   fs.appendFileSync(file, att({ type: "hook_success", hookEvent: "SessionStart", command: 'node "/opt/hooks/run.mjs" md', durationMs: 100, stdout: "" }) + "\n");
-  assert.equal(rows()["hook output|SessionStart: run.mjs"], "400 ms in all · 2 runs · 200 ms each · adds 22 chars");
+  assert.equal(rows()["hook output|SessionStart: run.mjs"], "400 ms in all · 2 runs · 200 ms each · adds ~6 tokens");
 });
 
 test("session context (#139): memory servers are listed once as data sources, under the connector's name", () => {
@@ -99,4 +99,31 @@ test("session context (#145): matchers are never compiled as regex; a pathologic
   ]).filter((r) => r.kind === "hook output").map((r) => r.label);
   assert.ok(Date.now() - started < 500, "no catastrophic backtracking");
   assert.deepEqual(labels, ["PreToolUse: evil.mjs"], "a pattern it cannot read may fit; a prefix or exact name that does not fit is left out");
+});
+
+test("context budget (#29): every loaded item with estimated tokens, biggest first; hook text summed per run; unused MCP flagged; tool definitions not guessed", () => {
+  const { sessionBudget, tokensOf } = require("../vscode/session-context.js");
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "budget-"));
+  const dir = path.join(home, ".claude", "projects", "p");
+  fs.mkdirSync(dir, { recursive: true });
+  const ctx = (text) => JSON.stringify({ hookSpecificOutput: { additionalContext: text } });
+  fs.writeFileSync(path.join(dir, "s.jsonl"), [
+    att({ type: "instructions", files: [{ path: path.join(home, "CLAUDE.md"), type: "Project", content: "x".repeat(40000) }] }),
+    att({ type: "hook_success", hookEvent: "PreToolUse", command: 'node "/opt/pre.mjs"', durationMs: 10, stdout: ctx("y".repeat(800)) }),
+    att({ type: "hook_success", hookEvent: "PreToolUse", command: 'node "/opt/pre.mjs"', durationMs: 10, stdout: "" }),
+    att({ type: "hook_success", hookEvent: "PreToolUse", command: 'node "/opt/pre.mjs"', durationMs: 10, stdout: ctx("y".repeat(800)) }),
+    att({ type: "mcp_instructions_delta", addedNames: ["used", "idle"], addedBlocks: ["u".repeat(400), "i".repeat(2000)] }),
+    att({ type: "deferred_tools_delta", addedNames: ["mcp__used__a", "mcp__idle__b", "Monitor"] }),
+    JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "mcp__used__a", input: {} }] } }),
+    "",
+  ].join("\n"));
+  const b = sessionBudget(dir, home);
+  assert.equal(tokensOf(40000), 10000, "4 characters a token");
+  assert.deepEqual(b.rows.map((r) => [r.kind, r.tokens]), [["instructions", 10000], ["MCP instructions", 500], ["hook output", 400], ["MCP instructions", 100]]);
+  assert.equal(b.total, 11000);
+  assert.match(b.rows[0].suggestion, /halving it saves ~5,000 tokens/);
+  assert.equal(b.rows[2].detail, "~200 tokens on 2 of 3 runs · 30 ms in all", "text summed over the runs that added it");
+  assert.match(b.rows[1].suggestion, /Not called in the last session/);
+  assert.equal(b.rows[3].suggestion, "", "a called server has no removal suggestion");
+  assert.deepEqual(b.uncounted, ["3 tool definitions (their schemas are not in the transcript; /context counts them)"]);
 });

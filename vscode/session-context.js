@@ -10,15 +10,16 @@ const path = require("node:path");
 
 /**
  * @typedef {{instructions: Map<string, {type: string, chars: number}>,
- *   hooks: Map<string, {event: string, script: string, abs: string, runs: number, ms: number, chars: number, first: string, tools: Set<string>}>,
+ *   hooks: Map<string, {event: string, script: string, abs: string, runs: number, ms: number, chars: number, total: number, adds: number, first: string, tools: Set<string>}>,
  *   mcp: Map<string, number>, tools: Map<string, Set<string>>, failed: Map<string, string>, needsAuth: Set<string>,
- *   skills: {names: Set<string>, chars: number}, agents: Set<string>, model: string, mode: Record<string, unknown>, context: Map<string, number>}} SessionState
+ *   skills: {names: Set<string>, chars: number}, agents: Set<string>, model: string, mode: Record<string, unknown>, context: Map<string, number>,
+ *   used: Map<string, number>}} SessionState
  */
 
 /** @returns {SessionState} */
 const empty = () => ({
   instructions: new Map(), hooks: new Map(), mcp: new Map(), tools: new Map(), failed: new Map(), needsAuth: new Set(),
-  skills: { names: new Set(), chars: 0 }, agents: new Set(), model: "", mode: {}, context: new Map(),
+  skills: { names: new Set(), chars: 0 }, agents: new Set(), model: "", mode: {}, context: new Map(), used: new Map(),
 });
 
 /** What a hook's run put into the session: its additionalContext / systemMessage, else plain stdout. @param {any} a */
@@ -45,6 +46,17 @@ function hookScript(cmd) {
 
 /** Folds one transcript line into the state; lines that are not attachments are skipped cheaply. @param {SessionState} s @param {string} line */
 function fold(s, line) {
+  // The tools the agent called, by server (#29): an MCP server never called is a removal candidate.
+  if (line.includes('"tool_use"') && line.includes('"assistant"')) {
+    try {
+      for (const p of JSON.parse(line).message?.content ?? [])
+        if (p?.type === "tool_use" && typeof p.name === "string") {
+          const server = p.name.startsWith("mcp__") ? p.name.split("__")[1] : "Claude Code";
+          s.used.set(server, (s.used.get(server) ?? 0) + 1);
+        }
+    } catch {}
+    return;
+  }
   if (!line.includes('"attachment"')) return;
   let a;
   try {
@@ -61,7 +73,7 @@ function fold(s, line) {
       const { abs, script } = hookScript(String(a.command ?? ""));
       // Keyed by the script's path: two copies of one plugin (two scopes) stay two rows (#145).
       const key = `${a.hookEvent} ${abs || script}`;
-      const h = s.hooks.get(key) ?? { event: String(a.hookEvent), script, abs, runs: 0, ms: 0, chars: 0, first: "", tools: new Set() };
+      const h = s.hooks.get(key) ?? { event: String(a.hookEvent), script, abs, runs: 0, ms: 0, chars: 0, total: 0, adds: 0, first: "", tools: new Set() };
       // "PreToolUse:mcp__x__y": the tool it ran for, to name a hook Claude Code logged without its command.
       const tool = String(a.hookName ?? "").split(":").slice(1).join(":");
       if (tool) h.tools.add(tool);
@@ -69,7 +81,7 @@ function fold(s, line) {
       const text = injected(a) || String(a.content ?? "");
       h.runs++;
       h.ms += Number(a.durationMs) || 0;
-      if (text) Object.assign(h, { chars: text.length, first: text.split("\n", 1)[0].slice(0, 120) });
+      if (text) Object.assign(h, { chars: text.length, total: h.total + text.length, adds: h.adds + 1, first: text.split("\n", 1)[0].slice(0, 120) });
       s.hooks.set(key, h);
       break;
     }
@@ -191,8 +203,8 @@ const secs = (ms) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${ms} ms`);
 /** @param {string} p @param {string} home */
 const tildeOf = (p, home) => (p && p.startsWith(home) ? `~${p.slice(home.length)}` : p || "?");
 
-/** @param {number} n */
-const chars = (n) => (n >= 10_000 ? `${Math.round(n / 1000)}k chars` : `${n} chars`);
+/** Characters shown as estimated tokens (#29). @param {number} n */
+const chars = (n) => `~${tokensOf(n).toLocaleString("en-US")} tokens`;
 
 /**
  * Agent setup rows for what the last session in this project saw (#139), tool "This session".
@@ -218,7 +230,7 @@ function sessionItems(projectDir, home, configured = []) {
   for (const h of hooks.sort((a, b) => b.ms - a.ms)) {
     const twice = copies(h) > 1;
     row("hook output", `${h.event}: ${h.script}${twice ? " (copy)" : ""}`,
-      [`${secs(h.ms)} in all`, `${h.runs} runs`, `${Math.round(h.ms / h.runs)} ms each`, h.chars && `adds ${chars(h.chars)}`, twice && `runs ${copies(h)} times: ${copies(h)} copies installed`].filter(Boolean).join(" · "),
+      [`${secs(h.ms)} in all`, `${h.runs} runs`, `${Math.round(h.ms / h.runs)} ms each`, h.total && `adds ${chars(h.total)}`, twice && `runs ${copies(h)} times: ${copies(h)} copies installed`].filter(Boolean).join(" · "),
       h.abs, [...(twice ? [`from ${tildeOf(h.abs, home)}`] : []), ...(h.first ? [h.first] : [])]);
   }
   for (const [n, c] of s.mcp) row("MCP instructions", n, chars(c));
@@ -237,4 +249,60 @@ function sessionItems(projectDir, home, configured = []) {
   return out;
 }
 
-module.exports = { MEMORY, sessionItems, stateOf, fold, empty, injected, hookScript, newestTranscript };
+/**
+ * Tokens from characters (#29): about 4 characters a token for English prose and code, the
+ * rule of thumb Anthropic gives for Claude's tokenizer. An estimate, shown as "~"; Claude
+ * Code's /context has the exact count. @param {number} chars
+ */
+const tokensOf = (chars) => Math.round(chars / 4);
+
+/** Large enough to warn about (#29): an item that alone takes a noticeable part of every session. */
+const LARGE = 5000;
+
+/**
+ * The context budget of the last session (#29): what was loaded into the model's context,
+ * item by item, with estimated tokens, biggest first, and a suggestion for the big or unused
+ * ones. Tool definitions are not in the transcript: they are counted as tools, not tokens.
+ * @param {string} projectDir @param {string} home @param {Array<{event: string, matcher: string, script: string}>} [configured]
+ * @returns {{total: number, rows: Array<{label: string, kind: string, tokens: number, detail: string, abs: string, suggestion: string}>, uncounted: string[]} | undefined}
+ */
+function sessionBudget(projectDir, home, configured = []) {
+  const file = newestTranscript(projectDir);
+  const s = file && stateOf(file);
+  if (!s) return undefined;
+  const tilde = (/** @type {string} */ p) => (p.startsWith(home) ? `~${p.slice(home.length)}` : p);
+  /** @type {Array<{label: string, kind: string, tokens: number, detail: string, abs: string, suggestion: string}>} */
+  const rows = [];
+  for (const [p, f] of s.instructions) {
+    const t = tokensOf(f.chars);
+    rows.push({ label: tilde(p), kind: "instructions", tokens: t, detail: `${f.type} · loaded every session`, abs: p,
+      suggestion: t >= 2000 ? `Move the sections the agent needs only now and then into a skill or an on-demand file: halving it saves ~${Math.round(t / 2).toLocaleString("en-US")} tokens a session.` : "" });
+  }
+  for (const h of s.hooks.values()) {
+    if (!h.total) continue;
+    // What it added over the session: each run's text, not the last one times the runs.
+    const t = tokensOf(h.total);
+    const each = Math.round(t / h.adds);
+    const name = h.abs || !/^command hook\b/.test(h.script) ? h.script : nameOf(h, configured);
+    rows.push({ label: `${h.event}: ${name}`, kind: "hook output", tokens: t, detail: `~${each.toLocaleString("en-US")} tokens on ${h.adds} of ${h.runs} run${h.runs === 1 ? "" : "s"} · ${secs(h.ms)} in all`, abs: h.abs,
+      suggestion: h.adds > 1 && each >= 100 ? `It adds ~${each.toLocaleString("en-US")} tokens each time: shorter output, or adding text only when something changed, saves most of ~${t.toLocaleString("en-US")}.` : t >= 1500 ? `A shorter summary saves part of ~${t.toLocaleString("en-US")} tokens a session.` : "" });
+  }
+  for (const [n, c] of s.mcp) {
+    const t = tokensOf(c);
+    const calls = s.used.get(n.replace(/^claude\.ai /, "claude_ai_").replace(/ /g, "_")) ?? s.used.get(n) ?? 0;
+    rows.push({ label: n, kind: "MCP instructions", tokens: t, detail: `${calls} call${calls === 1 ? "" : "s"} this session`, abs: "",
+      suggestion: calls ? "" : `Not called in the last session: turning this server off in repos that do not need it saves ~${t.toLocaleString("en-US")} tokens of instructions plus its tool definitions.` });
+  }
+  if (s.skills.chars) {
+    const t = tokensOf(s.skills.chars);
+    rows.push({ label: `${s.skills.names.size} skills listed`, kind: "listings", tokens: t, detail: "names and descriptions, every session", abs: "",
+      suggestion: t >= 2000 ? `Each skill's description is listed every session: turning off plugins whose skills this repo never uses saves part of ~${t.toLocaleString("en-US")}.` : "" });
+  }
+  for (const [k, c] of s.context) rows.push({ label: `context: ${k}`, kind: "session context", tokens: tokensOf(c), detail: "added by Claude Code", abs: "", suggestion: "" });
+  rows.sort((a, b) => b.tokens - a.tokens);
+  const toolCount = [...s.tools.values()].reduce((n, set) => n + set.size, 0);
+  const uncounted = [toolCount && `${toolCount} tool definitions (their schemas are not in the transcript; /context counts them)`, s.agents.size && `${s.agents.size} agent descriptions`].filter(Boolean).map(String);
+  return { total: rows.reduce((n, r) => n + r.tokens, 0), rows, uncounted };
+}
+
+module.exports = { MEMORY, LARGE, tokensOf, sessionBudget, sessionItems, stateOf, fold, empty, injected, hookScript, newestTranscript };

@@ -846,4 +846,4 @@ function changesSince(items, seen) {
 /** A snapshot to remember as seen. @param {Array<{rel: string, hash: string}>} items */
 const snapshotOf = (items) => Object.fromEntries(flatItems(items).map((i) => [i.rel, i.hash]));
 
-module.exports = { isNewer, mcpVersion, classify, findAgentFiles, scanSetup, changesSince, snapshotOf, hooksOf, summarize, importsOf, gitRootOf, projectSlug, autoMemoryDir, managedDir, flatItems, parseJson, allowsComments, stripJsonc };
+module.exports = { configuredHooks, isNewer, mcpVersion, classify, findAgentFiles, scanSetup, changesSince, snapshotOf, hooksOf, summarize, importsOf, gitRootOf, projectSlug, autoMemoryDir, managedDir, flatItems, parseJson, allowsComments, stripJsonc };
