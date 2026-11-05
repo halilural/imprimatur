@@ -4,6 +4,12 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.113.2] - 2026-11-05
+
+### Added
+- A click on a suggested plugin opens its GitHub page (#143): the plugin's own repo, its folder
+  in a bigger repo, or its folder in the marketplace's repo.
+
 ## [0.113.1] - 2026-11-05
 
 ### Fixed

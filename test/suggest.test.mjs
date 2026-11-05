@@ -52,3 +52,12 @@ test("suggestions (#143): refreshed once a day or when the stack changes; repo f
   assert.equal(await refreshSuggestions({ ...o, now: 1000 + DAY - 1 }), false, "once a day");
   assert.equal(await refreshSuggestions({ ...o, now: 1000 + 1, components: [{ name: "Terraform" }, { name: "React" }] }), true, "a new stack refreshes");
 });
+
+test("suggestions (#143): the page is the plugin's repo, its folder in a bigger repo, or its folder in the marketplace", () => {
+  const { pageOf } = createRequire(import.meta.url)("../vscode/suggest.js");
+  assert.equal(pageOf({ source: "url", url: "https://github.com/cloudflare/skills.git" }), "https://github.com/cloudflare/skills");
+  assert.equal(pageOf({ source: "git-subdir", url: "https://github.com/adobe/skills.git", path: "plugins/cc/x" }), "https://github.com/adobe/skills/tree/HEAD/plugins/cc/x");
+  assert.equal(pageOf("./external_plugins/github", "anthropics/claude-plugins-official"), "https://github.com/anthropics/claude-plugins-official/tree/HEAD/external_plugins/github");
+  assert.equal(pageOf("./../../etc", "a/b"), "");
+  assert.equal(pageOf({ source: "url", url: "https://gitlab.com/x/y.git" }), "");
+});

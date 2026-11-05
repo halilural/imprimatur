@@ -66,6 +66,23 @@ function repoOf(source) {
 }
 
 /**
+ * The page to open for a plugin (#143): its own GitHub repo (the folder for a plugin kept in a
+ * bigger repo), or its folder in the marketplace's repo. "" when neither is on GitHub.
+ * @param {any} source the catalog's source @param {string} [marketRepo] the marketplace's "owner/repo"
+ */
+function pageOf(source, marketRepo = "") {
+  const repo = repoOf(source);
+  const sub = typeof source === "object" && typeof source?.path === "string" ? source.path.replace(/^\.?\//, "") : "";
+  const ok = (/** @type {string} */ p) => !p.split("/").includes("..") && /^[\w./-]*$/.test(p);
+  if (repo) return `https://github.com/${repo}${sub && ok(sub) ? `/tree/HEAD/${sub}` : ""}`;
+  if (typeof source === "string" && /^[\w.-]+\/[\w.-]+$/.test(marketRepo)) {
+    const p = source.replace(/^\.?\//, "").replace(/\/$/, "");
+    return ok(p) ? `https://github.com/${marketRepo}${p ? `/tree/HEAD/${p}` : ""}` : "";
+  }
+  return "";
+}
+
+/**
  * What the #128 rules say about a candidate: flags, each a short reason; none means it passes.
  * @param {{description?: string}} p @param {{license?: string} | undefined} gh repo facts
  * @param {{hooks: number, mcp: string[]} | undefined} parts what it brings, when the marketplace has its files
@@ -113,12 +130,12 @@ function readSuggestions(file) {
  * changed): the catalog from `claude plugin list --available --json`, repo facts through
  * `gh api`, what a plugin brings read from the marketplace's copy when it has one.
  * @param {{components: Array<{name: string}>, installed: string[], file: string, claude: string, home: string,
- *   now?: number, run?: (cmd: string, args: string[]) => Promise<any>, partsOf?: (p: any) => {hooks: number, mcp: string[]} | undefined}} o
+ *   now?: number, run?: (cmd: string, args: string[]) => Promise<any>, partsOf?: (p: any) => {hooks: number, mcp: string[]} | undefined, marketRepoOf?: (name: string) => string}} o
  * @returns {Promise<boolean>} whether it ran
  */
-async function refreshSuggestions({ components, installed, file, claude, home, now = Date.now(), run = json, partsOf }) {
+async function refreshSuggestions({ components, installed, file, claude, home, now = Date.now(), run = json, partsOf, marketRepoOf }) {
   // The vetting's version is part of the key: a change to the rules refreshes at once.
-  const stack = `v2|${components.map((c) => c.name).sort().join("|")}`;
+  const stack = `v3|${components.map((c) => c.name).sort().join("|")}`;
   const last = readSuggestions(file);
   if (last && last.stack === stack && now - last.at < DAY) return false;
   const available = (await run(claude, ["plugin", "list", "--available", "--json"]))?.available ?? [];
@@ -132,11 +149,12 @@ async function refreshSuggestions({ components, installed, file, claude, home, n
         gh = { stars: Number(r.stargazers_count ?? 0), pushed: String(r.pushed_at ?? "").slice(0, 10), license: String(r.license?.spdx_id ?? "").replace(/^NOASSERTION$/, "") };
       } catch {}
     const parts = partsOf?.(p);
-    items.push({ id: p.pluginId, name: p.name, description: String(p.description ?? "").slice(0, 300), installs: p.installCount ?? 0, fits: p.fits, repo, gh, ...vet(p, gh, parts) });
+    items.push({ id: p.pluginId, name: p.name, description: String(p.description ?? "").slice(0, 300), installs: p.installCount ?? 0, fits: p.fits, repo, gh,
+      page: pageOf(p.source, marketRepoOf?.(p.marketplaceName) ?? ""), ...vet(p, gh, parts) });
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify({ at: now, stack, items }, null, 1));
   return true;
 }
 
-module.exports = { stackKeys, fitting, repoOf, vet, mentions, readSuggestions, refreshSuggestions, MIN_INSTALLS, DAY };
+module.exports = { pageOf, stackKeys, fitting, repoOf, vet, mentions, readSuggestions, refreshSuggestions, MIN_INSTALLS, DAY };
