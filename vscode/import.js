@@ -275,8 +275,8 @@ function filesAt(root, rev) {
   };
 }
 
-/** Whether Imprimatur wrote the text (docs-export.js HEADER on its first line). @param {string | undefined} text */
-const generated = (text) => require("./docs-export.js").isHeader(text?.split("\n", 1)[0].replace(/\r$/, "") ?? "");
+/** Whether Imprimatur wrote the text (docs-export.js HEADER first, after any front matter). @param {string | undefined} text */
+const generated = (text) => require("./docs-export.js").generatedText(text);
 
 /** @typedef {"todo" | "design" | "product" | "test" | "skip" | "generated"} SourceType */
 

@@ -14,7 +14,7 @@ const req = createRequire(import.meta.url);
 const { openDb, VERSION, MIGRATIONS } = req("../vscode/db.js");
 const docs = req("../vscode/docsView.js");
 const tv = req("../vscode/tasksView.js");
-const { docMarkdown, exportDocs, HEADER } = req("../vscode/docs-export.js");
+const { docMarkdown, exportDocs, HEADER, generatedText } = req("../vscode/docs-export.js");
 const { check } = req("../vscode/process.js");
 const { DatabaseSync } = req("node:sqlite");
 
@@ -105,7 +105,7 @@ test("glossary: terms read alphabetically (Turkish), unnumbered in the panel and
   assert.match(text, /^## Terms\n\n- \[ADR\]\(#adr\)\n- \[Çizgi\]\(#cizgi\)/m);
   assert.match(text, /<a id="cizgi"><\/a>\n\n## Çizgi\n\nOne line\./);
   exportDocs(db, root);
-  assert.ok(fs.readFileSync(path.join(root, "docs", "GLOSSARY.md"), "utf8").startsWith(HEADER));
+  assert.ok(generatedText(fs.readFileSync(path.join(root, "docs", "GLOSSARY.md"), "utf8")));
   // The user adds a term from the panel; MCP reads and writes them.
   docs.applyDocMessage(db, { type: "docNew", kind: "glossary", title: "Pointer (👉)", body: "Where work stopped." }, user, root);
   assert.ok(db.docSection(g.id, "pointer"));
@@ -283,7 +283,7 @@ test("export: the golden file; written only when changed; superseded left out; n
   if (process.env.UPDATE_GOLDEN) fs.writeFileSync(new URL("./fixtures/docs-export.golden.md", import.meta.url), docMarkdown(db, doc.id));
   const golden = fs.readFileSync(new URL("./fixtures/docs-export.golden.md", import.meta.url), "utf8");
   assert.equal(docMarkdown(db, doc.id), golden);
-  assert.ok(golden.startsWith(HEADER));
+  assert.ok(golden.startsWith(`---\ntype: explanation\n---\n\n${HEADER}`), "front matter first (#129), then the header");
   // #129: read back, the chapters and their "not written yet" lines belong to no section.
   assert.deepEqual(req("../vscode/docs-sync.js").parseManaged(golden).map((s) => [s.key, s.title, s.body]), [
     ["export", "Export [docs]", "Generated after a change."],

@@ -14,7 +14,7 @@ const req = createRequire(import.meta.url);
 const { openDb } = req("../vscode/db.js");
 const { syncDocs, describe, parseManaged, parseHand, sectionHash, conflictsOf } = req("../vscode/docs-sync.js");
 const { dataPath } = req("../vscode/data-dir.js");
-const { docMarkdown, HEADER } = req("../vscode/docs-export.js");
+const { docMarkdown, HEADER, generatedText } = req("../vscode/docs-export.js");
 const { importRepo, sources } = req("../vscode/import.js");
 const { check } = req("../vscode/process.js");
 
@@ -107,7 +107,7 @@ test("start: no file, sections in the database → the file is written in docs.d
   db.upsertSection(db.docOf(r.id, "product").id, "flow", { title: "Flow", body: "A → B" }, agent);
   const first = syncDocs(db, root);
   assert.deepEqual(first.map((x) => [x.kind, x.written]), [["architecture", false], ["product", true], ["glossary", false]]);
-  assert.ok(read(root, "docs/design/PRODUCT.md").startsWith(HEADER));
+  assert.ok(generatedText(read(root, "docs/design/PRODUCT.md")));
   assert.ok(!fs.existsSync(path.join(root, "docs/design/ARCHITECTURE.md")), "an empty document writes no file");
   assert.deepEqual(describe(syncDocs(db, root), root), ["docs/design/ARCHITECTURE.md: in sync", "docs/design/PRODUCT.md: in sync", "docs/design/GLOSSARY.md: in sync"]);
 });
@@ -130,7 +130,7 @@ test("middle: hand-written files are adopted with their imported records linked;
   assert.deepEqual(arch.find((s) => s.key === "agent").records.map(title), ["Agent", "Workflow `apply-submit`"], "a ### under it is the same section");
   const prod = sectionsOf(db, root, "product");
   assert.deepEqual(prod[0].records.map((id) => db.record(id).kind), ["pdr"], "docs/design/PRODUCT.md is product, not ADRs");
-  assert.ok(read(root, "docs/design/ARCHITECTURE.md").startsWith(HEADER));
+  assert.ok(generatedText(read(root, "docs/design/ARCHITECTURE.md")));
   // No ADR from the README.
   const repoId = db.repoByRoot(root).id;
   assert.equal(db.recordsFromSource(repoId, "docs/design/README.md").length, 0);

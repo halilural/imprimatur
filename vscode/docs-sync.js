@@ -22,7 +22,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
-const { docMarkdown, fileOf, inside, docsSettings, kindsOf, FILES, isHeader } = require("./docs-export.js");
+const { docMarkdown, fileOf, inside, docsSettings, kindsOf, FILES, generatedText } = require("./docs-export.js");
 const { fenceTracker, filesAt, importRepo, originOf } = require("./import.js");
 const { slugify } = require("./docsView.js");
 const { CHAPTER_ANCHOR } = require("./db.js");
@@ -152,7 +152,7 @@ function optedIn(root) {
 }
 
 /** Whether the text is one Imprimatur wrote. @param {string} text */
-const managed = (text) => isHeader(text.split("\n", 1)[0].replace(/\r$/, ""));
+const managed = (text) => generatedText(text);
 
 /** @param {number} repoId @param {string} kind */
 const stateKey = (repoId, kind) => `docsync:${repoId}:${kind}`;
