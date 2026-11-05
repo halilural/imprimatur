@@ -44,8 +44,9 @@ type: explanation
   28. [Panel design layer: theme variables, icons, mascot](#ui-design)
   29. [Context budget: what a session loads, in estimated tokens](#context-budget)
 - [Decisions](#chapter-decisions)
+  30. [Decision records: ADR and PDR as MADR 4 files](#decision-records)
 - [Risks and technical debt](#chapter-risks)
-  30. [Known limits](#limits)
+  31. [Known limits](#limits)
 
 <a id="chapter-goals"></a>
 
@@ -986,7 +987,22 @@ The tools the agent called are counted per server from `tool_use` blocks.
 
 ## Decisions
 
-_Not written yet._
+<a id="decision-records"></a>
+
+### 30. Decision records: ADR and PDR as MADR 4 files
+
+The decisions are the repo's adr and pdr records. Each one is also written as a MADR 4 file, `docs/decisions/NNNN-slug.md`, listed in `docs/decisions/README.md`. That index is the list this chapter would otherwise repeat.
+
+- **Source:** the record. The files are generated on every document export (`vscode/decisions.js`, from `exportDocs`) and never read back (decision 9331).
+- **Numbers:** a record gets its number the first time it is exported, kept in `links.madr`, so every device names it the same after sync. A dropped record keeps its number and its file reads `status: rejected`, so a number is never reused. Two devices numbering new decisions before either syncs can give one number twice.
+- **Shape:**
+  - Front matter: `type: adr|pdr`, `status`, `date`, and `record`, the record's uid.
+  - Headings: Context and Problem Statement (from the task), Considered Options and Consequences (the body's lines that name them, else a note that they are not listed apart), Decision Outcome (the body), Sections.
+  - A long imported title is cut to its first sentence; the whole title starts the outcome.
+- **Links:** under each architecture and product section, the generated file adds `<!-- imprimatur:decisions --> Decisions: [ADR 0012](decisions/…)` for the adr and pdr records linked to it, and docs-sync skips that line. Each decision file lists those sections back.
+- **Safety:** a hand-written file of the same name is left alone. A generated file whose decision was renamed is removed, and the number goes with the new name.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0109](decisions/0109-decisions-as-madr-4-files-numbered-once-in-the-record-s-link.md)
 
 <a id="chapter-risks"></a>
 
@@ -994,7 +1010,7 @@ _Not written yet._
 
 <a id="limits"></a>
 
-### 30. Known limits
+### 31. Known limits
 
 ### Review
 
