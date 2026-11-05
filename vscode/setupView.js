@@ -98,6 +98,8 @@ class SetupView {
     this.onDidChangeTreeData = this.changed.event;
     /** @type {Scope[]} */
     this.scopes = [];
+    /** @type {ReturnType<typeof installChecksNow> | undefined} the install checks of the last scan (#81) */
+    this.installs = undefined;
     /** The checklist (#142) and who hears its count (the launcher). */
     this.checklist = checklistOf([], 0);
     /** @type {((count: number) => void) | undefined} */
@@ -227,7 +229,8 @@ class SetupView {
     const fresh = this.scopes.reduce((n, s) => n + Object.keys(s.state).length + s.removed.length, 0);
     this.loadAudit();
     // The checklist (#142): what needs doing, from the scan, the health check and the audit.
-    this.checklist = checklistOf(this.scopes, /** @type {any} */ (this.audit)?.open ?? 0);
+    this.installs = installChecksNow();
+    this.checklist = checklistOf(this.scopes, /** @type {any} */ (this.audit)?.open ?? 0, this.installs);
     this.onScanned?.(this.checklist.count);
     this.extras();
     if (this.view) this.view.badge = fresh ? { value: fresh, tooltip: `${fresh} agent setup change${fresh === 1 ? "" : "s"} since you last looked` } : undefined;
@@ -537,6 +540,37 @@ async function fixWithClaude(provider, node) {
   if (pick === "Show answer") out.show();
 }
 
+/** The install checks now (#81): the CLI, the plugin or npm run setup, the database. */
+function installChecksNow() {
+  const records = require("./records.js");
+  const db = records.dbOf();
+  return require("./install-check.js").installChecks({ claudeBin: require("./fix-runner.js").claudeBin(), plugin: require("./versions.js").imprimaturPlugin(),
+    dbError: db ? undefined : records.lastError ?? "unavailable" });
+}
+
+/** An install check's fix: a terminal line, a page, or a command. @param {{kind: string, value: string, title: string}} fix */
+function runInstallFix(fix) {
+  if (fix?.kind === "terminal") {
+    const t = vscode.window.createTerminal({ name: `Imprimatur: ${fix.title}` });
+    t.show();
+    t.sendText(fix.value);
+  } else if (fix?.kind === "url" && /^https:\/\//.test(fix.value)) vscode.env.openExternal(vscode.Uri.parse(fix.value));
+  else if (fix?.kind === "command") vscode.commands.executeCommand(fix.value);
+}
+
+/** Imprimatur: Check Setup (#81): says what is missing, or that nothing is. @param {SetupView} provider */
+async function checkSetup(provider) {
+  provider.refresh();
+  const missing = (provider.installs ?? installChecksNow()).filter((c) => !c.ok);
+  if (!missing.length)
+    return void vscode.window.showInformationMessage("Imprimatur is set up: the Claude Code CLI, the hooks, the MCP server and the database are all in place.");
+  const pick = await vscode.window.showWarningMessage(`Imprimatur: ${missing.length} thing${missing.length === 1 ? "" : "s"} missing: ${missing.map((c) => `${c.label} (${c.why})`).join("; ")}`,
+    ...missing.flatMap((c) => (c.fix ? [c.fix.title] : [])).filter((t, k, a) => a.indexOf(t) === k), "Show Checklist");
+  if (pick === "Show Checklist") return void vscode.commands.executeCommand("imprimatur.setup.focus");
+  const fix = missing.find((c) => c.fix?.title === pick)?.fix;
+  if (fix) runInstallFix(fix);
+}
+
 /**
  * Updates a plugin that is behind its marketplace (#140) in a terminal, at the scope it was
  * installed and in its repo for project and local scope: Claude Code's own update, after a
@@ -647,6 +681,8 @@ function registerSetupView(ctx, roots, counts) {
     view.onDidChangeVisibility((e) => e.visible && soon()),
     vscode.window.onDidChangeWindowState((s) => s.focused && view.visible && soon()),
     vscode.commands.registerCommand("imprimatur.setup.refresh", () => provider.refresh()),
+    vscode.commands.registerCommand("imprimatur.setup.installFix", (fix) => runInstallFix(fix)),
+    vscode.commands.registerCommand("imprimatur.checkSetup", () => checkSetup(provider)),
     vscode.commands.registerCommand("imprimatur.setup.fixWithClaude", (node) => fixWithClaude(provider, node ?? view.selection[0])),
     vscode.commands.registerCommand("imprimatur.setup.showUpstream", (node) => {
       const url = (node ?? view.selection[0])?.item?.compare;

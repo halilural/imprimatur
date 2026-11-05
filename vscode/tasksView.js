@@ -852,7 +852,7 @@ function homeHtml(m) {
  * @param {{waiting?: any[], linkOf?: (root: string, key: string) => string | undefined, now?: number}} [o]
  */
 function paneHtml(db, root, view, o = {}) {
-  if (!db) return `<p class="empty" data-k="nodb">Could not open the Imprimatur database: ${esc(o.error ?? "unavailable")}</p>`;
+  if (!db) return `<p class="empty" data-k="nodb">Could not open the Imprimatur database: ${esc(o.error ?? "unavailable")}. Run <span class="mono">Imprimatur: Check Setup</span> to see what is missing; if another window holds it, Reload Window.</p>`;
   if (view.tab === "home") return homeHtml(homeModel(db, root, o));
   if (view.tab === "tasks") return tasksHtml(tasksPage(db, root, view, o));
   if (view.tab === "inbox") return inboxHtml(inboxModel(db, root, { all: view.all, waiting: o.waiting, now: o.now, placeOf: o.placeOf }));

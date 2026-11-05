@@ -12,10 +12,16 @@ const { fixable, skillUpdatePrompt } = require("./fix-prompts.js");
  * The checklist's rows and how many there are. Plain rows (PlainNode) for the setup view.
  * @param {Array<{label: string, global: boolean, items: any[], health: Array<{file: string, level: string, message: string, line?: number}>}>} scopes
  * @param {number} openRecommendations
+ * @param {Array<{ok: boolean, label: string, why: string, fix?: any}>} [installs] the install checks (install-check.js)
  */
-function checklistOf(scopes, openRecommendations) {
+function checklistOf(scopes, openRecommendations, installs = []) {
   /** @type {any[]} */
   const rows = [];
+  // What Imprimatur itself needs on this machine (#81) comes first: without it nothing else is recorded.
+  for (const c of installs)
+    if (!c.ok)
+      rows.push({ type: "leaf", label: `Set up: ${c.label}`, description: c.why, tooltip: `${c.label}: ${c.why}.${c.fix ? ` ${c.fix.title}.` : ""}`, icon: "error",
+        color: "problemsErrorIcon.foreground", ...(c.fix ? { command: "imprimatur.setup.installFix", args: [c.fix] } : {}) });
   const flat = (/** @type {any[]} */ items) => items.flatMap((i) => [i, ...flat(i.children ?? [])]);
   for (const s of scopes)
     for (const it of flat(s.items)) {

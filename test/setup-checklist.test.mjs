@@ -27,3 +27,14 @@ test("checklist (#142): outdated plugins, upstream changes, health problems and 
   const none = checklistOf([{ label: "x", global: false, items: [{ label: "fine", summary: "v1" }], health: [] }], 0);
   assert.deepEqual([none.count, none.node.description], [0, "nothing to do"]);
 });
+
+test("checklist (#81): a missing install part comes first, with its fix; a complete install adds nothing", () => {
+  const installs = [
+    { id: "cli", ok: true, label: "Claude Code CLI", why: "found" },
+    { id: "hooks", ok: false, label: "Imprimatur's hooks in Claude Code", why: "not installed", fix: { kind: "terminal", value: "claude plugin install imprimatur@imprimatur", title: "Install the plugin" } },
+  ];
+  const { count, node } = checklistOf([{ label: "r", global: false, items: [], health: [] }], 2, installs);
+  assert.equal(count, 2);
+  assert.deepEqual([node.children[0].label, node.children[0].command, node.children[0].args[0].title], ["Set up: Imprimatur's hooks in Claude Code", "imprimatur.setup.installFix", "Install the plugin"]);
+  assert.equal(checklistOf([], 0, [{ id: "cli", ok: true, label: "x", why: "y" }]).count, 0);
+});

@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.108.0",
+  "version": "0.109.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -46,7 +46,11 @@
     "media/icon.png",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "media/walkthrough/check.md",
+    "media/walkthrough/edit.md",
+    "media/walkthrough/setup.md",
+    "media/walkthrough/tasks.md"
   ],
   "activationEvents": [
     "onStartupFinished",
@@ -361,6 +365,17 @@
         "command": "imprimatur.processOn",
         "title": "Turn On Process Checks for This Repo",
         "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.checkSetup",
+        "title": "Check Setup",
+        "category": "Imprimatur",
+        "icon": "$(pass)"
+      },
+      {
+        "command": "imprimatur.setup.installFix",
+        "title": "Fix Setup",
+        "category": "Imprimatur"
       }
     ],
     "colors": [
@@ -411,6 +426,10 @@
     ],
     "menus": {
       "commandPalette": [
+        {
+          "command": "imprimatur.setup.installFix",
+          "when": "false"
+        },
         {
           "command": "imprimatur.setup.fixWithClaude",
           "when": "false"
@@ -765,6 +784,59 @@
           "contextualTitle": "Imprimatur"
         }
       ]
-    }
+    },
+    "walkthroughs": [
+      {
+        "id": "start",
+        "title": "Get started with Imprimatur",
+        "description": "See what your AI agent changes, asks and decides, and keep up with it.",
+        "steps": [
+          {
+            "id": "check",
+            "title": "Check the install",
+            "description": "Imprimatur runs inside Claude Code. Check that its hooks, its MCP server and the database are in place.\n[Check Setup](command:imprimatur.checkSetup)",
+            "media": {
+              "markdown": "media/walkthrough/check.md"
+            },
+            "completionEvents": [
+              "onCommand:imprimatur.checkSetup"
+            ]
+          },
+          {
+            "id": "edit",
+            "title": "See the agent's first edit",
+            "description": "Ask Claude Code to edit a Markdown file here. The edit stays marked until you accept it.\n[Open Agent changes](command:imprimatur.openGraph)",
+            "media": {
+              "markdown": "media/walkthrough/edit.md"
+            },
+            "completionEvents": [
+              "onCommand:imprimatur.openGraph"
+            ]
+          },
+          {
+            "id": "setup",
+            "title": "Look at the agent setup",
+            "description": "Everything that shapes what the agent does, with a checklist of what needs doing.\n[Open Agent Setup](command:imprimatur.setup.focus)\n[Run the audit](command:imprimatur.setup.audit)",
+            "media": {
+              "markdown": "media/walkthrough/setup.md"
+            },
+            "completionEvents": [
+              "onView:imprimatur.setup"
+            ]
+          },
+          {
+            "id": "tasks",
+            "title": "Keep tasks and records",
+            "description": "The agent keeps to-dos, decisions and questions per task; 👉 shows where work stopped.\n[Open Tasks](command:imprimatur.openTasks)",
+            "media": {
+              "markdown": "media/walkthrough/tasks.md"
+            },
+            "completionEvents": [
+              "onCommand:imprimatur.openTasks"
+            ]
+          }
+        ]
+      }
+    ]
   }
 }
