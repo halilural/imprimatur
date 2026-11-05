@@ -23,6 +23,7 @@ Rules 001–003 report one finding each, naming up to 12 decisions and "and N mo
 Documentation rules in setup_audit as Imprimatur's own IMP-DOC rules, decision rules reported once per rule
 
 vscode/doc-rules.js checks the documentation standard and returns findings in agnix's diagnostic shape. auditRoot adds them to agnix's and mcp-allow's for a repo (not for the global scope), so they become Recommendations records with Fix it and dismiss like the others. The rules:
+
 - IMP-DOC-001: a decision number is used once and every current decision has one; a MADR file "superseded by NNNN" names an existing file.
 - IMP-DOC-002: a decision names an alternative to the option chosen, which with the chosen one makes the two considered options. A line anywhere in the body with alternative, rejected, instead of, not chosen or considered counts.
 - IMP-DOC-003: a decision is linked to a section.

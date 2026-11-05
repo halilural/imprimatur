@@ -15,7 +15,7 @@ Task #108: feat(exercise): exercise mode — any topic broken into small steps t
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: a model call from the panel, rejected because generation in Claude Code gives better quality and can research sources, which a panel-side model call could not.
 
 ## Decision Outcome
 
@@ -24,6 +24,7 @@ Exercise mode: /exercise turns any topic into 5-9 ticked steps (purpose + done-w
 User 2026-10-24: "egzersiz mod lazım… görev/task'a bağlı olmayacak… küçük küçük adımlara bölecek, ben bitirdikçe tickleyeceğim"; "egzersiz herhangi bir egzersiz olabilir"; "önemli olan agentlar onu düzgün egzersize dönüştürecek, best practice'lere bak".
 
 Decided:
+
 - Any topic (code, concept, spoken language, reading, physical skill). Step kinds are generic: learn, example, predict, do, vary, explain, recall.
 - The skill's pipeline: clarify (1-3 questions) → short diagnostic (2-3) → "can do" goal + proof → 5-9 steps of 10-25 min, each with why (subgoal label) and done_when (something the user can show) → a checklist before saving → coach without giving the answer first (hint → narrower hint → solution only on request after trying) → closing recall without notes, weak points kept.
 - Exercises belong to the user, not a repo or task: the same list in every project; device-local, not synced (like section_reads).
@@ -33,6 +34,8 @@ Decided:
 Research behind it: Gemini Guided Learning (diagnostic, small goals), Claude Learning mode / ChatGPT Study Mode (clarify, withhold answers), CodeCrafters (each stage has a test → done_when), Exercism (feedback on the user's work), Duolingo (harder contexts, review mixed in), learning-opportunities skill (predict/generate/trace/debug/teach-back/retrieval), Margulieux subgoal labels, Bastani et al. 2025 (unguarded chatbot lowers later test scores; Socratic guard keeps the gain), Dunlosky 2013.
 
 Later (v2): spaced recall of weak points (1/3/7 days, then FSRS-like) shown on Home; v3: quick create from the panel, interleaved review.
+
+Alternative: a model call from the panel, rejected because generation in Claude Code gives better quality and can research sources, which a panel-side model call could not.
 
 ## Consequences
 

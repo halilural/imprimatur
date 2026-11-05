@@ -15,11 +15,13 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: Send to Claude (copy the step to the clipboard and focus Claude's input), tried and removed because the user found it unusable — Claude Code does not let external text be sent into an open chat, and `vscode://anthropic.claude-code/open?prompt=` does not apply to an open session.
 
 ## Decision Outcome
 
 Düz adım listesi (0.24.0, kullanıcı 2026-10-05: "hepsi tikli olsa bile kaybolmasın, geçmişi dursun, agent change graph gibi; liste hâlinde, aynıları elemek ya da geçersiz demek lazım") — Waiting sekmesi madde değil adım satırları (`waitingSteps`): yeniden eskiye, geçmiş kalır; durum: open (onay kutusu) / done (✓, kim: sen, chat, audit) / replaced (`check` satırında `why: "again"`: aynı istek yeniden geldi, soluk) / answered / closed; "open only" süzgeci. Send to Claude (panoya kopyala + Claude girişine odaklan) denendi ve kaldırıldı (kullanıcı: "kullanışsız"; Claude Code açık sohbete dışarıdan metin göndermeye izin vermiyor, `vscode://anthropic.claude-code/open?prompt=` açık oturumda uygulanmıyor). Mark as done tek adımı işaretler. Adımlar modele harfle verilir (A, B…): kullanıcının "şu 2'yi deneyelim"i 2. adım sanılmasın. Tek oturumda Graph sütunu gizli (tek düz çizgi bir şey söylemiyor).
+
+Alternative: Send to Claude (copy the step to the clipboard and focus Claude's input), tried and removed because the user found it unusable — Claude Code does not let external text be sent into an open chat, and `vscode://anthropic.claude-code/open?prompt=` does not apply to an open session.
 
 ## Consequences
 
@@ -27,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Panel and views](../ARCHITECTURE.md#panel)

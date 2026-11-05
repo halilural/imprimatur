@@ -15,7 +15,7 @@ Task #77: feat(audit): full agnix audit: findings become records, Recommendation
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: a trimmed subset of agnix's rule coverage, rejected because the user asked to take its full coverage with nothing cut ("agnix'ten bir şey kısmayalım").
 
 ## Decision Outcome
 
@@ -23,10 +23,12 @@ Agent setup denetimi agnix'in tam kapsamını alır; bulgular gizlenmez, kaynağ
 
 Kullanıcı (2026-10-12): "tüm kapsamı alalım, agnix'ten bir şey kısmayalım". Kural ve dosya kesilmez; proje / kullanıcı / plugin / worktree grupları; yanlış alarmlar gizlenmez, gerekçeyle reddedilir. Farklılaşma: öneri başına durum geçmişi (rakiplerde yok). agnix npx ile, sürüm sabit (0.57.0).
 
+Alternative: a trimmed subset of agnix's rule coverage, rejected because the user asked to take its full coverage with nothing cut ("agnix'ten bir şey kısmayalım").
+
 ## Consequences
 
 Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Product: Agent setup audit (planned)](../PRODUCT.md#agent-setup-audit)

@@ -31,4 +31,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: One-time backfill of design documents and glossary](../ARCHITECTURE.md#docs-backfill-live)

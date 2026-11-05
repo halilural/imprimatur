@@ -1,0 +1,41 @@
+{
+  "version": "0.2",
+  "language": "en,en-GB",
+  "files": [
+    "docs/**/*.md"
+  ],
+  "ignorePaths": [
+    "node_modules/**"
+  ],
+  "words": [
+    "agnix",
+    "AGNIX",
+    "savepoint",
+    "halilural",
+    "SSDF",
+    "dirtywork",
+    "autonumber",
+    "worktrees",
+    "Kiro",
+    "zcat",
+    "tablewrap",
+    "subfolders",
+    "sparklines",
+    "numstat",
+    "nosync",
+    "mksglu",
+    "maint",
+    "gopls",
+    "etable",
+    "emptyhero",
+    "dontAsk",
+    "docsync",
+    "appbar",
+    "adddf",
+    "LOCALAPPDATA",
+    "LATD",
+    "Gebert",
+    "FSRS",
+    "blader"
+  ]
+}

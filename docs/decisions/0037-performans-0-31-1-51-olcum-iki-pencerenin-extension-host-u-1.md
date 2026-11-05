@@ -15,11 +15,13 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: hashing file contents to detect changes for the cache key, rejected in favor of size+mtime — an unchanged file is then never read at all.
 
 ## Decision Outcome
 
 Performans (0.31.1, #51; ölçüm: iki pencerenin extension host'u %120-140 CPU, profilin %63'ü Imprimatur: `diff.js` `lines`, `spotsOf`, `summaryOf`) — her tool çağrısında `waiting/` yazılıyor, Agent Setup'ın sayacı (`updateGraphButton` → `refreshCounts`) ve açık grafik her seferinde bütün geçmişi baştan diff'liyordu. (1) `graph.js` `fileEdits`: dosya başına önbellek, anahtar = log, inceleme kopyası, dosya (açıksa editör metni) ve `calls.jsonl`'ın boyut+mtime'ı; açıklamalar, ajanın sözü, şeritler her çizimde (ucuz). `descriptionsOf` de boyut+mtime'la. (2) `diff(a, b, {words: false})`: yalnız satır aralığı gereken yerlerde (sayım, `spotsOf`, özet, hover diff'i, `acceptedOf`'un `review`'u) kelime diff'i yok. (3) `tasks.js`: `sessionTodos` TODO.md log'ları değişmedikçe yeniden parse edilmez (satırın yalnız başı okunur); `placeOf` / `jiraBase` TODO.md'leri ve satırlarının kelimelerini mtime'a göre önbellekten alır. (4) `waiting/` ve açıklama değişiklikleri son yazmadan 1 sn sonra (sürekli yazılıyorsa en geç 3 sn'de bir) tek yenileme; tam yenileme ucuz olduğu için ajanın sözü, başlık ve dal hiç bayat kalmaz. Ölçüm (bu makine, ısınmış): grafik + bekleyenler + sayfa bir yenilemede dirtywork 430 → 34 ms, investment 260 → 21 ms; yalnız `graphRows` 150-500 → ~3 ms.
+
+Alternative: hashing file contents to detect changes for the cache key, rejected in favor of size+mtime — an unchanged file is then never read at all.
 
 ## Consequences
 
@@ -27,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: File-based review data](../ARCHITECTURE.md#review-data)

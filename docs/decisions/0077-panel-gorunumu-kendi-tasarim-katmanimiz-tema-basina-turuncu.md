@@ -15,13 +15,14 @@ Task UI-DESIGN: .
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: the vscode-elements web component library, rejected because its shadow DOM breaks the outerHTML diff/morph update the panel relies on, and breaks keyboard navigation; it also gives the plain stock VS Code look that was the original complaint. Imprimatur uses its own design layer (theme.js) plus Lucide icons instead.
 
 ## Decision Outcome
 
 Panel görünümü: kendi tasarım katmanımız (tema başına turuncu vurgu) + Lucide ikonları; vscode-elements kullanılmadı
 
 **Katman:** `vscode/theme.js` her tema tipi için bir vurgu rengi tanımlar:
+
 - açık tema `#c2410c`
 - koyu tema `#fb923c`
 - yüksek kontrast koyu `#ffa94d`
@@ -33,10 +34,12 @@ Okunabilirlik oranları WCAG formülüyle hesaplandı. Aynı dosyada yüzeyler, 
 
 **Neden vscode-elements değil:** panel güncellemeleri parçaların outerHTML'ini karşılaştırıp morph eder; web bileşenlerinin shadow DOM'u bu karşılaştırmayı ve klavye gezinmesini bozar. Üstelik kit, sadeliğinden yakınılan stok VS Code görünümünü verir. Araştırma (Ekim 2026): webview-ui-toolkit Ocak 2025'te arşivlendi; @vscode-elements/elements 2.5.1 güncel.
 
+Alternative: the vscode-elements web component library, rejected because its shadow DOM breaks the outerHTML diff/morph update the panel relies on, and breaks keyboard navigation; it also gives the plain stock VS Code look that was the original complaint. Imprimatur uses its own design layer (theme.js) plus Lucide icons instead.
+
 ## Consequences
 
 Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Panel design layer: theme variables, icons, mascot](../ARCHITECTURE.md#ui-design)

@@ -62,7 +62,7 @@ The market research (2026-10-05) concluded that the bottleneck is not tokens but
 
 ### 2. Who it is for
 
-### Primary user
+#### Primary user
 
 An **individual developer** who spends most of the day with a coding agent (first of all Claude Code), works in several repos and sessions at once, and has to actually read and approve the documents and plans the agent writes. Traits:
 
@@ -72,11 +72,11 @@ An **individual developer** who spends most of the day with a coding agent (firs
 - May work on more than one machine (for example work and personal).
 - Does not want to be tied to one tool: next to Claude Code, may also use Cursor or Codex.
 
-### Secondary (future) user
+#### Secondary (future) user
 
 **Teams:** teams that manage agent configuration (CLAUDE.md, rules, hooks, MCP) across several repos and people, and want to measure drift and "did this rule work". Considered as a paid team plan (#42); there is no product today.
 
-### Distribution assumption
+#### Distribution assumption
 
 The open source extension is the distribution and trust vehicle: because the hook reads the agent's session transcripts, open code builds trust. Today it installs from a repo clone (`npm run setup`) or as a Claude Code plugin; Marketplace / Open VSX publishing is on the roadmap.
 
@@ -102,32 +102,32 @@ It is used daily by a developer who works with an AI agent across several reposi
 
 ### 4. Principles
 
-### 1. Nothing slips through
+#### 1. Nothing slips through
 
 - Every change the agent makes stays marked until the user explicitly accepts it; committing does not count as approval.
 - An open request is never closed on its own: archive, audit and import close it only with evidence. A request closed by mistake is worse than one left open.
 - Records are not deleted (`dropped`), document sections are not deleted (`superseded`); who changed what and when stays in the version history.
 - Old data heals itself: there is no repair script, the fix is made at read time.
 
-### 2. Cheap and fast
+#### 2. Cheap and fast
 
 - A model is used only where verbal judgment is needed and only the small model (Haiku); where a rule is enough, there is no call. It runs on the user's existing Claude subscription.
 - Hooks do not hold the tool back (~65 ms, heavy work in the background); the panel shows a change in ~50 ms; queries take < 1 ms at 10,000 records.
 - No dependencies: no `npm install` step at install.
 
-### 3. Independent of agent and tool
+#### 3. Independent of agent and tool
 
 - The only way to write records is MCP: Claude Code, Cursor and Codex see the same tools. The tools are few and general (12 tools), because every definition enters the agent's context.
 - Agent Setup shows each tool's configuration (Claude Code, Cursor, Copilot, AGENTS.md, Gemini, Windsurf, Cline, Aider) in one place.
 - Hook-based features (review, waiting items, activity) are specific to Claude Code today.
 
-### 4. The user's decisions are recorded
+#### 4. The user's decisions are recorded
 
 - A decision made in chat is kept as a `decision` record, with its date and the user's own words; the agent does not ask the same question again.
 - Design documents are tied to decisions: which ADR/PDR/decision a section rests on is visible.
 - The source of truth is the database; the Markdown views (`docs/ARCHITECTURE.md`, `docs/PRODUCT.md`) are generated.
 
-### 5. Safe defaults
+#### 5. Safe defaults
 
 - In an untrusted folder no model, `gh` or repo script runs; secrets live in a `0600` file; comments sent to the tracker are fixed text.
 - Process checks do not run unless the repo explicitly turns them on.
@@ -184,27 +184,27 @@ flowchart TD
   W5 -.when the task is done.-> S2
 ```
 
-### 1. Agent edits → review / Accept
+#### 1. Agent edits → review / Accept
 
 The agent changes a document; the user opens the file or the preview: an added line is green, a changed word sits in a red box next to the old word, a deleted block is marked. The user Accepts block by block; the view moves to the next one like a review queue. The **Agent changes** tab shows all edits in the repo in task lanes, each with a one-sentence explanation; a diff opens from the row, or an edit is accepted as a whole.
 
-### 2. Agent asks → Waiting on you → answer
+#### 2. Agent asks → Waiting on you → answer
 
 The agent asks something, requests permission, or at the end of a turn says "test this". The request lands in the list with its task, worded so it is understandable a week later without the chat ("#64: …"). If the user answers in chat, Haiku finds which step was decided and marks it; from the panel the user can write an answer, tick the step, or say "Done it". When the task is done, the requests that belong to it close in every session.
 
-### 3. Where we left off
+#### 3. Where we left off
 
 At the start of a session the agent gets the unfinished tasks and each one's 👉 with `where_we_left_off` (automatically at SessionStart if process checks are on). The user sees the same information on **Home** and in the status line (`Imprimatur · 3 waiting on you · #64 👉 …`).
 
-### 4. Tasks and records
+#### 4. Tasks and records
 
 While working, the agent adds and closes todo, decision, note, ADR, PDR and test records through MCP; the 👉 moves to where the work stopped. In the **Tasks** tab the user opens the task's page: adds records with the quick-add box (`?` question, `!` decision, `#` note, `@me` their own todo), ticks todos, answers questions. Every change is versioned with who made it.
 
-### 5. Architecture and product documents
+#### 5. Architecture and product documents
 
 When the agent makes an architecture or product decision, it adds an ADR/PDR record, updates the relevant document section with `doc_section_upsert` and links it to the record (if it does not, a process check warns). In the **Architecture** and **Product** tabs the user reads the contents, the rendered text and the contributing records, edits a section or marks it superseded; each section's history is visible. The documents are also written to the repo as `docs/ARCHITECTURE.md` and `docs/PRODUCT.md`.
 
-### 6. Sync with GitHub and Jira
+#### 6. Sync with GitHub and Jira
 
 When a task is done, its GitHub issue closes (or moves to Done in Jira); an issue closed on GitHub finishes the task, a new issue becomes a task; the line in the epic closes with the task. Imprimatur also accepts optional plugins.
 
@@ -212,7 +212,7 @@ When a task is done, its GitHub issue closes (or moves to Done in Jira); an issu
 
 ### 7. Surfaces and features
 
-### VS Code panel (the Imprimatur panel)
+#### VS Code panel (the Imprimatur panel)
 
 | Tab | What it is for |
 |---|---|
@@ -223,30 +223,30 @@ When a task is done, its GitHub issue closes (or moves to Done in Jira); an issu
 
 Keyboard: j/k, Enter, x, a, /, Esc. In the sidebar, rows that open the tabs and a badge that counts what is waiting.
 
-### Editor marks and preview
+#### Editor marks and preview
 
 - Marks at word or sentence level, the old text readable in a red box, a mark for a deleted block, the overview ruler, the number of changes in the status bar.
 - In the Markdown preview, marks at block level, clickable ticks on the right edge, ✓ Accept above the block (instant, without reloading the page).
 - `imprimatur.showIn`: Markdown marks are in the preview only by default; `both` turns the editor on too.
 - The file's agent edit history (Show Agent Edit History), each edit's diff. An optional Mermaid diagram diff.
 
-### Agent Setup
+#### Agent Setup
 
 Every file that affects the agent, for the repo and for home, grouped by tool and kind: a new/changed/deleted mark, when it takes effect ("always", "for these files", "on request") and which rules apply to the open file, health checks (broken reference, invalid JSON, secret, contradiction), drift across repos, git history and a "what did the last change do" summary, merged settings (hook order, effective permissions). Read-only.
 
-### Status line
+#### Status line
 
 In Claude Code's status line, for the repo and session: `Imprimatur · 3 waiting on you · #64 👉 discover cache`. It does not overwrite the user's existing status line.
 
-### MCP tools
+#### MCP tools
 
 `where_we_left_off`, `task_list`, `task_get`, `task_upsert`, `record_add`, `record_update`, `pointer_set`, `search`, `doc_get`, `doc_section_upsert`. In Claude Code (settings file or plugin), Cursor and Codex.
 
-### Process checks
+#### Process checks
 
 Optional per repo (`.claude/imprimatur.json`): where we left off at session start, a `--no-verify` block, main protection, design first, docs contents, issue fields, sweep, a "Where are we" section, branch finish, document update. Each is `block`, `warn` or off.
 
-### Command line
+#### Command line
 
 `npm run setup` (install), `npm run import` (import old Markdown records), `npm run tracker`, `node scripts/github-webhooks.mjs`, `node scripts/stale-epic-lines.mjs`.
 
@@ -324,17 +324,20 @@ Why it is this way: in Anthropic's 2026 study, people who asked for explanations
 
 The user picks any topic (a language feature, a concept for an interview, a spoken language, a book chapter, a sport) and wants to practise it, not only read about it. `/exercise <topic>` in Claude Code turns it into an exercise they tick in the panel's **Exercises** tab.
 
-### What the user gets
+#### What the user gets
+
 - **A few questions first:** why (understand, do, an exam or interview), their level, time and place; then two or three quick diagnostic questions, so what they know is skipped.
 - **A "can do" goal** with how it is checked at the end.
 - **5 to 9 steps of 10 to 25 minutes**, each with a kind (learn, example, predict, do, vary, explain, recall), what it is for, and when it counts as done: something they can show.
 - **Coaching without answers:** the agent reviews what they bring, gives a hint, then a narrower one; the solution only when they ask after trying.
 - **A closing recall** without notes; the weak points are kept for the next session.
 
-### The Exercises tab
+#### The Exercises tab
+
 Progress, the step to do now, a box per step, **skip** (why goes in its note), a note per step, **split** (copies `/exercise split step … of exercise …` for Claude Code), drop and resume, finished exercises below.
 
-### Rules
+#### Rules
+
 - Exercises are the user's, not a repo's or a task's: the same list in every project. They stay on this machine.
 - A split step is ticked when its smaller steps are; an exercise is done when its steps are.
 - Reading is at most a third of the steps; every exercise has a do step and a closing recall.
@@ -349,14 +352,16 @@ Later: spaced recall of weak points (1, 3, 7 days, then FSRS-like) on Home; a qu
 
 Announcing a project means a different post for each channel, and each channel has its own rules: a subreddit's sidebar, X's character counting, Show HN's guidelines, Product Hunt's launch page. Rules change, and a post that breaks one is removed or ignored.
 
-### /social-post
+#### /social-post
+
 - Reads the target platform's own rules and docs **when it writes**, not from memory. When a page cannot be fetched (Reddit blocks most fetches; Discord rules live in the server), the user pastes it, or the post is marked "rules not checked".
 - Keeps a dated **rules card** per channel: length, title format, self-promotion, where links go, flair, required parts, timing, what is forbidden.
 - Writes the post to fit the card and that community's way of reading, counts characters with a script, and checks every fact against its source.
 - Where a platform asks for text written by hand (Show HN), it gives the facts and an outline instead of a draft.
 - Never posts, schedules or logs in for the user.
 
-### The Social document (off by default)
+#### The Social document (off by default)
+
 - **Imprimatur: Turn on social media tracking** for a repo adds a **Social** page under Analysis, next to Architecture, Product and Glossary, kept in `docs/SOCIAL.md`.
 - One section per channel: the rules read, the post, its status (planned, posted, link), results over time, what was learned. /social-post writes it and updates a channel when the user says a post went out or brings its numbers.
 - **Turn off** hides the page and stops the file; the document is kept for when it is turned on again.
@@ -416,6 +421,7 @@ Imprimatur's own plugin brings its hooks, its MCP server and its skills: issues,
 | humanizer | clears AI tells from prose | blader/humanizer, downloaded into ~/.claude/skills with a SOURCE.txt for the upstream check |
 
 **In Agent Setup → Checklist:**
+
 - A missing item is a **Baseline: install …** row; one the user turned off is a **Baseline: turn on …** row. The button shows a confirmation, then runs `claude plugin install|enable <id> --scope user` in a terminal, or downloads the skill.
 - **Not in This Repo**, on a row's menu, opts the repo out of that item. The choice is kept in the repo's Imprimatur data. Setting a plugin's `enabledPlugins` entry to `false` in the repo's `.claude` settings counts as opting out too.
 - A **Baseline: N off in this repo** row brings an item back.
@@ -448,7 +454,7 @@ Imprimatur only adds what it installs. It never edits or removes a hook, a plugi
 
 The metrics are values measured in real repositories of different sizes.
 
-### Latency
+#### Latency
 
 | Metric | Target | Measured |
 |---|---|---|
@@ -460,7 +466,7 @@ The metrics are values measured in real repositories of different sizes.
 | Idle CPU | ~0% | The earlier 120–140% (two windows) is fixed |
 | Tick → redraw in Waiting on you | instant | ~150 ms → 57–80 ms |
 
-### Cost
+#### Cost
 
 | Metric | Before | Now |
 |---|---|---|
@@ -469,13 +475,13 @@ The metrics are values measured in real repositories of different sizes.
 | SessionStart context | Up to Claude Code's 10,000-character cut | ≤ 4,000 characters |
 | MCP tool definitions | | ~1.4k tokens, loaded deferred |
 
-### Correctness and coverage
+#### Correctness and coverage
 
 - Lines written by the old hook are matched to their calls: 77/79 and 62/62 in two real repositories.
 - Database: 12 concurrent writers without an error.
 - Markdown import: the number of prefixed lines per file = the number of records.
 
-### To watch (not measured yet)
+#### To watch (not measured yet)
 
 - How long the agent waits for the user and how soon changes are reviewed (#42).
 - The per-item token cost of the context loaded in every session (#29).

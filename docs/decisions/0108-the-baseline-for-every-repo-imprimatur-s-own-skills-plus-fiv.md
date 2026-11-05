@@ -15,7 +15,7 @@ Task #141: feat(setup): a must-have set Imprimatur brings to every repo; repo-sp
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: adding mattpocock-skills as well, rejected because its 27 skills would overlap issues, study, where_we_left_off and /code-review.
 
 ## Decision Outcome
 
@@ -24,6 +24,7 @@ The user chose this baseline on 2026-11-05.
 **From Imprimatur's own plugin:** hooks, the MCP server, and the skills issues, study, exercise, imprimatur-stats and social-post. The issues skill already carries what was taken from mattpocock/skills (triage, to-tickets; MIT, NOTICE.md), so mattpocock-skills is not added: its 27 skills would overlap issues, study, where_we_left_off and /code-review.
 
 **Third-party items**, installed from their own source at user scope and only on a yes:
+
 - the repo's language server: an LSP plugin chosen by the repo's files
 - security-guidance
 - ponytail (DietrichGebert/ponytail)
@@ -31,6 +32,8 @@ The user chose this baseline on 2026-11-05.
 - humanizer (blader/humanizer, MIT), downloaded into ~/.claude/skills with a SOURCE.txt
 
 A missing item is a Checklist row with Install, or Turn on when the user turned it off. A repo opts out in its Imprimatur data ("Not in This Repo"), or by setting enabledPlugins false in its own .claude settings. Imprimatur never edits or removes what it did not install.
+
+Alternative: adding mattpocock-skills as well, rejected because its 27 skills would overlap issues, study, where_we_left_off and /code-review.
 
 ## Consequences
 

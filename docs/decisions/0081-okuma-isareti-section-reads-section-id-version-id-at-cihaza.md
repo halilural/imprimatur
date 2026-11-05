@@ -15,7 +15,7 @@ Task #92: feat(reads): read marks and an understanding-debt counter per task.
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: counting a sync/import write as a "read", rejected because the read mark is specific to this device, not something synced from elsewhere.
 
 ## Decision Outcome
 
@@ -28,6 +28,8 @@ Okuma işareti: section_reads(section_id, version_id, at), cihaza özel; okunmad
 - Düzenlemeler veritabanında değil: kabul edilmemiş düzenleme sayısı graf satırlarından (görev şeridi) sayılır; durum satırı grafı çizmediği için eklenti `.claude/imprimatur/unread.json`'a yazar (15 dk'dan eskisi yok sayılır).
 - Placeholder repo birleşmesinde silinen bölümün okuma satırı da silinir.
 - Bölüm açılınca otomatik okundu sayılmaz, açık "Okudum" düğmesi var: doküman sekmesi bütün bölümleri aynı anda gösteriyor, sekmeyi açmak hepsini okumak demek değil.
+
+Alternative: counting a sync/import write as a "read", rejected because the read mark is specific to this device, not something synced from elsewhere.
 
 ## Consequences
 

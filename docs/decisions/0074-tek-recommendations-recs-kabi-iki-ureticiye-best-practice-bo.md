@@ -15,7 +15,7 @@ Task #87: feat(recs): one Recommendations view: RECS container, quick best-pract
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: a separate best-practice review task distinct from Recommendations, rejected because the user wanted it merged into one bin ("best practice ayrı olmasın, Recommendations'a girsin").
 
 ## Decision Outcome
 
@@ -28,10 +28,12 @@ Tek Recommendations: RECS kabı iki üreticiye; best practice boru hattı (kod t
 - Ölçüm: bu repoda 181 sn, 16 öneri, 2,70 $ (eskisi ~600 sn).
 - Gözden geçirme: okumada yazma döngüsü, eşzamanlı göç, eski sürüm kopyaları, sıra, sembolik bağlantı; güvenlik incelemesi: SSRF. Hepsi düzeltildi, testli.
 
+Alternative: a separate best-practice review task distinct from Recommendations, rejected because the user wanted it merged into one bin ("best practice ayrı olmasın, Recommendations'a girsin").
+
 ## Consequences
 
 Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Recommendations: project best-practice review (#86, #87)](../ARCHITECTURE.md#best-practice-review)

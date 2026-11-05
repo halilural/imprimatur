@@ -15,11 +15,13 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: a one-time repair/migration script that rewrites old history data in place, rejected — the principle is that old data heals itself at read time, with no repair script.
 
 ## Decision Outcome
 
 Eski veri kendiliğinden düzelir (0.30.5, #47; veri yeniden yazılmaz, onarım betiği yok) — (1) `vscode/calls.js`: grafik bir çağrıyı transcript'ten ilk okuduğunda (bitmişse: `tool_result` gelmiş) `.claude/imprimatur/calls.jsonl`'a yazar `{toolUseId, branch, name?, input?, failed?}`; sonra oradan okur: Claude Code transcript'leri siler (`cleanupPeriodDays`, varsayılan 30 gün), outside ayrımı ve dal düzeltmesi kalıcı olur. `narration.js` `callInfo`: transcript'in `gitBranch`'i, bitmiş çağrılar (tool_result id'leri, büyük çıktılar parse edilmeden). (2) Grafik her satırın dalını `editBranch(transcript dalı, kayıtlı dal)` ile hesaplar: Bash'in komut sonrası kaydedilmiş dalı ve dalı hiç olmayan eski satırlar düzelir; yeni satırlarda sonuç değişmez. `editBranch` `review-state.js`'te. (3) `todo-done.json` = `{rules, files}`; başka kurallarla (eski biçim) yazılmış önbellek baştan okunur: kural değişince kaçan kapanışlar kendiliğinden olur. Grafik açılınca da `closeDoneTasks` çalışır (yalnız o repoda bir tur bitmesini beklemez). Geri gelmeyen: hata veren Bash komutlarının #45 öncesi kaydedilmemiş düzenlemeleri (yazdıkları hiçbir yerde yok).
+
+Alternative: a one-time repair/migration script that rewrites old history data in place, rejected — the principle is that old data heals itself at read time, with no repair script.
 
 ## Consequences
 
@@ -27,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: File-based review data](../ARCHITECTURE.md#review-data)

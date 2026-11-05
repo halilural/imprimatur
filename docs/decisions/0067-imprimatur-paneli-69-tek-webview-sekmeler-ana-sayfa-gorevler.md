@@ -15,7 +15,7 @@ Task #69: feat(tasks): Imprimatur Tasks: tasks and records as a web page in an e
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: the narrow record trees in the sidebar, rejected because the user said they were unreadable ("okunmuyor"); replaced by a single webview panel with tabs.
 
 ## Decision Outcome
 
@@ -27,10 +27,12 @@ Imprimatur paneli (#69): tek webview, sekmeler (Ana sayfa, Görevler, Bende bekl
 - Kullanıcının yazmaları veritabanına aktör `user` ile.
 - Kenar çubuğu: sekmeleri açan satırlar (rozet bekleyenleri sayar) ve Agent setup ağacı.
 
+Alternative: the narrow record trees in the sidebar, rejected because the user said they were unreadable ("okunmuyor"); replaced by a single webview panel with tabs.
+
 ## Consequences
 
 Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Panel and views](../ARCHITECTURE.md#panel)

@@ -22,10 +22,12 @@ The options are not listed apart; the decision below says what was chosen and wh
 The whole Imprimatur panel becomes a board in the ponytail board style, with session cost/time/tokens recorded and analytic views; the VS Code side bar stays
 
 The user, on 2026-11-04, showing the ponytail board (`~/.config/ponytail/band/board.html`) beside the Imprimatur panel and side bar: "make it like the ponytail board. I do not want the views taken out of VS Code; the left pane can stay, but make this view like the ponytail board."
+
 - Asked where the board look goes: "you will turn all of it into the board."
 - Asked about cost: "yes, record it, and also good analytic views like the board."
 
 What the user gets:
+
 - **#148, the board look on every tab:** a near-black board palette with a light variant, cards with an inner highlight and a soft shadow, mono numbers, and a header with a breadcrumb and a range picker. The orange mascot and legible text stay, per the visual-style preference.
 - **#149, session numbers:** each Claude Code session's cost, time and lines, from the status line input, and its tokens, from the transcript.
 - **#150, one stats module:** daily series, shared by the panel and `/imprimatur-stats`.
@@ -37,6 +39,7 @@ Not changed: the VS Code side bar (Imprimatur launcher, Agent setup).
 ## Consequences
 
 The whole Imprimatur panel becomes a board in the ponytail board style, with session cost/time/tokens recorded and analytic views; the VS Code side bar stays
+
 - Asked about cost: "yes, record it, and also good analytic views like the board."
 - **#149, session numbers:** each Claude Code session's cost, time and lines, from the status line input, and its tokens, from the transcript.
 - **#152, analytics on each tab:** tasks, agent changes, documents, and hook cost.

@@ -22,10 +22,12 @@ Task #126: feat(data): keep per-repo data outside the repo, one change stamp ins
 Per-repo data lives at <database folder>/repos/<name>-<hash>/, not in the repo; dataPath() maps every old .claude/imprimatur path there; the first use moves the old folder under a lock and leaves MOVED.md
 
 **Context.** `.claude/imprimatur/` (edit copies, history, waiting and activity logs, state files, archive) lived inside each repo. Two things followed:
+
 - it was committed wherever no ignore rule covered it; the stopgap is 0.77.1's self-ignoring `.gitignore`;
 - every hook write was a file event in the workspace, for VS Code's watchers, search and other extensions, and for Imprimatur's own refresh routing.
 
 **Decision.**
+
 - `vscode/data-dir.js` resolves the folder as `dataDir(root) = <dirname(dbPath)>/repos/<basename>-<sha1(realpath root) 10>/`. It writes `root.txt` there, naming the repo.
 - `dataPath(root, rel, …)` maps a path under the old `.claude/imprimatur/` there. Every reader and writer (hooks, extension, MCP server, scripts) keeps its constants and calls `dataPath(root, CONST)` instead of `path.join(root, CONST)`.
 - The move, on the first `dataDir()` of a process, when the old folder has more than `.gitignore` and `MOVED.md`:

@@ -34,8 +34,8 @@ const OVERVIEW = { key: "overview", title: "Overview" };
 
 const hash = (/** @type {string} */ s) => crypto.createHash("sha1").update(s).digest("hex").slice(0, 16);
 const norm = (/** @type {string | null | undefined} */ s) => String(s ?? "").replace(/\r\n/g, "\n").trim();
-/** What a section says, as one hash: its title and body. @param {{title: string, body?: string | null}} s */
-const sectionHash = (s) => hash(`${norm(s.title).replace(/\s+/g, " ")}\n\n${norm(s.body)}`);
+/** What a section says, as one hash: its title and body, nested and tidied as the export writes it (#132), so a stored body and its file copy hash the same. @param {{title: string, body?: string | null}} s */
+const sectionHash = (s) => hash(`${norm(s.title).replace(/\s+/g, " ")}\n\n${norm(require("./md-tidy.js").tidy(require("./md-tidy.js").nest(norm(s.body))))}`);
 
 const trimBlank = (/** @type {string[]} */ lines) => {
   let a = 0;

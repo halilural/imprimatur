@@ -77,16 +77,17 @@ function madrText(r, sections, header) {
   const back = sections.length
     ? sections.map((s) => `- [${s.kind === "architecture" ? "Architecture" : "Product"}: ${s.title.replace(/[[\]]/g, "")}](../${file(s.kind)}#${s.key})`).join("\n")
     : "- No section links this decision yet.";
-  return [
+  return require("./md-tidy.js").tidy([
     `---\ntype: ${r.kind}\nstatus: ${statusOf(r.status)}\ndate: ${date}\nrecord: ${r.uid}\n---`,
     header,
-    `# ${String(r.links.madr).padStart(4, "0")}. ${short}`,
+    // No closing punctuation in a heading (MD026); the full title is in the outcome.
+    `# ${String(r.links.madr).padStart(4, "0")}. ${short.replace(/[.,;:!]+$/, "")}`,
     `## Context and Problem Statement\n\nTask ${r.task_key}: ${String(r.task_title ?? "").replace(/\s+/g, " ").trim()}.`,
     `## Considered Options\n\n${options.length ? options.join("\n") : "The options are not listed apart; the decision below says what was chosen and why."}`,
     `## Decision Outcome\n\n${body || "Not written yet."}`,
     `## Consequences\n\n${consequences.length ? consequences.join("\n") : "Not listed apart; see the decision outcome."}`,
     `## Sections\n\n${back}`,
-  ].join("\n\n") + "\n";
+  ].join("\n\n") + "\n");
 }
 
 /** The index of the decisions. @param {any[]} recs @param {string} header */

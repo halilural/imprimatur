@@ -1,0 +1,19 @@
+// Imprimatur's documentation standard (#132). Edit freely: setup never overwrites this file.
+{
+  "config": {
+    "default": true,
+    // Prose is not wrapped, and the generated documents carry <a id> anchors.
+    "MD013": false,
+    "MD033": false,
+    // Sections repeat subheadings (Data, Flow, ...): only the same heading under one parent is a problem.
+    "MD024": { "siblings_only": true },
+    // Many authors write the records: _x_ and *x* both stay.
+    "MD049": false,
+    "MD050": false,
+    // A numbered list may go on after a code block (7., 8., ...).
+    "MD029": false,
+    // Table pipes are written compact by the generator ("|---|").
+    "MD060": false
+  },
+  "ignores": ["node_modules/**"]
+}

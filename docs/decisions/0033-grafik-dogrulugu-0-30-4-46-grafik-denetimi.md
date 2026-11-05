@@ -15,11 +15,13 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: reconstructing a Bash edit's real "after" text the same way Edit/Write's is fixed, rejected because the transcript only records the command itself, not its effect — only Edit/Write calls are corrected.
 
 ## Decision Outcome
 
 Grafik doğruluğu (0.30.4, #46; grafik denetimi) — (1) Bash düzenlemesinin dalı PreToolUse'da da okunur (`pending/<id>.json` = `{files, branch}`; eski biçim de okunur); önce/sonra farklıysa varsayılan (main/master) olmayan (`baseline.mjs` `editBranch`): `düzenle && commit && switch main` ile `switch -c x && düzenle` ikisi de doğru dalda. (2) `review-state.js` `historyEdits(log, current, {toolCall})`: Edit/Write'ın after'ı transcript'teki çağrıdan kurulur (`narration.js` `toolCallOf`: Edit/Write girdisi + başarısız `tool_result`; başarısız çağrı = değişiklik yok); bir sonraki before'la farkı ayrı bir `outside` düzenlemesi (n + 0.5, t + 1 ms): elle, git ya da hatalı komutla gelen değişiklik ajanın satırına yazılmaz. Grafik onu düzenlemenin şeridinde, italik "Outside change" ve "after #n" ile gösterir; kabul, diff ve git-to (`extension.js` `editsOf`) aynı veriyi kullanır. Bash'in after'ı bilinemez (transcript'te yalnız komut). (3) Eklenen ve silinen satırı 0 olan düzenleme grafikte satır değildir.
+
+Alternative: reconstructing a Bash edit's real "after" text the same way Edit/Write's is fixed, rejected because the transcript only records the command itself, not its effect — only Edit/Write calls are corrected.
 
 ## Consequences
 
@@ -27,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: File-based review data](../ARCHITECTURE.md#review-data)

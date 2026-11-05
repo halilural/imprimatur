@@ -15,11 +15,21 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: VS Code's own "Open Changes" inline diff + "Stage Selected Ranges" (ponytail's zero-code suggestion), rejected because it also shows the user's own unstaged edits, doesn't show a new untracked file without `git add -N`, and keeps colors in a separate diff tab rather than inline in the editor.
+Alternative: claude-diff-review (copies the original to a shadow baseline, opens a native VS Code diff per file on Stop, accept/reject per hunk, rejecting re-runs Claude), rejected in favor of inline color in the editor itself rather than a separate diff window.
+Alternative: GitHuman (moves review into git's staging area, diff + comments in a separate web UI before commit, comments go back to the agent), rejected for the same reason: review stays in a separate window, not inline.
+Alternative: ChangeDown/CriticMarkup (writes change markup like `{++ ++}`/`{-- --}` directly into the file for Claude Code via MCP), rejected because the markup itself can leak into commits; Imprimatur's baseline-copy approach keeps the file text untouched.
 
 ## Decision Outcome
 
 `vscode/` — VS Code eklentisi, bağımlılıksız JS. Kopyası olan her dosyayı kopyayla karşılaştırır (ortak baş/son kırpılır, satır LCS; eşleşen silme+ekleme çiftleri "değişen satır", içlerinde kelime LCS). Satırda yalnız tek kelime değiştiyse kelime işareti; birden çok kelime değiştiyse cümle düzeyi: eski cümle satırın başında (girintiden sonra) kırmızı üstü çizili, yeni cümle hemen ardından vurgulu (dekorasyon araya gerçek satır ekleyemez). Eklenen satır yeşil, silinen blok önceki satırın sonunda kırmızı işaret (tamamı hover'da). Overview ruler işaretleri, durum çubuğunda "N agent changes (M latest)". (#3, #5)
+
+`vscode/` — VS Code eklentisi, bağımlılıksız JS. Kopyası olan her dosyayı kopyayla karşılaştırır (ortak baş/son kırpılır, satır LCS; eşleşen silme+ekleme çiftleri "değişen satır", içlerinde kelime LCS). Satırda yalnız tek kelime değiştiyse kelime işareti; birden çok kelime değiştiyse cümle düzeyi: eski cümle satırın başında (girintiden sonra) kırmızı üstü çizili, yeni cümle hemen ardından vurgulu (dekorasyon araya gerçek satır ekleyemez). Eklenen satır yeşil, silinen blok önceki satırın sonunda kırmızı işaret (tamamı hover'da). Overview ruler işaretleri, durum çubuğunda "N agent changes (M latest)". (#3, #5)
+
+Alternative: VS Code's own "Open Changes" inline diff + "Stage Selected Ranges" (ponytail's zero-code suggestion), rejected because it also shows the user's own unstaged edits, doesn't show a new untracked file without `git add -N`, and keeps colors in a separate diff tab rather than inline in the editor.
+Alternative: claude-diff-review (copies the original to a shadow baseline, opens a native VS Code diff per file on Stop, accept/reject per hunk, rejecting re-runs Claude), rejected in favor of inline color in the editor itself rather than a separate diff window.
+Alternative: GitHuman (moves review into git's staging area, diff + comments in a separate web UI before commit, comments go back to the agent), rejected for the same reason: review stays in a separate window, not inline.
+Alternative: ChangeDown/CriticMarkup (writes change markup like `{++ ++}`/`{-- --}` directly into the file for Claude Code via MCP), rejected because the markup itself can leak into commits; Imprimatur's baseline-copy approach keeps the file text untouched.
 
 ## Consequences
 
@@ -27,4 +37,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Panel and views](../ARCHITECTURE.md#panel)

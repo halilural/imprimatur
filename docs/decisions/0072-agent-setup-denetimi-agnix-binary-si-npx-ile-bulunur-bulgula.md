@@ -34,4 +34,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Agent setup audit (agnix)](../ARCHITECTURE.md#agent-setup-audit)

@@ -15,15 +15,18 @@ Task #62: perf: Imprimatur cheap and fast: fewer Haiku calls, a bounded SessionS
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: `--bare` / a direct API call, rejected because it needs an API key and does not work with a subscription.
 
 ## Decision Outcome
 
 Ölçüm 2026-10-09: her hook ~65 ms (43 ms Node açılışı), hook'lar paralel; MCP araç tanımları ~1,4k token ve ertelemeli yüklenir; asıl maliyet arka plandaki `claude -p --model haiku` çağrıları (investment'ta günde ~100 düzenleme açıklaması + her tur sonu denetimi).
+
 - Tur sonu denetimi yalnız açık madde varken ya da cevap bir şey isterken (👉, soru, "test et").
 - Düzenleme açıklaması (#63): ajanın sözü en az 4 kelimeyse çağrı yok (ölçüm: investment'ta 40 düzenlemenin 38'i); gerekirse eklentide, satır grafikte gösterilirken (en yeni 40 satır, aynı anda en çok 2); `vscode/describe.js`.
 - SessionStart bağlamı 4.000 karakter.
 - Değerlendirilip yapılmayan: hook `if` süzgeci; `--bare` / doğrudan API (API anahtarı ister, abonelikle çalışmaz).
+
+Alternative: `--bare` / a direct API call, rejected because it needs an API key and does not work with a subscription.
 
 ## Consequences
 
@@ -31,4 +34,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Model calls and cost](../ARCHITECTURE.md#model-calls)

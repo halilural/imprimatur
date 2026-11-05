@@ -34,6 +34,7 @@ Output schemas are 6.5 KB of core's 13.7 KB. Clients pass the model a tool's nam
 **Correction (2026-11-03, #120).** A first version of this record said the model reads only the text digest, not `structuredContent`. That is wrong for Claude Code: the MCP results in this session reached the model as the full JSON of `structuredContent`. The reason for dropping `outputSchema` in lean profiles still holds, since the schema itself is not sent to the model. Result size, though, does reach the model; #120 makes `search` and `task_get` lean for that reason.
 
 **Decision.**
+
 - Groups:
   - `core`: where_we_left_off, task_get, task_upsert, record_add, record_update, search, pointer_set;
   - `list`: task_list;

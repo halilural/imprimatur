@@ -24,6 +24,7 @@ The database bounds its WAL to 4 MB and gets a daily upkeep: TRUNCATE checkpoint
 **Context.** Measured on the real database (2026-11-03): `imprimatur.db` was 88.6 MB with 5,131 of 21,642 pages free (24%), and `imprimatur.db-wal` was 27.8 MB. `journal_size_limit` was -1 and `auto_vacuum` was 0, so nothing ever shrank either file.
 
 **Decision.**
+
 - Every connection sets `PRAGMA journal_size_limit = 4194304` in `openDb`, so a checkpoint truncates the WAL back to 4 MB.
 - `db.maintain()` runs at most once a day across processes; the claim is meta `maint:at`, taken in a transaction. It does three things, each in milliseconds:
   - `PRAGMA wal_checkpoint(TRUNCATE)`;

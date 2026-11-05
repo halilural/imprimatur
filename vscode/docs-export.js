@@ -56,6 +56,13 @@ const inline = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
  * @param {any} db @param {number} docId @returns {string | undefined} undefined: no current section
  */
 function docMarkdown(db, docId) {
+  const md = rawMarkdown(db, docId);
+  // Tidied here, where the text is made: the file and what docs-sync compares stay one text (#132).
+  return md === undefined ? undefined : require("./md-tidy.js").tidy(md);
+}
+
+/** The document before tidying. @param {any} db @param {number} docId */
+function rawMarkdown(db, docId) {
   const doc = db.docById(docId);
   if (!doc) return undefined;
   const sections = db.docSections(docId).filter((/** @type {any} */ s) => s.status === "current");
@@ -68,7 +75,7 @@ function docMarkdown(db, docId) {
     sections.map((/** @type {any} */ s, /** @type {number} */ i) => `${terms ? "-" : `${i + 1}.`} [${link(s.title)}](#${s.key})`).join("\n")];
   sections.forEach((/** @type {any} */ s, /** @type {number} */ i) => {
     out.push(`<a id="${s.key}"></a>`, terms ? `## ${inline(s.title)}` : `## ${i + 1}. ${inline(s.title)}`);
-    const body = String(s.body ?? "").replace(/\r\n/g, "\n").trim();
+    const body = require("./md-tidy.js").nest(String(s.body ?? "").replace(/\r\n/g, "\n").trim(), 3);
     if (body) out.push(body);
     const decided = require("./decisions.js").linksLine(s.contributors ?? []);
     if (decided) out.push(decided);
@@ -101,7 +108,7 @@ function chaptered(doc, sections, chapters) {
     if (!g.list.length) out.push("_Not written yet._");
     for (const s of g.list) {
       out.push(`<a id="${s.key}"></a>`, `### ${num.get(s.key)}. ${inline(s.title)}`);
-      const body = String(s.body ?? "").replace(/\r\n/g, "\n").trim();
+      const body = require("./md-tidy.js").nest(String(s.body ?? "").replace(/\r\n/g, "\n").trim());
       if (body) out.push(body);
       // The decisions it is built on, as links to their MADR files (#130); docs-sync skips the line.
       const decided = require("./decisions.js").linksLine(s.contributors ?? []);

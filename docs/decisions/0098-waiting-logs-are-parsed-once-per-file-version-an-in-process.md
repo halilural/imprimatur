@@ -15,7 +15,8 @@ Task #127: perf(waiting): cache parsed waiting logs per file (follow-up of the #
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: a worker thread, rejected because the #116 spike found it was not worth it (no-go).
+Alternative: caching in the hooks that call `openSteps`/`itemsOf`, rejected because each hook runs in its own short-lived process, so a cache there buys nothing.
 
 ## Decision Outcome
 
@@ -28,6 +29,9 @@ Waiting logs are parsed once per file version: an in-process cache keyed by inod
 **Why this key.** Hooks only append (size grows). The archive and other rewriters write a new file (new inode) or change the size. A same-size, same-mtime, same-inode rewrite is the only miss, and it does not happen in practice.
 
 **Not done.** A worker (no-go in #116). Caching `openSteps`/`itemsOf` callers in hooks: each hook runs in its own short process, so a cache there buys nothing.
+
+Alternative: a worker thread, rejected because the #116 spike found it was not worth it (no-go).
+Alternative: caching in the hooks that call `openSteps`/`itemsOf`, rejected because each hook runs in its own short-lived process, so a cache there buys nothing.
 
 ## Consequences
 

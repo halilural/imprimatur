@@ -15,7 +15,7 @@ Task TASK-ANALYSIS: feat(docs): görev başına Analiz belgesi — hook ile yaka
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: a foreign key from the task-analysis document to the task row, rejected because a placeholder-repo merge would break it; a task-key reference is used instead, which does not break on merge.
 
 ## Decision Outcome
 
@@ -23,10 +23,12 @@ Görev analizi dördüncü belge türü: documents.scope = görev anahtarı, eş
 
 Migration 6 (db.js): documents (kind CHECK + 'analysis', scope TEXT, UNIQUE(repo_id, kind, scope), CHECK((kind='analysis') = (scope<>''))), doc_sections.source, doc_sources(doc_id, path, hash, at). Görev FK yerine anahtar: yer tutucu repo birleşmesi referansı kırmaz. Bölüm eşitleme anahtarı origin\tanalysis:<görev>\t<bölüm>; eski sürümler bu türü ve source alanını reddeder, bozulmaz. Worker genel olduğu için bulut migration'ı yok. Yakalama: process.js PostToolUse (Edit/Write/MultiEdit/ExitPlanMode) → analysis.js onEdit (yol/başlık kuralı ya da saklı karar hemen; yalnız model gerekiyorsa hooks/analysis.mjs arka planda Haiku). Geçmiş: analysis-backfill.js transcript'lerdeki Write içeriği ve Edit old/new'i zaman sırasıyla oynatır; belgede daha yeni metin varsa eski durum yazılmaz.
 
+Alternative: a foreign key from the task-analysis document to the task row, rejected because a placeholder-repo merge would break it; a task-key reference is used instead, which does not break on merge.
+
 ## Consequences
 
 Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Task analyses](../ARCHITECTURE.md#task-analysis)

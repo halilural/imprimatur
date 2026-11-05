@@ -27,4 +27,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Local database and data model](../ARCHITECTURE.md#database)
