@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.114.1",
+  "version": "0.114.2",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -629,12 +629,12 @@
         },
         {
           "command": "imprimatur.setup.installSuggestion",
-          "when": "view == imprimatur.setup && viewItem == suggestion",
+          "when": "view == imprimatur.setup && viewItem =~ /^suggestion(Study)?$/",
           "group": "inline@0"
         },
         {
           "command": "imprimatur.setup.installSuggestion",
-          "when": "view == imprimatur.setup && viewItem == suggestion",
+          "when": "view == imprimatur.setup && viewItem =~ /^suggestion(Study)?$/",
           "group": "1_setup@0"
         },
         {

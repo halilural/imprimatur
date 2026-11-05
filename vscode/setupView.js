@@ -168,7 +168,7 @@ class SetupView {
           type: "group", label: i.name, icon: i.verdict === "study" ? "book" : i.flags.length ? "warning" : "extensions", color: i.flags.length && i.verdict !== "study" ? "problemsWarningIcon.foreground" : undefined,
           description: `${i.why ? `${i.verdict === "study" ? "study" : "install"} · ` : ""}${what}`,
           tooltip: `${i.id}\n\n${i.description}\n\n${verdict}: ${why}\nIt brings: ${i.brings?.length ? i.brings.join(", ") : i.reads}.${i.flags.length ? `\n\n⚠ ${i.flags.join("\n⚠ ")}` : ""}${i.repo ? `\n\ngithub.com/${i.repo}` : ""}`,
-          context: i.verdict === "study" ? "suggestionStudy" : "suggestion", installId: i.id, repoRoot: root, flags: i.flags, reads: i.reads, ...open,
+          context: i.verdict === "study" ? "suggestionStudy" : "suggestion", installId: i.id, repoRoot: root, flags: i.flags, reads: i.reads, study: i.verdict === "study" ? why : undefined, ...open,
           children: [
             line("What it is", what || "no description", "info"),
             line(i.verdict === "study" ? "Why study it" : "Why here", why, i.verdict === "study" ? "book" : "lightbulb"),
@@ -734,7 +734,7 @@ async function installSuggestion(node) {
   const root = node?.repoRoot;
   if (typeof id !== "string" || !/^[\w.-]+@[\w.-]+$/.test(id) || typeof root !== "string") return;
   const ok = await vscode.window.showWarningMessage(`Install ${id} for ${path.basename(root)}?`, { modal: true,
-    detail: `It brings: ${node.reads}.${node.flags?.length ? `\n\n⚠ ${node.flags.join("\n⚠ ")}` : ""}\n\nRuns: claude plugin install ${id} --scope project (in ${root}). Restart Claude Code sessions there afterwards.` }, "Install");
+    detail: `${node.study ? `Claude said to study it, not install it: ${node.study}\n\n` : ""}It brings: ${node.reads}.${node.flags?.length ? `\n\n⚠ ${node.flags.join("\n⚠ ")}` : ""}\n\nRuns: claude plugin install ${id} --scope project (in ${root}). Restart Claude Code sessions there afterwards.` }, "Install");
   if (ok !== "Install") return;
   const t = vscode.window.createTerminal({ name: `Install ${id}`, cwd: root });
   t.show();
