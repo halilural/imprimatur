@@ -103,3 +103,19 @@ test("runBackfill: a clean exit that wrote nothing is incomplete, not done", asy
   assert.equal(m.status, "incomplete");
   assert.deepEqual(m.left, ["architecture", "product", "glossary"]);
 });
+
+test("fixPrompt (#131): lists the decisions IMP-DOC-002/003 name, only for the rules found; claudeArgs adds record_update", () => {
+  const { root, db, repo, recs } = setup();
+  const alt = db.addRecord(db.upsertTask(repo.id, "#2").id, { kind: "adr", title: "B", body: "Alternative: C, rejected because slow" }, agent);
+  const f = (rule) => ({ title: `${rule}: x`, links: { audit: { rule } } });
+  const both = bf.fixPrompt(db, repo.id, root, [f("IMP-DOC-002"), f("IMP-DOC-003")]);
+  assert.match(both, new RegExp(`## IMP-DOC-003[\\s\\S]*\\[${recs[0].id}\\] ADR \\(#1\\) r0[\\s\\S]*\\[${alt.id}\\] ADR \\(#2\\) B[\\s\\S]*## IMP-DOC-002`));
+  // The decision that names an alternative is not in IMP-DOC-002's list.
+  assert.ok(!both.split("## IMP-DOC-002")[1].includes(`[${alt.id}]`));
+  assert.match(both, /do not invent one/);
+  const one = bf.fixPrompt(db, repo.id, root, [f("IMP-DOC-003")]);
+  assert.ok(!one.includes("## IMP-DOC-002"));
+  const args = bf.claudeArgs("/x/server.mjs", ["record_update"]);
+  assert.ok(args.includes("mcp__imprimatur__record_update") && args.includes("mcp__imprimatur__doc_section_upsert"));
+  assert.ok(!bf.claudeArgs("/x/server.mjs").includes("mcp__imprimatur__record_update"));
+});
