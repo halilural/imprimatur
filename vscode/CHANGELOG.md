@@ -4,6 +4,16 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.110.0] - 2026-11-05
+
+### Added
+- What each hook costs (#145). Agent Setup's "Hooks: what they added and how long they took"
+  rows now start with each hook's total time in the session, slowest first, then its runs,
+  time per run and the text it adds. Two copies of one plugin's hook (installed at two scopes)
+  show as two rows, each saying how many copies run and from where. A hook that Claude Code
+  logged only as "command hook" is named from the hooks your settings and enabled plugins
+  define for that event and tool.
+
 ## [0.109.0] - 2026-11-05
 
 ### Added

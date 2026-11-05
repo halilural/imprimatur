@@ -208,13 +208,15 @@ const parseJson = (abs, text) => JSON.parse(allowsComments(abs) ? stripJsonc(tex
  * @param {any} settings @returns {string[]}
  */
 function hooksOf(settings) {
+  return hookDefsOf(settings).map((d) => `${d.event}${d.matcher ? ` [${d.matcher}]` : ""} → ${d.script}`);
+}
+
+/** The hooks of a settings object as {event, matcher, script} (#145). @param {any} settings */
+function hookDefsOf(settings) {
   const out = [];
   for (const [event, entries] of Object.entries(settings?.hooks ?? {}))
-    for (const e of /** @type {any[]} */ (entries ?? []))
-      for (const h of e.hooks ?? []) {
-        const cmd = String(h.command ?? h.url ?? h.prompt ?? "");
-        out.push(`${event}${e.matcher ? ` [${e.matcher}]` : ""} → ${scriptName(cmd)}`);
-      }
+    for (const e of /** @type {any[]} */ (Array.isArray(entries) ? entries : []))
+      for (const h of e?.hooks ?? []) out.push({ event, matcher: String(e.matcher ?? ""), script: scriptName(String(h.command ?? h.url ?? h.prompt ?? "")) });
   return out;
 }
 
@@ -353,6 +355,44 @@ function skillOrigin(dir) {
 }
 
 /**
+ * A plugin's hooks as {event, matcher, script} (#145): its manifest's "hooks" (a file, an
+ * inline object, or a list of either) or hooks/hooks.json. @param {string} dir @param {any} [entry]
+ */
+function pluginHookDefs(dir, entry = {}) {
+  let m = {};
+  try {
+    m = JSON.parse(fs.readFileSync(path.join(dir, ".claude-plugin", "plugin.json"), "utf8")) ?? {};
+  } catch {}
+  m = { ...entry, ...m };
+  return (Array.isArray(m.hooks) ? m.hooks : [m.hooks]).flatMap((v) => {
+    let h = v && typeof v === "object" && !Array.isArray(v) ? v : {};
+    if (!(v && typeof v === "object"))
+      try {
+        h = JSON.parse(fs.readFileSync(path.join(dir, typeof v === "string" ? v : "hooks/hooks.json"), "utf8")) ?? {};
+      } catch {}
+    // A hooks file wraps the events in "hooks"; an inline manifest value may not.
+    return hookDefsOf(h.hooks ? h : { hooks: h });
+  });
+}
+
+/**
+ * The hooks configured for a repo (#145): the user's, the repo's and the local settings, and
+ * the hooks of the plugins installed for every repo or this one. @param {string} root @param {string} home
+ */
+function configuredHooks(root, home) {
+  const files = [path.join(home, ".claude", "settings.json"), path.join(root, ".claude", "settings.json"), path.join(root, ".claude", "settings.local.json")];
+  const fromSettings = files.flatMap((f) => hookDefsOf(readJson(f)));
+  const installed = readClaudeJson(home, "plugins/installed_plugins.json").plugins ?? {};
+  // A plugin turned off (enabledPlugins: false, the repo's settings over the user's) runs no hooks.
+  const enabled = Object.assign({}, ...files.map((f) => readJson(f).enabledPlugins ?? {}));
+  const fromPlugins = Object.entries(installed).filter(([id]) => enabled[id] !== false)
+    .flatMap(([, list]) => (Array.isArray(list) ? list : []))
+    .filter((e) => e?.scope === "user" || (typeof e?.projectPath === "string" && path.resolve(e.projectPath) === path.resolve(root)))
+    .flatMap((e) => (typeof e.installPath === "string" ? pluginHookDefs(e.installPath) : []));
+  return [...fromSettings, ...fromPlugins];
+}
+
+/**
  * What a plugin brings (#139): hooks, MCP servers, skills, agents and commands, from its
  * manifest's fields or the default folders. A plugin without a manifest ("strict": false)
  * is described by its marketplace entry. @param {string} dir the plugin's install path
@@ -386,11 +426,7 @@ function pluginContents(dir, entry = {}) {
     }
     return names.size;
   };
-  // "hooks" is a file, an inline object, or a list of either; a hooks file wraps the events in "hooks".
-  const hooks = (Array.isArray(m.hooks) ? m.hooks : [m.hooks]).reduce((sum, v) => {
-    const h = json(v, "hooks/hooks.json");
-    return sum + hooksOf(h.hooks ? h : { hooks: h }).length;
-  }, 0);
+  const hooks = pluginHookDefs(dir, entry).length;
   const mcpJson = json(m.mcpServers, ".mcp.json");
   const mcp = Object.keys(mcpJson.mcpServers ?? mcpJson);
   const lsp = Object.keys(m.lspServers && typeof m.lspServers === "object" ? m.lspServers : json(m.lspServers, ".lsp.json"));
@@ -488,7 +524,7 @@ function scanSetup(root, opts = {}) {
   items.push(...pluginItems(root, home, !!opts.global));
   if (opts.global) items.push(...syncedSkills(home), ...memoryStores(home));
   // What the repo's last Claude Code session was given (#139): read from its transcript.
-  else items.push(...sessionItems(path.join(home, ".claude", "projects", projectSlug(gitRootOf(root))), home));
+  else items.push(...sessionItems(path.join(home, ".claude", "projects", projectSlug(gitRootOf(root))), home, configuredHooks(root, home)));
   return items;
 }
 
