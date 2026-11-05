@@ -58,3 +58,15 @@ test("stats (#150): a task counts as finished on the day it became done, not on 
   assert.equal(db.sqlite.prepare("SELECT done_at FROM tasks WHERE id = ?").get(t.id).done_at, null, "reopening clears it");
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("stats (#149): cost from transcripts' cost points, spread over days; a drop adds nothing; one-prompt runs are background", () => {
+  const { transcriptCost } = require("../vscode/sessions.js");
+  const cs = (cost, extra = {}) => JSON.stringify({ type: "cost-state", sessionId: "s", totalCostUSD: cost, totalAPIDuration: 1000, startTime: 1, modelUsage: { m: { inputTokens: 1, outputTokens: 2, cacheReadInputTokens: 3, cacheCreationInputTokens: 4 } }, ...extra });
+  const text = [JSON.stringify({ type: "user", timestamp: "2026-11-04T10:00:00Z", message: { content: "hi" } }), cs(1),
+    JSON.stringify({ type: "user", timestamp: "2026-11-05T10:00:00Z", message: { content: [{ type: "tool_result" }] } }), cs(3),
+    JSON.stringify({ type: "user", timestamp: "2026-11-05T11:00:00Z", message: { content: "again" } }), cs(2.5)].join("\n");
+  const { points, prompts } = transcriptCost(text);
+  assert.equal(prompts, 2, "a tool result is not a prompt");
+  assert.deepEqual(points.map((p) => [new Date(p.t).toISOString().slice(0, 10), p.cost]), [["2026-11-04", 1], ["2026-11-05", 3], ["2026-11-05", 2.5]]);
+  assert.deepEqual(points[0].tokens, { input: 1, output: 2, cacheWrite: 4, cacheRead: 3 });
+});
