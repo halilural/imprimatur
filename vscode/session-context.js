@@ -129,19 +129,51 @@ function fold(s, line) {
   }
 }
 
-/** The newest transcript in a Claude Code project folder, or undefined. @param {string} dir */
-function newestTranscript(dir) {
-  let best;
+/**
+ * Whether a transcript is a background agent's, not the user's session: started through the
+ * SDK (a plugin's review), or a small file with one prompt (`claude -p`, Imprimatur's own runs).
+ * @param {string} file @param {number} size
+ */
+function background(file, size) {
+  let fd;
   try {
-    for (const n of fs.readdirSync(dir)) {
-      if (!n.endsWith(".jsonl")) continue;
+    fd = fs.openSync(file, "r");
+    const n = Math.min(size, 1 << 20);
+    const buf = Buffer.alloc(n);
+    fs.readSync(fd, buf, 0, n, 0);
+    const text = buf.toString("utf8");
+    if (/"entrypoint":"sdk-/.test(text.slice(0, 32768))) return true;
+    if (size > 1 << 20) return false;
+    let prompts = 0;
+    for (const line of text.split("\n"))
+      if (line.includes('"type":"user"') && !line.includes('"tool_result"') && !line.includes('"isMeta":true') && ++prompts > 1) return false;
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+/**
+ * The newest of the user's transcripts in a Claude Code project folder, or undefined. Background
+ * agents' (a plugin's review after a commit, `claude -p`) are passed over: they are newer than
+ * the session the user is in, and a panel about "this session" would describe them.
+ * @param {string} dir
+ */
+function newestTranscript(dir) {
+  /** @type {Array<{file: string, mtimeMs: number, size: number}>} */
+  let all = [];
+  try {
+    all = fs.readdirSync(dir).filter((n) => n.endsWith(".jsonl")).map((n) => {
       const st = fs.statSync(path.join(dir, n));
-      if (!best || st.mtimeMs > best.mtimeMs) best = { file: path.join(dir, n), mtimeMs: st.mtimeMs };
-    }
+      return { file: path.join(dir, n), mtimeMs: st.mtimeMs, size: st.size };
+    }).sort((a, b) => b.mtimeMs - a.mtimeMs);
   } catch {
     return undefined;
   }
-  return best?.file;
+  // At most a few looks: past the newest dozen, the newest one is the answer anyway.
+  return (all.slice(0, 12).find((t) => !background(t.file, t.size)) ?? all[0])?.file;
 }
 
 /** Per transcript: how far it was read, the unfinished last line, the state so far. @type {Map<string, {offset: number, rest: string, state: SessionState}>} */

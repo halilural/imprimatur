@@ -112,4 +112,45 @@ function recordSession(root, input, { now = Date.now() } = {}) {
   return row;
 }
 
-module.exports = { sessionsFile, readSessions, recordSession, tokensSince, QUIET_MS };
+/**
+ * A transcript's cost points (#149): Claude Code writes a "cost-state" line with the session's
+ * running totals (cost, API time, lines, tokens per model) in the terminal and in VS Code alike,
+ * where the status line does not run. Each point gets the time of the nearest line before it.
+ * prompts: the user's own messages (not tool results or meta lines); a background agent
+ * (`claude -p`, a plugin's review) has one.
+ * @param {string} text a transcript's text
+ * @returns {{prompts: number, points: Array<{t: number, session: string, started: number, cost: number, apiMs: number, added: number, removed: number, tokens: {input: number, output: number, cacheWrite: number, cacheRead: number}}>}}
+ */
+function transcriptCost(text) {
+  const points = [];
+  let prompts = 0;
+  let t = 0;
+  let from = 0;
+  for (;;) {
+    const end = text.indexOf("\n", from);
+    const line = end < 0 ? text.slice(from) : text.slice(from, end);
+    if (line.length > 20) {
+      const ts = /"timestamp":"([^"]{10,40})"/.exec(line.slice(0, 2000));
+      if (ts) t = Date.parse(ts[1]) || t;
+      if (line.includes('"type":"user"') && !line.includes('"tool_result"') && !line.includes('"isMeta":true') && !line.includes('"isCompactSummary":true')) prompts++;
+      if (line.startsWith('{"type":"cost-state"'))
+        try {
+          const j = JSON.parse(line);
+          const tokens = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 };
+          for (const m of Object.values(j.modelUsage ?? {})) {
+            tokens.input += Number(/** @type {any} */ (m).inputTokens) || 0;
+            tokens.output += Number(/** @type {any} */ (m).outputTokens) || 0;
+            tokens.cacheWrite += Number(/** @type {any} */ (m).cacheCreationInputTokens) || 0;
+            tokens.cacheRead += Number(/** @type {any} */ (m).cacheReadInputTokens) || 0;
+          }
+          points.push({ t: t || Number(j.startTime) || 0, session: String(j.sessionId ?? ""), started: Number(j.startTime) || t, cost: Number(j.totalCostUSD) || 0,
+            apiMs: Number(j.totalAPIDuration) || 0, added: Number(j.totalLinesAdded) || 0, removed: Number(j.totalLinesRemoved) || 0, tokens });
+        } catch {}
+    }
+    if (end < 0) break;
+    from = end + 1;
+  }
+  return { prompts, points };
+}
+
+module.exports = { sessionsFile, readSessions, recordSession, tokensSince, transcriptCost, QUIET_MS };

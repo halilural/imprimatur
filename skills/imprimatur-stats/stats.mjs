@@ -23,7 +23,7 @@ const s = statsOf(root, { days: 2 * DAYS });
 const sum = (xs, now) => (now ? xs.slice(DAYS) : xs.slice(0, DAYS)).reduce((a, b) => a + b, 0);
 const rows = [
   ["Tasks finished", "tasksDone"], ["Tasks opened", "tasksOpened"], ["Decisions (ADR/PDR/decision)", "decisions"], ["Records written", "records"],
-  ["Agent edits marked", "edits"], ["Turn-end asks recorded", "asks"], ["Sessions", "sessions"],
+  ["Agent edits marked", "edits"], ["Turn-end asks recorded", "asks"], ["Your Claude sessions", "sessions"],
 ].map(([label, key]) => [label, sum(s.series[key], true), sum(s.series[key], false)]);
 
 const W = 20;
@@ -45,13 +45,15 @@ const money = (n) => `$${n.toFixed(2)}`;
 const big = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
 const hrs = (ms) => `${(ms / 3_600_000).toFixed(1)} h`;
 out.push("", `  Cost                    ${money(sum(s.series.cost, true))}  (before: ${money(sum(s.series.cost, false))})`);
+out.push(`    of it background agents ${money(sum(s.series.backgroundCost, true))} in ${sum(s.series.backgroundRuns, true)} runs (plugin reviews, claude -p)`);
 out.push(`  Agent time (API)        ${hrs(sum(s.series.agentMs, true))}  (before: ${hrs(sum(s.series.agentMs, false))})`);
-out.push(`  Tokens                  ${big(sum(s.series.tokens, true))}  (before: ${big(sum(s.series.tokens, false))})`);
+out.push(`  Tokens                  ${big(sum(s.series.tokens, true))}, ${big(sum(s.series.cacheRead, true))} of them cache reads  (before: ${big(sum(s.series.tokens, false))})`);
 out.push("", `  Waiting on you now       ${s.waiting}`);
 out.push(`  Median time to answer   ${fmtH(wait(true))}  (before: ${fmtH(wait(false))})`);
 out.push(`  Tasks open or active    ${s.open}`);
 if (s.hooks.length) {
-  out.push("", "  Last session's hooks     runs · ms each · added");
+  // Claude Code writes a hook run into the transcript only when it left output: the counts and the time are of those.
+  out.push("", "  Last session's hooks (runs that left output in the transcript) · ms each · added");
   for (const h of s.hooks.slice(0, 6)) out.push(`    ${pad(h.label, 40)} ${h.summary}`);
 }
 out.push("");

@@ -128,7 +128,7 @@ function statsOf(root, { days = 7, now = Date.now(), db } = {}) {
   const since = new Date(`${list[0]}T00:00:00`).getTime();
   const zero = () => list.map(() => 0);
   /** @type {Record<string, number[]>} */
-  const series = { tasksDone: zero(), tasksOpened: zero(), decisions: zero(), records: zero(), edits: zero(), asks: zero(), sessions: zero(), agentMs: zero(), cost: zero(), tokens: zero() };
+  const series = { tasksDone: zero(), tasksOpened: zero(), decisions: zero(), records: zero(), edits: zero(), asks: zero(), sessions: zero(), agentMs: zero(), cost: zero(), tokens: zero(), cacheRead: zero(), backgroundCost: zero(), backgroundRuns: zero() };
   /** @param {string} key @param {number} t @param {number} [n] */
   const add = (key, t, n = 1) => {
     if (!(t <= now)) return;
@@ -153,21 +153,50 @@ function statsOf(root, { days = 7, now = Date.now(), db } = {}) {
   for (const a of asks) add("asks", Date.parse(a.t));
   const answered = asks.filter((a) => !a.open && a.answeredAt).map((a) => ({ t: Date.parse(a.t), hours: (Date.parse(a.answeredAt) - Date.parse(a.t)) / 3_600_000 })).filter((a) => a.hours >= 0);
   const answerHours = list.map((d) => median(answered.filter((a) => dayOf(a.t) === d).map((a) => a.hours)));
-  // Sessions (#149) count on the day they started; their cost, agent time and tokens too.
-  const sessions = cachedRead(require("./sessions.js").sessionsFile(root), (text) => text.split("\n").flatMap((l) => {
-    try {
-      return [JSON.parse(l)];
-    } catch {
-      return [];
+  // Sessions (#149): from each transcript's cost points (Claude Code's running totals, written in
+  // VS Code too, where the status line does not run). A point's growth over the one before it
+  // goes to the day of that point, so a session that runs for days spreads over them. A total
+  // that drops (a resumed session restores a slightly older state: 50.71 → 48.60) adds nothing
+  // there, and growth counts on from the lower value. The status line's rows fill in sessions whose
+  // transcript has no points.
+  const { transcriptCost, readSessions } = require("./sessions.js");
+  const { gitRootOf: gr, projectSlug: ps } = require("./agent-setup.js");
+  const projectDir = path.join(require("node:os").homedir(), ".claude", "projects", ps(gr(root)));
+  let transcripts = [];
+  try {
+    transcripts = fs.readdirSync(projectDir).filter((n) => n.endsWith(".jsonl")).map((n) => path.join(projectDir, n))
+      .filter((f) => fs.statSync(f).mtimeMs >= since);
+  } catch {}
+  const seen = new Set();
+  const tok = (/** @type {any} */ k) => (k.input || 0) + (k.output || 0) + (k.cacheWrite || 0) + (k.cacheRead || 0);
+  for (const f of transcripts) {
+    const { points, prompts } = cachedRead(f, transcriptCost) ?? { points: [], prompts: 0 };
+    // The user's own sessions count as sessions; a one-prompt run is a background agent, its cost apart.
+    const mine = prompts >= 2;
+    let prev = { cost: 0, apiMs: 0, tokens: 0, cacheRead: 0 };
+    for (const p of points) {
+      if (p.session && !seen.has(p.session)) {
+        seen.add(p.session);
+        if (mine) add("sessions", p.started || p.t);
+      }
+      if (!mine) {
+        add("backgroundCost", p.t, Math.max(0, p.cost - prev.cost));
+        add("backgroundRuns", p.t, prev.cost === 0 && p === points[0] ? 1 : 0);
+      }
+      const cur = { cost: p.cost, apiMs: p.apiMs, tokens: tok(p.tokens), cacheRead: p.tokens.cacheRead };
+      for (const [k, key] of /** @type {const} */ ([["cost", "cost"], ["apiMs", "agentMs"], ["tokens", "tokens"], ["cacheRead", "cacheRead"]]))
+        add(key, p.t, Math.max(0, cur[k] - prev[k]));
+      prev = cur;
     }
-  })) ?? [];
-  for (const s of sessions) {
+  }
+  for (const s of readSessions(root)) {
+    if (seen.has(s.session)) continue;
     const t = Number(s.started ?? s.at);
     add("sessions", t);
     add("agentMs", t, Number(s.apiMs) || 0);
     add("cost", t, Number(s.cost) || 0);
-    const k = s.tokens ?? {};
-    add("tokens", t, (Number(k.input) || 0) + (Number(k.output) || 0) + (Number(k.cacheWrite) || 0) + (Number(k.cacheRead) || 0));
+    add("tokens", t, tok(s.tokens ?? {}));
+    add("cacheRead", t, Number(s.tokens?.cacheRead) || 0);
   }
   const open = tasks.filter((t) => t.status === "open" || t.status === "active").length;
   // What waits on the user now (the Home badge's count) and the last session's hooks.
