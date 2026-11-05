@@ -38,3 +38,11 @@ test("checklist (#81): a missing install part comes first, with its fix; a compl
   assert.deepEqual([node.children[0].label, node.children[0].command, node.children[0].args[0].title], ["Set up: Imprimatur's hooks in Claude Code", "imprimatur.setup.installFix", "Install the plugin"]);
   assert.equal(checklistOf([], 0, [{ id: "cli", ok: true, label: "x", why: "y" }]).count, 0);
 });
+
+test("checklist (#129): documents with sections in no chapter get a row; none, no row", () => {
+  const { checklistOf } = createRequire(import.meta.url)("../vscode/setup-checklist.js");
+  const row = checklistOf([], 0, [], undefined, { noChapter: 3 }).node.children?.find((c) => /no chapter/.test(c.label));
+  assert.equal(row.label, "Documents: 3 sections in no chapter");
+  assert.equal(row.command, "imprimatur.openArchitecture");
+  assert.equal(checklistOf([], 0, [], undefined, { noChapter: 0 }).count, 0);
+});

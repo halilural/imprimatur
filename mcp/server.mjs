@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const {
-  openDb, KINDS, DOC_KINDS, CHAPTERS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, analysisTitle,
+  openDb, KINDS, DOC_KINDS, CHAPTERS, ANALYSIS_CHAPTERS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, analysisTitle,
   EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, REVIEW_DAYS, REVIEW_RESULTS, weakText,
 } = require("../vscode/db.js");
 const { repoRoot } = require("../vscode/review-state.js");
@@ -288,8 +288,8 @@ const TOOLS = [
       status: { type: "string", enum: SECTION_STATUSES },
       chapter: {
         type: "string",
-        enum: [...new Set(Object.values(CHAPTERS).flatMap((c) => Object.keys(c)))],
-        description: `The fixed chapter the section sits in (architecture and product only; every new section needs one): ${Object.entries(CHAPTERS).map(([k, c]) => `${k}: ${Object.keys(c).join(", ")}`).join("; ")}`,
+        enum: [...new Set([...Object.values(CHAPTERS), ANALYSIS_CHAPTERS].flatMap((c) => Object.keys(c)))],
+        description: `The fixed chapter the section sits in (every new architecture or product section needs one): ${Object.entries(CHAPTERS).map(([k, c]) => `${k}: ${Object.keys(c).join(", ")}`).join("; ")}; analysis, a mini design doc (a new task analysis: one section per chapter): ${Object.keys(ANALYSIS_CHAPTERS).join(", ")}`,
       },
       records: { type: "array", items: int, description: "Record ids that contribute to the section (linked, never unlinked here)" },
       repo: repoArg,

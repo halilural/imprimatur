@@ -462,6 +462,8 @@ const CHAPTERS = {
     deployment: "Deployment", crosscutting: "Crosscutting concepts", decisions: "Decisions", risks: "Risks and technical debt" },
   product: { problem: "Problem", users: "Users", goals: "Goals", "non-goals": "Non-goals", features: "Features", metrics: "Metrics" },
 };
+/** A task analysis's chapters (#129): a mini design doc. Analyses come from files too, so these only sort and label; the file is never rewritten. */
+const ANALYSIS_CHAPTERS = { context: "Context and scope", goals: "Goals and non-goals", design: "Design", alternatives: "Alternatives considered", risks: "Risks and open questions" };
 /** A chapter's anchor in the file; no section key may start with it. */
 const CHAPTER_ANCHOR = "chapter-";
 const DOC_KINDS = { architecture: "Architecture Design Document", product: "Product Design Document", glossary: "Project Glossary", social: "Social Media" };
@@ -1570,7 +1572,7 @@ class Db {
     return this.tx(() => {
       const doc = this.docById(docId);
       if (!doc) throw new Error(`Imprimatur: no document ${docId}`);
-      const chapters = /** @type {Record<string, Record<string, string>>} */ (CHAPTERS)[doc.kind];
+      const chapters = doc.kind === ANALYSIS ? ANALYSIS_CHAPTERS : /** @type {Record<string, Record<string, string>>} */ (CHAPTERS)[doc.kind];
       if (fields.chapter != null && !Object.hasOwn(chapters ?? {}, fields.chapter)) {
         throw new Error(`Imprimatur: chapter "${fields.chapter}" is not one of the ${doc.kind} document's: ${chapters ? Object.keys(chapters).join(", ") : "it has none"}`);
       }
@@ -2036,5 +2038,5 @@ module.exports = {
   backupFile,
   WAL_LIMIT,
   openDb, dbPath, onWindowsDrive, normOrigin, refersTo, recordOf, analysisTitle, KINDS, ACTORS, VERSION, MIGRATIONS, FIELDS,
-  TRACKER_KEY, TASK_STATUSES, RECORD_STATUSES, EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, weakText, REVIEW_DAYS, REVIEW_RESULTS, DOC_KINDS, CHAPTERS, CHAPTER_ANCHOR, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, SECTION_TITLE_MAX, SOURCE_MAX,
+  TRACKER_KEY, TASK_STATUSES, RECORD_STATUSES, EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, weakText, REVIEW_DAYS, REVIEW_RESULTS, DOC_KINDS, CHAPTERS, ANALYSIS_CHAPTERS, CHAPTER_ANCHOR, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, SECTION_TITLE_MAX, SOURCE_MAX,
 };
