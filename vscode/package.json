@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.111.0",
+  "version": "0.112.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -376,6 +376,12 @@
         "command": "imprimatur.setup.installFix",
         "title": "Fix Setup",
         "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.setup.turnOffPlugin",
+        "title": "Turn Off in This Repo",
+        "category": "Imprimatur",
+        "icon": "$(circle-slash)"
       }
     ],
     "colors": [
@@ -426,6 +432,10 @@
     ],
     "menus": {
       "commandPalette": [
+        {
+          "command": "imprimatur.setup.turnOffPlugin",
+          "when": "false"
+        },
         {
           "command": "imprimatur.setup.installFix",
           "when": "false"
@@ -587,6 +597,16 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "imprimatur.setup.turnOffPlugin",
+          "when": "view == imprimatur.setup && viewItem == budgetPlugin",
+          "group": "inline@0"
+        },
+        {
+          "command": "imprimatur.setup.turnOffPlugin",
+          "when": "view == imprimatur.setup && viewItem == budgetPlugin",
+          "group": "1_setup@0"
+        },
         {
           "command": "imprimatur.setup.fixWithClaude",
           "when": "view == imprimatur.setup && viewItem =~ /^(checkFix(-upstream)?|auditFinding-open|bestFinding-open)$/",

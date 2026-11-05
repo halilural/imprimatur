@@ -554,14 +554,57 @@ function budgetRow(root) {
   const b = sc.sessionBudget(path.join(home, ".claude", "projects", a.projectSlug(a.gitRootOf(root))), home, a.configuredHooks(root, home));
   if (!b) return undefined;
   const n = (/** @type {number} */ t) => `~${t.toLocaleString("en-US")} tokens`;
-  const rows = b.rows.map((r) => ({
+  // A plugin row can be turned off for this repo; a group named like a plugin that is not installed is claude.ai's synced skills.
+  const installed = Object.keys(JSON.parse(safeRead(path.join(home, ".claude", "plugins", "installed_plugins.json")) || "{}").plugins ?? {});
+  const rows = b.rows.map((r) => {
+    const id = r.plugin ? installed.find((x) => x.split("@")[0] === r.plugin) : undefined;
+    if (r.plugin && !id && r.kind === "listings") r.suggestion = `These skills are synced from claude.ai: turn off the ones this work never needs in claude.ai's skill settings to save ~${r.tokens.toLocaleString("en-US")} tokens a session.`;
+    return {
+    ...(id ? { context: "budgetPlugin", pluginId: id, repoRoot: root, tokens: r.tokens } : {}),
     type: "leaf", label: r.label, description: `${n(r.tokens)} · ${r.kind} · ${r.detail}`, abs: r.abs || undefined,
     icon: r.tokens >= sc.LARGE ? "warning" : r.suggestion ? "lightbulb" : "circle-small", color: r.tokens >= sc.LARGE ? "problemsWarningIcon.foreground" : undefined,
     tooltip: `${r.label}: ${n(r.tokens)} (${r.kind}). ${r.detail}.${r.tokens >= sc.LARGE ? " Large: it alone takes a noticeable part of every session." : ""}${r.suggestion ? `\n\n${r.suggestion}` : ""}`,
-  }));
+  };
+  });
   for (const u of b.uncounted) rows.push({ type: "leaf", label: `Not counted: ${u}`, icon: "question", tooltip: "Not in the transcript, so not guessed. Claude Code's /context shows the exact numbers." });
   return { type: "group", label: "Context budget", description: `${n(b.total)} a session (estimate)`, icon: "dashboard", children: rows,
     tooltip: "What the last session in this repo loaded into the model's context, item by item. Tokens are estimated as characters ÷ 4; /context in Claude Code has the exact count." };
+}
+
+/** A file's text, "" when it cannot be read. @param {string} f */
+function safeRead(f) {
+  try {
+    return fs.readFileSync(f, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Turn a plugin off for one repo (#29): enabledPlugins[id] = false in the repo's
+ * .claude/settings.local.json (not committed; other repos keep it), after a confirmation.
+ * @param {SetupView} provider @param {any} node a Context budget row with pluginId
+ */
+async function turnOffPlugin(provider, node) {
+  const id = node?.pluginId;
+  const root = node?.repoRoot;
+  if (typeof id !== "string" || !/^[\w.-]+@[\w.-]+$/.test(id) || typeof root !== "string") return;
+  const file = path.join(root, ".claude", "settings.local.json");
+  const text = safeRead(file);
+  let settings = {};
+  try {
+    settings = text ? JSON.parse(text) : {};
+  } catch {
+    return void vscode.window.showErrorMessage(`Imprimatur: ${file} is not valid JSON; fix it first.`);
+  }
+  const ok = await vscode.window.showWarningMessage(`Turn ${id} off in ${path.basename(root)}?`, { modal: true,
+    detail: `Writes "enabledPlugins": { "${id}": false } to .claude/settings.local.json in this repo (not committed). Other repos keep it. Saves about ${Number(node.tokens || 0).toLocaleString("en-US")} tokens a session here, from the next Claude Code session. To turn it back on, delete that line.` }, "Turn off");
+  if (ok !== "Turn off") return;
+  /** @type {any} */ (settings).enabledPlugins = { .../** @type {any} */ (settings).enabledPlugins, [id]: false };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`);
+  provider.refresh();
+  vscode.window.showInformationMessage(`Imprimatur: ${id} is off in ${path.basename(root)} from the next Claude Code session.`);
 }
 
 /** The install checks now (#81): the CLI, the plugin or npm run setup, the database. */
@@ -705,6 +748,7 @@ function registerSetupView(ctx, roots, counts) {
     view.onDidChangeVisibility((e) => e.visible && soon()),
     vscode.window.onDidChangeWindowState((s) => s.focused && view.visible && soon()),
     vscode.commands.registerCommand("imprimatur.setup.refresh", () => provider.refresh()),
+    vscode.commands.registerCommand("imprimatur.setup.turnOffPlugin", (node) => turnOffPlugin(provider, node ?? view.selection[0])),
     vscode.commands.registerCommand("imprimatur.setup.installFix", (fix) => runInstallFix(fix)),
     vscode.commands.registerCommand("imprimatur.checkSetup", () => checkSetup(provider)),
     vscode.commands.registerCommand("imprimatur.setup.fixWithClaude", (node) => fixWithClaude(provider, node ?? view.selection[0])),
