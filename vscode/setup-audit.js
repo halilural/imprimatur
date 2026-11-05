@@ -353,7 +353,13 @@ function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = 
   const agnix = report ?? (paths.length ? runAgnix(bin, scope.root, { paths, spawn }) : { files_checked: 0, diagnostics: [] });
   // Imprimatur's own check (#113), on the repo's effective settings: once per repo, not again in the global audit.
   const own = scope.global ? undefined : mcpAllow.allowDiagnostic({ root: scope.root, home, ...(managedDir ? { managedDir } : {}) });
-  const rep = own ? { ...agnix, diagnostics: [...(agnix.diagnostics ?? []), own] } : agnix;
+  // The documentation standard (#131), on the repo's documents and agent files: not in the global audit.
+  let docs = [];
+  if (!scope.global)
+    try {
+      docs = require("./doc-rules.js").docDiagnostics(db, scope.root);
+    } catch {}
+  const rep = { ...agnix, diagnostics: [...(agnix.diagnostics ?? []), ...(own ? [own] : []), ...docs] };
   const findings = findingsOf(rep, { root: scope.root, home, global: scope.global, plugins: scope.plugins }).filter((f) => !NOT_YOURS.has(f.group));
   const repo = db.repoOf(scope.root, scope.global ? { name: "~" } : {});
   // Read only: RECS and the containers it replaces (a dry run moves nothing).
@@ -370,6 +376,7 @@ function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = 
   if (dryRun) return summaryOf(first);
   const ruleOf = (/** @type {string} */ id) => {
     if (id === mcpAllow.RULE) return mcpAllow.RULE_INFO;
+    if (id.startsWith("IMP-DOC-")) return require("./doc-rules.js").ruleInfo(id);
     if (!rules.has(id)) rules.set(id, explainRule(bin, id, { spawn }));
     return rules.get(id);
   };

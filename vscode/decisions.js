@@ -56,7 +56,7 @@ function numbered(db, repoId) {
 const statusOf = (status) => (status === "dropped" ? "rejected" : "accepted");
 
 /** The lines of a body that name options: "Option …", "Alternative …", "Rejected …", "Instead of …". @param {string} body */
-const optionLines = (body) => String(body).split(/\r?\n/).filter((l) => /^\s*(?:[-*]\s*)?(?:option|alternative|rejected|instead of|not chosen|considered)\b/i.test(l));
+const optionLines = (body) => String(body).split(/\r?\n/).filter((l) => /\b(?:alternatives?|rejected|instead of|not chosen|option [a-z0-9]|considered)\b/i.test(l));
 
 /**
  * A decision's MADR 4 file. The record's body is the decision outcome; the context is its task;
