@@ -9,17 +9,17 @@ type: explanation
 ## Contents
 
 - [Goals](#chapter-goals)
-  1. [Export \[docs\]](#export)
+  - [1. Export \[docs\]](#export)
 - [Context and scope](#chapter-context)
 - [Solution strategy](#chapter-strategy)
 - [Building blocks](#chapter-building-blocks)
-  2. [Storage](#storage)
+  - [2. Storage](#storage)
 - [Deployment](#chapter-deployment)
 - [Crosscutting concepts](#chapter-crosscutting)
 - [Decisions](#chapter-decisions)
 - [Risks and technical debt](#chapter-risks)
 - [Unsorted](#chapter-unsorted)
-  3. [Empty](#empty)
+  - [3. Empty](#empty)
 
 <a id="chapter-goals"></a>
 
