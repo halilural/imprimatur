@@ -1,9 +1,10 @@
 // @ts-check
 // Suggestions for this repo (#143): plugins from Claude Code's marketplaces that fit the repo's
 // stack (the best-practice review's source map, #86), ranked by how many stack parts they fit
-// and how widely they are installed, with the vetting rules of #128: a license that allows
-// redistribution, hooks and MCP servers read when the marketplace has the files, and no second
-// task or memory store next to Imprimatur's. Repo facts (stars, last push, license) come from
+// and how widely they are installed, with the vetting rules of #128 that apply to installing:
+// hooks and MCP servers read when the marketplace has the files, and no second
+// task or memory store next to Imprimatur's; the license is shown, not judged, since installing
+// a plugin to use it is not redistributing it. Repo facts (stars, last push, license) come from
 // GitHub through gh, cached a day. Read only: nothing is installed here.
 "use strict";
 
@@ -35,8 +36,6 @@ const mentions = (text, key) => new RegExp(`(^|[^a-z0-9])${key.replace(/[.*+?^${
 
 /** Descriptions that bring their own tasks or memory: a second store next to Imprimatur's (#128). */
 const STORE = /\b(memory|memories|knowledge base|second brain|todo list|task manager|task tracking|session continuity)\b/i;
-/** Licenses that allow redistribution. */
-const OPEN = /^(MIT|Apache-2\.0|BSD-2-Clause|BSD-3-Clause|ISC|MPL-2\.0|0BSD|Unlicense|CC0-1\.0)$/;
 /** Installs below this are not "well adopted". */
 const MIN_INSTALLS = 500;
 
@@ -72,9 +71,9 @@ function repoOf(source) {
  * @param {{hooks: number, mcp: string[]} | undefined} parts what it brings, when the marketplace has its files
  */
 function vet(p, gh, parts) {
+  // The license is shown, not flagged: installing a plugin to use it needs no right to
+  // redistribute it. That rule (#128) is for what Imprimatur itself ships (the baseline, #141).
   const flags = [];
-  if (gh && !gh.license) flags.push("no license: it cannot be redistributed");
-  else if (gh?.license && !OPEN.test(gh.license)) flags.push(`license ${gh.license}: check it allows redistribution`);
   if (STORE.test(p.description ?? "")) flags.push("brings its own memory or tasks: a second store next to Imprimatur's");
   const reads = parts ? [parts.hooks && `${parts.hooks} hook${parts.hooks === 1 ? "" : "s"}`, parts.mcp.length && `MCP server ${parts.mcp.join(", ")} (network)`].filter(Boolean).join(", ") || "no hooks or MCP servers"
     : "hooks and MCP servers: read them before installing (the files are not in the marketplace)";
@@ -118,7 +117,8 @@ function readSuggestions(file) {
  * @returns {Promise<boolean>} whether it ran
  */
 async function refreshSuggestions({ components, installed, file, claude, home, now = Date.now(), run = json, partsOf }) {
-  const stack = components.map((c) => c.name).sort().join("|");
+  // The vetting's version is part of the key: a change to the rules refreshes at once.
+  const stack = `v2|${components.map((c) => c.name).sort().join("|")}`;
   const last = readSuggestions(file);
   if (last && last.stack === stack && now - last.at < DAY) return false;
   const available = (await run(claude, ["plugin", "list", "--available", "--json"]))?.available ?? [];
