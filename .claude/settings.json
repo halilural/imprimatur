@@ -2,6 +2,9 @@
   "enabledPlugins": {
     "ponytail@ponytail": true,
     "mcp-server-dev@claude-plugins-official": true,
-    "plugin-dev@claude-plugins-official": true
+    "plugin-dev@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "atlassian@claude-plugins-official": true
   }
 }
