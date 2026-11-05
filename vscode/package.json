@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.125.1",
+  "version": "0.126.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -388,6 +388,11 @@
         "title": "Ask Claude to Judge the Suggestions",
         "category": "Imprimatur",
         "icon": "$(sparkle)"
+      },
+      {
+        "command": "imprimatur.setup.writeAgentFiles",
+        "title": "Write the Missing Agent Files (AGENTS.md, CLAUDE.md, .claude/rules/docs.md)",
+        "category": "Imprimatur"
       },
       {
         "command": "imprimatur.setup.installBaseline",

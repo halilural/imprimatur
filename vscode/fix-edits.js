@@ -23,12 +23,15 @@ function parseEdits(answer) {
 /**
  * The new text of each file, or why an edit was left out: a file that is not a target, an
  * old text that is empty or not found exactly once. Edits to one file apply in order.
+ * whole (#133): files an empty old text rewrites as a whole (a target that does not exist yet is
+ * created); only for fixes that hand over a whole file, such as moving CLAUDE.md into AGENTS.md.
  * @param {Array<{file: string, old: string, new: string}>} edits @param {string[]} targets
- * @param {(file: string) => string} [read]
- * @returns {{files: Map<string, {before: string, after: string}>, skipped: Array<{file: string, why: string}>}}
+ * @param {(file: string) => string} [read] @param {{whole?: string[]}} [o]
+ * @returns {{files: Map<string, {before: string, after: string, created?: boolean}>, skipped: Array<{file: string, why: string}>}}
  */
-function planEdits(edits, targets, read = (f) => fs.readFileSync(f, "utf8")) {
+function planEdits(edits, targets, read = (f) => fs.readFileSync(f, "utf8"), { whole = [] } = {}) {
   const allowed = new Set(targets.map((t) => path.resolve(t)));
+  const wholeOk = new Set(whole.map((t) => path.resolve(t)));
   /** @type {Map<string, {before: string, after: string}>} */
   const files = new Map();
   const skipped = [];
@@ -44,9 +47,18 @@ function planEdits(edits, targets, read = (f) => fs.readFileSync(f, "utf8")) {
         const text = read(file);
         cur = { before: text, after: text };
       } catch {
-        skipped.push({ file: e.file, why: "cannot be read" });
-        continue;
+        // A whole-file target that is not there yet: created.
+        if (!(wholeOk.has(file) && e.old === "")) {
+          skipped.push({ file: e.file, why: "cannot be read" });
+          continue;
+        }
+        cur = { before: "", after: "", created: true };
       }
+    }
+    if (e.old === "" && wholeOk.has(file)) {
+      cur.after = e.new;
+      files.set(file, cur);
+      continue;
     }
     const n = e.old ? cur.after.split(e.old).length - 1 : 0;
     if (n !== 1) {
@@ -56,7 +68,7 @@ function planEdits(edits, targets, read = (f) => fs.readFileSync(f, "utf8")) {
     cur.after = cur.after.replace(e.old, () => e.new);
     files.set(file, cur);
   }
-  for (const [f, c] of files) if (c.after === c.before) files.delete(f);
+  for (const [f, c] of files) if (c.after === c.before && !c.created) files.delete(f);
   return { files, skipped };
 }
 

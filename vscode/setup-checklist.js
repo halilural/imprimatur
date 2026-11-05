@@ -15,8 +15,9 @@ const { fixable, skillUpdatePrompt } = require("./fix-prompts.js");
  * @param {Array<{ok: boolean, label: string, why: string, fix?: any}>} [installs] the install checks (install-check.js)
  * @param {{root: string, items: any[]}} [baseline] the repo's baseline (baseline.js, #141)
  * @param {{noChapter: number}} [docs] the repo's design documents (#129): sections outside the fixed chapters
+ * @param {any[]} [agentRows] the repo's agent-file rows (agent-files.js, #133)
  */
-function checklistOf(scopes, openRecommendations, installs = [], baseline, docs) {
+function checklistOf(scopes, openRecommendations, installs = [], baseline, docs, agentRows = []) {
   /** @type {any[]} */
   const rows = [];
   // What Imprimatur itself needs on this machine (#81) comes first: without it nothing else is recorded.
@@ -36,6 +37,7 @@ function checklistOf(scopes, openRecommendations, installs = [], baseline, docs)
     rows.push({ type: "leaf", label: `Baseline: ${off.length} off in this repo`, description: off.map((b) => b.label).join(", "), icon: "circle-slash",
       tooltip: "Baseline items this repo opted out of (here, or by turning the plugin off in its own settings). Click to bring one back.",
       command: "imprimatur.setup.baselineBack", args: [{ root: baseline?.root, items: off }] });
+  rows.push(...agentRows);
   // The documentation standard (#129): every architecture and product section sits in a chapter.
   if (docs?.noChapter)
     rows.push({ type: "leaf", label: `Documents: ${docs.noChapter} section${docs.noChapter === 1 ? "" : "s"} in no chapter`, description: "architecture and product follow fixed chapters",
