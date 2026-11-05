@@ -4,6 +4,21 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.112.0] - 2026-11-05
+
+### Added
+- Context budget acts on what it finds (#29):
+  - The skill listing is split by source: your own skills (with the biggest ones named), each
+    plugin's skills, and claude.ai's synced skills.
+  - A plugin's row (its skills, or an MCP server it brings) has **Turn Off in This Repo**. After a
+    confirmation, it writes `enabledPlugins: { "<id>": false }` to this repo's
+    `.claude/settings.local.json`; that file is not committed, and other repos keep the plugin.
+  - A claude.ai connector or synced skill says to turn it off in claude.ai.
+
+### Changed
+- The where-we-left-off context at session start lists only the tasks with work in hand (at
+  most 8, shorter), and counts the rest in one line.
+
 ## [0.111.0] - 2026-11-05
 
 ### Added

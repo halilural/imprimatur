@@ -12,14 +12,14 @@ const path = require("node:path");
  * @typedef {{instructions: Map<string, {type: string, chars: number}>,
  *   hooks: Map<string, {event: string, script: string, abs: string, runs: number, ms: number, chars: number, total: number, adds: number, first: string, tools: Set<string>}>,
  *   mcp: Map<string, number>, tools: Map<string, Set<string>>, failed: Map<string, string>, needsAuth: Set<string>,
- *   skills: {names: Set<string>, chars: number}, agents: Set<string>, model: string, mode: Record<string, unknown>, context: Map<string, number>,
+ *   skills: {names: Set<string>, chars: number, byName: Map<string, number>}, agents: Set<string>, model: string, mode: Record<string, unknown>, context: Map<string, number>,
  *   used: Map<string, number>}} SessionState
  */
 
 /** @returns {SessionState} */
 const empty = () => ({
   instructions: new Map(), hooks: new Map(), mcp: new Map(), tools: new Map(), failed: new Map(), needsAuth: new Set(),
-  skills: { names: new Set(), chars: 0 }, agents: new Set(), model: "", mode: {}, context: new Map(), used: new Map(),
+  skills: { names: new Set(), chars: 0, byName: new Map() }, agents: new Set(), model: "", mode: {}, context: new Map(), used: new Map(),
 });
 
 /** What a hook's run put into the session: its additionalContext / systemMessage, else plain stdout. @param {any} a */
@@ -100,9 +100,17 @@ function fold(s, line) {
       break;
     case "skill_listing":
       // The first listing is the whole list; later ones add to it.
-      if (a.isInitial) s.skills = { names: new Set(), chars: 0 };
+      if (a.isInitial) s.skills = { names: new Set(), chars: 0, byName: new Map() };
       for (const n of a.names ?? []) s.skills.names.add(String(n));
       s.skills.chars += String(a.content ?? "").length;
+      // Each "- name: description" line, per skill (#29): the listing's cost per plugin.
+      {
+        const names = [...(a.names ?? [])].map(String).sort((x, y) => y.length - x.length);
+        for (const l of String(a.content ?? "").split("\n")) {
+          const n = names.find((x) => l.startsWith(`- ${x}:`));
+          if (n) s.skills.byName.set(n, (s.skills.byName.get(n) ?? 0) + l.length + 1);
+        }
+      }
       break;
     case "agent_listing_delta":
       for (const t of a.removedTypes ?? []) s.agents.delete(t);
@@ -264,14 +272,14 @@ const LARGE = 5000;
  * item by item, with estimated tokens, biggest first, and a suggestion for the big or unused
  * ones. Tool definitions are not in the transcript: they are counted as tools, not tokens.
  * @param {string} projectDir @param {string} home @param {Array<{event: string, matcher: string, script: string}>} [configured]
- * @returns {{total: number, rows: Array<{label: string, kind: string, tokens: number, detail: string, abs: string, suggestion: string}>, uncounted: string[]} | undefined}
+ * @returns {{total: number, rows: Array<{label: string, kind: string, tokens: number, detail: string, abs: string, suggestion: string, plugin?: string}>, uncounted: string[]} | undefined}
  */
 function sessionBudget(projectDir, home, configured = []) {
   const file = newestTranscript(projectDir);
   const s = file && stateOf(file);
   if (!s) return undefined;
   const tilde = (/** @type {string} */ p) => (p.startsWith(home) ? `~${p.slice(home.length)}` : p);
-  /** @type {Array<{label: string, kind: string, tokens: number, detail: string, abs: string, suggestion: string}>} */
+  /** @type {Array<{label: string, kind: string, tokens: number, detail: string, abs: string, suggestion: string, plugin?: string}>} */
   const rows = [];
   for (const [p, f] of s.instructions) {
     const t = tokensOf(f.chars);
@@ -290,13 +298,33 @@ function sessionBudget(projectDir, home, configured = []) {
   for (const [n, c] of s.mcp) {
     const t = tokensOf(c);
     const calls = s.used.get(n.replace(/^claude\.ai /, "claude_ai_").replace(/ /g, "_")) ?? s.used.get(n) ?? 0;
-    rows.push({ label: n, kind: "MCP instructions", tokens: t, detail: `${calls} call${calls === 1 ? "" : "s"} this session`, abs: "",
-      suggestion: calls ? "" : `Not called in the last session: turning this server off in repos that do not need it saves ~${t.toLocaleString("en-US")} tokens of instructions plus its tool definitions.` });
+    // A plugin's server is "plugin:<name>:<server>"; a claude.ai connector is "claude.ai …" and is managed on claude.ai.
+    const plugin = /^plugin:([^:]+):/.exec(n)?.[1] ?? "";
+    const where = plugin ? `turning ${plugin} off here` : /^claude\.ai /.test(n) ? "turning the connector off in claude.ai's connector settings" : "removing it from this repo's MCP config";
+    rows.push({ label: n, kind: "MCP instructions", tokens: t, detail: `${calls} call${calls === 1 ? "" : "s"} this session`, abs: "", plugin,
+      suggestion: calls ? "" : `Not called in the last session: ${where} saves ~${t.toLocaleString("en-US")} tokens of instructions plus its tool definitions.` });
   }
-  if (s.skills.chars) {
-    const t = tokensOf(s.skills.chars);
-    rows.push({ label: `${s.skills.names.size} skills listed`, kind: "listings", tokens: t, detail: "names and descriptions, every session", abs: "",
-      suggestion: t >= 2000 ? `Each skill's description is listed every session: turning off plugins whose skills this repo never uses saves part of ~${t.toLocaleString("en-US")}.` : "" });
+  // The skill listing per source (#29): a plugin's skills are "plugin:skill"; the rest are the user's own or the repo's.
+  /** @type {Map<string, {n: number, chars: number, names: Array<[string, number]>}>} */
+  const groups = new Map();
+  for (const [name, c] of s.skills.byName) {
+    const g = name.includes(":") ? name.split(":")[0] : "";
+    const cur = groups.get(g) ?? { n: 0, chars: 0, names: [] };
+    groups.set(g, { n: cur.n + 1, chars: cur.chars + c, names: [...cur.names, [name, c]] });
+  }
+  const listed = [...groups.values()].reduce((n, g) => n + g.chars, 0);
+  if (s.skills.chars > listed) groups.set("?", { n: s.skills.names.size - [...groups.values()].reduce((n, g) => n + g.n, 0), chars: s.skills.chars - listed, names: [] });
+  for (const [g, v] of groups) {
+    const t = tokensOf(v.chars);
+    if (g === "?") {
+      if (t) rows.push({ label: "skills: the rest of the listing", kind: "listings", tokens: t, detail: "not matched to a skill", abs: "", suggestion: "", plugin: "" });
+      continue;
+    }
+    const top = v.names.sort((x, y) => y[1] - x[1]).slice(0, 8).map(([n, c]) => `${n} ~${tokensOf(c)}`).join(", ");
+    rows.push({ label: g ? `skills of ${g} (${v.n})` : `your own skills (${v.n})`, kind: "listings", tokens: t, detail: `names and descriptions, every session · biggest: ${top}`, abs: "", plugin: g,
+      suggestion: g
+        ? `If this repo never uses ${g}'s skills, turning ${g} off here saves ~${t.toLocaleString("en-US")} tokens a session.`
+        : t >= 1000 ? `Skills in ~/.claude/skills are listed in every repo. Move the ones only one repo needs into that repo's .claude/skills: up to ~${t.toLocaleString("en-US")} tokens a session saved everywhere else.` : "" });
   }
   for (const [k, c] of s.context) rows.push({ label: `context: ${k}`, kind: "session context", tokens: tokensOf(c), detail: "added by Claude Code", abs: "", suggestion: "" });
   rows.sort((a, b) => b.tokens - a.tokens);

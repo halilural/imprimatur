@@ -127,3 +127,26 @@ test("context budget (#29): every loaded item with estimated tokens, biggest fir
   assert.equal(b.rows[3].suggestion, "", "a called server has no removal suggestion");
   assert.deepEqual(b.uncounted, ["3 tool definitions (their schemas are not in the transcript; /context counts them)"]);
 });
+
+test("context budget (#29): the skill listing per source, a plugin's group tagged with the plugin; plugin MCP servers tagged too", () => {
+  const { sessionBudget } = require("../vscode/session-context.js");
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "budget-skills-"));
+  const dir = path.join(home, ".claude", "projects", "p");
+  fs.mkdirSync(dir, { recursive: true });
+  const line = (n, len) => `- ${n}: ${"d".repeat(len)}`;
+  fs.writeFileSync(path.join(dir, "s.jsonl"), [
+    att({ type: "skill_listing", isInitial: true, names: ["etf", "cloudflare:wrangler", "cloudflare:workers"], content: [line("etf", 400), line("cloudflare:wrangler", 200), line("cloudflare:workers", 200)].join("\n") }),
+    att({ type: "mcp_instructions_delta", addedNames: ["plugin:datadog:mcp"], addedBlocks: ["x".repeat(400)] }),
+    "",
+  ].join("\n"));
+  const rows = sessionBudget(dir, home).rows;
+  const own = rows.find((r) => r.label === "your own skills (1)");
+  const cf = rows.find((r) => r.label === "skills of cloudflare (2)");
+  assert.equal(own.plugin, "");
+  assert.equal(cf.plugin, "cloudflare");
+  assert.match(cf.suggestion, /turning cloudflare off here saves/);
+  assert.ok(Math.abs(own.tokens + cf.tokens - Math.round((line("etf", 400).length + line("cloudflare:wrangler", 200).length + line("cloudflare:workers", 200).length + 3) / 4)) <= 1);
+  const dd = rows.find((r) => r.label === "plugin:datadog:mcp");
+  assert.equal(dd.plugin, "datadog");
+  assert.match(dd.suggestion, /turning datadog off here/);
+});
