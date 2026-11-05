@@ -97,6 +97,9 @@ test("upstream (#156): a SAFE verdict copies the reviewed files and records the 
   assert.equal(verdictOf("x\n**VERDICT:** STOP line 12 asks to read ~/.ssh").reason, "line 12 asks to read ~/.ssh");
   assert.equal(verdictOf("VERDICT: SAFE\nlater\nVERDICT: STOP changed my mind").safe, false, "the last verdict counts");
   assert.equal(verdictOf("all good").safe, false, "no verdict is not safe");
+  const { summaryOf } = require("../vscode/upstream.js");
+  assert.equal(summaryOf("**Where we are**\nSUMMARY: three additions, no scripts\nVERDICT: SAFE"), "three additions, no scripts");
+  assert.equal(summaryOf("no summary"), "");
   const from = fs.mkdtempSync(path.join(os.tmpdir(), "apply-from-"));
   const to = fs.mkdtempSync(path.join(os.tmpdir(), "apply-to-"));
   fs.mkdirSync(path.join(from, "ref"));

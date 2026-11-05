@@ -455,7 +455,7 @@ async function fixWithClaude(provider, node) {
     const v = up.verdictOf(r.stdout);
     if (v.safe) {
       try {
-        const note = r.stdout.trim().split("\n").find((l) => l.trim() && !/VERDICT/i.test(l)) ?? "no findings";
+        const note = up.summaryOf(r.stdout) || "SAFE verdict; the full review is in the Imprimatur Fix it output";
         up.applySkillUpdate(fix.apply.from, fix.apply.to, fix.apply.files, fix.apply.commit, note, new Date().toISOString().slice(0, 10));
         applied = `updated ${fix.label} to ${fix.apply.commit.slice(0, 7)}`;
       } catch (e) {

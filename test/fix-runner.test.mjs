@@ -10,6 +10,7 @@ test("fix runner (#156): user settings only, no MCP, no commands; edits only the
   assert.ok(!a.includes("--permission-mode"), "no acceptEdits: what is not allowed is denied");
   assert.equal(a[a.indexOf("--setting-sources") + 1], "user", "a repo's hooks and permissions do not load");
   assert.ok(a.includes("--strict-mcp-config"));
+  assert.equal(a[a.indexOf("--settings") + 1], '{"disableAllHooks":true}', "no hook adds its context to the answer");
   const after = (flag) => a.slice(a.indexOf(flag) + 1, a.findIndex((x, i) => i > a.indexOf(flag) && x.startsWith("--")));
   assert.deepEqual(after("--allowedTools"), ["Read", "Glob", "Grep", "Edit(//h/.claude/settings.json)"], "one argument per rule");
   assert.deepEqual(after("--disallowedTools"), ["Bash", "WebFetch", "WebSearch", "Task", "NotebookEdit"]);
