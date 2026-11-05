@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.112.0",
+  "version": "0.113.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -382,6 +382,12 @@
         "title": "Turn Off in This Repo",
         "category": "Imprimatur",
         "icon": "$(circle-slash)"
+      },
+      {
+        "command": "imprimatur.setup.installSuggestion",
+        "title": "Install for This Repo",
+        "category": "Imprimatur",
+        "icon": "$(cloud-download)"
       }
     ],
     "colors": [
@@ -432,6 +438,10 @@
     ],
     "menus": {
       "commandPalette": [
+        {
+          "command": "imprimatur.setup.installSuggestion",
+          "when": "false"
+        },
         {
           "command": "imprimatur.setup.turnOffPlugin",
           "when": "false"
@@ -597,6 +607,16 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "imprimatur.setup.installSuggestion",
+          "when": "view == imprimatur.setup && viewItem == suggestion",
+          "group": "inline@0"
+        },
+        {
+          "command": "imprimatur.setup.installSuggestion",
+          "when": "view == imprimatur.setup && viewItem == suggestion",
+          "group": "1_setup@0"
+        },
         {
           "command": "imprimatur.setup.turnOffPlugin",
           "when": "view == imprimatur.setup && viewItem == budgetPlugin",
