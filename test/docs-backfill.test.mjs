@@ -12,6 +12,7 @@ const req = createRequire(import.meta.url);
 const { openDb } = req("../vscode/db.js");
 const { check } = req("../vscode/process.js");
 const bf = req("../vscode/docs-backfill.js");
+const { callTool } = await import("../mcp/server.mjs");
 
 const agent = { kind: "agent", id: "claude-code:S1" };
 const tmpDir = () => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-bf-")));
@@ -118,4 +119,24 @@ test("fixPrompt (#131): lists the decisions IMP-DOC-002/003 name, only for the r
   const args = bf.claudeArgs("/x/server.mjs", ["record_update"]);
   assert.ok(args.includes("mcp__imprimatur__record_update") && args.includes("mcp__imprimatur__doc_section_upsert"));
   assert.ok(!bf.claudeArgs("/x/server.mjs").includes("mcp__imprimatur__record_update"));
+});
+
+test("a fix run's record_update (#131): only the listed decisions, only body and links", () => {
+  const { root, db, repo, recs } = setup();
+  const other = recs[1];
+  const ids = bf.fixRecordIds(db, repo.id, [{ links: { audit: { rule: "IMP-DOC-003" } } }]);
+  assert.deepEqual(ids, [recs[0].id]);
+  const args = bf.claudeArgs("/x/server.mjs", ["record_update"], { IMPRIMATUR_RECORD_UPDATE: ids.join(",") });
+  assert.equal(JSON.parse(args[args.indexOf("--mcp-config") + 1]).mcpServers.imprimatur.env.IMPRIMATUR_RECORD_UPDATE, String(recs[0].id));
+  process.env.IMPRIMATUR_RECORD_UPDATE = ids.join(",");
+  try {
+    assert.throws(() => callTool(db, "record_update", { id: other.id, status: "dropped" }), /not one this run may change/);
+    callTool(db, "record_update", { id: recs[0].id, body: "b\nAlternative: x", status: "dropped", title: "T" });
+    const r = db.record(recs[0].id);
+    assert.equal(r.body, "b\nAlternative: x");
+    assert.equal(r.status, "open");
+    assert.equal(r.title, "r0");
+  } finally {
+    delete process.env.IMPRIMATUR_RECORD_UPDATE;
+  }
 });

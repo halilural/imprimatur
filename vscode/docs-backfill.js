@@ -105,17 +105,27 @@ function fixPrompt(db, repoId, root, findings) {
   }
   if (rules.has("IMP-DOC-001")) parts.push("", "## IMP-DOC-001: a number used twice gets a new, unused one on the newer decision (record_update links.madr); a missing number is left to the next export.");
   if (rules.has("IMP-DOC-004")) parts.push("", "## IMP-DOC-004: write the missing architecture chapters or C4 views the finding names (doc_section_upsert with its chapter), from the code and the records.");
-  if (rules.has("IMP-DOC-005")) parts.push("", "## IMP-DOC-005: in each sequenceDiagram the finding names, add autonumber and, right under the diagram, a numbered list with one item per arrow (doc_section_upsert; an analysis through task_upsert).");
-  parts.push("", "Work through as many as you can; the audit runs again after you and lists what is left. When done, reply with one line per rule: what you changed and what you left, and why.");
+  if (rules.has("IMP-DOC-005")) parts.push("", "## IMP-DOC-005: in each sequenceDiagram of the architecture or product document, add autonumber and, right under the diagram, a numbered list with one item per arrow (doc_section_upsert). A diagram in a task analysis: leave it and name it in your reply.");
+  parts.push("", "record_update changes only the decisions listed above, and only their body and links.", "Work through as many as you can; the audit runs again after you and lists what is left. When done, reply with one line per rule: what you changed and what you left, and why.");
   return parts.join("\n");
+}
+
+/** The decision ids a fix run may record_update: those its prompt lists (fixPrompt's caps). @param {any} db @param {number} repoId @param {any[]} findings */
+function fixRecordIds(db, repoId, findings) {
+  const rules = new Set(findings.map((f) => f.links?.audit?.rule));
+  const { few, loose } = require("./doc-rules.js").decisionGaps(db, repoId);
+  const ids = [...(rules.has("IMP-DOC-003") ? loose.slice(0, 80) : []), ...(rules.has("IMP-DOC-002") ? few.slice(0, 80) : [])].map((r) => r.id);
+  if (rules.has("IMP-DOC-001")) ids.push(...db.decisionRecords(repoId).map((/** @type {any} */ r) => r.id));
+  return [...new Set(ids)];
 }
 
 /**
  * The claude arguments: sonnet, the repo tools and Imprimatur's MCP server only, no settings (no hooks).
  * @param {string} mcpServer @param {string[]} [more] further imprimatur tools (Fix it on a docs finding adds record_update)
+ * @param {Record<string, string>} [env] the MCP server's environment (IMPRIMATUR_RECORD_UPDATE: the record ids record_update may change)
  */
-function claudeArgs(mcpServer, more = []) {
-  const mcp = JSON.stringify({ mcpServers: { imprimatur: { type: "stdio", command: process.execPath, args: [mcpServer] } } });
+function claudeArgs(mcpServer, more = [], env) {
+  const mcp = JSON.stringify({ mcpServers: { imprimatur: { type: "stdio", command: process.execPath, args: [mcpServer], ...(env ? { env } : {}) } } });
   const tools = [...REPO_TOOLS, ...MCP_TOOLS, ...more.map((t) => `mcp__imprimatur__${t}`)];
   const { DENY } = require("./best-practice.js");
   return ["-p", "--model", MODEL, "--max-turns", String(MAX_TURNS), "--output-format", "json",
@@ -179,4 +189,4 @@ function startDetached(root) {
   }).unref();
 }
 
-module.exports = { MIN_RECORDS, targets, due, promptFor, fixPrompt, claudeArgs, runBackfill, maybeStart, metaKey, TIMEOUT_MS };
+module.exports = { MIN_RECORDS, targets, due, promptFor, fixPrompt, fixRecordIds, claudeArgs, runBackfill, maybeStart, metaKey, TIMEOUT_MS };

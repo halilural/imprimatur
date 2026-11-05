@@ -647,10 +647,14 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
       const task = db.taskByKey(rid, a.task) ?? db.upsertTask(rid, a.task, {}, actor);
       return { record: db.addRecord(task.id, pick(a, ["kind", "title", "body", "owner", "status", "parent_id", "links", "pointer"]), actor) };
     }
-    case "record_update":
+    case "record_update": {
       recordOf(db, a.id);
+      // An unattended Fix it run (#131) may change only the decisions its prompt lists, only their body and links.
+      const only = process.env.IMPRIMATUR_RECORD_UPDATE;
+      if (only !== undefined && !only.split(",").includes(String(a.id))) throw new ToolError(`record ${a.id} is not one this run may change`);
       if (a.parent_id !== undefined) recordOf(db, a.parent_id, "parent_id");
-      return { record: db.updateRecord(a.id, pick(a, ["kind", "title", "body", "owner", "status", "parent_id", "links", "position"]), actor) };
+      return { record: db.updateRecord(a.id, pick(a, only !== undefined ? ["body", "links"] : ["kind", "title", "body", "owner", "status", "parent_id", "links", "position"]), actor) };
+    }
     case "pointer_set": {
       const rec = recordOf(db, a.id);
       if (rec.status !== "open") {

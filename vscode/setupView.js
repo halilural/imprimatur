@@ -478,7 +478,7 @@ async function fixDocs(provider, findings, repo) {
     return void vscode.window.showInformationMessage("Imprimatur: Claude cannot run here (no CLI or untrusted folder); the fix prompt is on the clipboard.");
   }
   const go = await vscode.window.showWarningMessage(`Run Claude in the background to fix ${findings.length} documentation finding${findings.length === 1 ? "" : "s"}?`,
-    { modal: true, detail: `It changes no file: it writes Imprimatur's records and document sections through its MCP tools (doc_section_upsert, record_update), with sonnet, at most $3. Alternatives are added only where the records show one; none is invented. The audit runs again after it.\n\n${prompt.slice(0, 1200)}` }, "Run");
+    { modal: true, detail: `It changes no file: it writes Imprimatur's records and document sections through Imprimatur's MCP tools: doc_get, doc_section_upsert, search, task_get, task_list, and record_update on the listed decisions only (body and links), with Read/Glob/Grep on the repo; sonnet, at most $3. Alternatives are added only where the records show one; none is invented. The audit runs again after it.\n\n${prompt.slice(0, 1200)}` }, "Run");
   if (go !== "Run") return;
   if (provider.fixing) return void vscode.window.showInformationMessage("Imprimatur: a Fix it is already running.");
   provider.fixing = true;
@@ -488,7 +488,7 @@ async function fixDocs(provider, findings, repo) {
   const env = { ...bp.childEnv(), ENABLE_TOOL_SEARCH: "false" };
   // shortcut: not cancellable (bp.run has no kill); the run stops at its turn, budget and time caps.
   const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur: Claude is fixing the documentation findings…" },
-    () => bp.run(bin, bf.claudeArgs(path.join(__dirname, "..", "mcp", "server.mjs"), ["record_update", "task_upsert"]), { cwd: repo, timeout: bf.TIMEOUT_MS, env, input: prompt }));
+    () => bp.run(bin, bf.claudeArgs(path.join(__dirname, "..", "mcp", "server.mjs"), ["record_update"], { IMPRIMATUR_RECORD_UPDATE: bf.fixRecordIds(db, r0.id, findings).join(",") }), { cwd: repo, timeout: bf.TIMEOUT_MS, env, input: prompt }));
   provider.fixing = false;
   let res = /** @type {any} */ ({});
   try {
