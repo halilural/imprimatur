@@ -230,12 +230,20 @@ function docModel(db, root, kind, view = {}) {
   const sections = doc ? db.docSections(doc.id) : [];
   const last = doc ? db.docLastChange(doc.id) : undefined;
   const edit = editOf(view.edit, kind);
+  // A document with fixed chapters (#129) reads as its file does: chapter by chapter, in their
+  // order, then by position; numbered through the document. A section with no chapter goes last.
+  const chapters = /** @type {Record<string, Record<string, string>> } */ (require("./db.js").CHAPTERS)[kind];
+  if (chapters) {
+    const order = Object.keys(chapters);
+    const at = (/** @type {any} */ s) => (order.includes(s.chapter) ? order.indexOf(s.chapter) : order.length);
+    sections.sort((a, b) => at(a) - at(b) || a.position - b.position);
+  }
   let n = 0;
   const shape = (/** @type {any} */ s) => {
     const current = s.status === "current";
     return {
       // Terms are not numbered: the glossary reads alphabetically.
-      id: s.id, key: s.key, title: s.title, status: s.status, n: current && kind !== "glossary" ? ++n : null,
+      id: s.id, key: s.key, title: s.title, status: s.status, n: current && kind !== "glossary" ? ++n : null, chapter: s.chapter ?? null,
       body: s.body ?? "", html: renderMarkdown(s.body),
       contributors: s.contributors.map((/** @type {any} */ r) => ({
         id: r.id, kind: r.kind, label: /** @type {any} */ (KIND_LABEL)[r.kind] ?? r.kind, title: r.title, task: r.task_key, status: r.status,
@@ -252,7 +260,7 @@ function docModel(db, root, kind, view = {}) {
     kind, label: /** @type {any} */ (TAB_LABEL)[kind], title: doc?.title ?? /** @type {any} */ (DOC_KINDS)[kind],
     repoName: repo?.name ?? root.split(/[\\/]/).pop(),
     last: last ? { at: last.at, who: /** @type {any} */ (WHO_TR)[last.actor_kind] ?? last.actor_kind, actor: last.actor } : undefined,
-    current, superseded, adding: edit === "new", empty: !sections.length,
+    current, superseded, adding: edit === "new", empty: !sections.length, chapters: chapters ?? null,
     // The repo's docs/ file someone wrote by hand: the export leaves it alone (#72).
     manual: require("./docs-export.js").fileState(root, kind) === "manual"
       ? `docs/${/** @type {any} */ (require("./docs-export.js").FILES)[kind]}` : undefined,
@@ -287,11 +295,34 @@ function sectionHtml(m, s) {
 <div class="dsec-h"><h2>${s.n ? `<span class="num">${s.n}.</span>` : s.status === "current" ? "" : `${icon("file", 14)}`}${esc(s.title)}</h2>${acts}</div>${body}${contrib}${hist}</article>`;
 }
 
+/**
+ * The current sections, each chapter's heading before its first one and an empty chapter's
+ * heading alone (#129); a document with no chapters is the list as it is.
+ * @param {ReturnType<typeof docModel>} m @param {(s: any) => string} item
+ * @param {(key: string, label: string, n: number) => string} heading
+ */
+function byChapter(m, item, heading) {
+  if (!m.chapters) return m.current.map(item).join("");
+  const out = [];
+  for (const [key, label] of Object.entries(m.chapters)) {
+    const list = m.current.filter((s) => s.chapter === key);
+    out.push(heading(key, label, list.length), ...list.map(item));
+  }
+  const loose = m.current.filter((s) => !s.chapter || !(s.chapter in /** @type {any} */ (m.chapters)));
+  if (loose.length) out.push(heading("none", "No chapter yet", loose.length), ...loose.map(item));
+  return out.join("");
+}
+
+/** The contents list: grouped under chapter labels where the document has them. @param {ReturnType<typeof docModel>} m */
+const tocItems = (m) => byChapter(m,
+  (s) => `<li data-k="t${s.id}" data-q="${esc(`${s.title} ${s.body}`)}"><a href="#sec-${esc(s.key)}" data-act="docGo" data-key="${esc(s.key)}">${s.n ? `<span class="num">${s.n}</span>` : ""}<span>${esc(s.title)}</span></a></li>`,
+  (key, label, n) => `<li class="tch${n ? "" : " none"}" data-k="tch-${esc(key)}">${esc(label)}${n ? "" : " · empty"}</li>`);
+
 /** @param {ReturnType<typeof docModel>} m */
 function docHtml(m) {
   const { icon } = require("./tasksView.js");
   const g = m.kind === "glossary";
-  const toc = `<aside class="dtoc" data-k="toc" data-scroll="dtoc" aria-label="${g ? "Terms" : "Contents"}"><div class="lbl" data-k="h">${g ? `Terms · ${m.current.length}` : "Contents"}</div><ol data-k="list">${m.current.map((s) => `<li data-k="t${s.id}" data-q="${esc(`${s.title} ${s.body}`)}"><a href="#sec-${esc(s.key)}" data-act="docGo" data-key="${esc(s.key)}">${s.n ? `<span class="num">${s.n}</span>` : ""}<span>${esc(s.title)}</span></a></li>`).join("") || `<li data-k="none" class="dim">${g ? "No terms" : "No sections"}</li>`}</ol>${m.superseded.length ? `<a href="#sec-__old" class="dold" data-k="old" data-act="docGo" data-key="__old">${g ? "Superseded terms" : "Superseded sections"} · ${m.superseded.length}</a>` : ""}<button class="dashed" data-k="new" data-act="docEdit" data-kind="${m.kind}" data-id="new">${icon("plus")} ${g ? "New term" : "New section"}</button></aside>`;
+  const toc = `<aside class="dtoc" data-k="toc" data-scroll="dtoc" aria-label="${g ? "Terms" : "Contents"}"><div class="lbl" data-k="h">${g ? `Terms · ${m.current.length}` : "Contents"}</div><ol data-k="list">${tocItems(m) || `<li data-k="none" class="dim">${g ? "No terms" : "No sections"}</li>`}</ol>${m.superseded.length ? `<a href="#sec-__old" class="dold" data-k="old" data-act="docGo" data-key="__old">${g ? "Superseded terms" : "Superseded sections"} · ${m.superseded.length}</a>` : ""}<button class="dashed" data-k="new" data-act="docEdit" data-kind="${m.kind}" data-id="new">${icon("plus")} ${g ? "New term" : "New section"}</button></aside>`;
   const head = `<section class="dhead" data-k="head"><span class="lbl">${esc(m.label)} · ${esc(m.repoName)}</span><h1>${esc(m.title)}</h1><p class="lead">${m.last ? `Last updated · ${esc(when(m.last.at))} · ${esc(m.last.who)}` : "Not updated yet"}</p>${m.manual ? `<p class="dnote">${esc(m.manual)} was written by hand and was not overwritten</p>` : ""}</section>`;
   const empty = m.empty && !m.adding && g
     ? `<div class="card dempty emptyhero" data-k="empty">${require("./mascot.js").mascot(56)}<div><p>The glossary is empty. When a new term appears in the project, or a term changes meaning, the agent writes it here with <span class="mono">doc_section_upsert</span>.</p><p class="dim">You can add one too with "New term" on the left. The glossary is also written to the repo as docs/GLOSSARY.md.</p></div></div>`
@@ -301,7 +332,7 @@ function docHtml(m) {
     ? `<div class="card dempty emptyhero" data-k="empty">${require("./mascot.js").mascot(56)}<div><p>This document is empty. When the agent adds ${m.kind === "architecture" ? "an ADR" : "a PDR"} or a decision, it writes the matching section here with <span class="mono">doc_section_upsert</span> and links the record.</p><p class="dim">You can add a section too with "New section" on the left. The document is also written to the repo as docs/${m.kind === "architecture" ? "ARCHITECTURE" : "PRODUCT"}.md.</p></div></div>`
     : "";
   const adding = m.adding ? `<section class="dsec adding" data-k="new"><div class="dsec-h"><h2>${g ? "New term" : "New section"}</h2></div>${editorHtml(m, undefined)}</section>` : "";
-  const sections = m.current.map((s) => sectionHtml(m, s)).join("");
+  const sections = byChapter(m, (s) => sectionHtml(m, s), (key, label, n) => `<h2 class="dch" id="chapter-${esc(key)}" data-k="ch-${esc(key)}">${esc(label)}${n ? "" : ' <span class="dim">· nothing written yet</span>'}</h2>`);
   const old = m.superseded.length
     ? `<details class="dolds" id="sec-__old" data-k="old"${m.superseded.some((s) => s.editing || s.flash) ? " open" : ""}><summary>${g ? "Superseded terms" : "Superseded sections"} · ${m.superseded.length}</summary>${m.superseded.map((s) => sectionHtml(m, s)).join("")}</details>`
     : "";
@@ -356,6 +387,9 @@ const DOCS_CSS = `
   .dtoc li a { display: flex; gap: 8px; padding: 5px 8px; border-radius: 6px; color: var(--vscode-foreground) !important; font-weight: 600; }
   .dtoc li a:hover { background: var(--acc-soft); text-decoration: none !important; }
   .dtoc .num { flex: none; min-width: 18px; color: var(--acc); font-weight: 700; }
+  .dtoc li.tch { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; padding: 10px 8px 2px; }
+  .dtoc li.tch.none { color: var(--warn); }
+  .dpage h2.dch { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .08em; color: var(--acc); margin: 18px 0 -6px; }
   /* A narrow panel: the contents sit above the page and scroll away with it, or a sticky
      one would cover the section a click scrolls to. */
   @media (max-width: 760px) {
