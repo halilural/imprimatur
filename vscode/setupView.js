@@ -135,7 +135,7 @@ class SetupView {
     if (claude && !this.suggesting) {
       this.suggesting = true;
       sg.refreshSuggestions({ root, projectDir: c.projectDir, components: c.components, installed: c.installed, file: c.file, claude, home: c.home,
-        partsOf: c.partsOf, marketRepoOf: c.marketRepoOf, connected: c.connected, relevanceOf: c.relevanceOf })
+        partsOf: c.partsOf, marketRepoOf: c.marketRepoOf, connected: c.connected, relevanceOf: c.relevanceOf, trusted: vscode.workspace.isTrusted })
         .then((ran) => ran && this.refresh())
         .catch(() => {})
         .finally(() => (this.suggesting = false));

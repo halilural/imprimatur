@@ -66,16 +66,30 @@ function globRe(g) {
   return new RegExp(`^${re}$`, "i");
 }
 
-/**
- * A regex from a marketplace (third-party data): at most 256 characters, and none with a
- * quantified group that itself repeats, the shape that backtracks without end.
- * shortcut: a shape check, not a regex engine with a time limit; upgrade if marketplaces ship such patterns.
- * @param {unknown} src @param {string} [flags] @returns {RegExp | undefined}
- */
+/** A regex from a rule (a marketplace's is third-party data): at most 256 characters. @param {unknown} src @param {string} [flags] @returns {RegExp | undefined} */
 function safeRe(src, flags = "") {
-  if (typeof src !== "string" || src.length > 256 || /\([^)]*[+*}][^)]*\)\s*[+*{]/.test(src)) return undefined;
+  if (typeof src !== "string" || src.length > 256) return undefined;
   try {
     return new RegExp(src, flags);
+  } catch {
+    return undefined;
+  }
+}
+
+const vm = require("node:vm");
+const MATCH = new vm.Script("String(re.exec(text)?.[0] ?? '')");
+/** Time a match may take: a pattern that backtracks without end is stopped and does not match. */
+const MATCH_MS = 100;
+
+/**
+ * The text a regex matches ("" for none), in a VM with a time limit: a marketplace's pattern
+ * cannot hang the extension host however it is written. Undefined when it was stopped.
+ * @param {RegExp} re @param {string} text @returns {string | undefined}
+ */
+function matchOf(re, text) {
+  re.lastIndex = 0;
+  try {
+    return MATCH.runInNewContext({ re, text }, { timeout: MATCH_MS });
   } catch {
     return undefined;
   }
@@ -86,10 +100,15 @@ const MANIFEST = /(^|\/)(package\.json|pyproject\.toml|requirements[^/]*\.txt|go
 const MAX_FILES = 20000;
 const MAX_BYTES = 512 * 1024;
 
-/** The repo's files, relative: git's list when it is a repo, else a walk four levels down. @param {string} root @returns {string[]} */
-function repoFiles(root) {
-  try {
-    const out = execFileSync("git", ["ls-files", "-co", "--exclude-standard"], { cwd: root, encoding: "utf8", maxBuffer: 64 << 20, timeout: 10_000, stdio: ["ignore", "pipe", "ignore"] });
+/**
+ * The repo's files, relative: git's list in a trusted folder that is a repo, else a walk four
+ * levels down. Git is not run in an untrusted folder: its .git/config can name commands
+ * (core.fsmonitor) that git runs; even trusted, fsmonitor is turned off for this call.
+ * @param {string} root @param {boolean} [trusted] @returns {string[]}
+ */
+function repoFiles(root, trusted = false) {
+  if (trusted) try {
+    const out = execFileSync("git", ["-c", "core.fsmonitor=false", "ls-files", "-co", "--exclude-standard"], { cwd: root, encoding: "utf8", maxBuffer: 64 << 20, timeout: 10_000, stdio: ["ignore", "pipe", "ignore"] });
     return out.split("\n").filter((f) => f && !SKIP.test(f)).slice(0, MAX_FILES);
   } catch {}
   /** @type {string[]} */
@@ -159,10 +178,10 @@ function recentCommands(projectDir, sessions = 5) {
 
 /**
  * What the repo shows, for the rules: its files, its manifests' text, the commands of its recent sessions.
- * @param {string} root @param {string} [projectDir]
+ * @param {string} root @param {string} [projectDir] @param {{trusted?: boolean}} [o] trusted: the folder is trusted, so git may list it
  */
-function repoSignals(root, projectDir = "") {
-  const files = repoFiles(root);
+function repoSignals(root, projectDir = "", { trusted = false } = {}) {
+  const files = repoFiles(root, trusted);
   const manifests = files.filter((f) => MANIFEST.test(f)).slice(0, 50).map((f) => ({ file: f, text: small(path.join(root, f)) }));
   return { root: root.replace(/\\/g, "/"), files, manifests, commands: projectDir ? recentCommands(projectDir) : new Map() };
 }
@@ -173,7 +192,8 @@ function repoSignals(root, projectDir = "") {
  */
 function firedBy(signals, repo) {
   const s = signals && typeof signals === "object" ? signals : {};
-  const arr = (/** @type {unknown} */ v) => (Array.isArray(v) ? v.slice(0, 10).filter((x) => typeof x === "string" && x.length <= 256) : []);
+  // A glob with many ** backtracks like a nested regex: at most 4, and a run of them counts once.
+  const arr = (/** @type {unknown} */ v) => (Array.isArray(v) ? v.slice(0, 10).filter((x) => typeof x === "string" && x.length <= 256).map((x) => x.replace(/(\*\*\/)+/g, "**/")).filter((x) => (x.match(/\*\*/g) ?? []).length <= 4) : []);
   for (const g of arr(s.cwd)) {
     // A cwd pattern matches the folder itself and everything under it, absolute or relative to the repo.
     const base = g.replace(/\/(\*\*)?$/, "");
@@ -186,14 +206,20 @@ function firedBy(signals, repo) {
   }
   for (const d of Array.isArray(s.manifestDeps) ? s.manifestDeps.slice(0, 10) : []) {
     const file = safeRe(d?.file, "i"), pattern = safeRe(d?.pattern);
-    const hit = file && pattern ? repo.manifests.find((m) => file.test(m.file) && pattern.test(m.text)) : undefined;
-    if (hit && pattern) return `${hit.file} lists ${(pattern.exec(hit.text)?.[0] ?? "").replace(/["\s:=]+$/g, "").replace(/^"/, "").slice(0, 60)}`;
+    if (!file || !pattern) continue;
+    for (const m of repo.manifests) {
+      if (!matchOf(file, m.file)) continue;
+      const got = matchOf(pattern, m.text);
+      if (got) return `${m.file} lists ${got.replace(/["\s:=]+$/g, "").replace(/^"/, "").slice(0, 60)}`;
+    }
   }
   for (const d of Array.isArray(s.code) ? s.code.slice(0, 10) : []) {
     const file = safeRe(d?.file, "i"), pattern = safeRe(d?.pattern);
     if (!file || !pattern) continue;
-    const hit = repo.files.filter((f) => file.test(f)).slice(0, 300).find((f) => pattern.test(small(path.join(repo.root, f))));
-    if (hit) return `${hit} serves MCP tools (${(pattern.exec(small(path.join(repo.root, hit)))?.[0] ?? "").slice(0, 40)})`;
+    for (const f of repo.files.filter((x) => matchOf(file, x)).slice(0, 300)) {
+      const got = matchOf(pattern, small(path.join(repo.root, f)));
+      if (got) return `${f} serves MCP tools (${got.slice(0, 40)})`;
+    }
   }
   for (const c of arr(s.cli)) {
     const n = repo.commands.get(c);
@@ -242,4 +268,4 @@ function declaredBy(root, installed) {
   }
 }
 
-module.exports = { RULES, globRe, safeRe, repoFiles, recentCommands, repoSignals, firedBy, ruleMatches, declaredBy };
+module.exports = { RULES, globRe, safeRe, matchOf, repoFiles, recentCommands, repoSignals, firedBy, ruleMatches, declaredBy };

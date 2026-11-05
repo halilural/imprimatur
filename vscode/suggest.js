@@ -141,10 +141,10 @@ function readSuggestions(file) {
  * --available --json`, repo facts through `gh api`, what a plugin brings from the marketplace's copy.
  * @param {{root: string, projectDir?: string, components: Array<{name: string}>, installed: string[], file: string, claude: string, home: string,
  *   now?: number, run?: (cmd: string, args: string[]) => Promise<any>, partsOf?: (p: any) => {hooks: number, mcp: string[], brings?: string[], names?: string[]} | undefined,
- *   marketRepoOf?: (name: string) => string, connected?: string[], relevanceOf?: Record<string, any>, signals?: any}} o
+ *   marketRepoOf?: (name: string) => string, connected?: string[], relevanceOf?: Record<string, any>, signals?: any, trusted?: boolean}} o
  * @returns {Promise<boolean>} whether it ran
  */
-async function refreshSuggestions({ root, projectDir = "", components, installed, file, claude, now = Date.now(), run = json, partsOf, marketRepoOf, connected = [], relevanceOf = {}, signals }) {
+async function refreshSuggestions({ root, projectDir = "", components, installed, file, claude, now = Date.now(), run = json, partsOf, marketRepoOf, connected = [], relevanceOf = {}, signals, trusted = false }) {
   // The rules' version is part of the key: a change to them refreshes at once.
   const stack = `v5|${root}|${components.map((c) => c.name).sort().join("|")}`;
   const last = readSuggestions(file);
@@ -153,7 +153,7 @@ async function refreshSuggestions({ root, projectDir = "", components, installed
   const available = (await run(claude, ["plugin", "list", "--available", "--json"]))?.available ?? [];
   const have = new Set(installed);
   const byId = new Map(available.map((/** @type {any} */ p) => [p.pluginId, p]));
-  const repo = signals ?? rules.repoSignals(root, projectDir);
+  const repo = signals ?? rules.repoSignals(root, projectDir, { trusted });
   /** @type {Array<{p: any, source: string, why: string}>} */
   const picks = [];
   const add = (/** @type {any} */ p, /** @type {string} */ source, /** @type {string} */ why) => p && !have.has(p.pluginId) && !picks.some((x) => x.p.pluginId === p.pluginId) && picks.push({ p, source, why });
