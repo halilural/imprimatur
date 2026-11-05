@@ -836,8 +836,21 @@ function inboxHtml(m) {
   return `<div class="inbox" data-k="inbox">${top}${buckets}${chips}<div class="igroups" data-k="groups" data-navgroup="inbox">${groups}<p class="empty" id="ifnone" data-k="ifnone" hidden>Nothing in this filter is waiting on you.</p></div></div>`;
 }
 
-/** @param {ReturnType<typeof homeModel>} m */
-function homeHtml(m) {
+/**
+ * The board landing (#151) for the top of Home; "" when its numbers cannot be read (Home still draws).
+ * @param {any} db @param {string} root
+ */
+function boardOf(db, root) {
+  try {
+    const board = require("./board.js");
+    return board.boardHtml(board.boardModel(require("./stats.js").statsOf(root, { days: board.RANGE_DAYS, db })));
+  } catch (e) {
+    return `<p class="empty" data-k="noboard">The board could not be drawn: ${esc(e instanceof Error ? e.message : String(e))}</p>`;
+  }
+}
+
+/** @param {ReturnType<typeof homeModel>} m @param {string} [board] the board landing's HTML (#151) */
+function homeHtml(m, board = "") {
   const pct = m.total ? Math.round((m.done / m.total) * 100) : 0;
   const top = `<div data-k="top"><h1>${esc(m.repoName)}</h1><p class="lead">${m.done} / ${m.total} tasks done · ${m.active} in progress · ${m.open} open</p><div class="progress" role="progressbar" aria-label="Task progress" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div style="width: ${pct}%"></div></div></div>`;
   const pointers = `<section class="card left" aria-label="Where we left off"><h2 class="cap">${icon("arrow", 18)}Where we left off</h2>${m.pointers.map((p) => `<a href="#" class="ptr" data-act="open" data-id="${p.id}" data-f="${bucketOf(p.status)}" data-rec="${p.record}"><span class="pm"><span class="mono">${esc(p.key)}</span><span class="dim">${esc(p.task)}</span></span><span class="ptitle">${esc(p.next)}${p.mine ? ' <b class="mine">(on you)</b>' : ""}</span></a>`).join("") || '<p class="empty">None of the open tasks has where we left off marked.</p>'}</section>`;
@@ -849,7 +862,7 @@ function homeHtml(m) {
     ? `<section class="blk" data-k="loose" data-navgroup="loose" aria-label="Waiting on you, no task"><h2><span class="odot" aria-hidden="true"></span>Waiting on you, no task <span class="dim">· ${m.loose.length} · asked by the agent at the end of a turn, with no task</span></h2>${m.loose.map((r) => askCard(r)).join("")}</section>`
     : "";
   const recalls = m.recalls ? `<a href="#" class="callout" data-k="recalls-${m.recalls}" data-act="tab" data-tab="exercises">${icon("clock", 18)}<div><span class="lbl">Exercises</span><span class="ptitle">${m.recalls} recall${m.recalls === 1 ? "" : "s"} due today</span></div></a>` : "";
-  return `<div class="home" data-k="home">${top}${recalls}${editsHtml(m.openEdits)}<div class="grid2" data-k="cards">${pointers}${asks}</div>${loose}${table}</div>`;
+  return `<div class="home" data-k="home">${top}${board}${recalls}${editsHtml(m.openEdits)}<div class="grid2" data-k="cards">${pointers}${asks}</div>${loose}${table}</div>`;
 }
 
 /**
@@ -859,7 +872,7 @@ function homeHtml(m) {
  */
 function paneHtml(db, root, view, o = {}) {
   if (!db) return `<p class="empty" data-k="nodb">Could not open the Imprimatur database: ${esc(o.error ?? "unavailable")}. Run <span class="mono">Imprimatur: Check Setup</span> to see what is missing; if another window holds it, Reload Window.</p>`;
-  if (view.tab === "home") return homeHtml(homeModel(db, root, o));
+  if (view.tab === "home") return homeHtml(homeModel(db, root, o), boardOf(db, root));
   if (view.tab === "tasks") return tasksHtml(tasksPage(db, root, view, o));
   if (view.tab === "inbox") return inboxHtml(inboxModel(db, root, { all: view.all, waiting: o.waiting, now: o.now, placeOf: o.placeOf }));
   if (view.tab === "social" && !require("./docs-export.js").socialOn(root)) {

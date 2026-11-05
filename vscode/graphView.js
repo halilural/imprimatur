@@ -318,6 +318,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   ${reviewStyle()}
   .chip:focus-visible, button.acc:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 1px; }
   ${tasksView.TASKS_CSS}
+  ${require("./board.js").BOARD_CSS}
   ${docsView.DOCS_CSS}
   ${require("./exerciseView.js").EXERCISE_CSS}
   .badge { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); border-radius: var(--r-pill); padding: 0 6px; font-size: var(--fs-xs); font-weight: 700; }
@@ -556,6 +557,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     wrap.append(tools, vp);
     return wrap;
   };
+${require("./board.js").BOARD_SCRIPT}
   async function drawDiagrams() {
     if (!MERMAID_SRC) return;
     const blocks = () => [...document.querySelectorAll("#pane .mermaid-src[data-key]")];
@@ -696,6 +698,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     });
     const ifnone = document.getElementById("ifnone");
     if (ifnone) ifnone.hidden = !(chip || bucket || q) || !cards.length || cards.some((c) => !c.el.hidden);
+    drawBoard();
     drawDiagrams();
   };
   /** Change the view: the host draws the tab anew (it draws only the visible one). */
@@ -794,6 +797,8 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
       case "scope": return setView({ all: d.all === "1" });
       case "ibucket": state.ibucket = state.ibucket === d.b ? null : d.b; return apply();
       case "itask": state.itask = state.itask === Number(d.id) ? null : Number(d.id); return apply();
+      case "bmetric": state.board = { ...(state.board || { r: 30 }), m: d.m }; vscode.setState(state); return drawBoard();
+      case "brange": state.board = { ...(state.board || { m: "cost" }), r: Number(d.r) || 30 }; vscode.setState(state); return drawBoard();
       case "sel": return setView({ sel: Number(d.id) });
       case "open": return go({ tab: "tasks", sel: Number(d.id), filter: d.f || state.filter });
       case "tab": return go({ tab: d.tab });
@@ -1041,6 +1046,7 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
     patchRows("edits", doc);
     const freshPane = doc.getElementById("pane");
     if (freshPane) morph(document.getElementById("pane"), freshPane);
+    drawBoard();
     taskTabs();
     anaHub();
     keepSteps();

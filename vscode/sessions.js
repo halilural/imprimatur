@@ -113,26 +113,49 @@ function recordSession(root, input, { now = Date.now() } = {}) {
 }
 
 /**
- * A transcript's cost points (#149): Claude Code writes a "cost-state" line with the session's
- * running totals (cost, API time, lines, tokens per model) in the terminal and in VS Code alike,
- * where the status line does not run. Each point gets the time of the nearest line before it.
- * prompts: the user's own messages (not tool results or meta lines); a background agent
- * (`claude -p`, a plugin's review) has one.
- * @param {string} text a transcript's text
- * @returns {{prompts: number, points: Array<{t: number, session: string, started: number, cost: number, apiMs: number, added: number, removed: number, tokens: {input: number, output: number, cacheWrite: number, cacheRead: number}}>}}
+ * @typedef {{t: number, session: string, started: number, cost: number, apiMs: number, added: number, removed: number, tokens: {input: number, output: number, cacheWrite: number, cacheRead: number}}} CostPoint
+ * @typedef {{points: CostPoint[], prompts: number, t: number, first: number, last: number, firstPrompt: string, edits: number}} CostState
  */
-function transcriptCost(text) {
-  const points = [];
-  let prompts = 0;
-  let t = 0;
+
+/** An empty transcript reading. @returns {CostState} */
+const costInit = () => ({ points: [], prompts: 0, t: 0, first: 0, last: 0, firstPrompt: "", edits: 0 });
+
+/** The text of a user message, its first 120 characters. @param {any} m */
+const promptText = (m) => {
+  const c = m?.content;
+  const text = typeof c === "string" ? c : Array.isArray(c) ? c.filter((x) => x?.type === "text").map((x) => x.text).join(" ") : "";
+  return text.replace(/<[^>]{1,40}>[\s\S]*?<\/[^>]{1,40}>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+};
+
+/**
+ * Reads whole lines of a transcript into its state (#149, #151): Claude Code's "cost-state"
+ * lines (the session's running cost, API time, lines and tokens per model, written in the
+ * terminal and in VS Code alike, where the status line does not run), each with the time of the
+ * nearest line before it; the user's own prompts (not tool results or meta lines: a background
+ * agent, `claude -p` or a plugin's review, has one), the first of them, the edits (Edit, Write,
+ * MultiEdit, NotebookEdit calls) and the first and last times.
+ * @param {CostState} st @param {string} text whole lines
+ */
+function costFeed(st, text) {
   let from = 0;
   for (;;) {
     const end = text.indexOf("\n", from);
     const line = end < 0 ? text.slice(from) : text.slice(from, end);
     if (line.length > 20) {
       const ts = /"timestamp":"([^"]{10,40})"/.exec(line.slice(0, 2000));
-      if (ts) t = Date.parse(ts[1]) || t;
-      if (line.includes('"type":"user"') && !line.includes('"tool_result"') && !line.includes('"isMeta":true') && !line.includes('"isCompactSummary":true')) prompts++;
+      if (ts) {
+        st.t = Date.parse(ts[1]) || st.t;
+        if (!st.first) st.first = st.t;
+        st.last = st.t;
+      }
+      if (line.includes('"type":"user"') && !line.includes('"tool_result"') && !line.includes('"isMeta":true') && !line.includes('"isCompactSummary":true')) {
+        st.prompts++;
+        if (!st.firstPrompt)
+          try {
+            st.firstPrompt = promptText(JSON.parse(line).message);
+          } catch {}
+      }
+      if (line.includes('"type":"tool_use"')) st.edits += (line.match(/"type":"tool_use","id":"[^"]*","name":"(?:Edit|Write|MultiEdit|NotebookEdit)"/g) ?? []).length;
       if (line.startsWith('{"type":"cost-state"'))
         try {
           const j = JSON.parse(line);
@@ -143,14 +166,56 @@ function transcriptCost(text) {
             tokens.cacheWrite += Number(/** @type {any} */ (m).cacheCreationInputTokens) || 0;
             tokens.cacheRead += Number(/** @type {any} */ (m).cacheReadInputTokens) || 0;
           }
-          points.push({ t: t || Number(j.startTime) || 0, session: String(j.sessionId ?? ""), started: Number(j.startTime) || t, cost: Number(j.totalCostUSD) || 0,
+          st.points.push({ t: st.t || Number(j.startTime) || 0, session: String(j.sessionId ?? ""), started: Number(j.startTime) || st.t, cost: Number(j.totalCostUSD) || 0,
             apiMs: Number(j.totalAPIDuration) || 0, added: Number(j.totalLinesAdded) || 0, removed: Number(j.totalLinesRemoved) || 0, tokens });
         } catch {}
     }
     if (end < 0) break;
     from = end + 1;
   }
-  return { prompts, points };
+  return st;
 }
 
-module.exports = { sessionsFile, readSessions, recordSession, tokensSince, transcriptCost, QUIET_MS };
+/** A whole transcript's reading. @param {string} text */
+const transcriptCost = (text) => costFeed(costInit(), text);
+
+/** @type {Map<string, {ino: number, size: number, offset: number, st: CostState}>} each transcript's reading, kept to go on from */
+const readings = new Map();
+
+/**
+ * A transcript's reading, from where the last call stopped: transcripts only grow (a live one
+ * reaches tens of MB), so a call reads only what was appended, whole lines. A file that shrank
+ * or was replaced is read again from the start.
+ * @param {string} file @returns {CostState}
+ */
+function transcriptReading(file) {
+  let st;
+  try {
+    st = fs.statSync(file);
+  } catch {
+    readings.delete(file);
+    return costInit();
+  }
+  let r = readings.get(file);
+  if (!r || r.ino !== st.ino || st.size < r.size) r = { ino: st.ino, size: 0, offset: 0, st: costInit() };
+  if (st.size > r.offset) {
+    const fd = fs.openSync(file, "r");
+    try {
+      const len = st.size - r.offset;
+      const buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, r.offset);
+      const end = buf.lastIndexOf(10);
+      if (end >= 0) {
+        costFeed(r.st, buf.subarray(0, end).toString("utf8"));
+        r.offset += end + 1;
+      }
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+  r.size = st.size;
+  readings.set(file, r);
+  return r.st;
+}
+
+module.exports = { sessionsFile, readSessions, recordSession, tokensSince, transcriptCost, transcriptReading, costFeed, costInit, QUIET_MS };

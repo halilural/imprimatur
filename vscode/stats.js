@@ -118,7 +118,7 @@ const median = (xs) => {
 /**
  * The repo's per-day series for the days ending today (#150).
  * @param {string} root the repo @param {{days?: number, now?: number, db?: any}} [o]
- * @returns {{days: string[], series: Record<string, number[]>, answerHours: Array<number | undefined>, answered: Array<{t: number, hours: number}>, open: number, waiting: number, hooks: any[]}}
+ * @returns {{days: string[], series: Record<string, number[]>, answerHours: Array<number | undefined>, answered: Array<{t: number, hours: number}>, open: number, waiting: number, hooks: any[], sessionList: any[]}}
  */
 function statsOf(root, { days = 7, now = Date.now(), db } = {}) {
   db ??= require("./db.js").openDb();
@@ -159,7 +159,9 @@ function statsOf(root, { days = 7, now = Date.now(), db } = {}) {
   // that drops (a resumed session restores a slightly older state: 50.71 → 48.60) adds nothing
   // there, and growth counts on from the lower value. The status line's rows fill in sessions whose
   // transcript has no points.
-  const { transcriptCost, readSessions } = require("./sessions.js");
+  const { transcriptReading, readSessions } = require("./sessions.js");
+  /** The user's sessions in the range, newest first (the board's table, #151). @type {any[]} */
+  const sessionList = [];
   const { gitRootOf: gr, projectSlug: ps } = require("./agent-setup.js");
   const projectDir = path.join(require("node:os").homedir(), ".claude", "projects", ps(gr(root)));
   let transcripts = [];
@@ -170,9 +172,14 @@ function statsOf(root, { days = 7, now = Date.now(), db } = {}) {
   const seen = new Set();
   const tok = (/** @type {any} */ k) => (k.input || 0) + (k.output || 0) + (k.cacheWrite || 0) + (k.cacheRead || 0);
   for (const f of transcripts) {
-    const { points, prompts } = cachedRead(f, transcriptCost) ?? { points: [], prompts: 0 };
+    const reading = transcriptReading(f);
+    const { points, prompts } = reading;
     // The user's own sessions count as sessions; a one-prompt run is a background agent, its cost apart.
     const mine = prompts >= 2;
+    const lastPoint = points.at(-1);
+    if (mine && reading.last >= since)
+      sessionList.push({ session: lastPoint?.session || path.basename(f, ".jsonl"), prompt: reading.firstPrompt, started: reading.first, last: reading.last, turns: prompts, edits: reading.edits,
+        cost: lastPoint?.cost ?? 0, tokens: lastPoint ? tok(lastPoint.tokens) : 0, apiMs: lastPoint?.apiMs ?? 0 });
     let prev = { cost: 0, apiMs: 0, tokens: 0, cacheRead: 0 };
     for (const p of points) {
       if (p.session && !seen.has(p.session)) {
@@ -204,7 +211,8 @@ function statsOf(root, { days = 7, now = Date.now(), db } = {}) {
   const { gitRootOf, projectSlug } = require("./agent-setup.js");
   const home = require("node:os").homedir();
   const hooks = require("./session-context.js").sessionItems(path.join(home, ".claude", "projects", projectSlug(gitRootOf(root))), home).filter((/** @type {any} */ r) => r.kind === "hook output");
-  return { days: list, series, answerHours, answered, open, waiting, hooks };
+  sessionList.sort((a, b) => b.last - a.last);
+  return { days: list, series, answerHours, answered, open, waiting, hooks, sessionList };
 }
 
 module.exports = { statsOf, dayOf, median, cachedRead, DAY };
