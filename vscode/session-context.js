@@ -333,4 +333,12 @@ function sessionBudget(projectDir, home, configured = []) {
   return { total: rows.reduce((n, r) => n + r.tokens, 0), rows, uncounted };
 }
 
-module.exports = { MEMORY, LARGE, tokensOf, sessionBudget, sessionItems, stateOf, fold, empty, injected, hookScript, newestTranscript };
+/** The MCP servers and connectors the last session had (#143). @param {string} projectDir @param {string} home */
+function connectedServers(projectDir, home) {
+  const file = newestTranscript(projectDir);
+  const s = file && stateOf(file);
+  void home;
+  return s ? [...new Set([...s.mcp.keys(), ...[...s.tools.keys()].filter((k) => k !== "Claude Code").map((k) => k.replace(/^claude_ai_/, "claude.ai ").replace(/_/g, " "))])] : [];
+}
+
+module.exports = { connectedServers, MEMORY, LARGE, tokensOf, sessionBudget, sessionItems, stateOf, fold, empty, injected, hookScript, newestTranscript };

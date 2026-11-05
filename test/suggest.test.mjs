@@ -17,9 +17,11 @@ test("suggestions (#143): fit the stack by whole words, best first, installed an
     { pluginId: "x@m", name: "react", description: "React components", installCount: 500000 },
     { pluginId: "have@m", name: "terraform-have", description: "terraform", installCount: 9999 },
     { pluginId: "word@m", name: "a", description: "terraformed land", installCount: 9999 },
+    { pluginId: "passing@m", name: "hosting", description: "Deploy your sites. No local Terraform needed.", installCount: 99999 },
+    { pluginId: "ctx@m", name: "context7", description: "Docs for Terraform.", installCount: 99999 },
   ];
-  const got = fitting(available, stack, ["have@m"]);
-  assert.deepEqual(got.map((p) => p.pluginId), ["gh@m", "cf@m", "tf@m"], "installs times the parts it fits");
+  const got = fitting(available, stack, ["have@m"], ["claude.ai Context7"]);
+  assert.deepEqual(got.map((p) => p.pluginId), ["gh@m", "cf@m", "tf@m"], "installs times the parts it fits; a passing mention after the first sentence fits nothing; one already connected is left out");
   assert.deepEqual(got[1].fits, ["Cloudflare Workers", "Cloudflare D1"]);
   assert.equal(repoOf(available[0].source), "cloudflare/skills");
   assert.equal(repoOf("./plugins/terraform"), "");

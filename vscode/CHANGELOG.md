@@ -4,6 +4,15 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.113.4] - 2026-11-05
+
+### Fixed
+- Suggested plugins fit the stack by their purpose (#143). Only a plugin's name and the first
+  sentence of its description count, so a passing mention later on no longer counts ("no local
+  Node.js required", "sync to Jira"). A plugin for a server or connector the last session already
+  had (such as Context7 from claude.ai) is not suggested. On this repo, 8 suggestions became 4:
+  github, atlassian, greptile, atlassian-twg-cli.
+
 ## [0.113.2] - 2026-11-05
 
 ### Added

@@ -43,14 +43,20 @@ const MIN_INSTALLS = 500;
  * The plugins that fit, best first: installs times the stack parts they fit. Installed ones are left out.
  * @param {Array<{pluginId: string, name: string, description?: string, installCount?: number, source?: any}>} available
  * @param {Array<{name: string}>} components @param {string[]} installed plugin ids
+ * @param {string[]} [connected] names of MCP servers and connectors already in use (e.g. "claude.ai Context7")
  */
-function fitting(available, components, installed) {
+function fitting(available, components, installed, connected = []) {
   const keys = stackKeys(components);
   const have = new Set(installed);
+  const words = (/** @type {string} */ s) => s.toLowerCase().replace(/^claude\.ai\s+|^plugin:[^:]+:/, "").replace(/[^a-z0-9]+/g, "");
+  const already = new Set(connected.map(words).filter((w) => w.length >= 3));
   return available
-    .filter((p) => !have.has(p.pluginId) && (p.installCount ?? 0) >= MIN_INSTALLS)
+    .filter((p) => !have.has(p.pluginId) && (p.installCount ?? 0) >= MIN_INSTALLS && !already.has(words(p.name)))
     .map((p) => {
-      const text = `${p.name} ${p.description ?? ""}`.toLowerCase();
+      // Its purpose, not a passing mention: the name and the description's first sentence
+      // ("no local Node.js required" or "sync to Jira" further on fit nothing).
+      const first = String(p.description ?? "").split(/(?<=[.!?])\s/)[0];
+      const text = `${p.name} ${first}`.toLowerCase();
       const fits = keys.filter((k) => k.keys.some((key) => mentions(text, key))).map((k) => k.part);
       return { ...p, fits };
     })
@@ -130,17 +136,17 @@ function readSuggestions(file) {
  * changed): the catalog from `claude plugin list --available --json`, repo facts through
  * `gh api`, what a plugin brings read from the marketplace's copy when it has one.
  * @param {{components: Array<{name: string}>, installed: string[], file: string, claude: string, home: string,
- *   now?: number, run?: (cmd: string, args: string[]) => Promise<any>, partsOf?: (p: any) => {hooks: number, mcp: string[]} | undefined, marketRepoOf?: (name: string) => string}} o
+ *   now?: number, run?: (cmd: string, args: string[]) => Promise<any>, partsOf?: (p: any) => {hooks: number, mcp: string[]} | undefined, marketRepoOf?: (name: string) => string, connected?: string[]}} o
  * @returns {Promise<boolean>} whether it ran
  */
-async function refreshSuggestions({ components, installed, file, claude, home, now = Date.now(), run = json, partsOf, marketRepoOf }) {
+async function refreshSuggestions({ components, installed, file, claude, home, now = Date.now(), run = json, partsOf, marketRepoOf, connected = [] }) {
   // The vetting's version is part of the key: a change to the rules refreshes at once.
-  const stack = `v3|${components.map((c) => c.name).sort().join("|")}`;
+  const stack = `v4|${components.map((c) => c.name).sort().join("|")}`;
   const last = readSuggestions(file);
   if (last && last.stack === stack && now - last.at < DAY) return false;
   const available = (await run(claude, ["plugin", "list", "--available", "--json"]))?.available ?? [];
   const items = [];
-  for (const p of fitting(available, components, installed).slice(0, SHOW)) {
+  for (const p of fitting(available, components, installed, connected).slice(0, SHOW)) {
     const repo = repoOf(p.source);
     let gh;
     if (repo && /^[\w.-]+\/[\w.-]+$/.test(repo))
