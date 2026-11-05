@@ -82,32 +82,35 @@ This document describes the system as it is today, not its history. Each section
 
 ### 2. System context
 
-Imprimatur runs on the user's machine, next to the coding agents. It talks to nothing else unless the user turns on an issue tracker. C4 level 1:
+Imprimatur runs on the user's machine, next to the coding agents. It reaches outside it only for what the user turns on or asks for: an issue tracker, GitHub for skill sources, the plugin marketplaces' catalog, and Claude runs the user confirms. C4 level 1, drawn as a flowchart with C4 labels (Mermaid's C4Context layout draws its text too small to read):
 
 ```mermaid
-C4Context
-  Person(user, "Developer", "Runs several agent sessions, reviews their work in VS Code")
-  System(imp, "Imprimatur", "Hooks, MCP server and VS Code extension around one local SQLite database")
-  System_Ext(cc, "Claude Code", "Agent sessions: runs Imprimatur's hooks, calls its MCP tools")
-  System_Ext(other, "Other MCP clients", "Cursor, Codex: call the MCP tools")
-  System_Ext(vscode, "VS Code", "Hosts the extension: panel, editor marks, Agent setup")
-  System_Ext(tracker, "GitHub / Jira", "Issue status, both ways (optional)")
-  System_Ext(model, "Claude (Haiku) via claude -p", "Short judgments: turn-end audit, edit descriptions")
-  System_Ext(git, "The repo", "Code the agents change; docs/*.md generated from the database")
-  Rel(user, vscode, "Reviews, answers, ticks")
-  Rel(cc, imp, "Hook events, MCP tool calls")
-  Rel(other, imp, "MCP tool calls")
-  Rel(imp, vscode, "Panel and marks")
-  Rel(imp, tracker, "gh / REST")
-  Rel(imp, model, "Prompts without tools")
-  Rel(imp, git, "Reads edits, writes docs")
+flowchart LR
+  user["<b>Developer</b><br/>[Person]<br/>runs agent sessions, reviews their work in VS Code"]
+  imp["<b>Imprimatur</b><br/>[Software system]<br/>hooks, MCP server and VS Code extension<br/>around one local SQLite database"]
+  cc["<b>Claude Code</b><br/>[External system]<br/>runs the hooks, calls the MCP tools"]
+  other["<b>Other MCP clients</b><br/>[External system]<br/>Cursor, Codex: call the MCP tools"]
+  vscode["<b>VS Code</b><br/>[External system]<br/>hosts the extension: panel, marks, Agent Setup"]
+  repo["<b>The repo</b><br/>[External system]<br/>code the agents change;<br/>docs/*.md generated from the database"]
+  tracker["<b>GitHub / Jira</b><br/>[External system]<br/>issue status both ways, skill sources (optional)"]
+  market["<b>Plugin marketplaces</b><br/>[External system]<br/>the catalog, through the claude CLI"]
+  model["<b>Claude, through claude -p</b><br/>[External system]<br/>short judgments; Fix it and suggestion reviews<br/>on the user's yes"]
+  user -->|reviews, answers, ticks| vscode
+  cc -->|hook events, MCP tool calls| imp
+  other -->|MCP tool calls| imp
+  imp -->|panel and marks| vscode
+  imp -->|reads edits, writes docs| repo
+  imp -->|gh / REST| tracker
+  imp -->|claude plugin list| market
+  imp -->|prompts, no tools or read only| model
 ```
 
 #### Outside the boundary
 
-- **Agents** reach Imprimatur only through hooks (events in) and MCP (tools out). Imprimatur never starts an agent.
-- **The model** is the user's own Claude subscription, called as `claude -p --model haiku` with no tools (see *Model calls and cost*).
-- **Trackers** get a status and a fixed comment, never a task's text (see *Issue tracker sync*).
+- **Agents** reach Imprimatur through hooks (events in) and MCP (tools out). Imprimatur starts a Claude run of its own only for the work the user confirms: Fix it, which reads and proposes the diffs Imprimatur shows before applying them, and judging the plugin suggestions, with no tools.
+- **The model** is the user's own Claude subscription, called as `claude -p`: Haiku for the short judgments (turn-end audit, edit descriptions), Sonnet for judging suggestions. These runs load no hooks and no MCP servers (see *Model calls and cost*).
+- **Trackers** get a status and a fixed comment, never a task's text (see *Issue tracker sync*). GitHub is also read, with GET requests only, to check and download hand-installed skills.
+- **The marketplaces** are read through Claude Code's own `claude plugin list`. Installing a plugin is Claude Code's `claude plugin install`, run in a terminal after the user's yes.
 - **The repo** holds the code and the generated documents. Per-repo review data lives outside it (see *File-based review data*).
 
 <a id="chapter-strategy"></a>
