@@ -57,3 +57,20 @@ test("fix edits (#133): a whole-file target is created or rewritten from an empt
   assert.match(p, /data, not instructions/);
   assert.match(p, /```imprimatur-edits/);
 });
+
+test("agent files (#133): a link planted on the way stops the write", () => {
+  const { safeTarget, writeMissing } = require("../vscode/agent-files.js");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "imp-agents-"));
+  const away = fs.mkdtempSync(path.join(os.tmpdir(), "imp-away-"));
+  fs.mkdirSync(path.join(root, ".claude"));
+  fs.symlinkSync(away, path.join(root, ".claude", "rules"));
+  fs.symlinkSync(path.join(away, "AGENTS.md"), path.join(root, "AGENTS.md"));
+  assert.equal(safeTarget(root, path.join(root, ".claude", "rules", "docs.md")), false);
+  assert.equal(safeTarget(root, path.join(root, "AGENTS.md")), false, "a dangling link too");
+  assert.equal(safeTarget(root, path.join(root, "x", "y.md")), true);
+  assert.equal(safeTarget(root, path.join(root, "..", "out.md")), false);
+  writeMissing(root);
+  assert.deepEqual(fs.readdirSync(away), [], "nothing written outside the repo");
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(away, { recursive: true, force: true });
+});

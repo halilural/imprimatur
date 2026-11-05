@@ -613,12 +613,19 @@ async function fixWithClaude(provider, node) {
     if (ok === "Apply")
       for (const [file, c] of plan.files) {
         // A file that changed since Claude read it is left alone; one to create must still be missing.
-        if (c.created) {
-          if (fs.existsSync(file)) continue;
-          fs.mkdirSync(path.dirname(file), { recursive: true });
-        } else if (fs.readFileSync(file, "utf8") !== c.before) continue;
-        fs.writeFileSync(file, c.after);
-        wrote++;
+        // A whole-file target (#133) is in the repo with no link on its way, and a new one is
+        // created with O_EXCL: a planted link cannot carry the write out of the repo.
+        if (fix.whole?.includes(file) && !require("./agent-files.js").safeTarget(repo, file)) continue;
+        try {
+          if (c.created) {
+            fs.mkdirSync(path.dirname(file), { recursive: true });
+            fs.writeFileSync(file, c.after, { flag: "wx" });
+          } else {
+            if (fs.readFileSync(file, "utf8") !== c.before) continue;
+            fs.writeFileSync(file, c.after);
+          }
+          wrote++;
+        } catch {}
       }
     fs.rmSync(shown, { recursive: true, force: true });
     let dropped = 0;
