@@ -12,6 +12,8 @@ const { scanSetup, changesSince, snapshotOf, flatItems } = require("./agent-setu
 const { readUpstream, checkUpstream, staleOf } = require("./upstream.js");
 const { recordVersions, versionLine } = require("./version-history.js");
 const { checklistOf } = require("./setup-checklist.js");
+/** The last click on a suggestion, for a double click (#143). */
+let lastClick = { url: "", at: 0 };
 /** @type {vscode.OutputChannel | undefined} Fix it's answers (#156). */
 let fixOutput;
 const { DriftScanner, driftLabel, DEFAULT_EXCLUDE } = require("./setup-drift.js");
@@ -169,8 +171,8 @@ class SetupView {
           !i.repo && "kept in the marketplace"].filter(Boolean).join(" · "),
         tooltip: `${i.id}\n\n${i.description}\n\nWhy: it fits ${i.fits.join(", ")}.\nIt brings: ${i.reads}.${i.flags.length ? `\n\n⚠ ${i.flags.join("\n⚠ ")}` : ""}${i.repo ? `\n\ngithub.com/${i.repo}` : ""}`,
         context: "suggestion", installId: i.id, repoRoot: root, flags: i.flags, reads: i.reads,
-        // A click opens its repo; the download button installs it.
-        ...(typeof i.page === "string" && i.page.startsWith("https://github.com/") ? { command: "vscode.open", args: [vscode.Uri.parse(i.page)] } : {}),
+        // A double click opens its repo (a single click only selects it); the download button installs it.
+        ...(typeof i.page === "string" && i.page.startsWith("https://github.com/") ? { command: "imprimatur.setup.openOnDoubleClick", args: [i.page] } : {}),
       })) };
   }
 
@@ -820,6 +822,14 @@ function registerSetupView(ctx, roots, counts) {
     view.onDidChangeVisibility((e) => e.visible && soon()),
     vscode.window.onDidChangeWindowState((s) => s.focused && view.visible && soon()),
     vscode.commands.registerCommand("imprimatur.setup.refresh", () => provider.refresh()),
+    vscode.commands.registerCommand("imprimatur.setup.openOnDoubleClick", (url) => {
+      // A tree has no double-click event: a second click on the same row within half a second is one.
+      const now = Date.now();
+      if (lastClick.url === url && now - lastClick.at < 500 && typeof url === "string" && url.startsWith("https://github.com/")) {
+        lastClick = { url: "", at: 0 };
+        vscode.env.openExternal(vscode.Uri.parse(url));
+      } else lastClick = { url, at: now };
+    }),
     vscode.commands.registerCommand("imprimatur.setup.installSuggestion", (node) => installSuggestion(node ?? view.selection[0])),
     vscode.commands.registerCommand("imprimatur.setup.turnOffPlugin", (node) => turnOffPlugin(provider, node ?? view.selection[0])),
     vscode.commands.registerCommand("imprimatur.setup.installFix", (fix) => runInstallFix(fix)),

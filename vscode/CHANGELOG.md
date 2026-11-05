@@ -7,7 +7,7 @@ extension is in early development.
 ## [0.113.2] - 2026-11-05
 
 ### Added
-- A click on a suggested plugin opens its GitHub page (#143): the plugin's own repo, its folder
+- A double click on a suggested plugin opens its GitHub page (#143, 0.113.3: a single click only selects it): the plugin's own repo, its folder
   in a bigger repo, or its folder in the marketplace's repo.
 
 ## [0.113.1] - 2026-11-05
