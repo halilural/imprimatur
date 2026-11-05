@@ -90,3 +90,26 @@ test("upstream (#156): a skill's folder is downloaded with GETs only; paths cann
   await assert.rejects(fetchSkillFolder({ repo: "acme/s", path: "../x" }, "11afdb9", dest, { api, raw }), /not a plain/);
   await assert.rejects(fetchSkillFolder({ repo: "acme/s", path: "skills/etf" }, "11afdb9", dest, { api, raw: async () => "x".repeat(3 << 20) }), /larger/);
 });
+
+test("upstream (#156): a SAFE verdict copies the reviewed files and records the commit; STOP or no verdict copies nothing", () => {
+  const { applySkillUpdate, verdictOf } = require("../vscode/upstream.js");
+  assert.deepEqual(verdictOf("Three lines.\nVERDICT: SAFE"), { safe: true, reason: "" });
+  assert.equal(verdictOf("x\n**VERDICT:** STOP line 12 asks to read ~/.ssh").reason, "line 12 asks to read ~/.ssh");
+  assert.equal(verdictOf("VERDICT: SAFE\nlater\nVERDICT: STOP changed my mind").safe, false, "the last verdict counts");
+  assert.equal(verdictOf("all good").safe, false, "no verdict is not safe");
+  const from = fs.mkdtempSync(path.join(os.tmpdir(), "apply-from-"));
+  const to = fs.mkdtempSync(path.join(os.tmpdir(), "apply-to-"));
+  fs.mkdirSync(path.join(from, "ref"));
+  fs.writeFileSync(path.join(from, "SKILL.md"), "new");
+  fs.writeFileSync(path.join(from, "ref/a.md"), "ref");
+  fs.writeFileSync(path.join(to, "SKILL.md"), "old");
+  fs.writeFileSync(path.join(to, "SOURCE.txt"), "source: https://github.com/a/b (x)\ncommit: 5456da3\nlicense: MIT\n");
+  applySkillUpdate(from, to, ["SKILL.md", "ref/a.md", "../escape.md"], "1726f29abc", "three additions, no scripts", "2026-11-05");
+  assert.equal(fs.readFileSync(path.join(to, "SKILL.md"), "utf8"), "new");
+  assert.equal(fs.readFileSync(path.join(to, "ref/a.md"), "utf8"), "ref");
+  assert.ok(!fs.existsSync(path.join(to, "..", "escape.md")));
+  const src = fs.readFileSync(path.join(to, "SOURCE.txt"), "utf8");
+  assert.match(src, /^commit: 1726f29$/m);
+  assert.match(src, /^license: MIT$/m);
+  assert.match(src, /updated: 2026-11-05 to 1726f29, reviewed by Claude through Imprimatur's Fix it: three additions, no scripts\n$/);
+});
