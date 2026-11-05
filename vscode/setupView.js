@@ -319,7 +319,11 @@ class SetupView {
       const repo = repoRoot && db?.repoByRoot(repoRoot);
       if (repo) docs = { noChapter: db.sectionsPerChapter(repo.id).filter((/** @type {any} */ c) => (c.kind === "architecture" || c.kind === "product") && !c.chapter).reduce((/** @type {number} */ a, /** @type {any} */ c) => a + c.n, 0) };
     } catch {}
-    this.checklist = checklistOf(this.scopes, /** @type {any} */ (this.audit)?.open ?? 0, this.installs, baseline, docs);
+    let agentRows = [];
+    try {
+      if (repoRoot) agentRows = require("./agent-files.js").agentRows(require("./agent-files.js").agentFiles(repoRoot));
+    } catch {}
+    this.checklist = checklistOf(this.scopes, /** @type {any} */ (this.audit)?.open ?? 0, this.installs, baseline, docs, agentRows);
     this.onScanned?.(this.checklist.count);
     this.extras();
     if (this.view) this.view.badge = fresh ? { value: fresh, tooltip: `${fresh} agent setup change${fresh === 1 ? "" : "s"} since you last looked` } : undefined;
@@ -463,7 +467,7 @@ async function fixWithClaude(provider, node) {
   const runner = require("./fix-runner.js");
   const db = require("./records.js").dbOf();
   const repo = provider.scopes.find((s) => !s.global)?.root ?? os.homedir();
-  /** @type {{prompt: string, label: string, edit: string[], editDirs: string[], read: string[], audit?: boolean, records?: any[], apply?: {from: string, to: string, files: string[], commit: string}}} */
+  /** @type {{prompt: string, label: string, edit: string[], editDirs: string[], read: string[], whole?: string[], audit?: boolean, records?: any[], apply?: {from: string, to: string, files: string[], commit: string}}} */
   let fix = { prompt: "", label: "", edit: [], editDirs: [], read: [] };
   const kind = node?.fix?.kind;
   if (kind === "health") fix = { prompt: prompts.healthPrompt(node.fix.problem), label: path.basename(node.fix.problem.file), edit: [node.fix.problem.file], editDirs: [], read: [] };
@@ -474,6 +478,12 @@ async function fixWithClaude(provider, node) {
   } else if (!kind && node?.recordId && db) {
     const r = db.record(node.recordId);
     if (r) fix = { prompt: prompts.findingPrompt(r), label: r.title.slice(0, 40), edit: r.links?.audit?.file ? [r.links.audit.file] : [], editDirs: [], read: [], audit: true, records: [r] };
+  }
+  if (kind === "agents") {
+    // #133: CLAUDE.md into AGENTS.md; each file handed back whole, shown as diffs before writing.
+    const af = require("./agent-files.js").agentFiles(repo);
+    const files = [af.claudeFile, af.agentsFile, af.docsRule];
+    fix = { prompt: prompts.agentsPrompt(af), label: "CLAUDE.md → AGENTS.md", edit: files, editDirs: [], read: [], whole: files };
   }
   const skill = kind === "skill" ? node.fix.item : undefined;
   if (skill && !prompts.skillUpdatePrompt(skill)) return void vscode.window.showWarningMessage("Imprimatur: this skill's SOURCE.txt is not a plain GitHub source; review the change by hand.");
@@ -571,7 +581,7 @@ async function fixWithClaude(provider, node) {
   // Proposed edits: shown as diffs, applied when the user says so.
   if (!fix.apply) {
     const edits = require("./fix-edits.js");
-    const plan = edits.planEdits(edits.parseEdits(r.stdout), fix.edit);
+    const plan = edits.planEdits(edits.parseEdits(r.stdout), fix.edit, undefined, { whole: fix.whole ?? [] });
     // Findings Claude says are wrong or intended: dismissed with its reason when the user applies.
     const said = edits.parseDismissals(r.stdout, fix.records?.length ?? 0).map((d) => ({ ...d, rec: /** @type {any[]} */ (fix.records)[d.n - 1] }));
     // "other" (not fixed by an edit) is work for the user, not a false alarm: it stays open.
@@ -590,7 +600,10 @@ async function fixWithClaude(provider, node) {
     for (const [file, c] of plan.files) {
       const proposed = path.join(shown, `${++k}-${path.basename(file)}`);
       fs.writeFileSync(proposed, c.after);
-      await vscode.commands.executeCommand("vscode.diff", vscode.Uri.file(file), vscode.Uri.file(proposed), `Fix it: ${path.basename(file)} (now ↔ proposed)`, { preview: false });
+      // A file to be created is shown against an empty one.
+      const now = c.created ? path.join(shown, `${k}-empty-${path.basename(file)}`) : file;
+      if (c.created) fs.writeFileSync(now, "");
+      await vscode.commands.executeCommand("vscode.diff", vscode.Uri.file(now), vscode.Uri.file(proposed), `Fix it: ${path.basename(file)} (${c.created ? "new" : "now"} ↔ proposed)`, { preview: false });
     }
     const files = [...plan.files.keys()].map((f) => f.replace(os.homedir(), "~"));
     const what = [files.length && `change ${files.length} file${files.length === 1 ? "" : "s"}`, drops.length && `dismiss ${drops.length} finding${drops.length === 1 ? "" : "s"}`].filter(Boolean).join(" and ");
@@ -599,8 +612,11 @@ async function fixWithClaude(provider, node) {
     let wrote = 0;
     if (ok === "Apply")
       for (const [file, c] of plan.files) {
-        // A file that changed since Claude read it is left alone.
-        if (fs.readFileSync(file, "utf8") !== c.before) continue;
+        // A file that changed since Claude read it is left alone; one to create must still be missing.
+        if (c.created) {
+          if (fs.existsSync(file)) continue;
+          fs.mkdirSync(path.dirname(file), { recursive: true });
+        } else if (fs.readFileSync(file, "utf8") !== c.before) continue;
         fs.writeFileSync(file, c.after);
         wrote++;
       }
@@ -1087,6 +1103,15 @@ function registerSetupView(ctx, roots, counts) {
       } else lastClick = { url, at: now };
     }),
     vscode.commands.registerCommand("imprimatur.setup.installBaseline", (arg) => installBaseline(provider, arg)),
+    vscode.commands.registerCommand("imprimatur.setup.writeAgentFiles", async () => {
+      const root = provider.scopes.find((s) => !s.global)?.root;
+      if (!root || !vscode.workspace.isTrusted) return;
+      const written = require("./agent-files.js").writeMissing(root);
+      provider.refresh();
+      if (written.length) {
+        vscode.window.showInformationMessage(`Imprimatur: wrote ${written.map((f) => path.relative(root, f)).join(", ")} from the templates.`, "Open").then((p) => p && vscode.window.showTextDocument(vscode.Uri.file(written[0])));
+      }
+    }),
     vscode.commands.registerCommand("imprimatur.setup.baselineOut", (node) => baselineOut(provider, node ?? view.selection[0])),
     vscode.commands.registerCommand("imprimatur.setup.baselineBack", (arg) => baselineBack(provider, arg)),
     vscode.commands.registerCommand("imprimatur.setup.rankSuggestions", () => rankSuggestions(provider)),
