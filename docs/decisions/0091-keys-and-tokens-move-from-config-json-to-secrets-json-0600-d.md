@@ -15,7 +15,7 @@ Task #124: feat(security): keep the sync token and GitLab key in secret storage.
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+**Decision (the user chose option 1).**
 
 ## Decision Outcome
 

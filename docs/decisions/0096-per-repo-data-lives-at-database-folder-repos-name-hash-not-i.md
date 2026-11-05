@@ -15,7 +15,7 @@ Task #126: feat(data): keep per-repo data outside the repo, one change stamp ins
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+- `dataPath(root, rel, …)` maps a path under the old `.claude/imprimatur/` there. Every reader and writer (hooks, extension, MCP server, scripts) keeps its constants and calls `dataPath(root, CONST)` instead of `path.join(root, CONST)`.
 
 ## Decision Outcome
 

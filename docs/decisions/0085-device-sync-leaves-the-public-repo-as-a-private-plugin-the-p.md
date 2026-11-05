@@ -15,7 +15,7 @@ Task #106: refactor(plugins): optional plugin hook; move device sync out of the 
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+**Rejected:** a second, private .vsix build. It splits about 20 files into two builds, and the user would lose Marketplace updates.
 
 ## Decision Outcome
 

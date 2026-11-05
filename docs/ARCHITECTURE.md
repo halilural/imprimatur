@@ -9,45 +9,46 @@ type: explanation
 ## Contents
 
 - [Goals](#chapter-goals)
-  1. [Overview and purpose](#overview)
+  - [1. Overview and purpose](#overview)
 - [Context and scope](#chapter-context)
-  2. [System context](#context)
+  - [2. System context](#context)
 - [Solution strategy](#chapter-strategy)
-  3. [Key choices](#strategy)
+  - [3. Key choices](#strategy)
 - [Building blocks](#chapter-building-blocks)
-  4. [Components and their boundaries](#components)
-  5. [Local database and data model](#database)
-  6. [File-based review data](#review-data)
-  7. [Hooks and flows](#hooks)
-  8. [MCP server](#mcp)
-  9. [Panel and views](#panel)
-  10. [Live updates](#live)
-  11. [Issue tracker sync](#tracker)
-  12. [Design documents ↔ Markdown files (docs sync)](#docs-sync)
-  13. [History scan and TODO.md task tracking](#history-scan-todo)
-  14. [Task analyses](#task-analysis)
-  15. [Agent setup audit (agnix)](#agent-setup-audit)
-  16. [Audit: is the finding in effect (#78)](#audit-effect)
-  17. [Recommendations: project best-practice review (#86, #87)](#best-practice-review)
-  18. [Understanding debt: read marks and the unread count (#92)](#unread)
-  19. [/study: study mode (#95)](#study)
-  20. [/exercise: exercise mode (#108)](#exercise)
-  21. [Social document: a per-repo opt-in document kind (#109)](#social)
-  22. [Agent setup inventory: plugins, synced skills and the session's context (#139)](#agent-inventory)
-  23. [Agent files: AGENTS.md, CLAUDE.md and the docs rule (#133)](#agent-files)
+  - [4. Components and their boundaries](#components)
+  - [5. Local database and data model](#database)
+  - [6. File-based review data](#review-data)
+  - [7. Hooks and flows](#hooks)
+  - [8. MCP server](#mcp)
+  - [9. Panel and views](#panel)
+  - [10. Live updates](#live)
+  - [11. Issue tracker sync](#tracker)
+  - [12. Design documents ↔ Markdown files (docs sync)](#docs-sync)
+  - [13. History scan and TODO.md task tracking](#history-scan-todo)
+  - [14. Task analyses](#task-analysis)
+  - [15. Agent setup audit (agnix)](#agent-setup-audit)
+  - [16. Audit: is the finding in effect (#78)](#audit-effect)
+  - [17. Recommendations: project best-practice review (#86, #87)](#best-practice-review)
+  - [18. Understanding debt: read marks and the unread count (#92)](#unread)
+  - [19. /study: study mode (#95)](#study)
+  - [20. /exercise: exercise mode (#108)](#exercise)
+  - [21. Social document: a per-repo opt-in document kind (#109)](#social)
+  - [22. Agent setup inventory: plugins, synced skills and the session's context (#139)](#agent-inventory)
+  - [23. Agent files: AGENTS.md, CLAUDE.md and the docs rule (#133)](#agent-files)
 - [Deployment](#chapter-deployment)
-  24. [Installation and distribution](#deployment)
+  - [24. Installation and distribution](#deployment)
 - [Crosscutting concepts](#chapter-crosscutting)
-  25. [Security](#security)
-  26. [Model calls and cost](#model-calls)
-  27. [Process checks](#process-checks)
-  28. [Test strategy](#testing)
-  29. [Panel design layer: theme variables, icons, mascot](#ui-design)
-  30. [Context budget: what a session loads, in estimated tokens](#context-budget)
+  - [25. Security](#security)
+  - [26. Model calls and cost](#model-calls)
+  - [27. Process checks](#process-checks)
+  - [28. Test strategy](#testing)
+  - [29. Panel design layer: theme variables, icons, mascot](#ui-design)
+  - [30. Context budget: what a session loads, in estimated tokens](#context-budget)
+  - [31. Documentation rules in the audit (IMP-DOC, #131)](#doc-rules)
 - [Decisions](#chapter-decisions)
-  31. [Decision records: ADR and PDR as MADR 4 files](#decision-records)
+  - [32. Decision records: ADR and PDR as MADR 4 files](#decision-records)
 - [Risks and technical debt](#chapter-risks)
-  32. [Known limits](#limits)
+  - [33. Known limits](#limits)
 
 <a id="chapter-goals"></a>
 
@@ -1008,13 +1009,32 @@ The tools the agent called are counted per server from `tool_use` blocks.
 - An MCP server that was not called in the session: turn it off where it is not needed, which saves its instructions and its tool definitions.
 - A skill listing of 2,000 tokens or more: turn off plugins whose skills the repo never uses.
 
+<a id="doc-rules"></a>
+
+### 31. Documentation rules in the audit (IMP-DOC, #131)
+
+`setup_audit` checks the documentation standard next to agnix's agent-setup rules. `vscode/doc-rules.js` reads the repo's documents (the database) and its agent files and returns findings in agnix's diagnostic shape. `auditRoot` adds them for a repo, not for the global scope, so they become Recommendations records with Fix it and dismiss like agnix's.
+
+| Rule | Checks | Level |
+|---|---|---|
+| IMP-DOC-001 | each MADR number used once, every current decision numbered; a "superseded by NNNN" names a file that exists | warning |
+| IMP-DOC-002 | a decision names an alternative to the option chosen (a body line with alternative, rejected, instead of, not chosen or considered) | info |
+| IMP-DOC-003 | a decision is linked to a section | info |
+| IMP-DOC-004 | every architecture chapter has a section; a C4 context view (`[Person]`, `[Software system]`) and a container view (`[Container: …]`) exist | warning |
+| IMP-DOC-005 | every sequenceDiagram (architecture, product, task analyses) has `autonumber` and a numbered list under it with an item per arrow | warning |
+| IMP-DOC-006 | AGENTS.md and CLAUDE.md stay under 200 lines | warning |
+
+The decision rules (001–003) report one finding per rule. Each names up to 12 decisions, then "and N more": one finding per decision would bury the panel. 002 and 003 are info, because they describe what the records lack, not a broken setup.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0111](decisions/0111-documentation-rules-in-setup-audit-as-imprimatur-s-own-imp-d.md)
+
 <a id="chapter-decisions"></a>
 
 ## Decisions
 
 <a id="decision-records"></a>
 
-### 31. Decision records: ADR and PDR as MADR 4 files
+### 32. Decision records: ADR and PDR as MADR 4 files
 
 The decisions are the repo's adr and pdr records. Each one is also written as a MADR 4 file, `docs/decisions/NNNN-slug.md`, listed in `docs/decisions/README.md`. That index is the list this chapter would otherwise repeat.
 
@@ -1035,7 +1055,7 @@ The decisions are the repo's adr and pdr records. Each one is also written as a 
 
 <a id="limits"></a>
 
-### 32. Known limits
+### 33. Known limits
 
 ### Review
 

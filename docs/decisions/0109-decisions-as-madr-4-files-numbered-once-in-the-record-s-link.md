@@ -15,7 +15,8 @@ Task #130: feat(docs): ADR and PDR records written as MADR 4 files in docs/decis
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Each adr and pdr record is written as `docs/decisions/NNNN-slug.md` (MADR 4: front matter with type, status, date and record uid; Context and Problem Statement, Considered Options, Decision Outcome, Consequences, Sections), with an index `docs/decisions/README.md`. The record stays the source (decision 9331); the files are never read back.
+- **Numbering:** a record gets its number the first time it is exported, stored in `links.madr`, so every device names it the same after sync. Dropped records keep theirs (the file says `rejected`), so a number is never reused. Alternative: number by creation order on the fly, rejected because a record synced late with an older time would renumber the others.
 
 ## Decision Outcome
 

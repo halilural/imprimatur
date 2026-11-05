@@ -15,7 +15,7 @@ Task #129: feat(docs): one structure for every repo's documents (arc42-lite, PRO
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+**Why not alternatives.**
 
 ## Decision Outcome
 

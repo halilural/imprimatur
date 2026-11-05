@@ -15,7 +15,7 @@ Task #118: perf(hooks): one process per hook event, activity logging opt-in.
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+**Rejected:** turning activity off by default. It would remove the Edits tab's tool-call rows, which the user sees and uses.
 
 ## Decision Outcome
 

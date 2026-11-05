@@ -15,7 +15,7 @@ Task #117: chore(db): bound the WAL and reclaim free pages.
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+**Rejected: switching to `auto_vacuum=INCREMENTAL`.** SQLite does not change `auto_vacuum` on a WAL database through VACUUM; the test showed it stayed 0. Changing it means leaving WAL with every other connection (hooks, MCP server, extension) closed.
 
 ## Decision Outcome
 

@@ -15,7 +15,7 @@ Task #121: feat(db): version retention (store after only, compact imports).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Version tables are compacted losslessly (option A): drop only what another stored value says, fill it back when history is read; a full backup before the first run
 
 ## Decision Outcome
 
