@@ -135,7 +135,7 @@ class SetupView {
     if (claude && !this.suggesting) {
       this.suggesting = true;
       sg.refreshSuggestions({ root, projectDir: c.projectDir, components: c.components, installed: c.installed, file: c.file, claude, home: c.home,
-        partsOf: c.partsOf, marketRepoOf: c.marketRepoOf, connected: c.connected, relevanceOf: c.relevanceOf, trusted: vscode.workspace.isTrusted })
+        partsOf: c.partsOf, marketRepoOf: c.marketRepoOf, connected: c.connected, relevanceOf: c.relevanceOf, entries: c.entries, trusted: vscode.workspace.isTrusted })
         .then((ran) => ran && this.refresh())
         .catch(() => {})
         .finally(() => (this.suggesting = false));
@@ -146,7 +146,11 @@ class SetupView {
     /** @type {Map<string, {verdict: string, why: string, n: number}>} */
     const verdicts = new Map((ranked?.picks ?? []).map((/** @type {any} */ v, /** @type {number} */ n) => [v.id, { ...v, n }]));
     const hidden = hiddenSuggestions(this.ctx, root);
-    const all = (s?.items ?? []).filter((/** @type {any} */ i) => !c.installed.includes(i.id) && !hidden.has(i.id));
+    // Technologies a recent prompt named and nothing installed covered (#144), this week, first.
+    const asked = require("./on-demand.js").recentOnDemand(root).filter((x) => Date.now() - x.at < require("./on-demand.js").WEEK)
+      .flatMap((x) => x.candidates.map((/** @type {any} */ cd) => ({ id: cd.id, name: String(cd.id).split("@")[0], description: cd.what, what: cd.what, installs: cd.installs, reads: cd.reads, flags: cd.flags ?? [], fits: [],
+        source: "prompt", trigger: `a prompt on ${new Date(x.at).toISOString().slice(0, 10)} named ${x.key}, and nothing installed covers it` })));
+    const all = [...asked, ...(s?.items ?? []).filter((/** @type {any} */ i) => !asked.some((a) => a.id === i.id))].filter((/** @type {any} */ i) => !c.installed.includes(i.id) && !hidden.has(i.id));
     const skipped = all.filter((/** @type {any} */ i) => verdicts.get(i.id)?.verdict === "skip");
     const items = all.filter((/** @type {any} */ i) => verdicts.get(i.id)?.verdict !== "skip")
       .map((/** @type {any} */ i, /** @type {number} */ n) => ({ i, n, v: verdicts.get(i.id) }))
@@ -161,7 +165,7 @@ class SetupView {
         description: s ? "nothing fits beyond what is installed" : "looking…" };
     const k = (/** @type {number} */ n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
     const stale = ranked && ranked.fingerprint !== s?.fingerprint;
-    const SOURCE = { repo: "this repo turns it on", rule: "rule", words: "stack match" };
+    const SOURCE = { prompt: "named in a prompt", repo: "this repo turns it on", rule: "rule", words: "stack match" };
     return { type: "group", label: "Suggested for this repo", context: "suggestions", icon: "extensions",
       description: `${items.length} plugin${items.length === 1 ? "" : "s"}${ranked ? ` · Claude's verdicts of ${new Date(ranked.at).toISOString().slice(0, 10)}${stale ? " (the list changed since: ask again)" : ""}` : ""}`,
       tooltip: "Plugins for this repo, each with what put it here: the repo's own .claude/settings.json, a rule (a file, a dependency or a command this repo shows, matched against the marketplaces' relevance rules and Anthropic's claude-code-setup table), or its stack's words. The sparkle asks Claude to order them and say install, study or skip. Vetted by the rules of #128.",
@@ -680,16 +684,22 @@ function suggestContext(root, ctx) {
   };
   /** The marketplaces' own relevance blocks (Claude Code's plugin suggestions), by plugin id, from their local copies. */
   const relevanceOf = /** @type {Record<string, any>} */ ({});
+  /** The official marketplace's entries by name (source, category), for the technologies index (#144). */
+  const entries = /** @type {Record<string, any>} */ ({});
   for (const [name, m] of Object.entries(markets)) {
     const list = JSON.parse(safeRead(path.join(String(/** @type {any} */ (m)?.installLocation ?? ""), ".claude-plugin", "marketplace.json")) || "{}").plugins;
-    for (const e of Array.isArray(list) ? list : []) if (e?.relevance && typeof e.name === "string") relevanceOf[`${e.name}@${name}`] = e.relevance;
+    for (const e of Array.isArray(list) ? list : []) {
+      if (typeof e?.name !== "string") continue;
+      if (e.relevance) relevanceOf[`${e.name}@${name}`] = e.relevance;
+      if (name === "claude-plugins-official") entries[e.name] = { source: e.source, category: e.category, author: e.author?.name };
+    }
   }
   const marketRepoOf = (/** @type {string} */ n) => String(markets[n]?.source?.repo ?? "");
   // Servers and connectors the last session already had: a plugin for the same one is not suggested.
   const projectDir = path.join(home, ".claude", "projects", as.projectSlug(as.gitRootOf(root)));
   const connected = [...(require("./session-context.js").connectedServers?.(projectDir, home) ?? [])];
   const slug = as.projectSlug(root);
-  return { components, installed, connected, partsOf, marketRepoOf, relevanceOf, home, projectDir,
+  return { components, installed, connected, partsOf, marketRepoOf, relevanceOf, entries, home, projectDir,
     file: path.join(ctx.globalStorageUri.fsPath, `suggestions-${slug}.json`), rankedFile: path.join(ctx.globalStorageUri.fsPath, `suggestions-claude-${slug}.json`) };
 }
 

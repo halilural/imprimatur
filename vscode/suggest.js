@@ -141,16 +141,24 @@ function readSuggestions(file) {
  * --available --json`, repo facts through `gh api`, what a plugin brings from the marketplace's copy.
  * @param {{root: string, projectDir?: string, components: Array<{name: string}>, installed: string[], file: string, claude: string, home: string,
  *   now?: number, run?: (cmd: string, args: string[]) => Promise<any>, partsOf?: (p: any) => {hooks: number, mcp: string[], brings?: string[], names?: string[]} | undefined,
- *   marketRepoOf?: (name: string) => string, connected?: string[], relevanceOf?: Record<string, any>, signals?: any, trusted?: boolean}} o
+ *   marketRepoOf?: (name: string) => string, connected?: string[], relevanceOf?: Record<string, any>, signals?: any, trusted?: boolean, entries?: Record<string, any>}} o
  * @returns {Promise<boolean>} whether it ran
  */
-async function refreshSuggestions({ root, projectDir = "", components, installed, file, claude, now = Date.now(), run = json, partsOf, marketRepoOf, connected = [], relevanceOf = {}, signals, trusted = false }) {
+async function refreshSuggestions({ root, projectDir = "", components, installed, file, claude, now = Date.now(), run = json, partsOf, marketRepoOf, connected = [], relevanceOf = {}, signals, trusted = false, entries }) {
   // The rules' version is part of the key: a change to them refreshes at once.
-  const stack = `v5|${root}|${components.map((c) => c.name).sort().join("|")}`;
+  const stack = `v6|${root}|${components.map((c) => c.name).sort().join("|")}`;
   const last = readSuggestions(file);
   if (last && last.stack === stack && now - last.at < DAY) return false;
   const rules = require("./suggest-rules.js");
   const available = (await run(claude, ["plugin", "list", "--available", "--json"]))?.available ?? [];
+  // The technologies index for the prompt hook (#144), from the same catalog.
+  if (entries)
+    try {
+      const od = require("./on-demand.js");
+      const f = od.indexFile();
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, JSON.stringify({ at: now, index: od.buildIndex(available, entries, (/** @type {any} */ p) => vet(p, undefined, partsOf?.(p))) }));
+    } catch {}
   const have = new Set(installed);
   const byId = new Map(available.map((/** @type {any} */ p) => [p.pluginId, p]));
   const repo = signals ?? rules.repoSignals(root, projectDir, { trusted });
