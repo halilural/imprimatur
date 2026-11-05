@@ -120,12 +120,28 @@ function fixRecordIds(db, repoId, findings) {
 }
 
 /**
+ * The Imprimatur MCP server Claude Code has registered for the user (setup.mjs writes it to
+ * ~/.claude.json): the extension ships only its bundle, so it cannot start mcp/server.mjs itself.
+ * @param {string} [home] @returns {{command: string, args: string[]} | undefined}
+ */
+function registeredServer(home = os.homedir()) {
+  try {
+    const s = JSON.parse(require("node:fs").readFileSync(path.join(home, ".claude.json"), "utf8")).mcpServers?.imprimatur;
+    return typeof s?.command === "string" && Array.isArray(s.args) ? { command: s.command, args: s.args.map(String) } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * The claude arguments: sonnet, the repo tools and Imprimatur's MCP server only, no settings (no hooks).
- * @param {string} mcpServer @param {string[]} [more] further imprimatur tools (Fix it on a docs finding adds record_update)
+ * @param {string | {command: string, args: string[]}} mcpServer the server script (run with this node), or a registered server
+ * @param {string[]} [more] further imprimatur tools (Fix it on a docs finding adds record_update)
  * @param {Record<string, string>} [env] the MCP server's environment (IMPRIMATUR_RECORD_UPDATE: the record ids record_update may change)
  */
 function claudeArgs(mcpServer, more = [], env) {
-  const mcp = JSON.stringify({ mcpServers: { imprimatur: { type: "stdio", command: process.execPath, args: [mcpServer], ...(env ? { env } : {}) } } });
+  const server = typeof mcpServer === "string" ? { command: process.execPath, args: [mcpServer] } : mcpServer;
+  const mcp = JSON.stringify({ mcpServers: { imprimatur: { type: "stdio", ...server, ...(env ? { env } : {}) } } });
   const tools = [...REPO_TOOLS, ...MCP_TOOLS, ...more.map((t) => `mcp__imprimatur__${t}`)];
   const { DENY } = require("./best-practice.js");
   return ["-p", "--model", MODEL, "--max-turns", String(MAX_TURNS), "--output-format", "json",
@@ -189,4 +205,4 @@ function startDetached(root) {
   }).unref();
 }
 
-module.exports = { MIN_RECORDS, targets, due, promptFor, fixPrompt, fixRecordIds, claudeArgs, runBackfill, maybeStart, metaKey, TIMEOUT_MS };
+module.exports = { MIN_RECORDS, targets, due, promptFor, fixPrompt, fixRecordIds, registeredServer, claudeArgs, runBackfill, maybeStart, metaKey, TIMEOUT_MS };
