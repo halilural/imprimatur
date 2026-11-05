@@ -1,6 +1,6 @@
 ---
 name: issues
-description: Run the repo's issue work the Imprimatur way. It covers opening one issue, splitting a plan or epic into issues, triaging what needs attention, keeping an issue in step with the work, and closing it with what shipped. An issue gets a category and priority label, a board Status and the sprint, and links: an epic's children become GitHub sub-issues, and work that is blocked gets "blocked by". Each issue also gets an Imprimatur task whose records hold the detail. Use when the user says /issues, "open an issue", "issue aç", "split this into issues", "böl", "triage", "what needs my attention", "close this", "epic aç", "sprint", or asks to plan work as issues.
+description: Run the repo's issue work the Imprimatur way. It covers opening one issue, splitting a plan or epic into issues, triaging what needs attention, keeping an issue in step with the work, and closing it with what shipped. An issue gets a category and priority label, a board Status and the sprint, and links. An epic's children become GitHub sub-issues, and work that is blocked gets "blocked by". Each issue also gets an Imprimatur task whose records hold the detail. Use when the user says /issues, "open an issue", "issue aç", "split this into issues", "böl", "triage", "what needs my attention", "close this", "epic aç", "sprint", or asks to plan work as issues.
 ---
 
 # Issues

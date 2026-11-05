@@ -371,17 +371,17 @@ async function fixWithClaude(provider, node) {
   const runner = require("./fix-runner.js");
   const db = require("./records.js").dbOf();
   const repo = provider.scopes.find((s) => !s.global)?.root ?? os.homedir();
-  /** @type {{prompt: string, label: string, edit: string[], editDirs: string[], read: string[], audit?: boolean, apply?: {from: string, to: string, files: string[], commit: string}}} */
+  /** @type {{prompt: string, label: string, edit: string[], editDirs: string[], read: string[], audit?: boolean, records?: any[], apply?: {from: string, to: string, files: string[], commit: string}}} */
   let fix = { prompt: "", label: "", edit: [], editDirs: [], read: [] };
   const kind = node?.fix?.kind;
   if (kind === "health") fix = { prompt: prompts.healthPrompt(node.fix.problem), label: path.basename(node.fix.problem.file), edit: [node.fix.problem.file], editDirs: [], read: [] };
   else if (kind === "findings") {
     const open = provider.openFindings();
     const files = open.map((/** @type {any} */ r) => r.links?.audit?.file).filter(Boolean);
-    if (open.length) fix = { prompt: prompts.findingsPrompt(open), label: `${open.length} recommendations`, edit: files, editDirs: [], read: [], audit: true };
+    if (open.length) fix = { prompt: prompts.findingsPrompt(open), label: `${open.length} recommendations`, edit: files, editDirs: [], read: [], audit: true, records: open };
   } else if (!kind && node?.recordId && db) {
     const r = db.record(node.recordId);
-    if (r) fix = { prompt: prompts.findingPrompt(r), label: r.title.slice(0, 40), edit: r.links?.audit?.file ? [r.links.audit.file] : [], editDirs: [], read: [], audit: true };
+    if (r) fix = { prompt: prompts.findingPrompt(r), label: r.title.slice(0, 40), edit: r.links?.audit?.file ? [r.links.audit.file] : [], editDirs: [], read: [], audit: true, records: [r] };
   }
   const skill = kind === "skill" ? node.fix.item : undefined;
   if (skill && !prompts.skillUpdatePrompt(skill)) return void vscode.window.showWarningMessage("Imprimatur: this skill's SOURCE.txt is not a plain GitHub source; review the change by hand.");
@@ -480,9 +480,16 @@ async function fixWithClaude(provider, node) {
   if (!fix.apply) {
     const edits = require("./fix-edits.js");
     const plan = edits.planEdits(edits.parseEdits(r.stdout), fix.edit);
+    // Findings Claude says are wrong or intended: dismissed with its reason when the user applies.
+    const said = edits.parseDismissals(r.stdout, fix.records?.length ?? 0).map((d) => ({ ...d, rec: /** @type {any[]} */ (fix.records)[d.n - 1] }));
+    // "other" (not fixed by an edit) is work for the user, not a false alarm: it stays open.
+    const drops = said.filter((d) => d.reason !== "other");
+    const yours = said.filter((d) => d.reason === "other");
     const skippedNote = plan.skipped.length ? `\n\nLeft out: ${plan.skipped.map((x) => `${x.file.replace(os.homedir(), "~")} (${x.why})`).join("; ")}` : "";
-    if (!plan.files.size) {
-      const pick = await vscode.window.showInformationMessage(`Imprimatur: Claude proposed no change for ${fix.label}.${skippedNote.replace(/\n+/g, " ")}`, "Show answer");
+    const dropNote = (drops.length ? `\n\nDismiss ${drops.length}:\n${drops.map((d) => `• ${d.rec.title.slice(0, 80)} (${d.reason}): ${d.why}`).join("\n")}` : "")
+      + (yours.length ? `\n\nNeeds you (stays open):\n${yours.map((d) => `• ${d.rec.title.slice(0, 80)}: ${d.why}`).join("\n")}` : "");
+    if (!plan.files.size && !drops.length) {
+      const pick = await vscode.window.showInformationMessage(`Imprimatur: Claude proposed no change for ${fix.label}.${(dropNote + skippedNote).replace(/\n+/g, " ")}`, "Show answer");
       if (pick) out.show();
       return;
     }
@@ -494,8 +501,9 @@ async function fixWithClaude(provider, node) {
       await vscode.commands.executeCommand("vscode.diff", vscode.Uri.file(file), vscode.Uri.file(proposed), `Fix it: ${path.basename(file)} (now ↔ proposed)`, { preview: false });
     }
     const files = [...plan.files.keys()].map((f) => f.replace(os.homedir(), "~"));
-    const ok = await vscode.window.showWarningMessage(`Apply Claude's changes to ${files.length} file${files.length === 1 ? "" : "s"}?`,
-      { modal: true, detail: `${files.join("\n")}${skippedNote}\n\nThe diffs are open. Nothing has changed yet.` }, "Apply");
+    const what = [files.length && `change ${files.length} file${files.length === 1 ? "" : "s"}`, drops.length && `dismiss ${drops.length} finding${drops.length === 1 ? "" : "s"}`].filter(Boolean).join(" and ");
+    const ok = await vscode.window.showWarningMessage(`Apply Claude's fix: ${what}?`,
+      { modal: true, detail: `${files.join("\n")}${dropNote}${skippedNote}\n\n${files.length ? "The diffs are open. " : ""}Nothing has changed yet.` }, "Apply");
     let wrote = 0;
     if (ok === "Apply")
       for (const [file, c] of plan.files) {
@@ -505,8 +513,21 @@ async function fixWithClaude(provider, node) {
         wrote++;
       }
     fs.rmSync(shown, { recursive: true, force: true });
-    if (!wrote) return void vscode.window.showInformationMessage(`Imprimatur: nothing applied${ok === "Apply" ? " (the files changed meanwhile)" : ""}.`);
-    applied = `applied ${wrote} change${wrote === 1 ? "" : "s"} to ${fix.label}`;
+    let dropped = 0;
+    if (ok === "Apply" && drops.length && db) {
+      const recsMod = require("./recs.js");
+      for (const d of drops) {
+        const cur = db.record(d.rec.id);
+        const link = recsMod.sourceOf(cur) === "audit" ? "audit" : "best";
+        if (!cur || cur.status !== "open" || !cur.links?.[link]) continue;
+        db.updateRecord(cur.id, { status: "dropped", links: { ...cur.links, [link]: { ...cur.links[link], reason: link === "audit" ? d.reason : d.reason === "local" ? "not-applicable" : d.reason === "plugin" ? "other" : d.reason } },
+          body: `${cur.body ?? ""}\n\n_Dismissed (${d.reason}, by Claude through Fix it, applied by the user):_ ${d.why}` }, { kind: "user" });
+        dropped++;
+      }
+    }
+    if (!wrote && !dropped) return void vscode.window.showInformationMessage(`Imprimatur: nothing applied${ok === "Apply" ? " (the files changed meanwhile)" : ""}.`);
+    applied = [wrote && `applied ${wrote} change${wrote === 1 ? "" : "s"}`, dropped && `dismissed ${dropped} finding${dropped === 1 ? "" : "s"}`,
+      yours.length && `${yours.length} need${yours.length === 1 ? "s" : ""} you: ${yours.map((d) => d.rec.title.slice(0, 50)).join("; ")}`].filter(Boolean).join(", ");
   }
   // The run has no MCP: the audit runs here, so the counts show what is left.
   if (fix.audit) await runAudit(provider);

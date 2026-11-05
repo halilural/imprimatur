@@ -24,3 +24,13 @@ test("fix edits (#156): the last edits block is read; only target files, an old 
   const dollar = planEdits([{ file: "/r/a.md", old: "a", new: "$& $1" }], ["/r/a.md"], () => "a");
   assert.equal(dollar.files.get("/r/a.md").after, "$& $1", "replacement text is literal");
 });
+
+test("fix edits (#156): dismissals by number, a known reason, once each, within the list", () => {
+  const { parseDismissals } = createRequire(import.meta.url)("../vscode/fix-edits.js");
+  const answer = "```imprimatur-dismiss\n" + JSON.stringify([
+    { n: 4, reason: "local", why: "60s is\nintended" }, { n: 5, reason: "plugin", why: "a plugin's AGENTS.md" }, { n: 4, reason: "false", why: "again" },
+    { n: 9, reason: "false", why: "out of range" }, { n: 2, reason: "delete-everything", why: "x" }, { n: "3", reason: "false", why: "not a number" },
+  ]) + "\n```";
+  assert.deepEqual(parseDismissals(answer, 8), [{ n: 4, reason: "local", why: "60s is intended" }, { n: 5, reason: "plugin", why: "a plugin's AGENTS.md" }]);
+  assert.deepEqual(parseDismissals("none", 8), []);
+});

@@ -60,4 +60,24 @@ function planEdits(edits, targets, read = (f) => fs.readFileSync(f, "utf8")) {
   return { files, skipped };
 }
 
-module.exports = { parseEdits, planEdits };
+/** Why the agent says a finding should be dismissed: wrong for its file, intended here, caused by a third-party plugin's file, or not a file fix. */
+const DISMISS = new Set(["false", "local", "plugin", "other"]);
+
+/**
+ * The last "imprimatur-dismiss" block: findings the agent says to dismiss, by their number in
+ * the prompt's list (1 to count), with a reason and one line of why. Anything else is left out.
+ * @param {string} answer @param {number} count @returns {Array<{n: number, reason: string, why: string}>}
+ */
+function parseDismissals(answer, count) {
+  const blocks = [...String(answer).matchAll(/```imprimatur-dismiss\s*\n([\s\S]*?)\n```/g)];
+  let v = [];
+  try {
+    v = JSON.parse(blocks.at(-1)?.[1] ?? "[]");
+  } catch {}
+  const seen = new Set();
+  return (Array.isArray(v) ? v : [])
+    .filter((d) => d && Number.isInteger(d.n) && d.n >= 1 && d.n <= count && DISMISS.has(d.reason) && !seen.has(d.n) && seen.add(d.n))
+    .map((d) => ({ n: d.n, reason: d.reason, why: String(d.why ?? "").replace(/[\r\n]+/g, " ").slice(0, 200) }));
+}
+
+module.exports = { parseEdits, planEdits, parseDismissals };
