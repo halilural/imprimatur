@@ -15,11 +15,13 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: inserting a real line above the changed line in the editor, rejected because the extension API cannot add real lines to a document — view zones that could do this are core-only, not available to extensions.
 
 ## Decision Outcome
 
 Editörde eski cümle üstte (0.14.0) — eklenti API'si editöre gerçek satır ekleyemez (view zone yalnız çekirdekte); cümle düzeyinde değişen satırın eski hâli o satırın üstündeki CodeLens satırında "− <eski metin>" (200 karakter, tamamı tooltip'te), yeni satır altında vurgulu; tek kelime değişikliği satır içinde kalır. (#5)
+
+Alternative: inserting a real line above the changed line in the editor, rejected because the extension API cannot add real lines to a document — view zones that could do this are core-only, not available to extensions.
 
 ## Consequences
 
@@ -27,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Panel and views](../ARCHITECTURE.md#panel)

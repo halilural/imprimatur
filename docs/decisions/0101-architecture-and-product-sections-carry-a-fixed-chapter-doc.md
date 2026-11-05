@@ -24,6 +24,7 @@ Architecture and product sections carry a fixed chapter (doc_sections.chapter); 
 **Context.** The documents had grown into 27 (architecture) and 17 (product) flat sections in whatever order they were written. #128 wants one structure, the same in every repo: arc42-lite for architecture, problem-to-metrics for product. The section mapping is in this task's analysis, and the user approved it (decision 9334).
 
 **Decision.**
+
 - **Column:** schema version 12 adds `doc_sections.chapter TEXT`, nullable. `CHAPTERS` in `db.js` lists the fixed ids and titles per kind:
   - architecture: goals, context, strategy, building-blocks, deployment, crosscutting, decisions, risks;
   - product: problem, users, goals, non-goals, features, metrics.
@@ -34,10 +35,12 @@ Architecture and product sections carry a fixed chapter (doc_sections.chapter); 
 - Section bodies now use headings from `####` down. Existing `###` in bodies still renders and parses.
 
 **Why not alternatives.**
+
 - Keeping sections at H2 and only grouping the contents would give no real chapter headings, so it would not meet the standard.
 - Shifting body headings down one level on render and back on parse would round-trip fragilely, with no fence tracking in the parser.
 
 **Limits.**
+
 - `shortcut:` moving a section under another chapter by editing the file is not read back. The file is rewritten from the DB. Use the panel or MCP for that.
 - An older Imprimatur (an MCP server or extension not yet restarted) renders the flat format again. Both formats parse, but the file can flip between them until every process runs this version.
 

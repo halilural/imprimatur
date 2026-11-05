@@ -24,6 +24,7 @@ Imprimatur is where the agent's toolset is seen and managed: everything the agen
 The user, on 2026-11-04: "My aim is for everything the agent touches and uses to come to the surface. I want to see whether third-party skills are up to date, have them versioned, and update them when needed. Repo-specific agent files stay in the repo, but what every repo needs is brought, installed and managed by Imprimatur. When Imprimatur is set up in a project, there is something like a checklist of what is missing that tells me to do it, in Imprimatur's own panel. Also: suggest well-adopted, high-star OSS agent repos that best match the repo (these skills, those plugins). And when work needs, say, Cloudflare and we have no skill for it, look on GitHub right away, because some technologies have skills, download it and use it."
 
 What the user gets:
+
 1. **Visible:** Agent setup shows every third-party skill, plugin, MCP server and hook script with its source, the installed version or commit, and its scope. An item installed twice is flagged. (#139)
 2. **Versioned and updatable:** "update available" with the changelog or diff, a one-click update, and a lock so updates are deliberate and reversible. (#140)
 3. **Must-haves brought by Imprimatur:** a baseline set ships with Imprimatur and is installed in every repo, with a per-repo opt-out. Imprimatur touches only what it installed. Repo-specific files stay in the repo. (#141, absorbs the install half of #134)

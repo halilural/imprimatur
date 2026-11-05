@@ -15,7 +15,7 @@ Task #148: feat(panel): the board look for the whole panel (palette, cards, type
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: restyling each component (`graphView.js`, `tasksView.js`, etc.) one by one, rejected because it would touch hundreds of rules across components.
 
 ## Decision Outcome
 
@@ -24,6 +24,7 @@ The board look comes from theme.js: on dark and light themes the panel redefines
 **Context.** The user wants the whole panel to look like the ponytail board (PDR 9348). The panel's components (`graphView.js`, `tasksView.js`) take their colours from about 25 `--vscode-*` variables and from theme.js tokens (`--surface`, `--line`, `--shadow`, `--r-lg`, `--card`). Restyling each component one by one would touch hundreds of rules.
 
 **Decision** (`vscode/theme.js`):
+
 - Under `body.vscode-dark, body.vscode-light`, the panel defines board tokens (`--b-bg`, `--b-panel`, `--b-card` gradient, `--b-line`, `--b-text`, `--b-muted` …). It points the `--vscode-*` variables it uses and its own tokens at them, so every tab follows at once.
   - Dark palette: after the board's dark palette.
   - Light palette: after the board's light palette.
@@ -36,6 +37,8 @@ The board look comes from theme.js: on dark and light themes the panel redefines
 **Why this way.** One place, no component edits, and easy to undo. A theme rule near the top of the page sets variables that the later component rules read.
 
 **Next (#151, #152).** The board's own components: KPI cards with sparklines, charts, the sessions table, the heatmap.
+
+Alternative: restyling each component (`graphView.js`, `tasksView.js`, etc.) one by one, rejected because it would touch hundreds of rules across components.
 
 ## Consequences
 

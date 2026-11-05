@@ -15,11 +15,15 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: also capturing Claude Code's `permission_prompt` and `idle_prompt` Notification types as separate waiting items, rejected because they say the same thing PermissionRequest and Stop already capture, and would have duplicated items rather than added information.
 
 ## Decision Outcome
 
 Waiting on you (0.19.0, #11) — Graph panelinde ikinci sekme. İkinci hook `hooks/waiting.mjs` oturum başına `.claude/imprimatur/waiting/<oturum>.jsonl`'a satır ekler: `question` (PreToolUse AskUserQuestion, seçenekler `detail`'de; ya da Stop'ta `?` ile biten satır), `command` (PermissionRequest: araç + komut), `verify` (Stop'ta `last_assistant_message`'ın "kontrol et / test et / doğrula / please verify / shall I…" geçen satırları; kod blokları ve tablo satırları atlanır), `input` (Notification `agent_needs_input` / `elicitation_*`); kapatanlar `answer` (UserPromptSubmit ilk satırı, PostToolUse AskUserQuestion cevabı) ve `step` (soru içermeyen tur sonu). Bir oturumdaki her satır, o oturumun önceki açık maddelerini kapatır (`vscode/waiting.js` `itemsOf`): izin verilse de reddedilse de ajan devam etmiştir. Yalnız kapatan olaylar, oturumun dosyası yoksa yazılmaz. Sekme: açıklar üstte, yeniden eskiye, tür ikonu, istek, oturum rengi (Edits şeritleriyle aynı), durum ve cevap; "show answered", ortak süzgeç; sekme/süzgeç `vscode.setState` ile yenilemeden sağ çıkar. `waiting/` değişince yalnız Graph yenilenir (önizleme değil: her turda yazılır). Gürültü kabul (kullanıcı, 2026-10-05: "sonra followup öneririm"). (#11)
+
+Waiting on you (0.19.0, #11) — Graph panelinde ikinci sekme. İkinci hook `hooks/waiting.mjs` oturum başına `.claude/imprimatur/waiting/<oturum>.jsonl`'a satır ekler: `question` (PreToolUse AskUserQuestion, seçenekler `detail`'de; ya da Stop'ta `?` ile biten satır), `command` (PermissionRequest: araç + komut), `verify` (Stop'ta `last_assistant_message`'ın "kontrol et / test et / doğrula / please verify / shall I…" geçen satırları; kod blokları ve tablo satırları atlanır), `input` (Notification `agent_needs_input` / `elicitation_*`); kapatanlar `answer` (UserPromptSubmit ilk satırı, PostToolUse AskUserQuestion cevabı) ve `step` (soru içermeyen tur sonu). Bir oturumdaki her satır, o oturumun önceki açık maddelerini kapatır (`vscode/waiting.js` `itemsOf`): izin verilse de reddedilse de ajan devam etmiştir. Yalnız kapatan olaylar, oturumun dosyası yoksa yazılmaz. Sekme: açıklar üstte, yeniden eskiye, tür ikonu, istek, oturum rengi (Edits şeritleriyle aynı), durum ve cevap; "show answered", ortak süzgeç; sekme/süzgeç `vscode.setState` ile yenilemeden sağ çıkar. `waiting/` değişince yalnız Graph yenilenir (önizleme değil: her turda yazılır). Gürültü kabul (kullanıcı, 2026-10-05: "sonra followup öneririm"). (#11)
+
+Alternative: also capturing Claude Code's `permission_prompt` and `idle_prompt` Notification types as separate waiting items, rejected because they say the same thing PermissionRequest and Stop already capture, and would have duplicated items rather than added information.
 
 ## Consequences
 
@@ -27,4 +31,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: File-based review data](../ARCHITECTURE.md#review-data)

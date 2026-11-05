@@ -15,11 +15,13 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: building the server on the official MCP SDK, rejected because it would need an `npm install` step on the work machine; the server runs dependency-free from the repo instead.
 
 ## Decision Outcome
 
 `mcp/server.mjs` — stdio, bağımlılıksız: satır başına bir JSON-RPC mesajı, stdout'a yalnız MCP, günlük stderr'e; stdin kapanınca çıkar. İki dönem: 2026-07-28 (`server/discover`, her istekte `_meta` `io.modelcontextprotocol/protocolVersion` + `clientInfo`, sonuçta `resultType: "complete"`; başka sürüm `-32022`) ve eski `initialize` (istenen sürüm destekleniyorsa o, yoksa 2025-11-25). SDK yok: hook'lar gibi repodan koşar, iş makinesinde `npm install` adımı yok.
+
+Alternative: building the server on the official MCP SDK, rejected because it would need an `npm install` step on the work machine; the server runs dependency-free from the repo instead.
 
 ## Consequences
 
@@ -27,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: MCP server](../ARCHITECTURE.md#mcp)

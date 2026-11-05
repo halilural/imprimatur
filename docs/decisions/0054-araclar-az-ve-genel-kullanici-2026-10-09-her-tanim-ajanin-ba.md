@@ -15,11 +15,13 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: many specific tools, one per action, rejected because every tool definition enters the agent's context; a few general tools are used instead.
 
 ## Decision Outcome
 
 Araçlar az ve genel (kullanıcı, 2026-10-09; her tanım ajanın bağlamına girer, #29): `where_we_left_off`, `task_list`, `task_get`, `task_upsert`, `record_add` (`kind` ile todo|question|answer|decision|note|fixme|adr|pdr|test; görev yoksa açılır), `record_update`, `pointer_set`, `search` (`repo: "*"` bütün repolar). Sonuç hem `structuredContent` hem aynı JSON metin; aracın kendi hatası `isError` (model düzeltir), bilinmeyen araç `-32602`. SQL yok: hepsi `vscode/db.js`.
+
+Alternative: many specific tools, one per action, rejected because every tool definition enters the agent's context; a few general tools are used instead.
 
 ## Consequences
 
@@ -27,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: MCP server](../ARCHITECTURE.md#mcp)

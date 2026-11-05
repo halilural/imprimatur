@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.128.4",
+  "version": "0.129.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -392,6 +392,11 @@
       {
         "command": "imprimatur.setup.writeAgentFiles",
         "title": "Write the Missing Agent Files (AGENTS.md, CLAUDE.md, .claude/rules/docs.md)",
+        "category": "Imprimatur"
+      },
+      {
+        "command": "imprimatur.setup.writeDocLint",
+        "title": "Write the Missing Documentation Lint Configs (markdownlint, cspell, lychee, Vale)",
         "category": "Imprimatur"
       },
       {

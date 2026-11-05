@@ -15,11 +15,15 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: uninstalling the conflicting Mermaid Chart extension instead of defaulting Imprimatur's own Mermaid diff off, rejected by the user ("Kaldırmıyorum; agent review tarafını kaldıralım, Mermaid chart'larını etkileyen") — the user wanted to keep Mermaid Chart and have Imprimatur's feature step aside instead.
 
 ## Decision Outcome
 
 Mermaid farkı (0.11.0; 0.17.0'dan beri varsayılan KAPALI, ayar `imprimatur.mermaidDiff`, #9) — iki Mermaid önizleme eklentisi (Mermaid Chart + Markdown Mermaid Zoom) aynı webview'da çakışıyor (Mermaid Zoom readme), kullanıcı Mermaid Chart'ı tutuyor; kapalıyken önizleme Mermaid bloklarına hiç dokunmaz. Açıkken: önizlemede ajanın değiştirdiği bir Mermaid flowchart'ı kopyadaki eşi (ortak satırı en çok olan Mermaid bloğu) ile karşılaştırılır; render'da (dosyaya dokunmadan) diyagram kaynağının sonuna renk satırları eklenir: yeni düğüm yeşil kalın kenar, etiketi değişen turuncu, silinen düğüm kırmızı kesikli olarak geri eklenir; yeni ok yeşil, etiketi değişen turuncu (`linkStyle`), silinen ok kırmızı kesikli geri eklenir. Diyagramın üstünde açıklama satırı ve ✓ Accept (çit aralığı). Kaynak: Flow Lens `classDef added/modified/deleted`. İlk sürüm `flowchart`/`graph`; `&` ile çoklu bağlantı ve diğer diyagram türleri kapsam dışı. (#9)
+
+Mermaid farkı (0.11.0; 0.17.0'dan beri varsayılan KAPALI, ayar `imprimatur.mermaidDiff`, #9) — iki Mermaid önizleme eklentisi (Mermaid Chart + Markdown Mermaid Zoom) aynı webview'da çakışıyor (Mermaid Zoom readme), kullanıcı Mermaid Chart'ı tutuyor; kapalıyken önizleme Mermaid bloklarına hiç dokunmaz. Açıkken: önizlemede ajanın değiştirdiği bir Mermaid flowchart'ı kopyadaki eşi (ortak satırı en çok olan Mermaid bloğu) ile karşılaştırılır; render'da (dosyaya dokunmadan) diyagram kaynağının sonuna renk satırları eklenir: yeni düğüm yeşil kalın kenar, etiketi değişen turuncu, silinen düğüm kırmızı kesikli olarak geri eklenir; yeni ok yeşil, etiketi değişen turuncu (`linkStyle`), silinen ok kırmızı kesikli geri eklenir. Diyagramın üstünde açıklama satırı ve ✓ Accept (çit aralığı). Kaynak: Flow Lens `classDef added/modified/deleted`. İlk sürüm `flowchart`/`graph`; `&` ile çoklu bağlantı ve diğer diyagram türleri kapsam dışı. (#9)
+
+Alternative: uninstalling the conflicting Mermaid Chart extension instead of defaulting Imprimatur's own Mermaid diff off, rejected by the user ("Kaldırmıyorum; agent review tarafını kaldıralım, Mermaid chart'larını etkileyen") — the user wanted to keep Mermaid Chart and have Imprimatur's feature step aside instead.
 
 ## Consequences
 
@@ -27,4 +31,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Panel and views](../ARCHITECTURE.md#panel)

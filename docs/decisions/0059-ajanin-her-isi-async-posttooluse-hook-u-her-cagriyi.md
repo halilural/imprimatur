@@ -15,7 +15,7 @@ Task #55: feat(graph): everything the agent does: reads, searches, web, MCP, sub
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: parsing session transcripts for activity instead of a dedicated hook, rejected because transcripts are deleted after 30 days while the hook writes instantly and simply.
 
 ## Decision Outcome
 
@@ -25,10 +25,12 @@ Kaynak: hook (transkript ayrıştırma değil): transkriptler 30 günde silinir,
 Satır: {t, session, id (tool_use_id), tool, kind (edit|bash|read|search|web|mcp|agent|skill|other), what (girdi özeti ≤160), out (çıktı özeti ≤240), ms, agent (alt ajan içindeyse agent_id), agentId (Agent çağrısının yanıtındaki), failed}.
 Grafik: düzenleme satırıyla aynı tool_use_id'li etkinlik satırı gizlenir; görev şeridi oturumdaki en yakın görevden; varsayılan açık: düzenleme, kayıt, alt ajan, skill, web, MCP; kapalı: okuma, arama, Bash, diğer. En yeni 1.500 etkinlik satırı. Arşiv 7 gün.
 
+Alternative: parsing session transcripts for activity instead of a dedicated hook, rejected because transcripts are deleted after 30 days while the hook writes instantly and simply.
+
 ## Consequences
 
 Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: File-based review data](../ARCHITECTURE.md#review-data)

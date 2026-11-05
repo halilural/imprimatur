@@ -15,7 +15,7 @@ Task #109: feat(social): social media as a living document — posts per channel
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: an existing static social-media skill (e.g. the Social Media Skills collection, published through WoopSocial), rejected because it encodes platform rules statically instead of reading them live at writing time.
 
 ## Decision Outcome
 
@@ -24,10 +24,13 @@ Social media is a fifth living document (Social), off by default per repo; /soci
 User 2026-10-24: "sosyal medya için skill bul… anlık hangi platformda paylaşılacaksa onun dokümanlarına baksın hintleri edinsin ona göre oluştursun"; "Imprimatur sosyal medyayı da takip etsin, nasıl analiz product glossary, sosyal medya için de oluşsun"; "enable disable edilebilir bir şey olsun ve default disable olsun".
 
 Decided:
+
 - Skill: no existing one reads platform rules live (Social Media Skills, 106 skills, encodes them statically and publishes via WoopSocial). /social-post fetches the official pages each run (WebFetch → curl → browser → WebSearch → the user pastes), writes a dated rules card, fits the post, counts with a script (X: weighted, URL 23), checks facts. A rule not readable → "rules not checked", never memory presented as read. Show HN asks for hand-written text → facts + outline only. Never posts.
 - Document kind "social" (schema 10), one section per channel: rules card, post, Status (planned/posted/link), Results, Learned. docs/SOCIAL.md synced like the others.
 - Off by default, per repo, in the committed .claude/imprimatur.json {"social": true} (like process checks and docs settings: hooks, MCP and the extension all read it). Commands Turn on / Turn off. Off: no Social page, MCP doc tools refuse the kind, the file is neither written nor read; the document is kept.
 - Results by hand for now; later from public APIs where they exist (HN, Marketplace installs).
+
+Alternative: an existing static social-media skill (e.g. the Social Media Skills collection, published through WoopSocial), rejected because it encodes platform rules statically instead of reading them live at writing time.
 
 ## Consequences
 

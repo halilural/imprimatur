@@ -15,11 +15,13 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: fading older edits while highlighting only the latest one (the 0.3.0–0.11 behavior), rejected because the faded box's opacity covered the Accept button.
 
 ## Decision Outcome
 
 Tek görünüm (0.12.0) — önceki ve son ajan düzenlemesi aynı görünür (kullanıcı, 2026-10-03): önizleme, editör, sağ kenar çentikleri, CodeLens ve durum çubuğunda soluk/parlak ayrımı yok; düzenleme sırası tarihçe düğmesinde ve Agent Change Graph'ta. (0.3.0–0.11'deki "son düzenleme parlak, öncekiler soluk" kaldırıldı; soluk kutunun `opacity`'si Accept düğmesini örtüyordu.) (#5)
+
+Alternative: fading older edits while highlighting only the latest one (the 0.3.0–0.11 behavior), rejected because the faded box's opacity covered the Accept button.
 
 ## Consequences
 
@@ -27,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Panel and views](../ARCHITECTURE.md#panel)

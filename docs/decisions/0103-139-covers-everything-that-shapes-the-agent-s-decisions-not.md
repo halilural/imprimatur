@@ -19,11 +19,12 @@ The options are not listed apart; the decision below says what was chosen and wh
 
 ## Decision Outcome
 
-#139 covers everything that shapes the agent's decisions, not only plugins and skills: instruction files, settings and permissions, hook-injected context, tools with their instructions, the environment, and data sources
+\#139 covers everything that shapes the agent's decisions, not only plugins and skills: instruction files, settings and permissions, hook-injected context, tools with their instructions, the environment, and data sources
 
 The user, on 2026-11-04. They asked whether plugins and skills are all I think of as "agent". Shown the six groups below, they answered: "these are all of what I mean."
 
 What Agent setup must show, each item with where it comes from and, where it applies, its version and its size in context:
+
 1. **Instruction files:** CLAUDE.md at every scope and folder, @imports, AGENTS.md, `.claude/rules`, auto memory, other tools' rules. Already shown.
 2. **Settings and permissions:** allow, deny and ask rules; permission mode; model and effort; `env`; output style; sandbox; additional directories; managed policy. Each with the scope that sets it. Partly shown.
 3. **Hook-injected context:** what each SessionStart and UserPromptSubmit hook writes into the session (Imprimatur's where-we-left-off, ponytail, adhd-always-on, context-mode …) and how long it is. Not shown.

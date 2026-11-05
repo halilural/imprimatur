@@ -27,4 +27,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Product: Project glossary: a third living document (#91)](../PRODUCT.md#glossary-feature)

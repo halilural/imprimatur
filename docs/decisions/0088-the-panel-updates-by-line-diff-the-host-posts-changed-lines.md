@@ -15,7 +15,7 @@ Task #115: perf(extension): build the panel only when its inputs change, send le
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: sending parts (pane, rows) by name instead of a line diff, rejected because each part would need its own apply path on the page side, and queued part updates would have to be merged.
 
 ## Decision Outcome
 
@@ -24,6 +24,7 @@ The panel updates by line diff: the host posts changed lines against a versioned
 **Context.** Every panel update posted the whole page: 379 KB on Home and 587 KB on Edits. The page parsed it again in full. A measured typical change was 1 line (3.8 KB) on Home. On Edits it was 210 lines (118 KB), because a new row at the top shifted `data-i` on every row below it, and the hover-preview JSON was one long line.
 
 **Decision.**
+
 - Edit rows carry stable ids counted from the oldest row (`data-i = rows - 1 - i`). The hover-preview JSON is an object keyed by those ids, one row per line. A new row then changes only its own lines.
 - The host keeps the lines it last sent (`vscode/line-diff.js`). An update goes as `{type: "diff", base, ver, ops}`. Each op is `[keep, delete, insert[]]`, computed with Myers' O(ND) diff over the lines between the common head and tail.
 - The host sends the whole page as `{type: "render", html, ver}` instead when:
@@ -36,6 +37,8 @@ The panel updates by line diff: the host posts changed lines against a versioned
 **Why not send parts (pane, rows) by name?** The parts would need a new page-side apply path for each part, and queued part updates would have to be merged. A line diff works for every tab with one apply function. The page already merges updates while a mouse button is pressed: it applies every diff to its copy at once, and draws only the latest copy.
 
 **Consequences.** A typical update is a few KB. The extension keeps one page of lines in memory, under 1 MB after Edits paging. Messages are ordered and lossless while the webview lives. A torn-down webview reloads from `html`, and the host then starts again from a full render.
+
+Alternative: sending parts (pane, rows) by name instead of a line diff, rejected because each part would need its own apply path on the page side, and queued part updates would have to be merged.
 
 ## Consequences
 

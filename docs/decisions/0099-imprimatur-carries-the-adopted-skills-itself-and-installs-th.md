@@ -15,7 +15,7 @@ Task #134: feat(skills): vet community doc skills and ship them through the mark
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: adopt an existing OSS agent-config manager (rulesync, getsentry/dotagents or ruler) instead of carrying skills inside Imprimatur, rejected because adopting one would add a second source of truth and its own runtime (npm, git hooks, network).
 
 ## Decision Outcome
 
@@ -24,11 +24,14 @@ Imprimatur carries the adopted skills itself and installs them automatically; wh
 The user, on 2026-11-04, while six community repos were being vetted (planning-with-files, marketingskills, Understand-Anything, archify, paperclip, claude-mem): "I want Imprimatur to adopt these directly: hold the skills inside itself and install them automatically, or feed on them somehow."
 
 What it means, refining decision 9331 (skills from a marketplace, kept in sync):
+
 - **Carry:** Imprimatur's own plugin and marketplace bundle the adopted skills (with their license and source commit). Imprimatur's setup installs them in every repo with no manual step, and an Imprimatur update brings their new versions. This keeps "from a marketplace, synced": Imprimatur is that marketplace.
 - **Feed on:** when a repo is not a skill that can be carried (an app, a service, a memory system, an incompatible license), Imprimatur takes its useful ideas into its own features instead.
 - Every adopted item is vetted first: license allows redistribution (MIT/Apache), no hook or network behaviour we have not read, no second task or memory store competing with Imprimatur's.
 
 Open: per-repo opt-out for a bundled skill; how upstream updates are pulled (a pinned commit bumped by us, reviewed).
+
+Alternative: adopt an existing OSS agent-config manager (rulesync, getsentry/dotagents or ruler) instead of carrying skills inside Imprimatur, rejected because adopting one would add a second source of truth and its own runtime (npm, git hooks, network).
 
 ## Consequences
 
@@ -36,4 +39,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Product: The baseline every repo gets](../PRODUCT.md#baseline)

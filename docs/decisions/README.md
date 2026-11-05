@@ -121,3 +121,5 @@ Architecture (ADR) and product (PDR) decisions, one file each in MADR 4 form. A 
 | [0109](0109-decisions-as-madr-4-files-numbered-once-in-the-record-s-link.md) | Decisions as MADR 4 files: numbered once in the record's links, generated beside the documents,… | ADR | accepted | 2026-11-05 | #130 |
 | [0110](0110-agents-md-through-the-checklist-templates-for-a-repo-with-no.md) | AGENTS.md through the checklist: templates for a repo with none, Fix it for splitting an existing… | ADR | accepted | 2026-11-05 | #133 |
 | [0111](0111-documentation-rules-in-setup-audit-as-imprimatur-s-own-imp-d.md) | Documentation rules in setup_audit as Imprimatur's own IMP-DOC rules, decision rules reported once… | ADR | accepted | 2026-11-05 | #131 |
+| [0112](0112-fix-it-on-imp-doc-001-005-runs-claude-with-imprimatur-s-mcp.md) | Fix it on IMP-DOC-001..005 runs Claude with Imprimatur's MCP tools, not as a file diff | ADR | accepted | 2026-11-05 | #131 |
+| [0113](0113-doc-linting-generated-markdown-is-tidied-where-it-is-made-ag.md) | Doc linting: generated Markdown is tidied where it is made; Agent Setup writes four lint configs… | ADR | accepted | 2026-11-05 | #132 |

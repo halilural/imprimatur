@@ -15,11 +15,13 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: showing the user's own request text as the Description column, rejected because on short replies (e.g. "sure") it was meaningless.
 
 ## Decision Outcome
 
 Graph açıklaması (0.19.0, #8) — Açıklama sütunu artık kullanıcının isteği değil (kısa cevaplarda "olur" gibi anlamsızdı; kullanıcı, 2026-10-05): sırayla tarihçe satırının `intent`'i (Bash'te aracın `description`'ı; yoksa dökümde bu turdaki, yani kullanıcının son mesajından sonraki son ajan metninin ilk cümlesi, ≤ 120), yoksa `summaryOf`: ilk değişikliğin üstündeki en yakın Markdown başlığı + ilk değişen satır (liste işareti, vurgu, bağlantı sözdizimi atılır). İstek satırın tooltip'inde ve süzgeçte. Oturum sütunu dökümdeki son `ai-title` kaydı (`title`), yoksa kısa oturum kimliği; tam kimlik tooltip'te. Hook ikisini de (`intent`, `title`) tarihçe satırına yazar; Waiting satırları da `title` taşır.
+
+Alternative: showing the user's own request text as the Description column, rejected because on short replies (e.g. "sure") it was meaningless.
 
 ## Consequences
 
@@ -27,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Panel and views](../ARCHITECTURE.md#panel)

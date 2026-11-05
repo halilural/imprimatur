@@ -15,30 +15,11 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: tying the color overlay to git's stage/commit state, rejected — the user explicitly wanted agent change tracking independent of git, persisting even after commit ("git stage'e bağlı olmasın... commit olsa bile change management'ı tut").
 
 ## Decision Outcome
 
-Ajanın değiştirdiği dosyalar, kullanıcı kabul edene kadar editörde Word'ün
-izlenen değişiklikleri gibi renkli görünür; git'e (stage, commit) bağlı
-değildir, commit'ten sonra da durur. Bağımsız modül
-([#3](https://github.com/halilural/imprimatur/issues/3),
-[#5](https://github.com/halilural/imprimatur/issues/5), epic
-[#2](https://github.com/halilural/imprimatur/issues/2)); 2026-10-03'ten beri ayrı public repoda:
-[halilural/imprimatur](https://github.com/halilural/imprimatur) (kendi issue'ları ve panosu); aşağıdaki yollar o reponun köküne göredir. Bu makinede global kurulu
-([#4](https://github.com/halilural/imprimatur/issues/4)).
-
-```mermaid
-flowchart LR
-  A[Claude Code: Edit / Write] -->|PreToolUse| H[hooks/baseline.mjs]
-  H -->|kopya yoksa| B[.claude/imprimatur/baseline/&lt;yol&gt;]
-  H -->|her düzenleme| T[.claude/imprimatur/history/&lt;yol&gt;.jsonl]
-  B --> X[VS Code eklentisi]
-  T -->|son düzenleme öncesi| X
-  F[çalışma dosyası] --> X
-  X -->|satır LCS + değişen satırda kelime LCS| D[renkler: son düzenleme parlak, öncekiler soluk]
-  K[Accept / Accept all] --> B
-```
+Alternative: tying the color overlay to git's stage/commit state, rejected — the user explicitly wanted agent change tracking independent of git, persisting even after commit ("git stage'e bağlı olmasın... commit olsa bile change management'ı tut").
 
 ## Consequences
 
@@ -46,4 +27,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Installation and distribution](../ARCHITECTURE.md#deployment)

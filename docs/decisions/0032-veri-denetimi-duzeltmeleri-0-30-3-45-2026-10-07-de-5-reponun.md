@@ -15,11 +15,13 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: auto-closing question-shaped `verify` steps once some later event looks like an answer, deliberately not done — a wrongly closed request is worse than one left open.
 
 ## Decision Outcome
 
 Veri denetimi düzeltmeleri (0.30.3, #45; 2026-10-07'de 5 reponun verisi denetlendi) — (1) Bash düzenlemesi `PostToolUseFailure`'da da kaydedilir (hata veren komutun önceden yaptığı değişiklik kayboluyor, önceki düzenlemenin "after"ına yazılıyordu); PreToolUse'da 6 saatten eski `pending/` dosyaları süpürülür; `$R/x.md` gibi değişken yolu yakalanmaz. (2) Görev adım bazında: `tasks.js` `stepTask` = adımın metni bir anahtarla başlıyorsa o ("#88: …"), yoksa maddenin görevi; `normKey` modelin `"80"`ini `#80` yapar; audit bütün asks aynı anahtarla başlıyorsa maddeye o görevi yazar. `todo-done.js` adım bazında tikler; `openSteps` / `waitingSteps` adımın görevini taşır. (3) Bilinmeyen kayıt türü (eski `sent`) hiçbir şeyi kapatmaz (`waiting.js` `CLOSES`). (4) Grafik repoda olmayan (silinmiş, adı değişmiş) dosyanın geçmişini göstermez (açık, kaydedilmemiş belge hariç). (5) `latestBefore` log'u sondan 64 KB'lık parçalarla okur. Bilerek değişmeyen: soru biçimli `verify` maddeleri açık kalır (yanlış kapanan istek açık kalandan kötü).
+
+Alternative: auto-closing question-shaped `verify` steps once some later event looks like an answer, deliberately not done — a wrongly closed request is worse than one left open.
 
 ## Consequences
 
@@ -27,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: File-based review data](../ARCHITECTURE.md#review-data)

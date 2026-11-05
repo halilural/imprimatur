@@ -15,11 +15,15 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: VS Code's built-in Timeline panel (showing agent edits like git commits, the same panel Git Graph-style extensions use), rejected because `registerTimelineProvider` is a proposed API only (absent from stable `vscode.d.ts`) and a published, non-Insiders extension cannot register against it without `--enable-proposed-api`, which only works for a locally run, unpublished build.
 
 ## Decision Outcome
 
 Tarihçe düğmesi (0.5.0, #7) — dosyanın tarihçesi varsa durum çubuğunda hep görünen "$(history) N agent edits" düğmesi (Accept all sonrası da); tıklayınca ajanın düzenlemeleri git log gibi yeniden eskiye listelenir (no, saat, araç, oturum, +/− satır); seçilen düzenleme yerleşik `vscode.diff` ile açılır: önce = o satırın `before`'u, sonra = bir sonraki satırın `before`'u ya da şimdiki metin; içerik `imprimatur:` şemalı salt-okunur belge sağlayıcısından. VS Code Timeline paneli kararlı API'de değil (önerilen API), kullanılmaz. (#7)
+
+Tarihçe düğmesi (0.5.0, #7) — dosyanın tarihçesi varsa durum çubuğunda hep görünen "$(history) N agent edits" düğmesi (Accept all sonrası da); tıklayınca ajanın düzenlemeleri git log gibi yeniden eskiye listelenir (no, saat, araç, oturum, +/− satır); seçilen düzenleme yerleşik `vscode.diff` ile açılır: önce = o satırın `before`'u, sonra = bir sonraki satırın `before`'u ya da şimdiki metin; içerik `imprimatur:` şemalı salt-okunur belge sağlayıcısından. VS Code Timeline paneli kararlı API'de değil (önerilen API), kullanılmaz. (#7)
+
+Alternative: VS Code's built-in Timeline panel (showing agent edits like git commits, the same panel Git Graph-style extensions use), rejected because `registerTimelineProvider` is a proposed API only (absent from stable `vscode.d.ts`) and a published, non-Insiders extension cannot register against it without `--enable-proposed-api`, which only works for a locally run, unpublished build.
 
 ## Consequences
 
@@ -27,4 +31,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Panel and views](../ARCHITECTURE.md#panel)

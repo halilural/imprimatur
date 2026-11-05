@@ -15,11 +15,13 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: a silent fallback or a JSON backup store when `node:sqlite` cannot load, rejected — `db.js` throws an explicit error naming the Node version instead.
 
 ## Decision Outcome
 
 Motor — Node'un yerleşik `node:sqlite` (`DatabaseSync`): native modül yok, tek evrensel vsix. Eklenti VS Code'un Node'unda (1.141 = Electron 43, Node 24: bayraksız), hook'lar ve testler sistem Node'unda (≥ 22.13: bayraksız; "experimental" uyarısı yalnız bu uyarı için susturulur). `node:sqlite` yüklenemezse `db.js` açık hata fırlatır (Node sürümüyle); sessiz geri dönüş, JSON yedeği yok.
+
+Alternative: a silent fallback or a JSON backup store when `node:sqlite` cannot load, rejected — `db.js` throws an explicit error naming the Node version instead.
 
 ## Consequences
 
@@ -27,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Local database and data model](../ARCHITECTURE.md#database)

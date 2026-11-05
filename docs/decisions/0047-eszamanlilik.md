@@ -15,11 +15,13 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: default deferred transactions (`BEGIN DEFERRED`), rejected because the read-to-write lock upgrade can hit `SQLITE_BUSY` that `busy_timeout` does not wait for; every write starts with `BEGIN IMMEDIATE` instead.
 
 ## Decision Outcome
 
 Eşzamanlılık — her bağlantı açılışta `journal_mode=WAL`, `synchronous=NORMAL`, `busy_timeout=5000`, `foreign_keys=ON`. Okumalar yazmayı beklemez. Her yazma `BEGIN IMMEDIATE` ile başlar (kilit en başta alınır; okuma→yazma yükseltmesindeki, busy_timeout'un beklemediği SQLITE_BUSY olmaz); yeni dosyanın WAL'e ilk geçişi de busy_timeout'u beklemez, 5 sn yeniden denenir, kısa sürer, kaydı ve sürüm satırını aynı transaction'da yazar. Aynı anda birden çok oturum, hook ve eklenti yazar: testler 12 sürecin aynı anda yeni dosyayı açmasını ve yazmasını kapsar.
+
+Alternative: default deferred transactions (`BEGIN DEFERRED`), rejected because the read-to-write lock upgrade can hit `SQLITE_BUSY` that `busy_timeout` does not wait for; every write starts with `BEGIN IMMEDIATE` instead.
 
 ## Consequences
 
@@ -27,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Local database and data model](../ARCHITECTURE.md#database)

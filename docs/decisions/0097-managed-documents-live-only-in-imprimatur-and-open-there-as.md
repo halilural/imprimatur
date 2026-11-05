@@ -15,7 +15,7 @@ Task #128: Epic: one documentation standard in every repo (arc42-lite + C4 + MAD
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: keep documents in the repo as docs-as-code with a per-repo export switch, weighed in the follow-up research (where other tools keep design and agent docs): shared design docs are kept in the repo by nearly every tool, for review, forks and agents without the MCP server; not adopted in this PDR, though the epic's direction later changed (decision: "docs stay in the repo as docs-as-code") and adopted exactly this instead.
 
 ## Decision Outcome
 
@@ -24,15 +24,19 @@ Managed documents live only in Imprimatur and open there as read-only Markdown; 
 The user, on 2026-11-03: the documents Imprimatur manages need not be in the repo too. Keeping them in two places is pointless; they should live only in Imprimatur and open effectively from there.
 
 **Today:**
+
 - `imprimatur.docs.export` (on by default) writes `docs/ARCHITECTURE.md`, `PRODUCT.md` and `GLOSSARY.md` from the database on every section change; every commit today touched `docs/ARCHITECTURE.md`.
 - Agents already read documents through `doc_get`.
 - Repos also hold hand-written Markdown: dirtywork 28 files in 11 folders, groundwork 28 in 18, investment 16 in 8.
 
 **Plan:**
+
 1. A read-only virtual document per document and section, shown in VS Code's Markdown preview with Imprimatur's renderer, opened from the panel, the command palette and a quick pick of sections.
 2. Export off, then removed; the generated files are taken out of each repo in one commit.
 3. Hand-written Markdown is taken in repo by repo, from a list the user approves, then removed from the repo.
 4. Instructions and README point at Imprimatur, not files.
+
+Alternative: keep documents in the repo as docs-as-code with a per-repo export switch, weighed in the follow-up research (where other tools keep design and agent docs): shared design docs are kept in the repo by nearly every tool, for review, forks and agents without the MCP server; not adopted in this PDR, though the epic's direction later changed (decision: "docs stay in the repo as docs-as-code") and adopted exactly this instead.
 
 ## Consequences
 
@@ -40,4 +44,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Design documents ↔ Markdown files (docs sync)](../ARCHITECTURE.md#docs-sync)

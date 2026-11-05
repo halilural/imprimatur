@@ -16,6 +16,7 @@ Task #130: feat(docs): ADR and PDR records written as MADR 4 files in docs/decis
 ## Considered Options
 
 Each adr and pdr record is written as `docs/decisions/NNNN-slug.md` (MADR 4: front matter with type, status, date and record uid; Context and Problem Statement, Considered Options, Decision Outcome, Consequences, Sections), with an index `docs/decisions/README.md`. The record stays the source (decision 9331); the files are never read back.
+
 - **Numbering:** a record gets its number the first time it is exported, stored in `links.madr`, so every device names it the same after sync. Dropped records keep theirs (the file says `rejected`), so a number is never reused. Alternative: number by creation order on the fly, rejected because a record synced late with an older time would renumber the others.
 
 ## Decision Outcome
@@ -23,6 +24,7 @@ Each adr and pdr record is written as `docs/decisions/NNNN-slug.md` (MADR 4: fro
 Decisions as MADR 4 files: numbered once in the record's links, generated beside the documents, linked both ways
 
 Each adr and pdr record is written as `docs/decisions/NNNN-slug.md` (MADR 4: front matter with type, status, date and record uid; Context and Problem Statement, Considered Options, Decision Outcome, Consequences, Sections), with an index `docs/decisions/README.md`. The record stays the source (decision 9331); the files are never read back.
+
 - **Numbering:** a record gets its number the first time it is exported, stored in `links.madr`, so every device names it the same after sync. Dropped records keep theirs (the file says `rejected`), so a number is never reused. Alternative: number by creation order on the fly, rejected because a record synced late with an older time would renumber the others.
 - **Content:** the record's body is the decision outcome, its task the context. Options and consequences are the body's lines that name them, else the file says they are not listed apart: the records are free text, and inventing them would be worse.
 - **Links:** under each section, the generated file adds `<!-- imprimatur:decisions --> Decisions: [ADR 0012](decisions/…)`; docs-sync skips that line when reading the file back. Each decision file lists the sections built on it.

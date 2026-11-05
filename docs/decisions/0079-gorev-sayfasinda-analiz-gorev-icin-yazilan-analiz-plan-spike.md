@@ -29,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Product: A task's analysis](../PRODUCT.md#task-analysis)

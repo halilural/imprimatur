@@ -24,6 +24,7 @@ Device sync leaves the public repo as a private plugin; the public code keeps on
 **Context:** The repo is public and is going to the Marketplace. The user wants their own things private (the Cloudflare Worker and its D1 id, the sync setup) and wants the public code to carry no sync code.
 
 **Decision:**
+
 - Public: `config.json` gets `plugins: [paths]`. `openDb` loads them in every process (extension, hooks, MCP). `db.js` emits `onWrite(entity, row, fields)`. The extension calls `activate(context, api)` on each plugin.
 - Private `halilural/imprimatur-private`: the sync plugin (outbox, clock, applyRemote, push/pull, live WebSocket, `npm run sync`), `cloud/` (the Worker, real wrangler config), the webhook script, and a setup step that writes the plugin path into config.json.
 - Old migrations that made `outbox`/`clock` become no-ops; the plugin makes its tables with IF NOT EXISTS.
@@ -40,4 +41,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Installation and distribution](../ARCHITECTURE.md#deployment)

@@ -323,6 +323,10 @@ class SetupView {
     try {
       if (repoRoot) agentRows = require("./agent-files.js").agentRows(require("./agent-files.js").agentFiles(repoRoot));
     } catch {}
+    try {
+      // The documentation linters (#132): cspell only where the repo's prose is English.
+      if (repoRoot) agentRows = [...agentRows, ...require("./doc-lint.js").lintRows(require("./doc-lint.js").docLint(repoRoot, { english: /^en/i.test(require("./best-practice.js").proseLang(repoRoot)) }))];
+    } catch {}
     this.checklist = checklistOf(this.scopes, /** @type {any} */ (this.audit)?.open ?? 0, this.installs, baseline, docs, agentRows);
     this.onScanned?.(this.checklist.count);
     this.extras();
@@ -1185,6 +1189,13 @@ function registerSetupView(ctx, roots, counts) {
       if (written.length) {
         vscode.window.showInformationMessage(`Imprimatur: wrote ${written.map((f) => path.relative(root, f)).join(", ")} from the templates.`, "Open").then((p) => p && vscode.window.showTextDocument(vscode.Uri.file(written[0])));
       }
+    }),
+    vscode.commands.registerCommand("imprimatur.setup.writeDocLint", async () => {
+      const root = provider.scopes.find((s) => !s.global)?.root;
+      if (!root || !vscode.workspace.isTrusted) return;
+      const written = require("./doc-lint.js").writeMissing(root, { english: /^en/i.test(require("./best-practice.js").proseLang(root)) });
+      provider.refresh();
+      if (written.length) vscode.window.showInformationMessage(`Imprimatur: wrote ${written.map((f) => path.relative(root, f)).join(", ")}. Run npm run lint:docs to check the documents.`);
     }),
     vscode.commands.registerCommand("imprimatur.setup.baselineOut", (node) => baselineOut(provider, node ?? view.selection[0])),
     vscode.commands.registerCommand("imprimatur.setup.baselineBack", (arg) => baselineBack(provider, arg)),

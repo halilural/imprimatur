@@ -55,7 +55,7 @@ Result: upvotes or likes, comments, installs the day after, bugs reported.
 
 ## 3. Reddit r/ClaudeCode
 
-```
+```text
 Rules read 2026-10-24: r/ClaudeCode — NOT READABLE: reddit.com blocks curl, WebFetch and the
 browser tool here. Rules not checked.
 - Paste the sidebar rules and the flair list, and the post is checked against them.
@@ -131,7 +131,7 @@ Not posted yet.
 
 ## 4. Reddit r/ClaudeAI
 
-```
+```text
 Rules read 2026-10-24: r/ClaudeAI — NOT READABLE (as above). Rules not checked.
 - The "Built with Claude" flair's posting requirements could not be read. The only official
   page found is the 2025 contest rules (support.anthropic.com/en/articles/12003471), which
@@ -195,7 +195,7 @@ Not posted yet.
 
 ## 5. X thread
 
-```
+```text
 Rules read 2026-10-24: X — docs.x.com/fundamentals/counting-characters (help.x.com returned 403)
 - Length: 280 weighted characters per post; any URL counts 23; emoji and CJK count 2;
   media attached counts 0; measured after NFC normalization.
@@ -253,7 +253,7 @@ Not posted yet.
 
 ## 6. Claude Developers Discord #showcase
 
-```
+```text
 Rules read 2026-10-24: Claude Developers Discord #showcase — NOT READABLE: the server's rules
 channel and the channel's pinned messages have to be pasted. Rules not checked.
 - Hint (memory, unverified): one post per project, a few lines, one image, the link; no
@@ -289,7 +289,7 @@ Not posted yet.
 
 ## 7. Show HN
 
-```
+```text
 Rules read 2026-10-24: news.ycombinator.com/showhn.html, /newsguidelines.html, item?id=22336638
 - Title: begins "Show HN: "; plain, no attention-grabbing, no gratuitous numbers or adjectives.
 - Must be something people can try, made by you, and you're around to discuss it. Easy to try,
@@ -306,7 +306,7 @@ Rules read 2026-10-24: news.ycombinator.com/showhn.html, /newsguidelines.html, i
 drafted here. Material for you to write from:
 
 - **Title idea** (yours to word): `Show HN: Imprimatur – Claude Code's doc edits as tracked changes until you accept them`
-- **URL:** https://github.com/halilural/imprimatur (people can try it without signing up).
+- **URL:** <https://github.com/halilural/imprimatur> (people can try it without signing up).
 - **Points to cover, in your words:** the moment it started (edits faster than you could read, the diff
   gone after a commit); how it works (a PreToolUse hook saves a copy, the extension diffs against it, one
   SQLite database per machine, an MCP server); what's different from git diff (marks survive a commit,
@@ -333,7 +333,7 @@ Not posted yet.
 
 ## 8. LinkedIn
 
-```
+```text
 Rules read 2026-10-24: LinkedIn — linkedin.com/help/linkedin/answer/a528176
 - Length: up to 3,000 characters; longer goes to an article.
 - Documents can be attached (no limits stated).
@@ -383,7 +383,7 @@ Not posted yet.
 
 ## 9. Product Hunt
 
-```
+```text
 Rules read 2026-10-24: help.producthunt.com/en/articles/479557-how-to-post-a-product
 - Name: the product's name only, no description or emojis.
 - Description: 260 characters at most.

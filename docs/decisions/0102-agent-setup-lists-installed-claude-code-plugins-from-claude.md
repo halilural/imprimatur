@@ -24,6 +24,7 @@ Agent setup lists installed Claude Code plugins (from ~/.claude/plugins/installe
 **Context.** Agent setup walked files only. Installed plugins live in Claude Code's plugin cache and are recorded in `~/.claude/plugins/installed_plugins.json`, and skills synced from claude.ai sit in `~/.claude/skills/synced/<account>/`. Neither showed. The user wants everything the agent uses to be visible, with its version (#138).
 
 **Decision** (`vscode/agent-setup.js`, end of `scanSetup`):
+
 - **`pluginItems`:** one row per install entry.
   - Where: the global list shows `scope: "user"`; a repo shows project or local entries whose `projectPath` is that repo.
   - Row: kind "installed plugin"; label `name@marketplace`; summary `v<version> · every repo | <scope> scope · from <source>`. The source is the marketplace's GitHub repo, URL or path from `known_marketplaces.json`.
@@ -36,6 +37,7 @@ Agent setup lists installed Claude Code plugins (from ~/.claude/plugins/installe
 - **`setupView.js`:** names, icons and order for the two kinds.
 
 **Not done here.**
+
 - MCP server versions: servers are listed by name from their config files, as before.
 - Project skills copied by hand: their SOURCE.txt is not read yet.
 - Checking upstream for newer versions belongs to #140.

@@ -15,11 +15,13 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: opening the hover popup from anywhere on the row, rejected because the user said it made working with the row difficult; the popup opens only from the status cell instead.
 
 ## Decision Outcome
 
 Graph etkileşimi (0.20.0, kullanıcı 2026-10-05) — Durum sütunu: yeşil ✓ rozet / turuncu nokta, satır üstünde "Accept" düğmesi. Sağ tık VS Code'un kendi menüsü (`webview/context`, satırın `data-vscode-context`'i `webviewSection`: `edit-open` / `edit-ok` / `waiting-open` / `waiting-done`): Accept this edit, Open diff, Mark as done (oturumun günlüğüne `done` satırı), Copy what to do. Bir düzenlemeyi kabul etmek (`acceptEdit`): `spotsOf` ile o düzenlemenin bugün dosyada duran satırları (sonraki bir düzenlemenin yeniden yazdıkları hariç) ve silme yerleri bulunur; satırlar `acceptLines(…, "lines")`, silmeler önceki satıra bağlı `acceptLines(…, "deletions")` ile kopyaya yazılır, komşu düzenlemenin silmesi alınmaz. Waiting adımları onay kutusu: işaret oturumun günlüğüne `check` satırı (`item` = maddenin `t`'si, `i`, `on`), hiçbir maddeyi kapatmaz; satırda "k/n" ilerleme. Hover popup'ı yalnız durum hücresinden açılır (kullanıcı: "satırda hover zorlaştırıyor"), hücreden popup'a geçerken 250 ms bekler, kaydırılır, satırlar sarılır, 300 satıra kadar. Açıklama metni (`narration.js`): ajanın sözü dökümde araç çağrısından sonra yazıldığı için hook değil Graph okur: araç çağrısıyla aynı `message.id`'li metin, döküm artımlı okunur (önbellek: konum + harita). Waiting satırı açılınca "What you need to do" numaralı liste (istek satırları), tam mesaj katlı; başlık son istek satırı + "+N". Durum çubuğunda her zaman "Agent Graph" düğmesi (açık istek sayısıyla).
+
+Alternative: opening the hover popup from anywhere on the row, rejected because the user said it made working with the row difficult; the popup opens only from the status cell instead.
 
 ## Consequences
 
@@ -27,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Panel and views](../ARCHITECTURE.md#panel)

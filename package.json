@@ -21,7 +21,10 @@
     "plugin": "node scripts/plugin.mjs",
     "audit": "node scripts/audit.mjs",
     "best": "node scripts/best.mjs",
-    "icons": "node scripts/icons.mjs"
+    "icons": "node scripts/icons.mjs",
+    "lint:docs": "npx --yes markdownlint-cli2@0.18.1 \"docs/**/*.md\" && npx --yes cspell@9.2.1 lint --no-progress --no-exit-code \"docs/**/*.md\"",
+    "lint:links": "lychee --offline --no-progress docs",
+    "lint:prose": "vale sync && vale docs"
   },
   "devDependencies": {
     "@vscode/test-cli": "0.0.15",

@@ -1,0 +1,4 @@
+# Imprimatur's documentation standard (#132): links between the repo's own files, no network.
+offline = true
+include_fragments = true
+exclude_path = ["node_modules"]

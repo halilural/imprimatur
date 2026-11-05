@@ -15,11 +15,13 @@ Task ADR: Mimari kararlar (ADR).
 
 ## Considered Options
 
-The options are not listed apart; the decision below says what was chosen and why.
+Alternative: the raw line-diff ("md source") format for the hover, rejected because the user wanted the review-rendered view instead ("md source formatı yerine review modunda").
 
 ## Decision Outcome
 
 Grafik hover'ı review görünümünde (0.31.0, #50; kullanıcı: "md source formatı yerine review modunda") — Markdown düzenlemesinin hover'ı önce satır diff'ini gösterir, webview `{type: "preview", file, n}` ister; eklenti (`extension.js` `renderEdit`) düzenlemenin after'ını önizlemenin markdown-it'iyle işler (`preview.js` `reviewHtml`: `review(before, undefined, after)` + `annotate`, Accept düğmesi yok; eklentimizin render sarmalayıcısı `imprimaturInline` env'iyle atlanır), webview yalnız işaretli blokları ve çevresinde birer bloğu tutar (uzun listelerde aynı kesim maddelere), arada "⋯". Stil `preview.css`'in `#pop .review` altına alınmış hali (`scopeCss`). İşaret yoksa (yalnız kod bloğu değişmiş), dosya Markdown değilse ya da markdown-it henüz yüklenmemişse satır diff'i kalır.
+
+Alternative: the raw line-diff ("md source") format for the hover, rejected because the user wanted the review-rendered view instead ("md source formatı yerine review modunda").
 
 ## Consequences
 
@@ -27,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Panel and views](../ARCHITECTURE.md#panel)
