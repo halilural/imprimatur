@@ -133,57 +133,48 @@ The few choices the rest of the design follows from. Each is explained in the se
 
 ### 4. Components and their boundaries
 
-The system has five parts. The boundaries are drawn by who writes what.
+C4 level 2 (containers), drawn as a flowchart with C4 labels: Mermaid's C4Container layout stacks the external systems on top and its labels overlap. Everything inside the boundary runs on the developer's machine. The boundaries follow who writes what.
 
 ```mermaid
-flowchart LR
-  subgraph Agent["Agent (Claude Code, Cursor, Codex)"]
-    CC[Claude Code session]
-    OA[Other MCP clients]
+flowchart TB
+  dev["<b>Developer</b><br/>[Person]<br/>works in VS Code with Claude Code"]
+  cc["<b>Claude Code</b><br/>[Software system]<br/>agent sessions, terminal or VS Code"]
+  subgraph imp["Imprimatur, on the developer's machine [system]"]
+    ext["<b>VS Code extension</b><br/>[Container: Node.js, vscode/ bundled to dist/extension.js]<br/>marks, panel (Home board, Tasks, Analysis,<br/>Exercises, Agent changes), Agent Setup, export"]
+    hooks["<b>Hooks</b><br/>[Container: Node.js, hooks/run.mjs]<br/>one process per event: copies, asks,<br/>process checks, on-demand skill hint"]
+    mcp["<b>MCP server</b><br/>[Container: Node.js stdio, mcp/server.mjs]<br/>the agent's write path, 15 tools"]
+    db[("<b>imprimatur.db</b><br/>[Container: SQLite, node:sqlite]<br/>tasks, records, versions, documents")]
+    data[("<b>Repo data folders</b><br/>[Container: JSONL files, repos/name-hash/]<br/>copies, history, waiting, activity, sessions")]
   end
-  subgraph Hooks["hooks/*.mjs (a short process per event)"]
-    BL[baseline.mjs]
-    WT[waiting.mjs + audit/resolve]
-    AC[activity.mjs async]
-    PR[process.mjs]
-    MS[mcp-session.mjs]
-    SL[statusline.mjs]
-  end
-  MCP[mcp/server.mjs stdio]
-  DBJS[vscode/db.js access layer]
-  DB[(imprimatur.db one per device)]
-  FS[(.claude/imprimatur/ inside the repo)]
-  EXT[VS Code extension]
-  GH[GitHub / Jira]
-  CC -->|hook events| Hooks
-  CC -->|MCP tools| MCP
-  OA -->|MCP tools| MCP
-  MS -->|adds _session| MCP
-  BL --> FS
-  WT --> FS
-  AC --> FS
-  PR --> DBJS
-  SL --> DBJS
-  MCP --> DBJS
-  DBJS --> DB
-  EXT --> DBJS
-  EXT -->|watches, reads| FS
-  EXT <-->|gh / REST| GH
+  tracker["<b>GitHub / Jira</b><br/>[Software system]"]
+  market["<b>Claude Code marketplaces</b><br/>[Software system]<br/>plugin catalog"]
+  bg["<b>Background Claude runs</b><br/>[Software system]<br/>claude -p: Fix it, suggestion judging"]
+  dev -->|reviews edits, answers asks| ext
+  cc -->|hook events, stdin JSON| hooks
+  cc -->|MCP tools, stdio| mcp
+  hooks -->|appends| data
+  hooks -->|reads, checks| db
+  mcp -->|reads, writes| db
+  ext -->|reads, writes| db
+  ext -->|watches, reads| data
+  ext -->|issues, comments: gh / REST| tracker
+  ext -->|catalog: claude plugin list| market
+  ext -->|starts on the user's yes| bg
 ```
 
 ### Parts
 
 | Part | Location | Job | Boundary |
 |---|---|---|---|
-| Hooks | `hooks/*.mjs` | Capture Claude Code events: pre-edit copy, waiting items, activity, process checks, MCP session, status line | Never block the tool (except process checks, and only when they say "block" explicitly); every error is `exit 0` |
-| Review data | `<repo>/.claude/imprimatur/` | Copies, edit history, waiting logs, activity, archive | Inside the repo but kept out of git (global gitignore) |
-| Database | `vscode/db.js` + `imprimatur.db` | Tasks, records, versions, documents, issue-tracker queues | SQL only in `db.js` |
-| MCP server | `mcp/server.mjs` | The agent's only write path to the records; 12 tools | Touches only the database |
-| VS Code extension | `vscode/` (bundled: `vscode/dist/extension.js`) | Editor/preview marks, the Imprimatur panel, Agent Setup, issue tracker, document export | `extensionKind: workspace`; in an untrusted folder it starts no model, no `gh` and no repo script |
+| Hooks | `hooks/run.mjs` (the dispatcher, steps from `vscode/hook-plan.js`), `activity.mjs`, `statusline.mjs` | Capture Claude Code events: the pre-edit copy, waiting items, activity, process checks, the MCP session, the on-demand skill hint (#144), the status line | Never block the tool, except a process check that says "block"; every error is `exit 0` |
+| Review data | `<database folder>/repos/<name>-<hash>/` (#126, `vscode/data-dir.js`) | Copies, edit history, waiting logs, activity, archive, `sessions.jsonl`, `on-demand.json` | Outside the repo; links inside it are never followed |
+| Database | `vscode/db.js` + `imprimatur.db` | Tasks (with `done_at`), records, versions, documents, exercises, issue-tracker queues | SQL only in `db.js`; a database newer than the code is read only |
+| MCP server | `mcp/server.mjs` | The agent's only write path to the records; 15 tools | Touches only the database |
+| VS Code extension | `vscode/`, bundled to `vscode/dist/extension.js` | Editor and preview marks, the panel, Agent Setup, issue tracker, document export, background `claude -p` runs | `extensionKind: workspace`; in an untrusted folder it starts no model, no `gh` and no repo script |
 
-`db.js` also has an optional plugin hook (config.json "plugins"; a plugin hears every write through `onChange` in a savepoint, can answer `adoptRepo`, hears `onOrigin`, and its `activate` gets the extension's API; `vscode/loop.js` `runLoop` runs timed jobs). Nothing that leaves the device is part of this repo.
+`db.js` also has an optional plugin hook (config.json "plugins"). A plugin hears every write through `onChange` in a savepoint, can answer `adoptRepo`, hears `onOrigin`, and its `activate` gets the extension's API. `vscode/loop.js` `runLoop` runs timed jobs. Device sync works through that hook and lives outside this repo. Nothing that leaves the device is part of this repo.
 
-The shared modules (`vscode/diff.js`, `waiting.js`, `audit.js`, `tasks.js`, `records.js`, `model.js`, `config.js`) are used both by the hooks (through `createRequire`) and by the extension; that is why the hooks depend on the source files in the repo, not on the extension's bundle.
+The shared modules (`vscode/diff.js`, `waiting.js`, `audit.js`, `tasks.js`, `records.js`, `model.js`, `config.js`, `stats.js`, `sessions.js`) are used both by the hooks (through `createRequire`) and by the extension. That is why the hooks depend on the source files in the repo, not on the extension's bundle.
 
 <a id="database"></a>
 

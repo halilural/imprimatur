@@ -14,8 +14,9 @@ const { fixable, skillUpdatePrompt } = require("./fix-prompts.js");
  * @param {number} openRecommendations
  * @param {Array<{ok: boolean, label: string, why: string, fix?: any}>} [installs] the install checks (install-check.js)
  * @param {{root: string, items: any[]}} [baseline] the repo's baseline (baseline.js, #141)
+ * @param {{noChapter: number}} [docs] the repo's design documents (#129): sections outside the fixed chapters
  */
-function checklistOf(scopes, openRecommendations, installs = [], baseline) {
+function checklistOf(scopes, openRecommendations, installs = [], baseline, docs) {
   /** @type {any[]} */
   const rows = [];
   // What Imprimatur itself needs on this machine (#81) comes first: without it nothing else is recorded.
@@ -35,6 +36,11 @@ function checklistOf(scopes, openRecommendations, installs = [], baseline) {
     rows.push({ type: "leaf", label: `Baseline: ${off.length} off in this repo`, description: off.map((b) => b.label).join(", "), icon: "circle-slash",
       tooltip: "Baseline items this repo opted out of (here, or by turning the plugin off in its own settings). Click to bring one back.",
       command: "imprimatur.setup.baselineBack", args: [{ root: baseline?.root, items: off }] });
+  // The documentation standard (#129): every architecture and product section sits in a chapter.
+  if (docs?.noChapter)
+    rows.push({ type: "leaf", label: `Documents: ${docs.noChapter} section${docs.noChapter === 1 ? "" : "s"} in no chapter`, description: "architecture and product follow fixed chapters",
+      tooltip: "The architecture and product documents follow fixed chapters (arc42-lite and the PRODUCT shape, #129). Open them in the panel's Analysis tab: sections in no chapter are listed last, under \"No chapter yet\". Ask the agent to give each a chapter with doc_section_upsert.",
+      icon: "book", command: "imprimatur.openArchitecture" });
   const flat = (/** @type {any[]} */ items) => items.flatMap((i) => [i, ...flat(i.children ?? [])]);
   for (const s of scopes)
     for (const it of flat(s.items)) {

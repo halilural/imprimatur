@@ -313,7 +313,13 @@ class SetupView {
     try {
       baseline = repoRoot ? { root: repoRoot, items: require("./baseline.js").baselineOf(repoRoot, { trusted: vscode.workspace.isTrusted }) } : undefined;
     } catch {}
-    this.checklist = checklistOf(this.scopes, /** @type {any} */ (this.audit)?.open ?? 0, this.installs, baseline);
+    let docs;
+    try {
+      const db = require("./records.js").dbOf();
+      const repo = repoRoot && db?.repoByRoot(repoRoot);
+      if (repo) docs = { noChapter: db.sectionsPerChapter(repo.id).filter((/** @type {any} */ c) => (c.kind === "architecture" || c.kind === "product") && !c.chapter).reduce((/** @type {number} */ a, /** @type {any} */ c) => a + c.n, 0) };
+    } catch {}
+    this.checklist = checklistOf(this.scopes, /** @type {any} */ (this.audit)?.open ?? 0, this.installs, baseline, docs);
     this.onScanned?.(this.checklist.count);
     this.extras();
     if (this.view) this.view.badge = fresh ? { value: fresh, tooltip: `${fresh} agent setup change${fresh === 1 ? "" : "s"} since you last looked` } : undefined;
