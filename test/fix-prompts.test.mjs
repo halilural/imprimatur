@@ -14,6 +14,7 @@ test("fix prompts (#156): a finding, all findings, a skill update and a health p
   assert.match(one, /propose nothing and say why/);
   assert.match(one, /Do not edit any file/);
   assert.match(one, /```imprimatur-edits/);
+  assert.match(one, /```imprimatur-dismiss/);
   const all = findingsPrompt([rec, { title: "XP-006: layers", links: { audit: { file: "/h/.claude/CLAUDE.md", line: 1 } } }]);
   assert.match(all, /^Fix the 2 open/);
   assert.match(all, /> 2\. XP-006: layers — \/h\/\.claude\/CLAUDE\.md:1/);
