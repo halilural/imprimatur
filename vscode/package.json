@@ -293,6 +293,12 @@
         "icon": "$(search)"
       },
       {
+        "command": "imprimatur.records.goToTask",
+        "title": "Go to Task",
+        "category": "Imprimatur",
+        "icon": "$(go-to-file)"
+      },
+      {
         "command": "imprimatur.records.show",
         "title": "Show Record",
         "category": "Imprimatur"
@@ -975,6 +981,13 @@
             ]
           }
         ]
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "imprimatur.records.goToTask",
+        "key": "ctrl+alt+t",
+        "mac": "cmd+alt+t"
       }
     ]
   }
