@@ -100,13 +100,13 @@ When you come back to an issue, read the earlier notes first and never ask again
 - **While working:** decisions, ADRs and notes go to Imprimatur records, and `pointer_set` keeps 👉 on the next step. Do not narrate progress in GitHub comments. A comment is for something a reader of the issue needs: a changed scope, a found blocker, a question.
 - **If the scope changes:** edit the issue body's brief and acceptance criteria, keep the title equal to the task's (`gh issue edit --title`), and record why.
 - **Review:** an open PR or a step for the user to check moves the board to In Review.
-- **A slice shipped, the issue still open:** comment the version, what this slice does, and its **How to try it** steps. The user can check each slice as it lands.
+- **A slice shipped, the issue still open:** comment the version, what this slice does, and its **How to try it** steps, tried first by you with screenshots ([how](#try-it-yourself-first-with-screenshots)). The user can check each slice as it lands.
 
 ## 5. Close it with what shipped
 
 1. Check the acceptance criteria one by one against the code and the tests. An unchecked one is either done now or moved to a new issue that links back.
 2. Set the task `done` (`task_upsert`), with the result in its summary and the closing record's body. Imprimatur's tracker sync closes the GitHub issue. If it is not set up for this repo, close it with `gh issue close`.
-3. Leave one closing comment with what a reader needs: the version or commit, what changed for the user, what was left out, and the follow-up issues. End it with **How to try it**: numbered steps a person follows to see the change work, written so someone who did not build it can do them ([the format](#how-to-try-it)).
+3. Leave one closing comment with what a reader needs: the version or commit, what changed for the user, what was left out, and the follow-up issues. End it with **How to try it**: numbered steps a person follows to see the change work, written so someone who did not build it can do them ([the format](#how-to-try-it)), each "See" step you could run shown with its screenshot ([how](#try-it-yourself-first-with-screenshots)).
 4. Add the same steps as a `test` record (owner K) on the task, so the panel shows the check still waiting on the user. When the user reports back, set it `done` with what they saw, or open a fixme.
 5. Set the board to Done. If this was an epic's last open child, say so and offer to close the epic.
 
@@ -154,6 +154,21 @@ Steps a person follows to see the change work, in the closing comment (and in a 
 - Each step is one action and what it shows. Name the real button, view, command or file, and use data the user has, not a made-up example.
 - Cover each acceptance criterion with at least one "See" step, and add one negative case.
 - If a step cannot be run on this machine, say so and why (another OS, a paid account).
+
+### Try it yourself first, with screenshots
+
+Before posting the steps, run them yourself, and put what you saw under each "See" step. The user then reads a checked result, not a promise, and a defect shows before they spend time on it.
+
+1. **Run each step you can on this machine**, the way the user would (the real button, not a shortcut into the app's internals, which can skip the code being tried):
+   - a desktop app: drive it with the repo's CDP or Playwright-Electron harness and take `Page.captureScreenshot`;
+   - a web page: Playwright;
+   - VS Code: Playwright-Electron, if the repo has it.
+2. **Take one PNG per "See" step**, named for the step (`1-meetings.png`, `2-session.png`). Use the user's real data only where step 3 allows it.
+3. **Upload and embed** with `node <this skill>/screenshots.mjs <issue> <png>…`. It writes the images to a branch of their own through the GitHub API (not a local commit: the repo's hooks expect its files) and prints a Markdown line per image to paste under its step.
+   - A private repo: the images stay as private as the repo. Name the branch by the repo's branch rule if it has one (`--branch docs/<issue>-screenshots`).
+   - A public repo: the images are public. Take none that shows personal data (records, notes, mail, contacts, job lists); only UI with sample data, then `--public`. Otherwise describe the step in words.
+4. **Mark what you could not run**, with the reason: a phone, a real microphone or meeting, another OS, a paid account. That step stays the user's, in the `test` record.
+5. **A defect you see is a finding, not a footnote:** add a `fixme` record, move the issue back to Todo, and say it in the comment.
 
 ---
 

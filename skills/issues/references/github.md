@@ -69,3 +69,12 @@ gh api repos/OWNER/REPO/milestones -X POST -f title="Sprint 3 · Nov 4–10 · B
 gh label list --limit 100 --json name -q '.[].name'
 gh label create spike --color c5def5 --description "Time-boxed research"   # only labels the vocabulary names
 ```
+
+## Screenshots for How to try it
+
+```bash
+# PNGs onto a branch of their own via the API (no local commit: the repo's hooks expect its files);
+# prints one Markdown image line per file. Private repo by default; --public only for sample-data UI.
+node ~/.claude/skills/issues/screenshots.mjs $n shots/1-list.png shots/2-detail.png
+node ~/.claude/skills/issues/screenshots.mjs $n shots/*.png --branch docs/$n-screenshots
+```
