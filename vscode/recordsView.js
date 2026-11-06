@@ -159,6 +159,39 @@ function registerRecordCommands(ctx, log, onChange, reveal, setAllRepos) {
       );
       if (pick) vscode.commands.executeCommand("imprimatur.records.reveal", { root: pick.root, record: pick.record.id });
     }),
+    // Go to Task (#160): "#817" + Enter opens the task on the Tasks tab; the button, its issue.
+    vscode.commands.registerCommand("imprimatur.records.goToTask", async () => {
+      const db = records.dbOf();
+      if (!db) return;
+      const { taskRows, issueUrl } = require("./go-to-task.js");
+      const here = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
+      const githubButton = { iconPath: new vscode.ThemeIcon("github"), tooltip: "Open the issue on GitHub" };
+      const items = taskRows(db.repos(), (id) => db.tasksOf(id, { limit: 1000 }), here).map((row) => ({
+        ...row,
+        ...(row.issue ? { buttons: [githubButton] } : {}),
+      }));
+      const qp = vscode.window.createQuickPick();
+      qp.items = items;
+      qp.placeholder = "#817, or words of a task's title";
+      qp.matchOnDescription = true;
+      qp.onDidTriggerItemButton(({ item }) => {
+        const row = /** @type {any} */ (item);
+        let remote = "";
+        try {
+          remote = require("node:child_process").execFileSync("git", ["-C", row.root, "remote", "get-url", "origin"], { encoding: "utf8" });
+        } catch {}
+        const url = row.issue && issueUrl(remote, row.issue);
+        if (url) vscode.env.openExternal(vscode.Uri.parse(url));
+        qp.hide();
+      });
+      qp.onDidAccept(() => {
+        const row = /** @type {any} */ (qp.selectedItems[0]);
+        qp.hide();
+        if (row) vscode.commands.executeCommand("imprimatur.records.reveal", { root: row.root, task: row.key });
+      });
+      qp.onDidHide(() => qp.dispose());
+      qp.show();
+    }),
     // From the graph, Waiting on you and Search: the task (and record) on the panel's Tasks tab.
     vscode.commands.registerCommand("imprimatur.records.reveal", (/** @type {{root?: string, task?: string, record?: number}} */ at) => {
       if (!at || !records.dbOf()) return;
