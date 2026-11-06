@@ -41,24 +41,31 @@ let extensionUri;
 const setGraphExtensionUri = (uri) => void (extensionUri = uri);
 /** The folder of the repo's design documents, whose images the document tabs show. @param {string | undefined} root */
 const docsDirOf = (root) => (root ? vscode.Uri.file(require("./docs-export.js").dirOf(root)) : undefined);
+/** The repo's agent trial screenshots (#159), in its data folder. @param {string | undefined} root */
+const shotsDirOf = (root) => (root ? vscode.Uri.file(require("./data-dir.js").dataPath(root, SHOTS)) : undefined);
+/** The screenshots' folder under a repo's data folder (skills/issues/screenshots.mjs writes it). */
+const SHOTS = require("node:path").join(".claude", "imprimatur", "screenshots");
 /**
  * Options of the panel's webview: scripts, and local files only from the extension's dist/
- * (mermaid.min.js) and the repo's documents folder (images of the document tabs).
+ * (mermaid.min.js), the repo's documents folder (images of the document tabs) and its
+ * screenshots folder (#159).
  * @param {string} [root]
  */
 const webviewOptions = (root) => {
-  const docs = docsDirOf(root);
-  return { enableScripts: true, localResourceRoots: [...(extensionUri ? [vscode.Uri.joinPath(extensionUri, "dist")] : []), ...(docs ? [docs] : [])] };
+  const local = [docsDirOf(root), shotsDirOf(root)].filter((u) => u !== undefined);
+  return { enableScripts: true, localResourceRoots: [...(extensionUri ? [vscode.Uri.joinPath(extensionUri, "dist")] : []), ...local] };
 };
 /**
- * The pane with its relative images (docsView.js DOC_IMG) pointing into the documents folder.
+ * The pane with its relative images (docsView.js DOC_IMG) pointing into the documents folder,
+ * and its screenshots (SHOT_IMG, #159) into the screenshots folder.
  * @param {string} pane @param {vscode.Webview} webview @param {string} root
  */
 const withDocImages = (pane, webview, root) => {
-  const { DOC_IMG } = require("./docsView.js");
-  if (!pane.includes(`src="${DOC_IMG}`)) return pane;
-  const base = webview.asWebviewUri(/** @type {vscode.Uri} */ (docsDirOf(root))).toString().replace(/\/$/, "");
-  return pane.split(`src="${DOC_IMG}`).join(`src="${base}/`);
+  const { DOC_IMG, SHOT_IMG } = require("./docsView.js");
+  /** @param {string} html @param {string} prefix @param {vscode.Uri | undefined} dir */
+  const point = (html, prefix, dir) =>
+    dir && html.includes(`src="${prefix}`) ? html.split(`src="${prefix}`).join(`src="${webview.asWebviewUri(dir).toString().replace(/\/$/, "")}/`) : html;
+  return point(point(pane, DOC_IMG, docsDirOf(root)), SHOT_IMG, shotsDirOf(root));
 };
 /**
  * The page's mermaid script: its webview URI and the CSP source that allows it (the webview's

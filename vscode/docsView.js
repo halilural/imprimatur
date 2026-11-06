@@ -64,6 +64,18 @@ function fileRef(text, env = {}) {
 const RELATIVE = /^(?![a-z][a-z0-9+.-]*:)(?![\\/])\S/i;
 /** The prefix of a relative image's src, which the panel replaces with the documents folder's webview URI. */
 const DOC_IMG = "imprimatur-doc:";
+/**
+ * An agent trial's screenshot (#159): `shot:<issue>/<date>/<file>` in a record body is a file in
+ * the repo's data folder (skills/issues/screenshots.mjs keeps it there); the panel replaces this
+ * prefix with that folder's webview URI. Local, so a private repo's images show in VS Code.
+ */
+const SHOT_IMG = "imprimatur-shot:";
+/** A screenshot path: segments of word characters, no "..", no leading slash. */
+const SHOT = /^shot:((?:[\w@-][\w@.-]*\/)*[\w@-][\w@.-]*)$/;
+const shotOf = (/** @type {string} */ src) => {
+  const m = SHOT.exec(src.trim());
+  return m && !m[1].split("/").includes("..") ? m[1] : null;
+};
 
 /** markdown-it, set up once: safe links, relative images, mermaid fences, "- [ ] step" checkboxes. */
 function markdown() {
@@ -71,7 +83,8 @@ function markdown() {
     const MarkdownIt = require("markdown-it");
     md = new MarkdownIt({ html: false, linkify: true, typographer: false });
     const valid = md.validateLink.bind(md);
-    md.validateLink = (/** @type {string} */ url) => valid(url) && (/^(https?:|mailto:|#)/i.test(url.trim()) || RELATIVE.test(url.trim()));
+    md.validateLink = (/** @type {string} */ url) =>
+      (valid(url) && (/^(https?:|mailto:|#)/i.test(url.trim()) || RELATIVE.test(url.trim()))) || shotOf(url) !== null;
     md.renderer.rules.fence = mermaidFence(md.renderer.rules.fence);
     // `path/file.js:120` opens the file at that line (#96); `:338` the file named last before it.
     const code = md.renderer.rules.code_inline;
@@ -85,7 +98,9 @@ function markdown() {
     const image = md.renderer.rules.image;
     md.renderer.rules.image = (tokens, idx, options, env, self) => {
       const src = tokens[idx].attrGet("src") ?? "";
-      if (RELATIVE.test(src)) tokens[idx].attrSet("src", DOC_IMG + src.replace(/^\.\//, ""));
+      const shot = shotOf(src);
+      if (shot) tokens[idx].attrSet("src", SHOT_IMG + shot);
+      else if (RELATIVE.test(src)) tokens[idx].attrSet("src", DOC_IMG + src.replace(/^\.\//, ""));
       tokens[idx].attrJoin("class", "mdimg");
       return /** @type {any} */ (image)(tokens, idx, options, env, self);
     };
@@ -435,4 +450,4 @@ const DOCS_CSS = `
   .deditor .acts { align-items: center; flex-wrap: wrap; }
 `;
 
-module.exports = { fileRef, DOC_IMG, DOC_TABS, TAB_LABEL, DOCS_CSS, SECTION_BODY_MAX, docModel, docHtml, applyDocMessage, renderMarkdown, stepsOf, toggleStep, mermaidKey, slugify, editOf, describeSectionVersion };
+module.exports = { fileRef, DOC_IMG, SHOT_IMG, DOC_TABS, TAB_LABEL, DOCS_CSS, SECTION_BODY_MAX, docModel, docHtml, applyDocMessage, renderMarkdown, stepsOf, toggleStep, mermaidKey, slugify, editOf, describeSectionVersion };

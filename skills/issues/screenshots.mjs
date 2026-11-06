@@ -5,16 +5,51 @@
 // every local commit and expect the repo's files, which a branch holding only images lacks,
 // and skipping hooks is not allowed.
 //
-//   node screenshots.mjs <issue> <png>... [--branch name] [--public] [--date YYYY-MM-DD]
+//   node screenshots.mjs <issue> <png>... [--branch name] [--public] [--local-only] [--date YYYY-MM-DD]
 //
 // --branch: the branch, default screenshots/<issue>; use the repo's branch rule when it has
 //   one (dirtywork: docs/<issue>-screenshots).
 // --public: a public repo's images are public too; the script refuses it unless told the
 //   images hold no personal data (records, notes, mail, job lists): UI with sample data only.
+// --local-only: upload nothing; only keep them for Imprimatur's panel (below).
+//
+// Every run also keeps the PNGs in the repo's Imprimatur data folder and prints a `shot:` line
+// per image (#159): put those in the test record, where the Tasks tab shows them from the
+// local file. VS Code's GitHub panel cannot show a private repo's image; the panel can.
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+
+/** The image for a record body: the panel reads `shot:` from the repo's data folder (#159). */
+export function shotRecordLine(issue, date, file, alt) {
+  return `![${alt}](shot:${shotPath(issue, date, file)})`;
+}
+
+/** The repo's data folder for screenshots, or null when Imprimatur's code is not next to this skill. */
+function shotsDir(root) {
+  const lib = path.join(path.dirname(new URL(import.meta.url).pathname), "..", "..", "vscode", "data-dir.js");
+  if (!fs.existsSync(lib)) return null;
+  return createRequire(import.meta.url)(lib).dataPath(root, "screenshots");
+}
+
+/** Copies the PNGs into the data folder and prints their `shot:` lines (#159). */
+function keepLocally(issue, date, files) {
+  const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+  const dir = shotsDir(root);
+  if (!dir) {
+    console.error("(Imprimatur's data folder is not found from this skill: no local copies.)");
+    return;
+  }
+  for (const f of files) {
+    const to = path.join(dir, shotPath(issue, date, f));
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.copyFileSync(f, to);
+  }
+  console.log("\nFor the test record (Imprimatur's Tasks tab shows them):");
+  for (const f of files) console.log(shotRecordLine(issue, date, f, altOf(f)));
+}
 
 /** Where an image goes on the branch: <issue>/<date>/<file name>. */
 export function shotPath(issue, date, file) {
@@ -44,15 +79,17 @@ function main(argv) {
   const flags = new Map();
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--public") flags.set("public", true);
+    if (argv[i] === "--public" || argv[i] === "--local-only") flags.set(argv[i].slice(2), true);
     else if (argv[i].startsWith("--")) flags.set(argv[i].slice(2), argv[++i]);
     else rest.push(argv[i]);
   }
   const [issue, ...files] = rest;
   if (!/^\d+$/.test(issue ?? "") || !files.length) {
-    console.error("usage: screenshots.mjs <issue> <png>... [--branch name] [--public] [--date YYYY-MM-DD]");
+    console.error("usage: screenshots.mjs <issue> <png>... [--branch name] [--public] [--local-only] [--date YYYY-MM-DD]");
     process.exit(2);
   }
+  const date = flags.get("date") ?? new Date().toISOString().slice(0, 10);
+  if (flags.get("local-only")) return keepLocally(issue, date, files);
   const { nameWithOwner: repo, visibility } = JSON.parse(
     execFileSync("gh", ["repo", "view", "--json", "nameWithOwner,visibility"], { encoding: "utf8" })
   );
@@ -61,7 +98,6 @@ function main(argv) {
     process.exit(1);
   }
   const branch = flags.get("branch") ?? `screenshots/${issue}`;
-  const date = flags.get("date") ?? new Date().toISOString().slice(0, 10);
 
   // The branch's head, if it exists: the new commit goes on top and keeps its files.
   let parent = null;
@@ -94,7 +130,9 @@ function main(argv) {
   ).sha;
   if (parent) gh(["api", "-X", "PATCH", `repos/${repo}/git/refs/heads/${branch}`, "-f", `sha=${commit}`]);
   else gh(["api", `repos/${repo}/git/refs`, "-f", `ref=refs/heads/${branch}`, "-f", `sha=${commit}`]);
+  console.log("For the issue comment (github.com):");
   for (const f of files) console.log(shotMarkdown(repo, commit, shotPath(issue, date, f), altOf(f)));
+  keepLocally(issue, date, files);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main(process.argv.slice(2));
