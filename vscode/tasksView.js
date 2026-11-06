@@ -1075,6 +1075,8 @@ const TASKS_CSS = `
   .tl { display: flex; flex-wrap: wrap; align-items: stretch; margin: 0 -12px; border-top: 1px solid var(--line); min-height: calc(100vh - var(--appbar-h, 52px)); }
   /* Issue 161: a task page takes the full width, as GitHub's issue page; the "Tasks" button brings the list back. */
   body.nolist .tl:has(.thead) .tlist { display: none; }
+  /* Issue 162: the issue's description reads as on GitHub: a ticked criterion is not struck out. */
+  .idesc .md li.step.on, .idesc .md li.step.on > p { text-decoration: none; color: inherit; }
   .listtoggle { font-size: 12px; }
   .tlist { flex: 1 1 260px; max-width: 320px; min-width: 0; padding: 14px 10px; background: var(--vscode-sideBar-background); border-right: 1px solid var(--line);
     display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - var(--appbar-h, 52px)); overflow: auto; position: sticky; top: var(--appbar-h, 52px); box-sizing: border-box; }
