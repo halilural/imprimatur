@@ -356,3 +356,14 @@ test("#115 Edits paging: the newest 200 rows drawn, Show more adds 500, Show all
     Module._load = load;
   }
 });
+
+test("task page (#162): the issue's description shows under the head, as Markdown", () => {
+  const s = seed();
+  s.db.setIssueBody(s.t1.id, "**Summary:** the brief\n\n- [x] done criterion\n- [ ] open one");
+  const page = tv.paneHtml(s.db, s.root, { tab: "tasks", sel: s.t1.id });
+  assert.match(page, /data-k="desc-\d+"/);
+  assert.ok(page.includes("<strong>Summary:</strong> the brief"));
+  assert.ok(page.indexOf('data-k="desc-') < page.indexOf('role="tablist"') || !page.includes('role="tablist"'));
+  s.db.setIssueBody(s.t1.id, null);
+  assert.doesNotMatch(tv.paneHtml(s.db, s.root, { tab: "tasks", sel: s.t1.id }), /data-k="desc-/);
+});

@@ -228,6 +228,7 @@ function taskPage(db, task, view, opts) {
   const lastAt = Math.max(task.updated_at, last?.at ?? 0);
   return {
     id: task.id, key: task.key, title: task.title, status: task.status, summary: task.summary,
+    issueBody: typeof task.issue_body === "string" && task.issue_body.trim() ? task.issue_body : null,
     repo: repo ? { id: repo.id, name: repo.name, root: repo.root } : undefined,
     url: repo && opts.linkOf ? opts.linkOf(repo.root, task.key) : undefined,
     epic: epic ? { id: epic.id, key: epic.key, title: epic.title, status: epic.status } : undefined,
@@ -597,8 +598,13 @@ function taskBlocks(c) {
     : "";
   const activity = `<section class="blk" data-k="act" aria-label="Activity"><h2>Activity</h2>${c.activity.map((v, i) => `<div class="ev" data-k="e${i}"><span class="when">${esc(when(v.at))}</span><span class="who w-${esc(v.kind)}">${esc(v.who)}</span><span class="what">${esc(v.what)}</span></div>`).join("") || '<p class="empty" data-k="none">No events yet.</p>'}${c.older || c.showOld ? `<button class="link" data-k="more" data-act="old" data-task="${c.id}">${c.showOld ? "Hide older events" : `Show ${c.older} older event${c.older === 1 ? "" : "s"}`}</button>` : ""}</section>`;
   const recBlocks = (c.audit ? auditBlock(c.audit) : "") + (c.best ? bestBlock(c.best) : "");
+  // #162: the issue's description, as GitHub shows it, between the head and the tabs. Its "- [ ]"
+  // boxes show ticked or not; they are ticked on GitHub, whose next pull brings them here.
+  const desc = c.issueBody
+    ? `<section class="blk idesc" data-k="desc-${c.id}" aria-label="Description"><div class="body md">${require("./docsView.js").renderMarkdown(c.issueBody)}</div></section>`
+    : "";
   // The tabs right under the head (and Where we left off): what waits on the user is the first, open by default.
-  return head + taskTabs(c, [
+  return head + desc + taskTabs(c, [
     { k: "asks", label: "Waiting on you", n: c.asks.length, html: asks },
     { k: "todos", label: recBlocks ? "Recommendations" : "To-dos", n: c.openTodos, html: recBlocks || todos },
     { k: "dec", label: "Decisions", n: c.decisions.length, html: decisions },

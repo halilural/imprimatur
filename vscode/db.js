@@ -437,6 +437,8 @@ const MIGRATIONS = [
   // of titles or labels does not count as finishing them.
   `ALTER TABLE tasks ADD COLUMN done_at INTEGER;
   UPDATE tasks SET done_at = coalesce((SELECT max(r.updated_at) FROM records r WHERE r.task_id = tasks.id), created_at) WHERE status = 'done';`,
+  // #162: the GitHub issue's description, pulled by the tracker sync, shown on the task page.
+  `ALTER TABLE tasks ADD COLUMN issue_body TEXT;`,
 ];
 const VERSION = MIGRATIONS.length;
 
@@ -938,6 +940,14 @@ class Db {
   /** Issue states at the last pull: key → state. @param {number} repoId @param {string} provider @returns {Map<string, string>} */
   trackerStates(repoId, provider) {
     return new Map(this.q("SELECT key, state FROM tracker_state WHERE repo_id = ? AND provider = ?").all(repoId, provider).map((/** @type {any} */ r) => [r.key, r.state]));
+  }
+
+  /**
+   * The issue's description as the tracker last pulled it (#162). Not a task edit: no version,
+   * no plugin event, no updated_at. @param {number} taskId @param {string | null} body
+   */
+  setIssueBody(taskId, body) {
+    this.q("UPDATE tasks SET issue_body = ? WHERE id = ?").run(body, taskId);
   }
 
   /** @param {number} repoId @param {string} key @param {string} provider @param {string} state @param {number} at */
