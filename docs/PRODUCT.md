@@ -21,18 +21,19 @@ type: explanation
   - [6. Main flows](#flows)
   - [7. Surfaces and features](#surfaces)
   - [8. A task's analysis](#task-analysis)
-  - [9. Agent setup audit (planned)](#agent-setup-audit)
-  - [10. Unread: comprehension debt (#91, #92)](#unread)
-  - [11. /study: studying a topic (#95)](#study)
-  - [12. /exercise: practise any topic in small steps (#108)](#exercise)
-  - [13. Social media: /social-post and the Social document (#109)](#social)
-  - [14. The agent's toolset: seen, versioned, installed, found (#138)](#agent-toolset)
-  - [15. The panel as a board, with analytics (#147)](#board)
-  - [16. The baseline every repo gets](#baseline)
-  - [17. Project glossary: a third living document (#91)](#glossary-feature)
-  - [18. Skills Imprimatur carries](#bundled-skills)
+  - [9. Unread: comprehension debt (#91, #92)](#unread)
+  - [10. /study: studying a topic (#95)](#study)
+  - [11. /exercise: practise any topic in small steps (#108)](#exercise)
+  - [12. Social media: /social-post and the Social document (#109)](#social)
+  - [13. Project glossary: a third living document (#91)](#glossary-feature)
+  - [14. Skills Imprimatur carries](#bundled-skills)
 - [Metrics](#chapter-metrics)
-  - [19. Success metrics](#metrics)
+  - [15. Success metrics](#metrics)
+- [Unsorted](#chapter-unsorted)
+  - [16. Agent setup audit (planned)](#agent-setup-audit)
+  - [17. The agent's toolset: seen, versioned, installed, found (#138)](#agent-toolset)
+  - [18. The panel as a board, with analytics (#147)](#board)
+  - [19. The baseline every repo gets](#baseline)
 
 <a id="chapter-problem"></a>
 
@@ -270,27 +271,9 @@ STORY: I read a task's analyses, plans, spike results and research notes (wherev
 
 <!-- imprimatur:decisions --> Decisions: [PDR 0079](decisions/0079-gorev-sayfasinda-analiz-gorev-icin-yazilan-analiz-plan-spike.md)
 
-<a id="agent-setup-audit"></a>
-
-### 9. Agent setup audit (planned)
-
-The agent setup (CLAUDE.md, AGENTS.md, `.claude/` settings, hooks, skills, subagents, MCP, plugins, Cursor/Codex/Copilot/Gemini/Kiro files) is audited with rules based on the official documentation. The rule engine is agnix and it is used with its full coverage: no rule or file is cut.
-
-- Findings are not hidden; they are grouped as project / user / plugin / worktree and shown with category and level counts. Every finding has a link to the rule's documentation and the date it was verified.
-- Every finding is an Imprimatur record: open / applied / rejected (with a reason). A finding that disappears becomes "applied", a rejected one is not reopened; the difference between two scans is visible. Competitors have no per-suggestion status history; that is Imprimatur's difference.
-- Later: an LLM layer (quality, contradiction, stale instruction), consistency across agents, context cost × usage (#29).
-
-Epic [#76](https://github.com/halilural/imprimatur/issues/76), first piece of work [#77](https://github.com/halilural/imprimatur/issues/77).
-
-#### Decisions settled
-
-- 5734: the agent setup audit takes agnix's full rule coverage with nothing cut, hides no finding, and keeps a per-suggestion accept/reject status history across scans — the feature's stated point of difference from competitors.
-
-<!-- imprimatur:decisions --> Decisions: [PDR 0071](decisions/0071-agent-setup-denetimi-agnix-in-tam-kapsamini-alir-bulgular-gi.md)
-
 <a id="unread"></a>
 
-### 10. Unread: comprehension debt (#91, #92)
+### 9. Unread: comprehension debt (#91, #92)
 
 The agent writes code and documents faster than a person can read them; Imprimatur shows how much you have not yet seen.
 
@@ -307,7 +290,7 @@ Next: a "since your last read" diff (#93), an end-of-turn briefing (#94).
 
 <a id="study"></a>
 
-### 11. /study: studying a topic (#95)
+### 10. /study: studying a topic (#95)
 
 To learn a design decision, a feature or a document the agent made well enough to explain it, defend it and point to it in the code: `/study #92` (or "I want to study the section_reads design").
 
@@ -321,7 +304,7 @@ Why it is this way: in Anthropic's 2026 study, people who asked for explanations
 
 <a id="exercise"></a>
 
-### 12. /exercise: practise any topic in small steps (#108)
+### 11. /exercise: practise any topic in small steps (#108)
 
 The user picks any topic (a language feature, a concept for an interview, a spoken language, a book chapter, a sport) and wants to practise it, not only read about it. `/exercise <topic>` in Claude Code turns it into an exercise they tick in the panel's **Exercises** tab.
 
@@ -349,7 +332,7 @@ Later: spaced recall of weak points (1, 3, 7 days, then FSRS-like) on Home; a qu
 
 <a id="social"></a>
 
-### 13. Social media: /social-post and the Social document (#109)
+### 12. Social media: /social-post and the Social document (#109)
 
 Announcing a project means a different post for each channel, and each channel has its own rules: a subreddit's sidebar, X's character counting, Show HN's guidelines, Product Hunt's launch page. Rules change, and a post that breaks one is removed or ignored.
 
@@ -369,75 +352,9 @@ Announcing a project means a different post for each channel, and each channel h
 
 <!-- imprimatur:decisions --> Decisions: [PDR 0087](decisions/0087-social-media-is-a-fifth-living-document-social-off-by-defaul.md)
 
-<a id="agent-toolset"></a>
-
-### 14. The agent's toolset: seen, versioned, installed, found (#138)
-
-Epic #138, opened 2026-11-04 and the top priority. Imprimatur becomes the place where everything the agent uses is seen and managed. It builds on the Agent setup view, which already shows every agent file per repo and globally, the drift between copies, the effective settings, and the audit findings.
-
-- **Seen (#139):**
-  - *Shipped in 0.92.0:* Agent setup lists installed Claude Code plugins with their version, scope (every repo, or this project) and source marketplace. A plugin installed both for every repo and for this one is flagged. Skills synced from claude.ai are listed with their source and last update.
-  - *Next:* hand-copied skills and MCP servers with their source and version.
-- **Versioned (#140):** "update available" with what changed, a one-click update, and a lock so an update can be undone.
-- **Installed (#141):** a must-have set ships with Imprimatur and goes into every repo, and a repo can turn an item off. Imprimatur changes only what it installed. Repo-specific agent files stay in the repo.
-- **Checklist (#142):** the panel lists what this repo is missing or has out of date. Each item has an action, and Home shows the count.
-- **Recommended (#143):** maintained, well-adopted OSS skills, plugins and MCP servers that match the repo's stack.
-- **Found on demand (#144):** when work touches a technology with no skill installed, Imprimatur finds candidates, vets them, and installs one once the user agrees.
-- **Cost (#145):** what each hook costs per run and per session.
-
-Anything brought in is vetted first: its license allows redistribution, its hooks and network calls have been read, and it adds no second task store, memory store or context injector.
-
-<!-- imprimatur:decisions --> Decisions: [PDR 0100](decisions/0100-imprimatur-is-where-the-agent-s-toolset-is-seen-and-managed.md), [ADR 0102](decisions/0102-agent-setup-lists-installed-claude-code-plugins-from-claude.md), [PDR 0103](decisions/0103-139-covers-everything-that-shapes-the-agent-s-decisions-not.md), [ADR 0104](decisions/0104-agent-setup-shows-what-the-repo-s-last-claude-code-session-w.md)
-
-<a id="board"></a>
-
-### 15. The panel as a board, with analytics (#147)
-
-Epic #147, opened 2026-11-04. The Imprimatur panel looks and works like the ponytail board. The VS Code side bar stays as it is.
-
-- **Board look on every tab (#148).** *Shipped in 0.95.0:* a near-black board palette, with a light variant on light themes. Cards have a soft gradient and an inner highlight, corners are rounder, and the app bar is translucent. High-contrast themes keep VS Code's colours, and text stays legible.
-- **Session numbers (#149):** each Claude Code session's cost, time, lines and tokens.
-- **One stats module (#150):** daily series, shared by the panel and `/imprimatur-stats`.
-- **Board landing (#151):**
-  - cards with sparklines;
-  - a large chart with a metric switch and a 7d/30d/90d/All range;
-  - a sessions table;
-  - a 12-week activity heatmap with active days and streak.
-- **Analytics on each tab (#152):** tasks over time, agent edits per day and the most edited files, document chapters filled, and hook cost.
-
-<!-- imprimatur:decisions --> Decisions: [PDR 0106](decisions/0106-the-whole-imprimatur-panel-becomes-a-board-in-the-ponytail-b.md), [ADR 0107](decisions/0107-the-board-look-comes-from-theme-js-on-dark-and-light-themes.md)
-
-<a id="baseline"></a>
-
-### 16. The baseline every repo gets
-
-Imprimatur's own plugin brings its hooks, its MCP server and its skills: issues, study, exercise, imprimatur-stats and social-post. It installs at user scope. Beyond that, every repo should have five third-party items. Imprimatur does not ship them: each is installed from its own marketplace or repo, at user scope, after the user confirms.
-
-| Item | Why | Source |
-|---|---|---|
-| The repo's language server | exact go-to-definition, references and type errors | an LSP plugin chosen by the repo's files (typescript-lsp, pyright-lsp, gopls-lsp…) |
-| security-guidance | warns about security problems while Claude edits | claude-plugins-official |
-| ponytail | the smallest change that fully solves a task | DietrichGebert/ponytail |
-| context-mode | keeps large tool output out of the context window | mksglu/context-mode. ⚠ It keeps its own session store next to Imprimatur's records |
-| humanizer | clears AI tells from prose | blader/humanizer, downloaded into ~/.claude/skills with a SOURCE.txt for the upstream check |
-
-**In Agent Setup → Checklist:**
-
-- A missing item is a **Baseline: install …** row; one the user turned off is a **Baseline: turn on …** row. The button shows a confirmation, then runs `claude plugin install|enable <id> --scope user` in a terminal, or downloads the skill.
-- **Not in This Repo**, on a row's menu, opts the repo out of that item. The choice is kept in the repo's Imprimatur data. Setting a plugin's `enabledPlugins` entry to `false` in the repo's `.claude` settings counts as opting out too.
-- A **Baseline: N off in this repo** row brings an item back.
-
-Imprimatur only adds what it installs. It never edits or removes a hook, a plugin or a skill it did not install.
-
-#### Decisions settled
-
-- 9332: Imprimatur carries the community skills it adopts itself — its own plugin and marketplace bundle them, with license and source commit, and Imprimatur's setup installs them in every repo automatically; where a tool cannot be carried this way (a different app, a second store, an incompatible license), Imprimatur takes its ideas into its own features instead of adopting it directly.
-
-<!-- imprimatur:decisions --> Decisions: [PDR 0099](decisions/0099-imprimatur-carries-the-adopted-skills-itself-and-installs-th.md), [PDR 0108](decisions/0108-the-baseline-for-every-repo-imprimatur-s-own-skills-plus-fiv.md)
-
 <a id="glossary-feature"></a>
 
-### 17. Project glossary: a third living document (#91)
+### 13. Project glossary: a third living document (#91)
 
 #### Decisions settled
 
@@ -447,7 +364,7 @@ Imprimatur only adds what it installs. It never edits or removes a hook, a plugi
 
 <a id="bundled-skills"></a>
 
-### 18. Skills Imprimatur carries
+### 14. Skills Imprimatur carries
 
 Imprimatur brings its skills to every repo with no manual step: setup links each folder of `skills/` into `~/.claude/skills` (or the plugin carries them), and an Imprimatur update brings their new versions.
 
@@ -457,8 +374,9 @@ Imprimatur brings its skills to every repo with no manual step: setup links each
 | documentation-writer | Writing a tutorial, how-to, reference or explanation (Diátaxis), outline first | github/awesome-copilot, MIT |
 | docs-sync-audit | A read-only check of where the docs no longer match the code, P0–P3 findings with path:line | github/awesome-copilot, MIT |
 | writing-clearly-and-concisely | Strunk's rules and the AI patterns to avoid, for any prose people read | softaworks/agent-toolkit, MIT |
+| i-have-adhd | Output shaped for a reader with ADHD: next action first, numbered steps, state restated each turn, no tangents; `/i-have-adhd` turns it on until "stop adhd mode" | ayghri/i-have-adhd, MIT |
 
-A skill taken from elsewhere is read in full before it ships, keeps its LICENSE, and records its source commit and every change in `SOURCE.txt`. The three above are changed so they never write Imprimatur's generated documents by hand, and run no bundled code. A skill that would keep a second task, decision or memory store next to Imprimatur's is not carried; its useful ideas go into Imprimatur's own features instead.
+A skill taken from elsewhere is read in full before it ships, keeps its LICENSE, and records its source commit and every change in `SOURCE.txt`. The documentation skills above are changed so they never write Imprimatur's generated documents by hand, and run no bundled code; i-have-adhd ships unchanged (output rules only). A skill that would keep a second task, decision or memory store next to Imprimatur's is not carried; its useful ideas go into Imprimatur's own features instead.
 
 <!-- imprimatur:decisions --> Decisions: [PDR 0099](decisions/0099-imprimatur-carries-the-adopted-skills-itself-and-installs-th.md)
 
@@ -468,7 +386,7 @@ A skill taken from elsewhere is read in full before it ships, keeps its LICENSE,
 
 <a id="metrics"></a>
 
-### 19. Success metrics
+### 15. Success metrics
 
 The metrics are values measured in real repositories of different sizes.
 
@@ -503,3 +421,91 @@ The metrics are values measured in real repositories of different sizes.
 
 - How long the agent waits for the user and how soon changes are reviewed (#42).
 - The per-item token cost of the context loaded in every session (#29).
+
+<a id="chapter-unsorted"></a>
+
+## Unsorted
+
+<a id="agent-setup-audit"></a>
+
+### 16. Agent setup audit (planned)
+
+The agent setup (CLAUDE.md, AGENTS.md, `.claude/` settings, hooks, skills, subagents, MCP, plugins, Cursor/Codex/Copilot/Gemini/Kiro files) is audited with rules based on the official documentation. The rule engine is agnix and it is used with its full coverage: no rule or file is cut.
+
+- Findings are not hidden; they are grouped as project / user / plugin / worktree and shown with category and level counts. Every finding has a link to the rule's documentation and the date it was verified.
+- Every finding is an Imprimatur record: open / applied / rejected (with a reason). A finding that disappears becomes "applied", a rejected one is not reopened; the difference between two scans is visible. Competitors have no per-suggestion status history; that is Imprimatur's difference.
+- Later: an LLM layer (quality, contradiction, stale instruction), consistency across agents, context cost × usage (#29).
+
+Epic [#76](https://github.com/halilural/imprimatur/issues/76), first piece of work [#77](https://github.com/halilural/imprimatur/issues/77).
+
+#### Decisions settled
+
+- 5734: the agent setup audit takes agnix's full rule coverage with nothing cut, hides no finding, and keeps a per-suggestion accept/reject status history across scans — the feature's stated point of difference from competitors.
+
+<!-- imprimatur:decisions --> Decisions: [PDR 0071](decisions/0071-agent-setup-denetimi-agnix-in-tam-kapsamini-alir-bulgular-gi.md)
+
+<a id="agent-toolset"></a>
+
+### 17. The agent's toolset: seen, versioned, installed, found (#138)
+
+Epic #138, opened 2026-11-04 and the top priority. Imprimatur becomes the place where everything the agent uses is seen and managed. It builds on the Agent setup view, which already shows every agent file per repo and globally, the drift between copies, the effective settings, and the audit findings.
+
+- **Seen (#139):**
+  - *Shipped in 0.92.0:* Agent setup lists installed Claude Code plugins with their version, scope (every repo, or this project) and source marketplace. A plugin installed both for every repo and for this one is flagged. Skills synced from claude.ai are listed with their source and last update.
+  - *Next:* hand-copied skills and MCP servers with their source and version.
+- **Versioned (#140):** "update available" with what changed, a one-click update, and a lock so an update can be undone.
+- **Installed (#141):** a must-have set ships with Imprimatur and goes into every repo, and a repo can turn an item off. Imprimatur changes only what it installed. Repo-specific agent files stay in the repo.
+- **Checklist (#142):** the panel lists what this repo is missing or has out of date. Each item has an action, and Home shows the count.
+- **Recommended (#143):** maintained, well-adopted OSS skills, plugins and MCP servers that match the repo's stack.
+- **Found on demand (#144):** when work touches a technology with no skill installed, Imprimatur finds candidates, vets them, and installs one once the user agrees.
+- **Cost (#145):** what each hook costs per run and per session.
+
+Anything brought in is vetted first: its license allows redistribution, its hooks and network calls have been read, and it adds no second task store, memory store or context injector.
+
+<!-- imprimatur:decisions --> Decisions: [PDR 0100](decisions/0100-imprimatur-is-where-the-agent-s-toolset-is-seen-and-managed.md), [ADR 0102](decisions/0102-agent-setup-lists-installed-claude-code-plugins-from-claude.md), [PDR 0103](decisions/0103-139-covers-everything-that-shapes-the-agent-s-decisions-not.md), [ADR 0104](decisions/0104-agent-setup-shows-what-the-repo-s-last-claude-code-session-w.md)
+
+<a id="board"></a>
+
+### 18. The panel as a board, with analytics (#147)
+
+Epic #147, opened 2026-11-04. The Imprimatur panel looks and works like the ponytail board. The VS Code side bar stays as it is.
+
+- **Board look on every tab (#148).** *Shipped in 0.95.0:* a near-black board palette, with a light variant on light themes. Cards have a soft gradient and an inner highlight, corners are rounder, and the app bar is translucent. High-contrast themes keep VS Code's colours, and text stays legible.
+- **Session numbers (#149):** each Claude Code session's cost, time, lines and tokens.
+- **One stats module (#150):** daily series, shared by the panel and `/imprimatur-stats`.
+- **Board landing (#151):**
+  - cards with sparklines;
+  - a large chart with a metric switch and a 7d/30d/90d/All range;
+  - a sessions table;
+  - a 12-week activity heatmap with active days and streak.
+- **Analytics on each tab (#152):** tasks over time, agent edits per day and the most edited files, document chapters filled, and hook cost.
+
+<!-- imprimatur:decisions --> Decisions: [PDR 0106](decisions/0106-the-whole-imprimatur-panel-becomes-a-board-in-the-ponytail-b.md), [ADR 0107](decisions/0107-the-board-look-comes-from-theme-js-on-dark-and-light-themes.md)
+
+<a id="baseline"></a>
+
+### 19. The baseline every repo gets
+
+Imprimatur's own plugin brings its hooks, its MCP server and its skills: issues, study, exercise, imprimatur-stats and social-post. It installs at user scope. Beyond that, every repo should have five third-party items. Imprimatur does not ship them: each is installed from its own marketplace or repo, at user scope, after the user confirms.
+
+| Item | Why | Source |
+|---|---|---|
+| The repo's language server | exact go-to-definition, references and type errors | an LSP plugin chosen by the repo's files (typescript-lsp, pyright-lsp, gopls-lsp…) |
+| security-guidance | warns about security problems while Claude edits | claude-plugins-official |
+| ponytail | the smallest change that fully solves a task | DietrichGebert/ponytail |
+| context-mode | keeps large tool output out of the context window | mksglu/context-mode. ⚠ It keeps its own session store next to Imprimatur's records |
+| humanizer | clears AI tells from prose | blader/humanizer, downloaded into ~/.claude/skills with a SOURCE.txt for the upstream check |
+
+**In Agent Setup → Checklist:**
+
+- A missing item is a **Baseline: install …** row; one the user turned off is a **Baseline: turn on …** row. The button shows a confirmation, then runs `claude plugin install|enable <id> --scope user` in a terminal, or downloads the skill.
+- **Not in This Repo**, on a row's menu, opts the repo out of that item. The choice is kept in the repo's Imprimatur data. Setting a plugin's `enabledPlugins` entry to `false` in the repo's `.claude` settings counts as opting out too.
+- A **Baseline: N off in this repo** row brings an item back.
+
+Imprimatur only adds what it installs. It never edits or removes a hook, a plugin or a skill it did not install.
+
+#### Decisions settled
+
+- 9332: Imprimatur carries the community skills it adopts itself — its own plugin and marketplace bundle them, with license and source commit, and Imprimatur's setup installs them in every repo automatically; where a tool cannot be carried this way (a different app, a second store, an incompatible license), Imprimatur takes its ideas into its own features instead of adopting it directly.
+
+<!-- imprimatur:decisions --> Decisions: [PDR 0099](decisions/0099-imprimatur-carries-the-adopted-skills-itself-and-installs-th.md), [PDR 0108](decisions/0108-the-baseline-for-every-repo-imprimatur-s-own-skills-plus-fiv.md)

@@ -11,47 +11,48 @@ type: explanation
 - [Goals](#chapter-goals)
   - [1. Overview and purpose](#overview)
 - [Context and scope](#chapter-context)
-  - [2. System context](#context)
 - [Solution strategy](#chapter-strategy)
-  - [3. Key choices](#strategy)
+  - [2. Key choices](#strategy)
 - [Building blocks](#chapter-building-blocks)
-  - [4. Components and their boundaries](#components)
-  - [5. Local database and data model](#database)
-  - [6. File-based review data](#review-data)
-  - [7. Hooks and flows](#hooks)
-  - [8. MCP server](#mcp)
-  - [9. Panel and views](#panel)
-  - [10. Live updates](#live)
-  - [11. Issue tracker sync](#tracker)
-  - [12. Design documents ↔ Markdown files (docs sync)](#docs-sync)
-  - [13. History scan and TODO.md task tracking](#history-scan-todo)
-  - [14. Task analyses](#task-analysis)
-  - [15. Agent setup audit (agnix)](#agent-setup-audit)
-  - [16. Audit: is the finding in effect (#78)](#audit-effect)
-  - [17. Recommendations: project best-practice review (#86, #87)](#best-practice-review)
-  - [18. Understanding debt: read marks and the unread count (#92)](#unread)
-  - [19. /study: study mode (#95)](#study)
-  - [20. /exercise: exercise mode (#108)](#exercise)
-  - [21. Social document: a per-repo opt-in document kind (#109)](#social)
-  - [22. Agent setup inventory: plugins, synced skills and the session's context (#139)](#agent-inventory)
-  - [23. Agent files: AGENTS.md, CLAUDE.md and the docs rule (#133)](#agent-files)
-  - [24. One-time backfill of design documents and glossary](#docs-backfill-live)
-  - [25. /imprimatur-stats: scoreboard skill (#146)](#imprimatur-stats)
+  - [3. Hooks and flows](#hooks)
+  - [4. Audit: is the finding in effect (#78)](#audit-effect)
+  - [5. Understanding debt: read marks and the unread count (#92)](#unread)
+  - [6. /study: study mode (#95)](#study)
+  - [7. /exercise: exercise mode (#108)](#exercise)
+  - [8. Social document: a per-repo opt-in document kind (#109)](#social)
+  - [9. One-time backfill of design documents and glossary](#docs-backfill-live)
+  - [10. /imprimatur-stats: scoreboard skill (#146)](#imprimatur-stats)
 - [Deployment](#chapter-deployment)
-  - [26. Installation and distribution](#deployment)
 - [Crosscutting concepts](#chapter-crosscutting)
-  - [27. Security](#security)
-  - [28. Model calls and cost](#model-calls)
-  - [29. Process checks](#process-checks)
-  - [30. Test strategy](#testing)
-  - [31. Panel design layer: theme variables, icons, mascot](#ui-design)
-  - [32. Context budget: what a session loads, in estimated tokens](#context-budget)
-  - [33. Documentation rules in the audit (IMP-DOC, #131)](#doc-rules)
-  - [34. Documentation linters (#132)](#doc-linting)
+  - [11. Process checks](#process-checks)
+  - [12. Test strategy](#testing)
+  - [13. Documentation linters (#132)](#doc-linting)
 - [Decisions](#chapter-decisions)
-  - [35. Decision records: ADR and PDR as MADR 4 files](#decision-records)
 - [Risks and technical debt](#chapter-risks)
-  - [36. Known limits](#limits)
+  - [14. Known limits](#limits)
+- [Unsorted](#chapter-unsorted)
+  - [15. Components and their boundaries](#components)
+  - [16. Security](#security)
+  - [17. Installation and distribution](#deployment)
+  - [18. System context](#context)
+  - [19. Local database and data model](#database)
+  - [20. Model calls and cost](#model-calls)
+  - [21. File-based review data](#review-data)
+  - [22. MCP server](#mcp)
+  - [23. Panel design layer: theme variables, icons, mascot](#ui-design)
+  - [24. Panel and views](#panel)
+  - [25. Live updates](#live)
+  - [26. Issue tracker sync](#tracker)
+  - [27. Design documents ↔ Markdown files (docs sync)](#docs-sync)
+  - [28. History scan and TODO.md task tracking](#history-scan-todo)
+  - [29. Task analyses](#task-analysis)
+  - [30. Agent setup audit (agnix)](#agent-setup-audit)
+  - [31. Recommendations: project best-practice review (#86, #87)](#best-practice-review)
+  - [32. Agent setup inventory: plugins, synced skills and the session's context (#139)](#agent-inventory)
+  - [33. Context budget: what a session loads, in estimated tokens](#context-budget)
+  - [34. Decision records: ADR and PDR as MADR 4 files](#decision-records)
+  - [35. Agent files: AGENTS.md, CLAUDE.md and the docs rule (#133)](#agent-files)
+  - [36. Documentation rules in the audit (IMP-DOC, #131)](#doc-rules)
 
 <a id="chapter-goals"></a>
 
@@ -83,40 +84,7 @@ This document describes the system as it is today, not its history. Each section
 
 ## Context and scope
 
-<a id="context"></a>
-
-### 2. System context
-
-Imprimatur runs on the user's machine, next to the coding agents. It reaches outside it only for what the user turns on or asks for: an issue tracker, GitHub for skill sources, the plugin marketplaces' catalog, and Claude runs the user confirms. C4 level 1, drawn as a flowchart with C4 labels (Mermaid's C4Context layout draws its text too small to read):
-
-```mermaid
-flowchart LR
-  user["<b>Developer</b><br/>[Person]<br/>runs agent sessions, reviews their work in VS Code"]
-  imp["<b>Imprimatur</b><br/>[Software system]<br/>hooks, MCP server and VS Code extension<br/>around one local SQLite database"]
-  cc["<b>Claude Code</b><br/>[External system]<br/>runs the hooks, calls the MCP tools"]
-  other["<b>Other MCP clients</b><br/>[External system]<br/>Cursor, Codex: call the MCP tools"]
-  vscode["<b>VS Code</b><br/>[External system]<br/>hosts the extension: panel, marks, Agent Setup"]
-  repo["<b>The repo</b><br/>[External system]<br/>code the agents change;<br/>docs/*.md generated from the database"]
-  tracker["<b>GitHub / Jira</b><br/>[External system]<br/>issue status both ways, skill sources (optional)"]
-  market["<b>Plugin marketplaces</b><br/>[External system]<br/>the catalog, through the claude CLI"]
-  model["<b>Claude, through claude -p</b><br/>[External system]<br/>short judgments; Fix it and suggestion reviews<br/>on the user's yes"]
-  user -->|reviews, answers, ticks| vscode
-  cc -->|hook events, MCP tool calls| imp
-  other -->|MCP tool calls| imp
-  imp -->|panel and marks| vscode
-  imp -->|reads edits, writes docs| repo
-  imp -->|gh / REST| tracker
-  imp -->|claude plugin list| market
-  imp -->|prompts, no tools or read only| model
-```
-
-#### Outside the boundary
-
-- **Agents** reach Imprimatur through hooks (events in) and MCP (tools out). Imprimatur starts a Claude run of its own only for the work the user confirms: Fix it, which reads and proposes the diffs Imprimatur shows before applying them, and judging the plugin suggestions, with no tools.
-- **The model** is the user's own Claude subscription, called as `claude -p`: Haiku for the short judgments (turn-end audit, edit descriptions), Sonnet for judging suggestions. These runs load no hooks and no MCP servers (see *Model calls and cost*).
-- **Trackers** get a status and a fixed comment, never a task's text (see *Issue tracker sync*). GitHub is also read, with GET requests only, to check and download hand-installed skills.
-- **The marketplaces** are read through Claude Code's own `claude plugin list`. Installing a plugin is Claude Code's `claude plugin install`, run in a terminal after the user's yes.
-- **The repo** holds the code and the generated documents. Per-repo review data lives outside it (see *File-based review data*).
+_Not written yet._
 
 <a id="chapter-strategy"></a>
 
@@ -124,7 +92,7 @@ flowchart LR
 
 <a id="strategy"></a>
 
-### 3. Key choices
+### 2. Key choices
 
 The few choices the rest of the design follows from. Each is explained in the section named.
 
@@ -142,9 +110,338 @@ The few choices the rest of the design follows from. Each is explained in the se
 
 ## Building blocks
 
+<a id="hooks"></a>
+
+### 3. Hooks and flows
+
+Hooks are registered either in `~/.claude/settings.json` (`npm run setup`) or in the Claude Code plugin's `hooks/hooks.json`. Both are generated from the same list (`vscode/hook-plan.js`) and are not installed at the same time.
+
+Since #118 there is **one dispatcher process per event**: `hooks/run.mjs` reads the input once and runs, in-process, every step the plan gives for the event and the tool. Each step is caught on its own. The steps' answers are merged:
+
+- a block (exit 2) wins, with its stderr;
+- `additionalContext` and `systemMessage` texts are joined;
+- `permissionDecision` is the strongest (deny > ask > allow);
+- `updatedInput` is kept.
+
+A Bash or Edit call costs two node processes (Pre, Post) instead of five. Measured medians for a Bash call: 140 ms of CPU instead of 294 ms. The agent's wait is about the same, because Claude Code ran the old hooks in parallel.
+
+| Event | Tools (anchored) | Steps in `run.mjs` |
+|---|---|---|
+| PreToolUse | `Edit`, `Write`, `Bash` · `AskUserQuestion` · Imprimatur MCP · `Bash`, `Edit`, `Write`, `MultiEdit`, `NotebookEdit` | baseline (copy + history line; `pending/` for Bash) · waiting · mcp (adds `_session`, returns `allow`) · process |
+| PostToolUse | `Bash` · `AskUserQuestion` · `Edit`, `Write`, `MultiEdit`, `ExitPlanMode`, `Bash`, MCP write tools | baseline (comparison after the command) · waiting · process · activity |
+| PostToolUseFailure | `Bash` | baseline (a failed command's change is recorded too) · activity |
+| PermissionRequest, Notification (`agent_needs_input`, `elicitation_*`), UserPromptSubmit | | waiting (UserPromptSubmit → `resolve.mjs` in the background) |
+| SessionStart | | process |
+| Stop | | waiting (→ `audit.mjs` in the background) · process |
+
+`hooks/activity.mjs` (PostToolUse and PostToolUseFailure, matcher `*`, async) writes the activity row only for tools the dispatcher does not run for (`activityHookWrites`). That gives one row per call. The older per-step scripts (`baseline.mjs`, `waiting.mjs`, `mcp-session.mjs`, `process.mjs`) still work on their own, for sessions started before an update. `npm run setup` takes their settings entries out as stale.
+
+`statusline.mjs` is also Claude Code's status line (not a hook, the `statusLine` setting).
+
+#### Main flows
+
+1. **Edit:** the agent calls Edit/Write → the baseline step writes the copy and the history line before the edit → the extension sees the file change, compares the file with the copy and marks it.
+2. **End of turn:** on Stop, the waiting step writes the `step` line that closes the questions and starts `audit.mjs` in the background. Haiku reads the open steps and the agent's last message: it marks steps that are done, answered or asked again, and writes what the message really asks for as short steps (👉 lines word for word). The audit runs only when there is an open item or the reply asks for something; a plain report makes no model call.
+3. **User message:** UserPromptSubmit writes the `answer` line, and `resolve.mjs` asks Haiku "which steps did this message settle?"; a message that names a task (`LATD-13977`, or just `13977`) also evaluates the steps of that task in other sessions.
+4. **Task done:** for a task that is `done` in the database, the steps opened before the task last changed are closed in every session (`todo-done.js`, on every Stop and when the graph is drawn).
+
+#### Rules
+
+- Hooks do not block the tool: every path is `exit 0`, except a process check that blocks on purpose. Even the process checks do nothing on their own errors.
+- Model calls do not make a hook wait: they start as a detached background process.
+- In model sessions started with `IMPRIMATUR_CHILD=1`, Imprimatur hooks write nothing.
+- Language and file extensions: hook argument > `IMPRIMATUR_LANG` > plugin options (`CLAUDE_PLUGIN_OPTION_*`) > `config.json` in the database folder.
+- `db.js` has an optional plugin hook (config.json "plugins"; a plugin hears every write through `onChange` in a savepoint, can answer `adoptRepo`, hears `onOrigin`, and its `activate` gets the extension's API; `vscode/loop.js` `runLoop` runs timed jobs).
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0090](decisions/0090-one-dispatcher-process-per-hook-event-hooks-run-mjs-runs-eve.md)
+
+<a id="audit-effect"></a>
+
+### 4. Audit: is the finding in effect (#78)
+
+Each finding is marked in the audit by whether Claude Code loads that file (`links.audit.effect`: `active` / `inactive`, `why`). No finding is hidden; "Open" counts only those that are loaded, and the rest stay under **Not loaded**, by reason.
+
+- Source: `~/.claude/plugins/installed_plugins.json` (each install's `installPath` and `scope`) and `~/.claude/settings.json` `enabledPlugins`. A user-scope install is on unless `enabledPlugins` turns it off; a project-scope install is on in its own project.
+- `inactive` reasons: `catalog` (`plugins/marketplaces/…`, the store catalog), `temp` (a `cache/temp_git_*` leftover), `not-installed` (a version other than the installed one, or a plugin that is not installed), `disabled` (a disabled plugin), `other-tool` (a file in the installed plugin folder that is not a Claude component: `.cursor-plugin`, `.github`, `configs/`, the Gemini manifest …), `worktree` (an agent worktree copy).
+- Claude components (the first part of the plugin folder path): `.claude-plugin`, `hooks`, `skills`, `agents`, `commands`, `output-styles`, `monitors`, `.mcp.json`, `.lsp.json`.
+- Repo, user and synced skill files are always `active`.
+- An open record whose effect changed is updated in the next audit. The task's summary is `N open (levels) · N not loaded · N applied · N dismissed`.
+
+<a id="unread"></a>
+
+### 5. Understanding debt: read marks and the unread count (#92)
+
+#### Data
+
+- Migration 7 (and 8): `section_reads(section_id PK → doc_sections, version_id, at)`. Device-specific. The migration counts every section that exists at that moment as read at its latest version. Migration 8 rebuilds the table: a draft of 7 without `version_id` had reached the live database (the branch was running in the live checkout).
+- A section is **unread** if it is `current` and an `agent` or `hook` wrote a version after its `version_id`, and that version changed the title or the text (a change of link or position alone does not count). The comparison is by version id, not by time: when an analysis is re-read, versions can be written with a past time.
+- When `user` writes, `upsertSection` marks the section read. `import` does not count (writes from a plugin or a file): reading belongs to this device, so that a first import does not show everything as unread.
+- `db.unreadSections(repoId)`: unread sections and their tasks: in a task analysis, the `scope`; in repo documents, the tasks of the records the unread versions newly linked. `db.markSectionsRead(ids)`.
+- When a placeholder repo is merged, the read row of a deleted section is deleted too (foreign key).
+
+#### Edits
+
+Edits not yet accepted are not in the database: they are counted per task strip from the graph rows (`!accepted && !gone`, activity and record rows excluded) (`graphView.openEditsOf`) and passed to `paneHtml` as `openEdits`. The status line does not draw the graph: the extension writes the count to `.claude/imprimatur/unread.json` while it computes the sidebar badge (when it changes, or every 5 minutes); the status line ignores a file older than 15 minutes.
+
+#### Surfaces
+
+`tasksView.unreadOf` gives `{edits, sections}` per task; the task list, the top of the task page and Home use `unreadHtml`; `docsView` has the section mark and Done reading. Page messages: `read` (ids, `writeFromPanel` → `applyMessage`), `showSection` (document tab + section).
+
+<!-- imprimatur:decisions --> Decisions: [PDR 0080](decisions/0080-anlama-borcu-satiri-degil-niyeti-karari-davranis-degisikligi.md), [ADR 0081](decisions/0081-okuma-isareti-section-reads-section-id-version-id-at-cihaza.md)
+
+<a id="study"></a>
+
+### 6. /study: study mode (#95)
+
+#### Parts
+
+- **Skill** `skills/study/SKILL.md`: the flow (find the topic, read the material, read the code, write a note, ask one by one, record mastery). The plugin finds `skills/` itself; `npm run setup` links `~/.claude/skills/study` to the checkout (`linkSkills`; a junction on Windows; it does not touch another person's folder or link; with the plugin present it removes its own link).
+- **MCP tool** `study_material {key}` (read-only), `vscode/study.js`: the task (for an epic, its tasks and their records too), decisions with the full body, notes, to-dos, the architecture/product sections fed by the task's records (`doc_section_records`), the task's analysis, glossary terms named in the material, commits that name the key and the files they changed (most changed first), the study note and the latest mastery. The model text is `studyDigest`.
+
+#### Storage (no migration)
+
+- Study note: the `study` section in the task's analysis (`doc_section_upsert kind analysis`). `stale` if a commit or decision came after it.
+- Mastery: a note record (owner K) carrying `links.study {topic, questions: [{q, type, result, gap, refs}]}`. The latest record is read: weak questions first; a commit/decision/section that came later is `changed`. This text is cut to one line and 300 characters, and type and result are forced into a fixed list: it stays as data and does not look like an instruction or a heading.
+
+#### Finding commits
+
+`git log --no-merges -E --grep=(^|[^A-Za-z0-9_#-])KEY([^0-9]|$) --numstat`: the boundary is in git's search, so `-n` is not filled with wrong matches (`#1` → `#10`…); `keyPattern` looks again over the whole message (title + body, "Closes #n"). If the repo is not on this machine (placeholder) or git is missing, there are no commits.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0083](decisions/0083-study-skill-salt-okur-study-material-mcp-araci-migration-yok.md)
+
+<a id="exercise"></a>
+
+### 7. /exercise: exercise mode (#108)
+
+Exercises are the user's own data, of no repo or task, in the same device database as everything else (`vscode/db.js`, schema 9).
+
+#### Data
+
+- `exercises`: topic, goal, proof (how the goal is checked), context (what the clarifying questions found), weak (JSON list of short lines from the closing recall), status active | done | dropped.
+- `exercise_steps`: exercise_id, parent_id (a split step's smaller steps; one level), position, kind (learn, example, predict, do, vary, explain, recall), title, why, done_when, minutes, status open | done | skipped, note, done_at.
+- Steps are never deleted (skipped instead). `settleExercise` keeps progress true after every status change: a split step is done when its smaller steps are all done or skipped, open when one opens; an exercise is done when all its top-level steps are closed, active when one opens, and a dropped one stays dropped.
+- Device-local and not reported to plugins: not synced between machines (like `section_reads`).
+
+#### Flow
+
+```mermaid
+sequenceDiagram
+autonumber
+actor U as User
+participant S as /exercise skill (Claude Code)
+participant M as MCP server
+participant D as db.js
+participant P as Exercises tab
+U->>S: /exercise <topic>
+S->>U: clarifying + diagnostic questions
+S->>M: exercise_save {topic, goal, proof, context, steps}
+M->>D: saveExercise (one transaction)
+P->>D: exerciseModel (on the database watcher's redraw)
+U->>P: tick / skip / note
+P->>D: applyExerciseMessage → updateStep → settleExercise
+S->>M: exercise_get {id} before each step
+```
+
+1. The user names the topic in Claude Code.
+2. The skill asks why, level and time, then two or three diagnostic questions.
+3. It saves the goal and 5 to 9 checked steps with `exercise_save`.
+4. The MCP server writes the exercise and its steps in one transaction; a bad step rolls back the whole save.
+5. The panel's Exercises tab reads the active exercises when the database changes.
+6. The user ticks, skips or notes a step in the tab.
+7. The page posts `exStep`/`exNote`/`exDrop`/`exResume`; `tasksView.applyMessage` hands them to `exerciseView.applyExerciseMessage`, which writes through `updateStep` and settles the progress.
+8. Before coaching each step the skill reads the exercise again, so it sees the user's ticks and notes.
+
+#### Code
+
+- `vscode/db.js`: `saveExercise`, `saveStep`, `updateStep`, `settleExercise`, `exercise`, `exercises`.
+- `mcp/server.mjs`: `exercise_save` (not idempotent: steps without id are added), `exercise_get` (read-only; always the list, plus one exercise with id); `exerciseDigest` is the text the agent reads.
+- `vscode/exerciseView.js`: the tab's model, HTML, CSS and writes; `split` copies a command through the host (`exCopy` → clipboard).
+- `skills/exercise/SKILL.md`: the pipeline (clarify → diagnose → goal → steps → check → coach → recall); setup links it into `~/.claude/skills`.
+
+#### Why generation lives in the skill
+
+Not a model call from the panel: the Claude Code session can research the topic's sources, ask questions, and coach in the same conversation. The panel only tracks.
+
+<!-- imprimatur:decisions --> Decisions: [PDR 0086](decisions/0086-exercise-mode-exercise-turns-any-topic-into-5-9-ticked-steps.md)
+
+<a id="social"></a>
+
+### 8. Social document: a per-repo opt-in document kind (#109)
+
+A fifth document kind, `social` ("Social Media"), stored like the design documents (`documents`, `doc_sections`, versions, read marks) and synced with `docs/SOCIAL.md`.
+
+#### The switch
+
+- Off by default, per repo: `.claude/imprimatur.json` `{"social": true}`. `docs-export.js` `socialOn(root)` reads it, `setSocial(root, on)` writes it keeping the file's other keys (and refuses a file that is not valid JSON), `kindsOf(root)` lists the kinds kept in files (social only when on).
+- Chosen over a VS Code setting or a database flag: the hooks, the MCP server and the extension all read the repo file already (process checks, docs settings), and committing it keeps the choice with the repo.
+- Off: `exportDocs` and `syncDocs` skip the kind (the file is neither written nor read back); the MCP `doc_get` / `doc_section_upsert` refuse it with how to turn it on (`socialGate`); the panel leaves Social out of the Analysis tabs (`analysisTabs(root)`) and its page says how to turn it on; a new section from the panel is refused. The document itself is kept.
+
+#### Schema 10
+
+The `documents.kind` CHECK takes `social`. SQLite cannot alter a CHECK, so the migration rebuilds `documents` and every table that points into it (`doc_sections`, `doc_section_records`, `doc_versions`, `doc_sources`, `section_reads`): new tables, rows copied, children dropped first, renamed back, indexes recreated. It was tried on a copy of the live database (row counts equal, `integrity_check` ok, `foreign_key_check` empty) before it ran there.
+
+#### The skill
+
+`skills/social-post/SKILL.md`, linked by setup and shipped by the plugin: rules fetched at writing time (WebFetch → curl → a browser MCP → WebSearch for the official page → the user pastes), a dated rules card per channel, counts by script (X weighted: URL 23, emoji 2), facts re-checked; with tracking on it writes one section per channel (`### Rules read`, `### Post`, `### Status`, `### Results`, `### Learned`).
+
+#### Lesson from building it
+
+The migration was first saved in the live main checkout: a hook opened the database with the new code and migrated it at once, and processes on the old code (the installed extension, a running MCP server) saw a newer schema and went read-only until rebuilt. Schema changes are made in a worktree or branch and land together with the install.
+
+<!-- imprimatur:decisions --> Decisions: [PDR 0087](decisions/0087-social-media-is-a-fifth-living-document-social-off-by-defaul.md)
+
+<a id="docs-backfill-live"></a>
+
+### 9. One-time backfill of design documents and glossary
+
+A repo's empty design documents and glossary are filled once, in the background, by a read-only `claude -p` agent run, rather than left empty or backfilled by hand.
+
+SessionStart checks, for every known repo (whether or not it has a `.claude/imprimatur.json`): has it already been backfilled once, does it have at least 10 records, and does at least one document stand empty or have ADR/PDR records with no linked section (the home directory is excluded). If so, a separate process starts `claude -p`: Sonnet, a $3 budget, up to 120 turns, read-only `Read`/`Glob`/`Grep` tools plus Imprimatur's MCP document tools. The agent writes sections from the existing records and the code, and links records to the sections it writes. The one-time claim keeps a repo from being backfilled twice; the superseded `docs-backfill` section (which predates the chaptered, decision-linked document structure) described the document shape before #129/#131 and no longer reflects the current rule set.
+
+#### Decisions settled
+
+- 6928: empty design documents and the glossary are backfilled once per repo, in the background, by a budget-capped, read-only `claude -p` run triggered at SessionStart, instead of leaving them empty or requiring a manual pass.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0076](decisions/0076-bos-tasarim-dokumanlari-ve-sozluk-her-repo-icin-bir-kez-arka.md)
+
+<a id="imprimatur-stats"></a>
+
+### 10. /imprimatur-stats: scoreboard skill (#146)
+
+`skills/imprimatur-stats/stats.mjs` is a Node ESM script run by the `/imprimatur-stats` skill: it maps a repo folder to its git root, takes `--days N` (default 7), and prints one ASCII bar per measure — now vs. the period before, scaled to the larger of the two, with ▲/▼ % or "new" (equal values show no trend).
+
+- **Measures:** tasks finished/opened, decisions (adr/pdr/decision) and records written, agent edits marked (history lines plus the gzipped archive for days in range), turn-end asks recorded (live and archived waiting logs, deduplicated by session and time), waiting on you now (`inboxCount`, the same figure as the Home badge), median time to answer, tasks open/active, the last session's hook rows (`session-context.js`).
+- **Skill:** runs the script, shows its output verbatim in a code block, and adds at most three lines of its own (the biggest change, what is waiting, a slow hook).
+- **Why a skill, not a panel page:** it reuses the terminal pattern the user pointed at (ponytail's `/ponytail-gain`) and needs no UI code; a panel page can come later from the same numbers (see "The panel as a board", #150).
+- Writes nothing; a run takes about 0.28 s.
+- **Limits:** "tasks finished" uses `updated_at`, so a done task edited later counts in the later period; the archive is read only for days archived within the three periods compared.
+
+#### Decisions settled
+
+- 9347: `/imprimatur-stats` is a skill whose script prints an ASCII scoreboard (now vs. the period before) from the database, the review data (archive included) and the last session's transcript, and the agent shows the script's output verbatim rather than re-summarizing it.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0105](decisions/0105-imprimatur-stats-is-a-skill-whose-script-prints-an-ascii-sco.md)
+
+<a id="chapter-deployment"></a>
+
+## Deployment
+
+_Not written yet._
+
+<a id="chapter-crosscutting"></a>
+
+## Crosscutting concepts
+
+<a id="process-checks"></a>
+
+### 11. Process checks
+
+The development process rules (formerly `.claude/hooks/*.sh` copied into every repo) run in one place, Imprimatur's global hook (`hooks/process.mjs` → `vscode/process.js`).
+
+#### Turning on and configuration
+
+- A repo opts in with a committed `.claude/imprimatur.json` (written by **Imprimatur: Turn On Process Checks for This Repo**). If the file is missing, no check runs.
+- Each check is `"block"` (stop the tool or the turn), `"warn"` (tell the agent, carry on) or `false`; a key missing from the file takes its default.
+- A check's own error does not stop the agent (`exit 0`); on Stop, `stop_hook_active` prevents a loop.
+
+#### Checks
+
+| Event | Check | Default | What it does |
+|---|---|---|---|
+| SessionStart | `whereWeLeftOff` | on | Unfinished tasks and their 👉 from the database (at most 4,000 characters) |
+| PreToolUse Bash | `hookBypass` | block | `git --no-verify`, `commit -n`, `HUSKY=0` |
+| PreToolUse edit | `mainGuard` | block | On `main`, only allowed paths (default `^docs/`) |
+| PreToolUse edit | `designFirst` | warn | Code on a `<type>/<n>-…` branch while the task has no ADR/PDR |
+| PostToolUse edit | `docsToc` | warn | When `docs/**/*.md` changes, the repo's table-of-contents script (only in a trusted repo) |
+| PostToolUse edit | `unopenedSources` | warn | A source marked "not opened" in market research |
+| PostToolUse Bash | `issueCreate`, `issueFields` | warn | After `gh issue create`: epic, board, milestone, Imprimatur task |
+| PostToolUse MCP | `sweep` | warn | The task is done but the issue is open (silent while issue tracker sync is running) |
+| Stop | `status` | block | The answer has no "Where are we" section |
+| SessionStart, Bash | `branchFinish` | warn | Branches that were merged but left behind |
+| PostToolUse MCP, Stop | `docUpdate` | warn | No document section is linked to an added/changed ADR or PDR |
+
+Repo-specific rules (an em dash ban, deploy, migrations, etc.) are out of scope and stay in the repo.
+
+<a id="testing"></a>
+
+### 12. Test strategy
+
+#### Unit tests (`npm test`)
+
+- `node:test`, dependency-free (`markdown-it` only for the preview tests). 44 test files under `test/`; each module has its own test: diff, preview, graph, waiting items, audit, hooks (with real JSON input), database, MCP, issue tracker, process checks, documents, Agent Setup, plugin files, the package list.
+- A pure design makes testing possible: the view builders (`tasksView`, `docsView`) take a database and return HTML; `tracker.js` and `watch.js` do not depend on VS Code and are driven with a fake clock and a fake `gh`.
+- Tests never touch the real database: under `node --test`, `dbPath()` gives a temporary file and passes it on to the hooks the test process starts.
+- Concurrency: 12 processes opening and writing a new database at the same time.
+- The data audit and "graph accuracy" tests prevent regressions of bugs that came from real data.
+
+#### Integration tests (`npm run test:integration`)
+
+In a real VS Code with `@vscode/test-cli` + `@vscode/test-electron`: activation and commands, the record commands, the document tabs, and a record written from another process reaching the panel within 500 ms.
+
+#### Manual tests
+
+Manual tests of visual behavior such as the editor marks and the preview are kept as test records in the `TEST` task (MT-AR-001…012, #6). Measurements (latency, CPU) are taken on real repositories of different sizes and written to the relevant record.
+
+<a id="doc-linting"></a>
+
+### 13. Documentation linters (#132)
+
+Every repo can carry four documentation linters: markdownlint-cli2 (structure), cspell (spelling, warnings only), lychee `--offline` (links between the repo's files) and Vale with Google's style (warnings). Agent Setup's checklist shows "Doc lint: write …" while a repo lacks one of their configs (`.markdownlint-cli2.jsonc`, `cspell.json`, `lychee.toml`, `.vale.ini`) or the npm scripts that run them. `vscode/doc-lint.js` writes only what is missing, with O_EXCL, so a repo's own edits stay; the scripts go into package.json under names that are free.
+
+| Script | Runs | Fails the run |
+|---|---|---|
+| `lint:docs` | markdownlint-cli2@0.18.1, then cspell@9.2.1 (English prose only) | markdownlint errors |
+| `lint:links` | lychee --offline docs | broken local links |
+| `lint:prose` | vale sync && vale docs | no (warnings) |
+
+#### Generated documents pass by construction
+
+The exported documents are tidied where their text is made (`vscode/md-tidy.js`, from `docMarkdown` and `madrText`): blank lines around headings, fences and the start of a list, `text` on a bare fence, bare URLs in `<>`, a line starting `#139` escaped. `nest` shifts a section body's headings so its highest sits one level under the section heading, so the same subheading in two sections is no longer a duplicate. docs-sync hashes a section after the same nest and tidy, so the tidied file and its stored body compare equal and the tidy-up is never read back as a hand edit. No stored text changes.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0113](decisions/0113-doc-linting-generated-markdown-is-tidied-where-it-is-made-ag.md)
+
+<a id="chapter-decisions"></a>
+
+## Decisions
+
+_Not written yet._
+
+<a id="chapter-risks"></a>
+
+## Risks and technical debt
+
+<a id="limits"></a>
+
+### 14. Known limits
+
+#### Review
+
+- No marks in diff tabs (Working Tree): git already colors them.
+- Bash edits are seen only for files named in the command; a glob (`sed -i *.md`) and a path with a variable (`$R/x.md`) slip through. The real result of a Bash edit cannot be known.
+- Numbered-list numbers are not compared; changes inside fenced code blocks are not marked (the history still counts them).
+- The preview is at block level (no word marks); a deleted table row is not visible in the preview.
+- Every difference between the copy and the file is marked, including the user's own edit in the same file; a parallel session editing the same file may show up as an "Outside change".
+- The history writes the whole text at every edit: small for documents, it grows for a big file. LCS is O(n·m): slow on a file with thousands of changed lines (at the upper bound the middle part is shown as a single block).
+- The Mermaid diff covers only `flowchart`/`graph`; it is off by default because two Mermaid preview extensions can clash in the same window.
+
+#### Data
+
+- Edits made by Bash commands that failed before #45 were not recorded and do not come back.
+- Issue tracker sync runs while the extension is open (or with `npm run tracker`).
+
+#### Scope
+
+- Hooks are only for Claude Code; Cursor and Codex use only the MCP tools (no review, waiting items or activity for them).
+- The issue tracker covers only GitHub Issues and Jira; no board Status field and no Linear.
+- There is no context budget (token by token) yet (#29).
+
+<a id="chapter-unsorted"></a>
+
+## Unsorted
+
 <a id="components"></a>
 
-### 4. Components and their boundaries
+### 15. Components and their boundaries
 
 C4 level 2 (containers), drawn as a flowchart with C4 labels: Mermaid's C4Container layout stacks the external systems on top and its labels overlap. Everything inside the boundary runs on the developer's machine. The boundaries follow who writes what.
 
@@ -195,9 +492,135 @@ The shared modules (`vscode/diff.js`, `waiting.js`, `audit.js`, `tasks.js`, `rec
 
 <!-- imprimatur:decisions --> Decisions: [ADR 0060](decisions/0060-senkron-yerel-node-sqlite-asil-kaynak-kalir-degisiklikler-al.md)
 
+<a id="security"></a>
+
+### 16. Security
+
+#### VS Code extension
+
+- **Workspace Trust:** `capabilities.untrustedWorkspaces.supported = "limited"`. In an untrusted folder it shows changes and records but starts no model call (`claude`), no `gh` and no repo script (`trust.js` logs once for each kind of work). Hooks run outside VS Code and make their own decisions.
+- **extensionKind `workspace`:** on a remote/WSL connection the extension runs on the machine where the files and the database are. Virtual workspaces are not supported.
+- **Webview:** `localResourceRoots: []` (no local file is loaded, everything is inline); CSP `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-…'; form-action 'none'; base-uri 'none'`. Document bodies are rendered with `html: false`, links are only http(s), mailto and in-page anchors. Data is carried by `postMessage`.
+- The Accept links in the preview go through the `vscode://halilural.imprimatur/accept?…` URI handler. The 📄 link of a waiting step does not open a file outside the repo.
+
+#### Secrets (#124)
+
+- Keys and tokens live in `secrets.json` (mode `0600`) next to `config.json` in the database folder. `config.json` keeps only what is not secret. A section reads as the two merged, with `secrets.json` winning (`vscode/secrets.js` `sectionWithSecrets`; `imprimatur-private` `lib/settings.js`). A `secrets.json` that others can read, or that is a symlink, is ignored.
+- `migrateSecrets` moves a field out of `config.json` only once its reader reads `secrets.json`: Imprimatur's own (`tracker.jira.token`), or a loaded plugin that names the key in `module.exports.secrets`. It runs when the extension starts and in `npm run setup`. It reports names only, never values. `secrets.json` is written first, so a crash never loses a key.
+- `npm run setup` adds `permissions.deny` `Read(…/secrets.json)` and `Edit(…/secrets.json)` to `~/.claude/settings.json`, so an agent's file tools do not pull a key into its context. A Bash command that reads the file still goes through the permission check; any process running as the user can read it; an OS keychain is the next step where one exists.
+- A token is not given on the command line (shell history); it is taken from an environment variable or a hidden prompt.
+- Comments sent to the issue tracker are fixed: no task or record text leaks out.
+- If the Agent Setup health check finds a secret, it names only the line and never writes the value.
+- Plugins listed in `config.json` ("plugins") are code the user chose to install; a plugin reaches only what the plugin hook gives it (writes through `onChange`, `adoptRepo`, `onOrigin`, and the extension's API in `activate`).
+
+#### Hooks and process checks
+
+- MCP tools run without a permission prompt (`allow`), because they touch only Imprimatur's database.
+- The repo's own scripts (e.g. `scripts/docs-toc.mjs` for `docsToc`) run only in repos the user trusted with a VS Code command: the list is outside the repo, in the database folder (`trusted-repos.json`). The script path must be a real file inside the repo (links are resolved, a path starting with `-` is rejected).
+- Document export does not write outside the repo (if `docs/` or the file is a link that leads outside the repo) and does not overwrite a hand-written file.
+
+##### Decisions settled
+
+- 5573: the extension runs with `extensionKind: ["workspace"]` (so it runs where the files and database are, even remote/WSL), `untrustedWorkspaces: limited` (no model/`gh`/repo script in an untrusted folder), and a webview with no local resource roots and a nonce-based CSP allowing no network or inline resources.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0063](decisions/0063-eklenti-guvenligi-ve-paketleme-65-extensionkind-workspace-wo.md), [ADR 0091](decisions/0091-keys-and-tokens-move-from-config-json-to-secrets-json-0600-d.md)
+
+<a id="deployment"></a>
+
+### 17. Installation and distribution
+
+#### Installing on a machine: `npm run setup`
+
+In a repo clone (Node 22+, git, VS Code 1.100+, the `claude` CLI), one command:
+
+- Adds the hooks to `~/.claude/settings.json` (backup first; ours are found by script name, older releases' per-script entries included, updated if the path or language changed, other people's are not touched): one `run.mjs` dispatcher entry per event (#118).
+- If there is no status line, makes `hooks/statusline.mjs` the status line.
+- Adds the MCP allow rule (#113) and the deny rules for `secrets.json` (#124) to `permissions`, and moves keys from `config.json` to `secrets.json`.
+- Registers the MCP server with Claude Code (user scope, `claude mcp add`) and, if installed, with Cursor and Codex (the rest of the file is preserved byte for byte). If Node < 22.13 it does not register and says why.
+- Packages and installs the extension; `--lang`, `--show-in` go to the VS Code machine settings; `--lang`/`--exts` go to `config.json` in the database folder.
+- Options `--dry-run`, `--no-extension`, `--no-allow` exist.
+
+Hooks and the MCP server run **from the repo clone**: on this machine the main checkout of `~/projects/imprimatur` is live code; a change merged to main is in effect at the next hook call (a session reads its hook list when it starts). The extension stays on the old version until it is packaged and installed.
+
+#### Claude Code plugin
+
+- `.claude-plugin/plugin.json` (the same version as the extension, the MCP server inline, `${CLAUDE_PLUGIN_ROOT}`) and `hooks/hooks.json` are generated by `scripts/plugin.mjs` from the same hook list as the setup; the test breaks if the committed files differ.
+- `claude plugin marketplace add halilural/imprimatur` + `claude plugin install imprimatur@imprimatur`. The plugin does not bring the VS Code extension or the status line.
+- `npm run setup -- --plugin` adds the clone as a marketplace, installs the plugin, and removes the hooks in the settings file and the user-scope MCP server (backup first). While the plugin is on, a plain `setup` writes no hooks: the same hook never runs twice.
+
+#### One version per machine (#123)
+
+Claude Code does not update a plugin's cache by itself, so the plugin can lag behind the extension; a migration shipped in one then makes the other read-only. `vscode/versions.js` reads what runs, from files only:
+
+- `imprimaturPlugin()`: the user-scope, enabled entry in `~/.claude/plugins/installed_plugins.json`;
+- `extensionVersion()`: VS Code's `extensions.json`;
+- `codeVersion(root)`: the version of the code in a folder.
+
+With the plugin installed, the status line imports the plugin's own `hooks/statusline.mjs`, so it runs the code the hooks and the MCP server run, whatever path `statusLine` names. It adds `⚠ <own> ≠ extension <ext>` when its version differs from the extension's. At start, the extension warns when the plugin's version differs from its own; its "Update the plugin" button runs `claude plugin marketplace update imprimatur && claude plugin update imprimatur@imprimatur` in a terminal.
+
+#### VS Code extension
+
+`npm run package`: `scripts/build.mjs` produces a single `vscode/dist/extension.js` with esbuild (`vscode` and Node built-ins left out), then `dist/imprimatur-<version>.vsix` with `vsce`. The package file list is kept by hand; a test catches a missing file.
+
+#### Plugins
+
+`db.js` has an optional plugin hook (config.json "plugins"; a plugin hears every write through `onChange` in a savepoint, can answer `adoptRepo`, hears `onOrigin`, its `activate` gets the extension's API, and its `secrets` export names the keys it reads from `secrets.json`; `vscode/loop.js` `runLoop` runs timed jobs). Plugins are installed and deployed on their own, outside this repo.
+
+Device sync is one such plugin: the public repo (`halilural/imprimatur`) carries only this generic plugin hook, never the sync code itself. The user's own Cloudflare Worker, its D1 database id, and the outbox/LWW sync logic live in a private repo (`halilural/imprimatur-private`) loaded through `config.json`'s `plugins` list. Going to the Marketplace made this split necessary: the public code and its history disclose nothing about the private backend.
+
+#### Versioning
+
+One version number (`vscode/package.json`) is shared by the extension and the plugin. Work is done on a short-lived branch and, when quality is green, merged straight into main (no PR).
+
+##### Decisions settled
+
+- 578: the review module is independent and lives in its own public repo, separate from git's staging/commit mechanics.
+- 619: the product and extension are named "Imprimatur", with the `imprimatur.` prefix used everywhere (settings, commands, colors, URI handler).
+- 620: this repo is reached only from outside; review data lives outside the repo, and the hook is installed machine-wide (not per-project).
+- 634: `npm run setup` registers the MCP server with Claude Code/Cursor/Codex and needs Node ≥ 22.13.
+- 5574: the Claude Code plugin's `hooks.json`/`plugin.json` are generated from the same hook list `npm run setup` uses, so the settings-file path and the plugin path never both write the same hook.
+- 8625: device sync stays a private plugin; the public repo keeps only the generic plugin hook, so the Cloudflare Worker, its D1 id and the sync logic never appear in public code.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0001](decisions/0001-modul.md), [ADR 0042](decisions/0042-ad-10.md), [ADR 0043](decisions/0043-bu-repoya-baglanti-yalniz-disaridan-gitignore-da-claude-impr.md), [ADR 0057](decisions/0057-kurulum.md), [ADR 0064](decisions/0064-claude-code-plugin-i-67-hooks-json-plugin-json-kurulumla-ayn.md), [ADR 0085](decisions/0085-device-sync-leaves-the-public-repo-as-a-private-plugin-the-p.md), [ADR 0095](decisions/0095-one-imprimatur-version-per-machine-the-status-line-runs-the.md)
+
+<a id="context"></a>
+
+### 18. System context
+
+Imprimatur runs on the user's machine, next to the coding agents. It reaches outside it only for what the user turns on or asks for: an issue tracker, GitHub for skill sources, the plugin marketplaces' catalog, and Claude runs the user confirms. C4 level 1, drawn as a flowchart with C4 labels (Mermaid's C4Context layout draws its text too small to read):
+
+```mermaid
+flowchart LR
+  user["<b>Developer</b><br/>[Person]<br/>runs agent sessions, reviews their work in VS Code"]
+  imp["<b>Imprimatur</b><br/>[Software system]<br/>hooks, MCP server and VS Code extension<br/>around one local SQLite database"]
+  cc["<b>Claude Code</b><br/>[External system]<br/>runs the hooks, calls the MCP tools"]
+  other["<b>Other MCP clients</b><br/>[External system]<br/>Cursor, Codex: call the MCP tools"]
+  vscode["<b>VS Code</b><br/>[External system]<br/>hosts the extension: panel, marks, Agent Setup"]
+  repo["<b>The repo</b><br/>[External system]<br/>code the agents change;<br/>docs/*.md generated from the database"]
+  tracker["<b>GitHub / Jira</b><br/>[External system]<br/>issue status both ways, skill sources (optional)"]
+  market["<b>Plugin marketplaces</b><br/>[External system]<br/>the catalog, through the claude CLI"]
+  model["<b>Claude, through claude -p</b><br/>[External system]<br/>short judgments; Fix it and suggestion reviews<br/>on the user's yes"]
+  user -->|reviews, answers, ticks| vscode
+  cc -->|hook events, MCP tool calls| imp
+  other -->|MCP tool calls| imp
+  imp -->|panel and marks| vscode
+  imp -->|reads edits, writes docs| repo
+  imp -->|gh / REST| tracker
+  imp -->|claude plugin list| market
+  imp -->|prompts, no tools or read only| model
+```
+
+#### Outside the boundary
+
+- **Agents** reach Imprimatur through hooks (events in) and MCP (tools out). Imprimatur starts a Claude run of its own only for the work the user confirms: Fix it, which reads and proposes the diffs Imprimatur shows before applying them, and judging the plugin suggestions, with no tools.
+- **The model** is the user's own Claude subscription, called as `claude -p`: Haiku for the short judgments (turn-end audit, edit descriptions), Sonnet for judging suggestions. These runs load no hooks and no MCP servers (see *Model calls and cost*).
+- **Trackers** get a status and a fixed comment, never a task's text (see *Issue tracker sync*). GitHub is also read, with GET requests only, to check and download hand-installed skills.
+- **The marketplaces** are read through Claude Code's own `claude plugin list`. Installing a plugin is Claude Code's `claude plugin install`, run in a terminal after the user's yes.
+- **The repo** holds the code and the generated documents. Per-repo review data lives outside it (see *File-based review data*).
+
 <a id="database"></a>
 
-### 5. Local database and data model
+### 19. Local database and data model
 
 #### Engine and location
 
@@ -267,9 +690,46 @@ Panel queries are indexed and `LIMIT`ed: < 1 ms at 10,000 records; opening (prag
 
 <!-- imprimatur:decisions --> Decisions: [ADR 0044](decisions/0044-kayit-veritabani-hedef-hal-57.md), [ADR 0045](decisions/0045-motor.md), [ADR 0046](decisions/0046-yer.md), [ADR 0047](decisions/0047-eszamanlilik.md), [ADR 0048](decisions/0048-sema.md), [ADR 0049](decisions/0049-surum.md), [ADR 0050](decisions/0050-erisim-katmani-vscode-db-js-commonjs-hook-lar-createrequire.md), [ADR 0051](decisions/0051-gecikme.md), [ADR 0089](decisions/0089-the-database-bounds-its-wal-to-4-mb-and-gets-a-daily-upkeep.md), [ADR 0094](decisions/0094-version-tables-are-compacted-losslessly-option-a-drop-only-w.md)
 
+<a id="model-calls"></a>
+
+### 20. Model calls and cost
+
+Imprimatur turns to a small model (Haiku) only where verbal judgment is needed; where a rule is enough, no model is called.
+
+#### How it is called
+
+`vscode/model.js` is the only path: `claude -p --model haiku`, with no tools, no MCP, no settings files (`--setting-sources ""`, `--strict-mcp-config`, `--tools ""`), without saving a session, in a temporary folder and with `IMPRIMATUR_CHILD=1` (Imprimatur hooks write nothing in that session). It runs on the user's Claude subscription; it needs no API key. The language is `IMPRIMATUR_LANG` / `imprimatur.language`.
+
+#### Where
+
+| Place | When | Without a model |
+|---|---|---|
+| End-of-turn audit (`audit.js`) | On Stop, only when there is an open item or the reply asks for something (👉, `?`, "test this") | Rule-based reading (👉, `?`, request phrases) |
+| Chat sync (`resolve.mjs`) | After every user message, if a step is open | Steps that end with `?` count as answered |
+| Edit description (`describe.js`) | Only when the agent's words are shorter than 4 words and the row is shown in the graph (the newest 40 rows, at most 2 at a time) | The nearest heading + the first changed line |
+| History scan (`history.js`) | When the user asks, or on first open in a project; 4 calls at a time | Only 👉 lines |
+| Agent Setup "Explain last change" | When asked, cached by commit + path | None |
+
+#### Cost principles
+
+- Measured (2026-10-09): each hook ~65 ms; the MCP tool definitions ~1.4k tokens and Claude Code loads them deferred; the real cost was the background Haiku calls (in a busy real repository about 100 descriptions a day + the audit at every turn end). Since 38 of 40 descriptions could be covered by the agent's own words, the model is called only for the rest.
+- The SessionStart context is limited to 4,000 characters (Claude Code truncates at 10,000).
+- Deterministic information such as the task strip is not asked of the model (the `#n` key in the text is used).
+- In an untrusted folder the extension starts no model call.
+- `--bare` or the API directly was evaluated and is not used: it needs an API key and does not work with a subscription.
+
+##### Decisions settled
+
+- 598: the end-of-turn audit calls Haiku only when there is an open step or the reply asks for something, after the model reasons one line per step before writing its JSON; Haiku was kept over Sonnet because it closed steps more consistently and cautiously in testing.
+- 601: the chat-sync pass (`resolve.mjs`) asks Haiku which open steps a user message settled, after every user message, including steps opened by other sessions on the same task.
+- 604: an edit's one-sentence description is requested from Haiku only when the agent's own words are too short to describe the change.
+- 5571: model calls happen only where a rule cannot decide (Haiku, via `claude -p`); this is the cost principle the rows above follow.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0021](decisions/0021-haiku-denetimi-0-24-0-kullanici-2026-10-05-haiku-genel-olara.md), [ADR 0024](decisions/0024-chat-senkronu-0-23-0-kullanici-2026-10-05-chatte-karar-veriy.md), [ADR 0027](decisions/0027-model-aciklamasi-0-22-0-kullanici-2026-10-05-degisikligi-hal.md), [ADR 0061](decisions/0061-model-cagrilari-yalniz-gerektiginde-62-63-haiku-claude-p-kur.md)
+
 <a id="review-data"></a>
 
-### 6. File-based review data
+### 21. File-based review data
 
 The review of an agent edit is kept not in the database but as files, one folder per repo: hooks must write very fast before an edit, the data must be split by repo and by file, and old data must be archivable on its own.
 
@@ -332,54 +792,9 @@ The old folder keeps `.gitignore` and `MOVED.md`. What an older release still wr
 
 <!-- imprimatur:decisions --> Decisions: [ADR 0002](decisions/0002-hooks-baseline-mjs.md), [ADR 0028](decisions/0028-acik-kalan-isler-0-21-0-kullanici-2026-10-05-sonraki-prompt.md), [ADR 0029](decisions/0029-waiting-on-you-0-19-0-11.md), [ADR 0032](decisions/0032-veri-denetimi-duzeltmeleri-0-30-3-45-2026-10-07-de-5-reponun.md), [ADR 0033](decisions/0033-grafik-dogrulugu-0-30-4-46-grafik-denetimi.md), [ADR 0034](decisions/0034-eski-veri-kendiliginden-duzelir-0-30-5-47-veri-yeniden-yazil.md), [ADR 0035](decisions/0035-eski-satirlar-cagrilarina-baglanir-0-30-7-49-interview-ve-gr.md), [ADR 0037](decisions/0037-performans-0-31-1-51-olcum-iki-pencerenin-extension-host-u-1.md), [ADR 0038](decisions/0038-arsiv-0-32-0-52-kullanici-sikistirilmis-arsiv-7-gun-inceleme.md), [ADR 0059](decisions/0059-ajanin-her-isi-async-posttooluse-hook-u-her-cagriyi.md), [ADR 0096](decisions/0096-per-repo-data-lives-at-database-folder-repos-name-hash-not-i.md), [ADR 0098](decisions/0098-waiting-logs-are-parsed-once-per-file-version-an-in-process.md)
 
-<a id="hooks"></a>
-
-### 7. Hooks and flows
-
-Hooks are registered either in `~/.claude/settings.json` (`npm run setup`) or in the Claude Code plugin's `hooks/hooks.json`. Both are generated from the same list (`vscode/hook-plan.js`) and are not installed at the same time.
-
-Since #118 there is **one dispatcher process per event**: `hooks/run.mjs` reads the input once and runs, in-process, every step the plan gives for the event and the tool. Each step is caught on its own. The steps' answers are merged:
-
-- a block (exit 2) wins, with its stderr;
-- `additionalContext` and `systemMessage` texts are joined;
-- `permissionDecision` is the strongest (deny > ask > allow);
-- `updatedInput` is kept.
-
-A Bash or Edit call costs two node processes (Pre, Post) instead of five. Measured medians for a Bash call: 140 ms of CPU instead of 294 ms. The agent's wait is about the same, because Claude Code ran the old hooks in parallel.
-
-| Event | Tools (anchored) | Steps in `run.mjs` |
-|---|---|---|
-| PreToolUse | `Edit`, `Write`, `Bash` · `AskUserQuestion` · Imprimatur MCP · `Bash`, `Edit`, `Write`, `MultiEdit`, `NotebookEdit` | baseline (copy + history line; `pending/` for Bash) · waiting · mcp (adds `_session`, returns `allow`) · process |
-| PostToolUse | `Bash` · `AskUserQuestion` · `Edit`, `Write`, `MultiEdit`, `ExitPlanMode`, `Bash`, MCP write tools | baseline (comparison after the command) · waiting · process · activity |
-| PostToolUseFailure | `Bash` | baseline (a failed command's change is recorded too) · activity |
-| PermissionRequest, Notification (`agent_needs_input`, `elicitation_*`), UserPromptSubmit | | waiting (UserPromptSubmit → `resolve.mjs` in the background) |
-| SessionStart | | process |
-| Stop | | waiting (→ `audit.mjs` in the background) · process |
-
-`hooks/activity.mjs` (PostToolUse and PostToolUseFailure, matcher `*`, async) writes the activity row only for tools the dispatcher does not run for (`activityHookWrites`). That gives one row per call. The older per-step scripts (`baseline.mjs`, `waiting.mjs`, `mcp-session.mjs`, `process.mjs`) still work on their own, for sessions started before an update. `npm run setup` takes their settings entries out as stale.
-
-`statusline.mjs` is also Claude Code's status line (not a hook, the `statusLine` setting).
-
-#### Main flows
-
-1. **Edit:** the agent calls Edit/Write → the baseline step writes the copy and the history line before the edit → the extension sees the file change, compares the file with the copy and marks it.
-2. **End of turn:** on Stop, the waiting step writes the `step` line that closes the questions and starts `audit.mjs` in the background. Haiku reads the open steps and the agent's last message: it marks steps that are done, answered or asked again, and writes what the message really asks for as short steps (👉 lines word for word). The audit runs only when there is an open item or the reply asks for something; a plain report makes no model call.
-3. **User message:** UserPromptSubmit writes the `answer` line, and `resolve.mjs` asks Haiku "which steps did this message settle?"; a message that names a task (`LATD-13977`, or just `13977`) also evaluates the steps of that task in other sessions.
-4. **Task done:** for a task that is `done` in the database, the steps opened before the task last changed are closed in every session (`todo-done.js`, on every Stop and when the graph is drawn).
-
-#### Rules
-
-- Hooks do not block the tool: every path is `exit 0`, except a process check that blocks on purpose. Even the process checks do nothing on their own errors.
-- Model calls do not make a hook wait: they start as a detached background process.
-- In model sessions started with `IMPRIMATUR_CHILD=1`, Imprimatur hooks write nothing.
-- Language and file extensions: hook argument > `IMPRIMATUR_LANG` > plugin options (`CLAUDE_PLUGIN_OPTION_*`) > `config.json` in the database folder.
-- `db.js` has an optional plugin hook (config.json "plugins"; a plugin hears every write through `onChange` in a savepoint, can answer `adoptRepo`, hears `onOrigin`, and its `activate` gets the extension's API; `vscode/loop.js` `runLoop` runs timed jobs).
-
-<!-- imprimatur:decisions --> Decisions: [ADR 0090](decisions/0090-one-dispatcher-process-per-hook-event-hooks-run-mjs-runs-eve.md)
-
 <a id="mcp"></a>
 
-### 8. MCP server
+### 22. MCP server
 
 `mcp/server.mjs` is the **only** read/write path agents have to tasks and records. Claude Code (user scope or plugin), Cursor (`~/.cursor/mcp.json`) and Codex (`~/.codex/config.toml`) see the same server and tools.
 
@@ -429,9 +844,43 @@ A result is a short text summary plus `structuredContent` (and `outputSchema` in
 
 <!-- imprimatur:decisions --> Decisions: [ADR 0052](decisions/0052-mcp-sunucusu-58.md), [ADR 0053](decisions/0053-mcp-server-mjs.md), [ADR 0054](decisions/0054-araclar-az-ve-genel-kullanici-2026-10-09-her-tanim-ajanin-ba.md), [ADR 0055](decisions/0055-repo.md), [ADR 0056](decisions/0056-kim.md), [ADR 0062](decisions/0062-mcp-araclari-spec-2026-07-28-e-ve-ajanlara-uygun-64-72-disco.md), [ADR 0092](decisions/0092-mcp-tool-profiles-imprimatur-tools-or-mcp-tools-in-claude-im.md), [ADR 0093](decisions/0093-search-answers-with-an-index-no-bodies-titles-cut-to-160-8-h.md)
 
+<a id="ui-design"></a>
+
+### 23. Panel design layer: theme variables, icons, mascot
+
+The panel's look comes from three small modules. All are plain CommonJS; they need no build step and do not trip the CSP.
+
+- **`vscode/theme.js` (THEME_CSS):** defines design variables on `body`:
+  - `--acc`, by theme type: light `#c2410c`, dark `#fb923c`, high contrast `#ffa94d` / `#9a3412`.
+  - `--acc-ink` (text on the accent), `--acc-soft`, `--acc-line`.
+  - `--surface`, `--surface-2`, `--line`, `--muted`, `--shadow` (none in high contrast).
+  - `--r-*` corners, `--fs-*` type scale.
+
+  The same file has the app bar styles: mascot, repo chip, tabs with icons, search box, Audit/Scan buttons. The app bar is sticky; below 760px it is not sticky. Its height is written as `--appbar-h`, and the Tasks list and the Contents panel stick under it.
+- **`vscode/icons.js`:** Lucide icons (ISC license). Not edited by hand; `npm run icons` (`scripts/icons.mjs`) generates only the ones in the NAMES list from `lucide-static`. `tasksView.icon(name, size)` draws them. The types in the Agent changes tab use these icons too.
+- **`vscode/mascot.js`:** the mascot from `assets/logo.svg` is embedded inline (the gradient ids are prefixed with `imp-`). It is shown in the header and in empty screens (`.emptyhero`).
+
+**Rules:**
+
+- No fixed hex colors in the Tasks CSS (a test checks this).
+- Secondary text is written with the `--muted` color, not with opacity.
+- Mermaid diagrams are drawn with `theme: base`; their colors are computed from the page's `--vscode-editor-background`, `--vscode-foreground` and `--acc` values.
+
+vscode-elements was deliberately not used; the reason is in the linked ADR.
+
+#### The board look (#148, 0.95.0)
+
+On dark and light themes, `theme.js` defines board tokens (`--b-bg`, `--b-panel`, `--b-card` gradient, `--b-line`, `--b-text`, `--b-muted`). It points the `--vscode-*` colours the panel uses (editor background, foreground, description, borders, inputs, hover) and its own tokens (`--surface`, `--line`, `--muted`, `--shadow`, radii) at them. Every tab follows without component edits. Cards (`.card`, `.bucket`, `.etable`, `.tablewrap`) get the board gradient, and the app bar blurs. Muted text stays legible: #a3a19a on dark, #5f5d57 on light. High-contrast themes keep VS Code's colours.
+
+#### Decisions settled
+
+- 6951: the panel's look is its own theme layer (a per-theme-type accent colour plus VS Code CSS variables) with Lucide icons, instead of adopting the vscode-elements component library.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0077](decisions/0077-panel-gorunumu-kendi-tasarim-katmanimiz-tema-basina-turuncu.md), [ADR 0107](decisions/0107-the-board-look-comes-from-theme-js-on-dark-and-light-themes.md)
+
 <a id="panel"></a>
 
-### 9. Panel and views
+### 24. Panel and views
 
 #### Editor and Markdown preview
 
@@ -497,7 +946,7 @@ The Imprimatur icon in the activity bar: rows that open the panel in a tab (the 
 
 <a id="live"></a>
 
-### 10. Live updates
+### 25. Live updates
 
 Goal: a change shows up in the panel the moment it is written. This is all local to the machine.
 
@@ -534,7 +983,7 @@ Only the visible tab is drawn. A write by a plugin goes through the same change 
 
 <a id="tracker"></a>
 
-### 11. Issue tracker sync
+### 26. Issue tracker sync
 
 A task's status is synced both ways with GitHub Issues or Jira; epic rows close together with their tasks.
 
@@ -573,7 +1022,7 @@ At startup, every 5 minutes, a few seconds after a status change; the Sync with 
 
 <a id="docs-sync"></a>
 
-### 12. Design documents ↔ Markdown files (docs sync)
+### 27. Design documents ↔ Markdown files (docs sync)
 
 `vscode/docs-sync.js` (#73) brings the architecture/product document in the database to the same text as `<docs dir>/ARCHITECTURE.md` and `PRODUCT.md`; whenever Imprimatur comes to a repo (no file, a hand-written file, a file deleted after a move) the result is the same.
 
@@ -602,7 +1051,7 @@ Architecture and product sections each sit in a fixed chapter (`doc_sections.cha
 
 <a id="history-scan-todo"></a>
 
-### 13. History scan and TODO.md task tracking
+### 28. History scan and TODO.md task tracking
 
 The panel's "Scan history" button (and, once, automatically the first time the panel is opened in a project) runs `scanHistory(root)` from `vscode/history.js`.
 
@@ -649,7 +1098,7 @@ The panel's "Scan history" button (and, once, automatically the first time the p
 
 <a id="task-analysis"></a>
 
-### 14. Task analyses
+### 29. Task analyses
 
 Every task has an analysis document: `kind = 'analysis'` in `documents`, `scope` = the task key (`''` for repo documents); a section's `source` field is the file it came from, and `doc_sources` holds the hash of the last read text of each file (the same text is not written twice). Migration 6 rebuilds the tables like the glossary migration.
 
@@ -677,7 +1126,7 @@ flowchart LR
 
 <a id="agent-setup-audit"></a>
 
-### 15. Agent setup audit (agnix)
+### 30. Agent setup audit (agnix)
 
 `vscode/setup-audit.js` audits the agent setup with [agnix](https://github.com/agent-sh/agnix) and keeps the findings as records; no rule or file is cut off. `setup-audit-tree.js` groups the records (`auditGroups`); the **Recommendations** tree in Agent Setup and the AUDIT page in the Tasks tab use the same grouping.
 
@@ -710,21 +1159,9 @@ One grouping: **status** (Open / Applied / Dismissed) → [for dismissed, **reas
 
 <!-- imprimatur:decisions --> Decisions: [ADR 0072](decisions/0072-agent-setup-denetimi-agnix-binary-si-npx-ile-bulunur-bulgula.md)
 
-<a id="audit-effect"></a>
-
-### 16. Audit: is the finding in effect (#78)
-
-Each finding is marked in the audit by whether Claude Code loads that file (`links.audit.effect`: `active` / `inactive`, `why`). No finding is hidden; "Open" counts only those that are loaded, and the rest stay under **Not loaded**, by reason.
-
-- Source: `~/.claude/plugins/installed_plugins.json` (each install's `installPath` and `scope`) and `~/.claude/settings.json` `enabledPlugins`. A user-scope install is on unless `enabledPlugins` turns it off; a project-scope install is on in its own project.
-- `inactive` reasons: `catalog` (`plugins/marketplaces/…`, the store catalog), `temp` (a `cache/temp_git_*` leftover), `not-installed` (a version other than the installed one, or a plugin that is not installed), `disabled` (a disabled plugin), `other-tool` (a file in the installed plugin folder that is not a Claude component: `.cursor-plugin`, `.github`, `configs/`, the Gemini manifest …), `worktree` (an agent worktree copy).
-- Claude components (the first part of the plugin folder path): `.claude-plugin`, `hooks`, `skills`, `agents`, `commands`, `output-styles`, `monitors`, `.mcp.json`, `.lsp.json`.
-- Repo, user and synced skill files are always `active`.
-- An open record whose effect changed is updated in the next audit. The task's summary is `N open (levels) · N not loaded · N applied · N dismissed`.
-
 <a id="best-practice-review"></a>
 
-### 17. Recommendations: project best-practice review (#86, #87)
+### 31. Recommendations: project best-practice review (#86, #87)
 
 **Recommendations** is a single place: one `RECS` task per repo (a record container) holds the records of two producers. The agent setup audit (`setup-audit.js`, `links.audit`) and the project best-practice review (`best-practice.js`, `links.best`). The old `AUDIT` (#77) and `BEST` (#86) records are moved to RECS with `db.moveRecord` the first time `recs.recsTask` is called (a version row is written); the old tasks become `dropped`, with the summary "Moved to RECS (#87)".
 
@@ -761,132 +1198,9 @@ The Agent Setup light bulb opens a menu: audit the agent setup (agnix), review t
 
 <!-- imprimatur:decisions --> Decisions: [ADR 0073](decisions/0073-best-practice-review-model-kaynak-haritasini-kurar-kod-dogru.md), [ADR 0074](decisions/0074-tek-recommendations-recs-kabi-iki-ureticiye-best-practice-bo.md)
 
-<a id="unread"></a>
-
-### 18. Understanding debt: read marks and the unread count (#92)
-
-#### Data
-
-- Migration 7 (and 8): `section_reads(section_id PK → doc_sections, version_id, at)`. Device-specific. The migration counts every section that exists at that moment as read at its latest version. Migration 8 rebuilds the table: a draft of 7 without `version_id` had reached the live database (the branch was running in the live checkout).
-- A section is **unread** if it is `current` and an `agent` or `hook` wrote a version after its `version_id`, and that version changed the title or the text (a change of link or position alone does not count). The comparison is by version id, not by time: when an analysis is re-read, versions can be written with a past time.
-- When `user` writes, `upsertSection` marks the section read. `import` does not count (writes from a plugin or a file): reading belongs to this device, so that a first import does not show everything as unread.
-- `db.unreadSections(repoId)`: unread sections and their tasks: in a task analysis, the `scope`; in repo documents, the tasks of the records the unread versions newly linked. `db.markSectionsRead(ids)`.
-- When a placeholder repo is merged, the read row of a deleted section is deleted too (foreign key).
-
-#### Edits
-
-Edits not yet accepted are not in the database: they are counted per task strip from the graph rows (`!accepted && !gone`, activity and record rows excluded) (`graphView.openEditsOf`) and passed to `paneHtml` as `openEdits`. The status line does not draw the graph: the extension writes the count to `.claude/imprimatur/unread.json` while it computes the sidebar badge (when it changes, or every 5 minutes); the status line ignores a file older than 15 minutes.
-
-#### Surfaces
-
-`tasksView.unreadOf` gives `{edits, sections}` per task; the task list, the top of the task page and Home use `unreadHtml`; `docsView` has the section mark and Done reading. Page messages: `read` (ids, `writeFromPanel` → `applyMessage`), `showSection` (document tab + section).
-
-<!-- imprimatur:decisions --> Decisions: [PDR 0080](decisions/0080-anlama-borcu-satiri-degil-niyeti-karari-davranis-degisikligi.md), [ADR 0081](decisions/0081-okuma-isareti-section-reads-section-id-version-id-at-cihaza.md)
-
-<a id="study"></a>
-
-### 19. /study: study mode (#95)
-
-#### Parts
-
-- **Skill** `skills/study/SKILL.md`: the flow (find the topic, read the material, read the code, write a note, ask one by one, record mastery). The plugin finds `skills/` itself; `npm run setup` links `~/.claude/skills/study` to the checkout (`linkSkills`; a junction on Windows; it does not touch another person's folder or link; with the plugin present it removes its own link).
-- **MCP tool** `study_material {key}` (read-only), `vscode/study.js`: the task (for an epic, its tasks and their records too), decisions with the full body, notes, to-dos, the architecture/product sections fed by the task's records (`doc_section_records`), the task's analysis, glossary terms named in the material, commits that name the key and the files they changed (most changed first), the study note and the latest mastery. The model text is `studyDigest`.
-
-#### Storage (no migration)
-
-- Study note: the `study` section in the task's analysis (`doc_section_upsert kind analysis`). `stale` if a commit or decision came after it.
-- Mastery: a note record (owner K) carrying `links.study {topic, questions: [{q, type, result, gap, refs}]}`. The latest record is read: weak questions first; a commit/decision/section that came later is `changed`. This text is cut to one line and 300 characters, and type and result are forced into a fixed list: it stays as data and does not look like an instruction or a heading.
-
-#### Finding commits
-
-`git log --no-merges -E --grep=(^|[^A-Za-z0-9_#-])KEY([^0-9]|$) --numstat`: the boundary is in git's search, so `-n` is not filled with wrong matches (`#1` → `#10`…); `keyPattern` looks again over the whole message (title + body, "Closes #n"). If the repo is not on this machine (placeholder) or git is missing, there are no commits.
-
-<!-- imprimatur:decisions --> Decisions: [ADR 0083](decisions/0083-study-skill-salt-okur-study-material-mcp-araci-migration-yok.md)
-
-<a id="exercise"></a>
-
-### 20. /exercise: exercise mode (#108)
-
-Exercises are the user's own data, of no repo or task, in the same device database as everything else (`vscode/db.js`, schema 9).
-
-#### Data
-
-- `exercises`: topic, goal, proof (how the goal is checked), context (what the clarifying questions found), weak (JSON list of short lines from the closing recall), status active | done | dropped.
-- `exercise_steps`: exercise_id, parent_id (a split step's smaller steps; one level), position, kind (learn, example, predict, do, vary, explain, recall), title, why, done_when, minutes, status open | done | skipped, note, done_at.
-- Steps are never deleted (skipped instead). `settleExercise` keeps progress true after every status change: a split step is done when its smaller steps are all done or skipped, open when one opens; an exercise is done when all its top-level steps are closed, active when one opens, and a dropped one stays dropped.
-- Device-local and not reported to plugins: not synced between machines (like `section_reads`).
-
-#### Flow
-
-```mermaid
-sequenceDiagram
-autonumber
-actor U as User
-participant S as /exercise skill (Claude Code)
-participant M as MCP server
-participant D as db.js
-participant P as Exercises tab
-U->>S: /exercise <topic>
-S->>U: clarifying + diagnostic questions
-S->>M: exercise_save {topic, goal, proof, context, steps}
-M->>D: saveExercise (one transaction)
-P->>D: exerciseModel (on the database watcher's redraw)
-U->>P: tick / skip / note
-P->>D: applyExerciseMessage → updateStep → settleExercise
-S->>M: exercise_get {id} before each step
-```
-
-1. The user names the topic in Claude Code.
-2. The skill asks why, level and time, then two or three diagnostic questions.
-3. It saves the goal and 5 to 9 checked steps with `exercise_save`.
-4. The MCP server writes the exercise and its steps in one transaction; a bad step rolls back the whole save.
-5. The panel's Exercises tab reads the active exercises when the database changes.
-6. The user ticks, skips or notes a step in the tab.
-7. The page posts `exStep`/`exNote`/`exDrop`/`exResume`; `tasksView.applyMessage` hands them to `exerciseView.applyExerciseMessage`, which writes through `updateStep` and settles the progress.
-8. Before coaching each step the skill reads the exercise again, so it sees the user's ticks and notes.
-
-#### Code
-
-- `vscode/db.js`: `saveExercise`, `saveStep`, `updateStep`, `settleExercise`, `exercise`, `exercises`.
-- `mcp/server.mjs`: `exercise_save` (not idempotent: steps without id are added), `exercise_get` (read-only; always the list, plus one exercise with id); `exerciseDigest` is the text the agent reads.
-- `vscode/exerciseView.js`: the tab's model, HTML, CSS and writes; `split` copies a command through the host (`exCopy` → clipboard).
-- `skills/exercise/SKILL.md`: the pipeline (clarify → diagnose → goal → steps → check → coach → recall); setup links it into `~/.claude/skills`.
-
-#### Why generation lives in the skill
-
-Not a model call from the panel: the Claude Code session can research the topic's sources, ask questions, and coach in the same conversation. The panel only tracks.
-
-<!-- imprimatur:decisions --> Decisions: [PDR 0086](decisions/0086-exercise-mode-exercise-turns-any-topic-into-5-9-ticked-steps.md)
-
-<a id="social"></a>
-
-### 21. Social document: a per-repo opt-in document kind (#109)
-
-A fifth document kind, `social` ("Social Media"), stored like the design documents (`documents`, `doc_sections`, versions, read marks) and synced with `docs/SOCIAL.md`.
-
-#### The switch
-
-- Off by default, per repo: `.claude/imprimatur.json` `{"social": true}`. `docs-export.js` `socialOn(root)` reads it, `setSocial(root, on)` writes it keeping the file's other keys (and refuses a file that is not valid JSON), `kindsOf(root)` lists the kinds kept in files (social only when on).
-- Chosen over a VS Code setting or a database flag: the hooks, the MCP server and the extension all read the repo file already (process checks, docs settings), and committing it keeps the choice with the repo.
-- Off: `exportDocs` and `syncDocs` skip the kind (the file is neither written nor read back); the MCP `doc_get` / `doc_section_upsert` refuse it with how to turn it on (`socialGate`); the panel leaves Social out of the Analysis tabs (`analysisTabs(root)`) and its page says how to turn it on; a new section from the panel is refused. The document itself is kept.
-
-#### Schema 10
-
-The `documents.kind` CHECK takes `social`. SQLite cannot alter a CHECK, so the migration rebuilds `documents` and every table that points into it (`doc_sections`, `doc_section_records`, `doc_versions`, `doc_sources`, `section_reads`): new tables, rows copied, children dropped first, renamed back, indexes recreated. It was tried on a copy of the live database (row counts equal, `integrity_check` ok, `foreign_key_check` empty) before it ran there.
-
-#### The skill
-
-`skills/social-post/SKILL.md`, linked by setup and shipped by the plugin: rules fetched at writing time (WebFetch → curl → a browser MCP → WebSearch for the official page → the user pastes), a dated rules card per channel, counts by script (X weighted: URL 23, emoji 2), facts re-checked; with tracking on it writes one section per channel (`### Rules read`, `### Post`, `### Status`, `### Results`, `### Learned`).
-
-#### Lesson from building it
-
-The migration was first saved in the live main checkout: a hook opened the database with the new code and migrated it at once, and processes on the old code (the installed extension, a running MCP server) saw a newer schema and went read-only until rebuilt. Schema changes are made in a worktree or branch and land together with the install.
-
-<!-- imprimatur:decisions --> Decisions: [PDR 0087](decisions/0087-social-media-is-a-fifth-living-document-social-off-by-defaul.md)
-
 <a id="agent-inventory"></a>
 
-### 22. Agent setup inventory: plugins, synced skills and the session's context (#139)
+### 32. Agent setup inventory: plugins, synced skills and the session's context (#139)
 
 Agent setup (`agent-setup.js` `scanSetup`) lists the agent's files, and three more sources besides them. All of it is read only; nothing is written.
 
@@ -906,282 +1220,9 @@ Rows with no file (MCP, tools, listings) have an empty `abs` and open nothing.
 
 <!-- imprimatur:decisions --> Decisions: [ADR 0102](decisions/0102-agent-setup-lists-installed-claude-code-plugins-from-claude.md), [ADR 0104](decisions/0104-agent-setup-shows-what-the-repo-s-last-claude-code-session-w.md)
 
-<a id="agent-files"></a>
-
-### 23. Agent files: AGENTS.md, CLAUDE.md and the docs rule (#133)
-
-AGENTS.md holds the rules every coding agent follows in a repo, at most 200 lines. CLAUDE.md starts with `@AGENTS.md` and keeps only what is Claude Code's own. `.claude/rules/docs.md`, scoped to `docs/**` by its `paths:` front matter, holds the documentation standard (decision 9331). `vscode/agent-files.js` reads how a repo stands and puts rows in Agent Setup's checklist:
-
-| Repo has | Row | Action |
-|---|---|---|
-| neither file | Agent files: write AGENTS.md and CLAUDE.md | templates, written with `wx` (never over a file) |
-| AGENTS.md only | Agent files: write CLAUDE.md | the one-line `@AGENTS.md` |
-| no `.claude/rules/docs.md` | (the same row) | the docs-rule template |
-| a CLAUDE.md that does not import AGENTS.md | Agent files: CLAUDE.md does not import AGENTS.md | Fix it |
-
-**Fix it** for this row gives Claude the three file names, never their text (Claude reads the files and is told their text is data). Claude hands each file back whole: AGENTS.md with the shared rules, CLAUDE.md with `@AGENTS.md` and the Claude-only items, and the docs rule only if CLAUDE.md had any. `fix-edits.js` `planEdits` takes these as `whole` files: an empty old text creates the file or rewrites it as a whole. For every other fix, an edit still needs an old text found exactly once. The diffs open first, a new file against an empty one.
-
-**Writes are kept inside the repo.** `safeTarget(root, file)` walks the path from the repo root and refuses any symbolic link on the way, the file itself included, so a planted link (`.claude/rules` pointing elsewhere, a dangling `AGENTS.md`) cannot carry a write out of the repo. A new file is opened with `wx` (O_EXCL), so an existing file or a dangling link is never written through. Apply checks its whole-file targets the same way, and writes an existing file only if it did not change since Claude read it.
-
-A second run writes nothing: the templates are skipped once their files exist, and the Fix it row goes once CLAUDE.md imports AGENTS.md.
-
-<!-- imprimatur:decisions --> Decisions: [ADR 0110](decisions/0110-agents-md-through-the-checklist-templates-for-a-repo-with-no.md)
-
-<a id="docs-backfill-live"></a>
-
-### 24. One-time backfill of design documents and glossary
-
-A repo's empty design documents and glossary are filled once, in the background, by a read-only `claude -p` agent run, rather than left empty or backfilled by hand.
-
-SessionStart checks, for every known repo (whether or not it has a `.claude/imprimatur.json`): has it already been backfilled once, does it have at least 10 records, and does at least one document stand empty or have ADR/PDR records with no linked section (the home directory is excluded). If so, a separate process starts `claude -p`: Sonnet, a $3 budget, up to 120 turns, read-only `Read`/`Glob`/`Grep` tools plus Imprimatur's MCP document tools. The agent writes sections from the existing records and the code, and links records to the sections it writes. The one-time claim keeps a repo from being backfilled twice; the superseded `docs-backfill` section (which predates the chaptered, decision-linked document structure) described the document shape before #129/#131 and no longer reflects the current rule set.
-
-#### Decisions settled
-
-- 6928: empty design documents and the glossary are backfilled once per repo, in the background, by a budget-capped, read-only `claude -p` run triggered at SessionStart, instead of leaving them empty or requiring a manual pass.
-
-<!-- imprimatur:decisions --> Decisions: [ADR 0076](decisions/0076-bos-tasarim-dokumanlari-ve-sozluk-her-repo-icin-bir-kez-arka.md)
-
-<a id="imprimatur-stats"></a>
-
-### 25. /imprimatur-stats: scoreboard skill (#146)
-
-`skills/imprimatur-stats/stats.mjs` is a Node ESM script run by the `/imprimatur-stats` skill: it maps a repo folder to its git root, takes `--days N` (default 7), and prints one ASCII bar per measure — now vs. the period before, scaled to the larger of the two, with ▲/▼ % or "new" (equal values show no trend).
-
-- **Measures:** tasks finished/opened, decisions (adr/pdr/decision) and records written, agent edits marked (history lines plus the gzipped archive for days in range), turn-end asks recorded (live and archived waiting logs, deduplicated by session and time), waiting on you now (`inboxCount`, the same figure as the Home badge), median time to answer, tasks open/active, the last session's hook rows (`session-context.js`).
-- **Skill:** runs the script, shows its output verbatim in a code block, and adds at most three lines of its own (the biggest change, what is waiting, a slow hook).
-- **Why a skill, not a panel page:** it reuses the terminal pattern the user pointed at (ponytail's `/ponytail-gain`) and needs no UI code; a panel page can come later from the same numbers (see "The panel as a board", #150).
-- Writes nothing; a run takes about 0.28 s.
-- **Limits:** "tasks finished" uses `updated_at`, so a done task edited later counts in the later period; the archive is read only for days archived within the three periods compared.
-
-#### Decisions settled
-
-- 9347: `/imprimatur-stats` is a skill whose script prints an ASCII scoreboard (now vs. the period before) from the database, the review data (archive included) and the last session's transcript, and the agent shows the script's output verbatim rather than re-summarizing it.
-
-<!-- imprimatur:decisions --> Decisions: [ADR 0105](decisions/0105-imprimatur-stats-is-a-skill-whose-script-prints-an-ascii-sco.md)
-
-<a id="chapter-deployment"></a>
-
-## Deployment
-
-<a id="deployment"></a>
-
-### 26. Installation and distribution
-
-#### Installing on a machine: `npm run setup`
-
-In a repo clone (Node 22+, git, VS Code 1.100+, the `claude` CLI), one command:
-
-- Adds the hooks to `~/.claude/settings.json` (backup first; ours are found by script name, older releases' per-script entries included, updated if the path or language changed, other people's are not touched): one `run.mjs` dispatcher entry per event (#118).
-- If there is no status line, makes `hooks/statusline.mjs` the status line.
-- Adds the MCP allow rule (#113) and the deny rules for `secrets.json` (#124) to `permissions`, and moves keys from `config.json` to `secrets.json`.
-- Registers the MCP server with Claude Code (user scope, `claude mcp add`) and, if installed, with Cursor and Codex (the rest of the file is preserved byte for byte). If Node < 22.13 it does not register and says why.
-- Packages and installs the extension; `--lang`, `--show-in` go to the VS Code machine settings; `--lang`/`--exts` go to `config.json` in the database folder.
-- Options `--dry-run`, `--no-extension`, `--no-allow` exist.
-
-Hooks and the MCP server run **from the repo clone**: on this machine the main checkout of `~/projects/imprimatur` is live code; a change merged to main is in effect at the next hook call (a session reads its hook list when it starts). The extension stays on the old version until it is packaged and installed.
-
-#### Claude Code plugin
-
-- `.claude-plugin/plugin.json` (the same version as the extension, the MCP server inline, `${CLAUDE_PLUGIN_ROOT}`) and `hooks/hooks.json` are generated by `scripts/plugin.mjs` from the same hook list as the setup; the test breaks if the committed files differ.
-- `claude plugin marketplace add halilural/imprimatur` + `claude plugin install imprimatur@imprimatur`. The plugin does not bring the VS Code extension or the status line.
-- `npm run setup -- --plugin` adds the clone as a marketplace, installs the plugin, and removes the hooks in the settings file and the user-scope MCP server (backup first). While the plugin is on, a plain `setup` writes no hooks: the same hook never runs twice.
-
-#### One version per machine (#123)
-
-Claude Code does not update a plugin's cache by itself, so the plugin can lag behind the extension; a migration shipped in one then makes the other read-only. `vscode/versions.js` reads what runs, from files only:
-
-- `imprimaturPlugin()`: the user-scope, enabled entry in `~/.claude/plugins/installed_plugins.json`;
-- `extensionVersion()`: VS Code's `extensions.json`;
-- `codeVersion(root)`: the version of the code in a folder.
-
-With the plugin installed, the status line imports the plugin's own `hooks/statusline.mjs`, so it runs the code the hooks and the MCP server run, whatever path `statusLine` names. It adds `⚠ <own> ≠ extension <ext>` when its version differs from the extension's. At start, the extension warns when the plugin's version differs from its own; its "Update the plugin" button runs `claude plugin marketplace update imprimatur && claude plugin update imprimatur@imprimatur` in a terminal.
-
-#### VS Code extension
-
-`npm run package`: `scripts/build.mjs` produces a single `vscode/dist/extension.js` with esbuild (`vscode` and Node built-ins left out), then `dist/imprimatur-<version>.vsix` with `vsce`. The package file list is kept by hand; a test catches a missing file.
-
-#### Plugins
-
-`db.js` has an optional plugin hook (config.json "plugins"; a plugin hears every write through `onChange` in a savepoint, can answer `adoptRepo`, hears `onOrigin`, its `activate` gets the extension's API, and its `secrets` export names the keys it reads from `secrets.json`; `vscode/loop.js` `runLoop` runs timed jobs). Plugins are installed and deployed on their own, outside this repo.
-
-Device sync is one such plugin: the public repo (`halilural/imprimatur`) carries only this generic plugin hook, never the sync code itself. The user's own Cloudflare Worker, its D1 database id, and the outbox/LWW sync logic live in a private repo (`halilural/imprimatur-private`) loaded through `config.json`'s `plugins` list. Going to the Marketplace made this split necessary: the public code and its history disclose nothing about the private backend.
-
-#### Versioning
-
-One version number (`vscode/package.json`) is shared by the extension and the plugin. Work is done on a short-lived branch and, when quality is green, merged straight into main (no PR).
-
-##### Decisions settled
-
-- 578: the review module is independent and lives in its own public repo, separate from git's staging/commit mechanics.
-- 619: the product and extension are named "Imprimatur", with the `imprimatur.` prefix used everywhere (settings, commands, colors, URI handler).
-- 620: this repo is reached only from outside; review data lives outside the repo, and the hook is installed machine-wide (not per-project).
-- 634: `npm run setup` registers the MCP server with Claude Code/Cursor/Codex and needs Node ≥ 22.13.
-- 5574: the Claude Code plugin's `hooks.json`/`plugin.json` are generated from the same hook list `npm run setup` uses, so the settings-file path and the plugin path never both write the same hook.
-- 8625: device sync stays a private plugin; the public repo keeps only the generic plugin hook, so the Cloudflare Worker, its D1 id and the sync logic never appear in public code.
-
-<!-- imprimatur:decisions --> Decisions: [ADR 0001](decisions/0001-modul.md), [ADR 0042](decisions/0042-ad-10.md), [ADR 0043](decisions/0043-bu-repoya-baglanti-yalniz-disaridan-gitignore-da-claude-impr.md), [ADR 0057](decisions/0057-kurulum.md), [ADR 0064](decisions/0064-claude-code-plugin-i-67-hooks-json-plugin-json-kurulumla-ayn.md), [ADR 0085](decisions/0085-device-sync-leaves-the-public-repo-as-a-private-plugin-the-p.md), [ADR 0095](decisions/0095-one-imprimatur-version-per-machine-the-status-line-runs-the.md)
-
-<a id="chapter-crosscutting"></a>
-
-## Crosscutting concepts
-
-<a id="security"></a>
-
-### 27. Security
-
-#### VS Code extension
-
-- **Workspace Trust:** `capabilities.untrustedWorkspaces.supported = "limited"`. In an untrusted folder it shows changes and records but starts no model call (`claude`), no `gh` and no repo script (`trust.js` logs once for each kind of work). Hooks run outside VS Code and make their own decisions.
-- **extensionKind `workspace`:** on a remote/WSL connection the extension runs on the machine where the files and the database are. Virtual workspaces are not supported.
-- **Webview:** `localResourceRoots: []` (no local file is loaded, everything is inline); CSP `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-…'; form-action 'none'; base-uri 'none'`. Document bodies are rendered with `html: false`, links are only http(s), mailto and in-page anchors. Data is carried by `postMessage`.
-- The Accept links in the preview go through the `vscode://halilural.imprimatur/accept?…` URI handler. The 📄 link of a waiting step does not open a file outside the repo.
-
-#### Secrets (#124)
-
-- Keys and tokens live in `secrets.json` (mode `0600`) next to `config.json` in the database folder. `config.json` keeps only what is not secret. A section reads as the two merged, with `secrets.json` winning (`vscode/secrets.js` `sectionWithSecrets`; `imprimatur-private` `lib/settings.js`). A `secrets.json` that others can read, or that is a symlink, is ignored.
-- `migrateSecrets` moves a field out of `config.json` only once its reader reads `secrets.json`: Imprimatur's own (`tracker.jira.token`), or a loaded plugin that names the key in `module.exports.secrets`. It runs when the extension starts and in `npm run setup`. It reports names only, never values. `secrets.json` is written first, so a crash never loses a key.
-- `npm run setup` adds `permissions.deny` `Read(…/secrets.json)` and `Edit(…/secrets.json)` to `~/.claude/settings.json`, so an agent's file tools do not pull a key into its context. A Bash command that reads the file still goes through the permission check; any process running as the user can read it; an OS keychain is the next step where one exists.
-- A token is not given on the command line (shell history); it is taken from an environment variable or a hidden prompt.
-- Comments sent to the issue tracker are fixed: no task or record text leaks out.
-- If the Agent Setup health check finds a secret, it names only the line and never writes the value.
-- Plugins listed in `config.json` ("plugins") are code the user chose to install; a plugin reaches only what the plugin hook gives it (writes through `onChange`, `adoptRepo`, `onOrigin`, and the extension's API in `activate`).
-
-#### Hooks and process checks
-
-- MCP tools run without a permission prompt (`allow`), because they touch only Imprimatur's database.
-- The repo's own scripts (e.g. `scripts/docs-toc.mjs` for `docsToc`) run only in repos the user trusted with a VS Code command: the list is outside the repo, in the database folder (`trusted-repos.json`). The script path must be a real file inside the repo (links are resolved, a path starting with `-` is rejected).
-- Document export does not write outside the repo (if `docs/` or the file is a link that leads outside the repo) and does not overwrite a hand-written file.
-
-##### Decisions settled
-
-- 5573: the extension runs with `extensionKind: ["workspace"]` (so it runs where the files and database are, even remote/WSL), `untrustedWorkspaces: limited` (no model/`gh`/repo script in an untrusted folder), and a webview with no local resource roots and a nonce-based CSP allowing no network or inline resources.
-
-<!-- imprimatur:decisions --> Decisions: [ADR 0063](decisions/0063-eklenti-guvenligi-ve-paketleme-65-extensionkind-workspace-wo.md), [ADR 0091](decisions/0091-keys-and-tokens-move-from-config-json-to-secrets-json-0600-d.md)
-
-<a id="model-calls"></a>
-
-### 28. Model calls and cost
-
-Imprimatur turns to a small model (Haiku) only where verbal judgment is needed; where a rule is enough, no model is called.
-
-#### How it is called
-
-`vscode/model.js` is the only path: `claude -p --model haiku`, with no tools, no MCP, no settings files (`--setting-sources ""`, `--strict-mcp-config`, `--tools ""`), without saving a session, in a temporary folder and with `IMPRIMATUR_CHILD=1` (Imprimatur hooks write nothing in that session). It runs on the user's Claude subscription; it needs no API key. The language is `IMPRIMATUR_LANG` / `imprimatur.language`.
-
-#### Where
-
-| Place | When | Without a model |
-|---|---|---|
-| End-of-turn audit (`audit.js`) | On Stop, only when there is an open item or the reply asks for something (👉, `?`, "test this") | Rule-based reading (👉, `?`, request phrases) |
-| Chat sync (`resolve.mjs`) | After every user message, if a step is open | Steps that end with `?` count as answered |
-| Edit description (`describe.js`) | Only when the agent's words are shorter than 4 words and the row is shown in the graph (the newest 40 rows, at most 2 at a time) | The nearest heading + the first changed line |
-| History scan (`history.js`) | When the user asks, or on first open in a project; 4 calls at a time | Only 👉 lines |
-| Agent Setup "Explain last change" | When asked, cached by commit + path | None |
-
-#### Cost principles
-
-- Measured (2026-10-09): each hook ~65 ms; the MCP tool definitions ~1.4k tokens and Claude Code loads them deferred; the real cost was the background Haiku calls (in a busy real repository about 100 descriptions a day + the audit at every turn end). Since 38 of 40 descriptions could be covered by the agent's own words, the model is called only for the rest.
-- The SessionStart context is limited to 4,000 characters (Claude Code truncates at 10,000).
-- Deterministic information such as the task strip is not asked of the model (the `#n` key in the text is used).
-- In an untrusted folder the extension starts no model call.
-- `--bare` or the API directly was evaluated and is not used: it needs an API key and does not work with a subscription.
-
-##### Decisions settled
-
-- 598: the end-of-turn audit calls Haiku only when there is an open step or the reply asks for something, after the model reasons one line per step before writing its JSON; Haiku was kept over Sonnet because it closed steps more consistently and cautiously in testing.
-- 601: the chat-sync pass (`resolve.mjs`) asks Haiku which open steps a user message settled, after every user message, including steps opened by other sessions on the same task.
-- 604: an edit's one-sentence description is requested from Haiku only when the agent's own words are too short to describe the change.
-- 5571: model calls happen only where a rule cannot decide (Haiku, via `claude -p`); this is the cost principle the rows above follow.
-
-<!-- imprimatur:decisions --> Decisions: [ADR 0021](decisions/0021-haiku-denetimi-0-24-0-kullanici-2026-10-05-haiku-genel-olara.md), [ADR 0024](decisions/0024-chat-senkronu-0-23-0-kullanici-2026-10-05-chatte-karar-veriy.md), [ADR 0027](decisions/0027-model-aciklamasi-0-22-0-kullanici-2026-10-05-degisikligi-hal.md), [ADR 0061](decisions/0061-model-cagrilari-yalniz-gerektiginde-62-63-haiku-claude-p-kur.md)
-
-<a id="process-checks"></a>
-
-### 29. Process checks
-
-The development process rules (formerly `.claude/hooks/*.sh` copied into every repo) run in one place, Imprimatur's global hook (`hooks/process.mjs` → `vscode/process.js`).
-
-#### Turning on and configuration
-
-- A repo opts in with a committed `.claude/imprimatur.json` (written by **Imprimatur: Turn On Process Checks for This Repo**). If the file is missing, no check runs.
-- Each check is `"block"` (stop the tool or the turn), `"warn"` (tell the agent, carry on) or `false`; a key missing from the file takes its default.
-- A check's own error does not stop the agent (`exit 0`); on Stop, `stop_hook_active` prevents a loop.
-
-#### Checks
-
-| Event | Check | Default | What it does |
-|---|---|---|---|
-| SessionStart | `whereWeLeftOff` | on | Unfinished tasks and their 👉 from the database (at most 4,000 characters) |
-| PreToolUse Bash | `hookBypass` | block | `git --no-verify`, `commit -n`, `HUSKY=0` |
-| PreToolUse edit | `mainGuard` | block | On `main`, only allowed paths (default `^docs/`) |
-| PreToolUse edit | `designFirst` | warn | Code on a `<type>/<n>-…` branch while the task has no ADR/PDR |
-| PostToolUse edit | `docsToc` | warn | When `docs/**/*.md` changes, the repo's table-of-contents script (only in a trusted repo) |
-| PostToolUse edit | `unopenedSources` | warn | A source marked "not opened" in market research |
-| PostToolUse Bash | `issueCreate`, `issueFields` | warn | After `gh issue create`: epic, board, milestone, Imprimatur task |
-| PostToolUse MCP | `sweep` | warn | The task is done but the issue is open (silent while issue tracker sync is running) |
-| Stop | `status` | block | The answer has no "Where are we" section |
-| SessionStart, Bash | `branchFinish` | warn | Branches that were merged but left behind |
-| PostToolUse MCP, Stop | `docUpdate` | warn | No document section is linked to an added/changed ADR or PDR |
-
-Repo-specific rules (an em dash ban, deploy, migrations, etc.) are out of scope and stay in the repo.
-
-<a id="testing"></a>
-
-### 30. Test strategy
-
-#### Unit tests (`npm test`)
-
-- `node:test`, dependency-free (`markdown-it` only for the preview tests). 44 test files under `test/`; each module has its own test: diff, preview, graph, waiting items, audit, hooks (with real JSON input), database, MCP, issue tracker, process checks, documents, Agent Setup, plugin files, the package list.
-- A pure design makes testing possible: the view builders (`tasksView`, `docsView`) take a database and return HTML; `tracker.js` and `watch.js` do not depend on VS Code and are driven with a fake clock and a fake `gh`.
-- Tests never touch the real database: under `node --test`, `dbPath()` gives a temporary file and passes it on to the hooks the test process starts.
-- Concurrency: 12 processes opening and writing a new database at the same time.
-- The data audit and "graph accuracy" tests prevent regressions of bugs that came from real data.
-
-#### Integration tests (`npm run test:integration`)
-
-In a real VS Code with `@vscode/test-cli` + `@vscode/test-electron`: activation and commands, the record commands, the document tabs, and a record written from another process reaching the panel within 500 ms.
-
-#### Manual tests
-
-Manual tests of visual behavior such as the editor marks and the preview are kept as test records in the `TEST` task (MT-AR-001…012, #6). Measurements (latency, CPU) are taken on real repositories of different sizes and written to the relevant record.
-
-<a id="ui-design"></a>
-
-### 31. Panel design layer: theme variables, icons, mascot
-
-The panel's look comes from three small modules. All are plain CommonJS; they need no build step and do not trip the CSP.
-
-- **`vscode/theme.js` (THEME_CSS):** defines design variables on `body`:
-  - `--acc`, by theme type: light `#c2410c`, dark `#fb923c`, high contrast `#ffa94d` / `#9a3412`.
-  - `--acc-ink` (text on the accent), `--acc-soft`, `--acc-line`.
-  - `--surface`, `--surface-2`, `--line`, `--muted`, `--shadow` (none in high contrast).
-  - `--r-*` corners, `--fs-*` type scale.
-
-  The same file has the app bar styles: mascot, repo chip, tabs with icons, search box, Audit/Scan buttons. The app bar is sticky; below 760px it is not sticky. Its height is written as `--appbar-h`, and the Tasks list and the Contents panel stick under it.
-- **`vscode/icons.js`:** Lucide icons (ISC license). Not edited by hand; `npm run icons` (`scripts/icons.mjs`) generates only the ones in the NAMES list from `lucide-static`. `tasksView.icon(name, size)` draws them. The types in the Agent changes tab use these icons too.
-- **`vscode/mascot.js`:** the mascot from `assets/logo.svg` is embedded inline (the gradient ids are prefixed with `imp-`). It is shown in the header and in empty screens (`.emptyhero`).
-
-**Rules:**
-
-- No fixed hex colors in the Tasks CSS (a test checks this).
-- Secondary text is written with the `--muted` color, not with opacity.
-- Mermaid diagrams are drawn with `theme: base`; their colors are computed from the page's `--vscode-editor-background`, `--vscode-foreground` and `--acc` values.
-
-vscode-elements was deliberately not used; the reason is in the linked ADR.
-
-#### The board look (#148, 0.95.0)
-
-On dark and light themes, `theme.js` defines board tokens (`--b-bg`, `--b-panel`, `--b-card` gradient, `--b-line`, `--b-text`, `--b-muted`). It points the `--vscode-*` colours the panel uses (editor background, foreground, description, borders, inputs, hover) and its own tokens (`--surface`, `--line`, `--muted`, `--shadow`, radii) at them. Every tab follows without component edits. Cards (`.card`, `.bucket`, `.etable`, `.tablewrap`) get the board gradient, and the app bar blurs. Muted text stays legible: #a3a19a on dark, #5f5d57 on light. High-contrast themes keep VS Code's colours.
-
-#### Decisions settled
-
-- 6951: the panel's look is its own theme layer (a per-theme-type accent colour plus VS Code CSS variables) with Lucide icons, instead of adopting the vscode-elements component library.
-
-<!-- imprimatur:decisions --> Decisions: [ADR 0077](decisions/0077-panel-gorunumu-kendi-tasarim-katmanimiz-tema-basina-turuncu.md), [ADR 0107](decisions/0107-the-board-look-comes-from-theme-js-on-dark-and-light-themes.md)
-
 <a id="context-budget"></a>
 
-### 32. Context budget: what a session loads, in estimated tokens
+### 33. Context budget: what a session loads, in estimated tokens
 
 Agent Setup's **Context budget** group (#29) lists what the repo's last Claude Code session loaded into the model's context. Items are sorted biggest first.
 
@@ -1206,9 +1247,47 @@ The tools the agent called are counted per server from `tool_use` blocks.
 - An MCP server that was not called in the session: turn it off where it is not needed, which saves its instructions and its tool definitions.
 - A skill listing of 2,000 tokens or more: turn off plugins whose skills the repo never uses.
 
+<a id="decision-records"></a>
+
+### 34. Decision records: ADR and PDR as MADR 4 files
+
+The decisions are the repo's adr and pdr records. Each one is also written as a MADR 4 file, `docs/decisions/NNNN-slug.md`, listed in `docs/decisions/README.md`. That index is the list this chapter would otherwise repeat.
+
+- **Source:** the record. The files are generated on every document export (`vscode/decisions.js`, from `exportDocs`) and never read back (decision 9331).
+- **Numbers:** a record gets its number the first time it is exported, kept in `links.madr`, so every device names it the same after sync. A dropped record keeps its number and its file reads `status: rejected`, so a number is never reused. Two devices numbering new decisions before either syncs can give one number twice.
+- **Shape:**
+  - Front matter: `type: adr|pdr`, `status`, `date`, and `record`, the record's uid.
+  - Headings: Context and Problem Statement (from the task), Considered Options and Consequences (the body's lines that name them, else a note that they are not listed apart), Decision Outcome (the body), Sections.
+  - A long imported title is cut to its first sentence; the whole title starts the outcome.
+- **Links:** under each architecture and product section, the generated file adds `<!-- imprimatur:decisions --> Decisions: [ADR 0012](decisions/…)` for the adr and pdr records linked to it, and docs-sync skips that line. Each decision file lists those sections back.
+- **Safety:** a hand-written file of the same name is left alone. A generated file whose decision was renamed is removed, and the number goes with the new name.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0109](decisions/0109-decisions-as-madr-4-files-numbered-once-in-the-record-s-link.md)
+
+<a id="agent-files"></a>
+
+### 35. Agent files: AGENTS.md, CLAUDE.md and the docs rule (#133)
+
+AGENTS.md holds the rules every coding agent follows in a repo, at most 200 lines. CLAUDE.md starts with `@AGENTS.md` and keeps only what is Claude Code's own. `.claude/rules/docs.md`, scoped to `docs/**` by its `paths:` front matter, holds the documentation standard (decision 9331). `vscode/agent-files.js` reads how a repo stands and puts rows in Agent Setup's checklist:
+
+| Repo has | Row | Action |
+|---|---|---|
+| neither file | Agent files: write AGENTS.md and CLAUDE.md | templates, written with `wx` (never over a file) |
+| AGENTS.md only | Agent files: write CLAUDE.md | the one-line `@AGENTS.md` |
+| no `.claude/rules/docs.md` | (the same row) | the docs-rule template |
+| a CLAUDE.md that does not import AGENTS.md | Agent files: CLAUDE.md does not import AGENTS.md | Fix it |
+
+**Fix it** for this row gives Claude the three file names, never their text (Claude reads the files and is told their text is data). Claude hands each file back whole: AGENTS.md with the shared rules, CLAUDE.md with `@AGENTS.md` and the Claude-only items, and the docs rule only if CLAUDE.md had any. `fix-edits.js` `planEdits` takes these as `whole` files: an empty old text creates the file or rewrites it as a whole. For every other fix, an edit still needs an old text found exactly once. The diffs open first, a new file against an empty one.
+
+**Writes are kept inside the repo.** `safeTarget(root, file)` walks the path from the repo root and refuses any symbolic link on the way, the file itself included, so a planted link (`.claude/rules` pointing elsewhere, a dangling `AGENTS.md`) cannot carry a write out of the repo. A new file is opened with `wx` (O_EXCL), so an existing file or a dangling link is never written through. Apply checks its whole-file targets the same way, and writes an existing file only if it did not change since Claude read it.
+
+A second run writes nothing: the templates are skipped once their files exist, and the Fix it row goes once CLAUDE.md imports AGENTS.md.
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0110](decisions/0110-agents-md-through-the-checklist-templates-for-a-repo-with-no.md)
+
 <a id="doc-rules"></a>
 
-### 33. Documentation rules in the audit (IMP-DOC, #131)
+### 36. Documentation rules in the audit (IMP-DOC, #131)
 
 `setup_audit` checks the documentation standard next to agnix's agent-setup rules. `vscode/doc-rules.js` reads the repo's documents (the database) and its agent files and returns findings in agnix's diagnostic shape. `auditRoot` adds them for a repo, not for the global scope, so they become Recommendations records with Fix it and dismiss like agnix's.
 
@@ -1230,71 +1309,3 @@ IMP-DOC-001..005 live in the database, and `docs/*.md` is generated from it, so 
 The run reads record bodies written by people and other agents, so its write access is narrowed. The MCP server gets `IMPRIMATUR_RECORD_UPDATE` (the ids `fixRecordIds` returns, the decisions the prompt lists). With it set, `record_update` refuses any other record and changes only `body` and `links`, never status, title or kind. `task_upsert` is not granted. A sequenceDiagram in a task analysis is left for the user. `doc_section_upsert` stays open to every section, as in the one-time backfill.
 
 <!-- imprimatur:decisions --> Decisions: [ADR 0111](decisions/0111-documentation-rules-in-setup-audit-as-imprimatur-s-own-imp-d.md), [ADR 0112](decisions/0112-fix-it-on-imp-doc-001-005-runs-claude-with-imprimatur-s-mcp.md)
-
-<a id="doc-linting"></a>
-
-### 34. Documentation linters (#132)
-
-Every repo can carry four documentation linters: markdownlint-cli2 (structure), cspell (spelling, warnings only), lychee `--offline` (links between the repo's files) and Vale with Google's style (warnings). Agent Setup's checklist shows "Doc lint: write …" while a repo lacks one of their configs (`.markdownlint-cli2.jsonc`, `cspell.json`, `lychee.toml`, `.vale.ini`) or the npm scripts that run them. `vscode/doc-lint.js` writes only what is missing, with O_EXCL, so a repo's own edits stay; the scripts go into package.json under names that are free.
-
-| Script | Runs | Fails the run |
-|---|---|---|
-| `lint:docs` | markdownlint-cli2@0.18.1, then cspell@9.2.1 (English prose only) | markdownlint errors |
-| `lint:links` | lychee --offline docs | broken local links |
-| `lint:prose` | vale sync && vale docs | no (warnings) |
-
-#### Generated documents pass by construction
-
-The exported documents are tidied where their text is made (`vscode/md-tidy.js`, from `docMarkdown` and `madrText`): blank lines around headings, fences and the start of a list, `text` on a bare fence, bare URLs in `<>`, a line starting `#139` escaped. `nest` shifts a section body's headings so its highest sits one level under the section heading, so the same subheading in two sections is no longer a duplicate. docs-sync hashes a section after the same nest and tidy, so the tidied file and its stored body compare equal and the tidy-up is never read back as a hand edit. No stored text changes.
-
-<!-- imprimatur:decisions --> Decisions: [ADR 0113](decisions/0113-doc-linting-generated-markdown-is-tidied-where-it-is-made-ag.md)
-
-<a id="chapter-decisions"></a>
-
-## Decisions
-
-<a id="decision-records"></a>
-
-### 35. Decision records: ADR and PDR as MADR 4 files
-
-The decisions are the repo's adr and pdr records. Each one is also written as a MADR 4 file, `docs/decisions/NNNN-slug.md`, listed in `docs/decisions/README.md`. That index is the list this chapter would otherwise repeat.
-
-- **Source:** the record. The files are generated on every document export (`vscode/decisions.js`, from `exportDocs`) and never read back (decision 9331).
-- **Numbers:** a record gets its number the first time it is exported, kept in `links.madr`, so every device names it the same after sync. A dropped record keeps its number and its file reads `status: rejected`, so a number is never reused. Two devices numbering new decisions before either syncs can give one number twice.
-- **Shape:**
-  - Front matter: `type: adr|pdr`, `status`, `date`, and `record`, the record's uid.
-  - Headings: Context and Problem Statement (from the task), Considered Options and Consequences (the body's lines that name them, else a note that they are not listed apart), Decision Outcome (the body), Sections.
-  - A long imported title is cut to its first sentence; the whole title starts the outcome.
-- **Links:** under each architecture and product section, the generated file adds `<!-- imprimatur:decisions --> Decisions: [ADR 0012](decisions/…)` for the adr and pdr records linked to it, and docs-sync skips that line. Each decision file lists those sections back.
-- **Safety:** a hand-written file of the same name is left alone. A generated file whose decision was renamed is removed, and the number goes with the new name.
-
-<!-- imprimatur:decisions --> Decisions: [ADR 0109](decisions/0109-decisions-as-madr-4-files-numbered-once-in-the-record-s-link.md)
-
-<a id="chapter-risks"></a>
-
-## Risks and technical debt
-
-<a id="limits"></a>
-
-### 36. Known limits
-
-#### Review
-
-- No marks in diff tabs (Working Tree): git already colors them.
-- Bash edits are seen only for files named in the command; a glob (`sed -i *.md`) and a path with a variable (`$R/x.md`) slip through. The real result of a Bash edit cannot be known.
-- Numbered-list numbers are not compared; changes inside fenced code blocks are not marked (the history still counts them).
-- The preview is at block level (no word marks); a deleted table row is not visible in the preview.
-- Every difference between the copy and the file is marked, including the user's own edit in the same file; a parallel session editing the same file may show up as an "Outside change".
-- The history writes the whole text at every edit: small for documents, it grows for a big file. LCS is O(n·m): slow on a file with thousands of changed lines (at the upper bound the middle part is shown as a single block).
-- The Mermaid diff covers only `flowchart`/`graph`; it is off by default because two Mermaid preview extensions can clash in the same window.
-
-#### Data
-
-- Edits made by Bash commands that failed before #45 were not recorded and do not come back.
-- Issue tracker sync runs while the extension is open (or with `npm run tracker`).
-
-#### Scope
-
-- Hooks are only for Claude Code; Cursor and Codex use only the MCP tools (no review, waiting items or activity for them).
-- The issue tracker covers only GitHub Issues and Jira; no board Status field and no Linear.
-- There is no context budget (token by token) yet (#29).
