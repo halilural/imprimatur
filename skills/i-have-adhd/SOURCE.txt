@@ -1,0 +1,5 @@
+source: https://github.com/ayghri/i-have-adhd (skills/i-have-adhd)
+commit: 1ecea1993b7fce257ffbd686c070948b5e07eda6
+license: MIT
+installed: 2026-11-06, reviewed (no scripts, no network, no hooks, no injection; output rules only)
+note: unchanged: SKILL.md as upstream; agents/ (gemini.toml, openai.yaml) left out, Claude only (#164)
