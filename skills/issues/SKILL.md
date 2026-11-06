@@ -1,6 +1,6 @@
 ---
 name: issues
-description: Run the repo's issue work the Imprimatur way. It covers opening one issue, splitting a plan or epic into issues, triaging what needs attention, keeping an issue in step with the work, and closing it with what shipped. An issue gets a category and priority label, a board Status and the sprint, and links. An epic's children become GitHub sub-issues, and work that is blocked gets "blocked by". Each issue also gets an Imprimatur task whose records hold the detail. Use when the user says /issues, "open an issue", "issue aç", "split this into issues", "böl", "triage", "what needs my attention", "close this", "epic aç", "sprint", or asks to plan work as issues.
+description: Run the repo's issue work the Imprimatur way. It covers opening one issue, splitting a plan or epic into issues, triaging what needs attention, keeping an issue in step with the work, and closing it with what shipped. An issue gets a category and priority label, a board Status and the sprint, and links. An epic's children become GitHub sub-issues, and work that is blocked gets "blocked by". Each issue also gets an Imprimatur task whose records hold the detail. Use when the user says /issues, "open an issue", "issue aç", "split this into issues", "böl", "triage", "what needs my attention", "close this", "epic aç", "sprint", or asks to plan work as issues, or when research hits a link the agent cannot open.
 ---
 
 # Issues
@@ -111,6 +111,24 @@ When you come back to an issue, read the earlier notes first and never ask again
 5. Set the board to Done. If this was an epic's last open child, say so and offer to close the epic.
 
 Won't do: the task goes `dropped` with the reason in a record. On GitHub the issue gets the `wontfix` label and is closed as not planned, with a polite comment that gives the reason.
+
+## 6. A link the agent cannot open
+
+Research often hits a page the agent cannot read: a bot wall (403, "are you human"), a login (LinkedIn, Google Docs, Notion, a private repo), a page drawn by JavaScript, a region block. Do not guess its content and do not drop it. Each such link becomes an issue the user fills in.
+
+1. **One issue per link**, opened when the link fails, not at the end. Title `Link: <site> — <what the research needs from it>`. Label `link-access` (create it once: `gh label create link-access --color BFD4F2 --description "A page the agent could not open; the user adds screenshots"`). Make it a sub-issue of the research's issue, board Todo, the current milestone. Body:
+   - the link, and why it failed (status code, login, empty page);
+   - what to capture: which section, which table, how far to scroll;
+   - "Open the link, then add screenshots (drag them into a comment) or paste the text. One comment per page is fine."
+2. **Record it:** a `question` record, owner K, on the research's task, linking the issue. The user sees it in the panel with the other things waiting on them.
+3. **Carry on** with what can be read. A finding that depends on a blocked link is written as pending, with its issue (`pending #N`), never filled in from memory.
+4. **When the user has added to it,** read every comment, the text and the images. A private repo's images are not reachable by plain URL; ask for the HTML body, whose image links are signed for a few minutes, and download them at once:
+   ```
+   gh api repos/<o>/<r>/issues/<n>/comments -H "Accept: application/vnd.github.full+json" --jq '.[].body_html' \
+     | grep -oE 'https://private-user-images[^"]+' | while read -r u; do curl -sL -o "shot-$((i+=1)).png" "$u"; done
+   ```
+   (A public repo: the `user-attachments` URLs in `body` download directly.) Look at each image. Then comment on the issue what you took from it, in a few lines, so the user can correct a misreading; add it as a `note` record on the research task; mark the `question` record done; close the issue as completed.
+5. **The final analysis** waits until every `link-access` issue of the research is closed, or the user says to go on without the rest. It cites each finding's source, a link issue included (`from #N`), and lists what stayed unread.
 
 ## The brief
 
