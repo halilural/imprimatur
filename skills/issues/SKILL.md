@@ -167,6 +167,7 @@ Before posting the steps, run them yourself, and put what you saw under each "Se
 3. **Upload and embed** with `node <this skill>/screenshots.mjs <issue> <png>…`. It writes the images to a branch of their own through the GitHub API (not a local commit: the repo's hooks expect its files) and prints a Markdown line per image to paste under its step.
    - A private repo: the images stay as private as the repo. Name the branch by the repo's branch rule if it has one (`--branch docs/<issue>-screenshots`).
    - A public repo: the images are public. Take none that shows personal data (records, notes, mail, contacts, job lists); only UI with sample data, then `--public`. Otherwise describe the step in words.
+   - It also keeps each image in the repo's Imprimatur data folder and prints `![…](shot:…)` lines. Put those under the same steps in the `test` record: Imprimatur's Tasks tab shows them from the local file, where VS Code's GitHub panel cannot show a private repo's image. `--local-only` keeps them there and uploads nothing (any repo, any data).
 4. **Mark what you could not run**, with the reason: a phone, a real microphone or meeting, another OS, a paid account. That step stays the user's, in the `test` record.
 5. **A defect you see is a finding, not a footnote:** add a `fixme` record, move the issue back to Todo, and say it in the comment.
 
