@@ -573,3 +573,22 @@ test("runLoop: a named loop says its name when a run fails", async () => {
   loop.dispose();
   assert.equal(r.error, "tracker sync failed: boom");
 });
+
+test("pull github (#162): the issue's description is kept on its task, new or old, and follows edits", async () => {
+  const { db, repo } = ghRepo();
+  db.upsertTask(repo.id, "#1", { title: "one", status: "active" }, agent);
+  const issues = [
+    { number: 1, title: "one", state: "OPEN", stateReason: "", updatedAt: OLD, body: "**Summary:** first\n\n- [ ] a" },
+    { number: 2, title: "two", state: "OPEN", stateReason: "", updatedAt: OLD, body: "Made from the issue" },
+  ];
+  const f = fakeGh({ issues });
+  await trackerOnce(db, { gh: f.gh, repos: [repo] });
+  assert.equal(db.taskByKey(repo.id, "#1").issue_body, "**Summary:** first\n\n- [ ] a");
+  assert.equal(db.taskByKey(repo.id, "#2").issue_body, "Made from the issue");
+  const before = db.taskByKey(repo.id, "#1").updated_at;
+  issues[0].body = "**Summary:** first\n\n- [x] a";
+  await trackerOnce(db, { gh: f.gh, repos: [repo] });
+  assert.equal(db.taskByKey(repo.id, "#1").issue_body, "**Summary:** first\n\n- [x] a");
+  assert.equal(db.taskByKey(repo.id, "#1").updated_at, before, "a description pull is not a task edit");
+  assert.ok(f.calls.find((c) => c[1] === "list").join(" ").includes("body"));
+});
