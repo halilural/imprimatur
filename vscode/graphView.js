@@ -423,6 +423,8 @@ ${opts.mermaid ? `<meta name="imprimatur-mermaid" content="${esc(opts.mermaid.sr
   // Waiting on you is gone: a page saved on it opens Home.
   if (state.tab === "inbox") state.tab = "home";
   if (typeof state.q === "string") { state.qs.edits = state.qs.edits ?? state.q; delete state.q; }
+  // #161: a task page is full width unless the list was asked for (the page's "Tasks" button).
+  document.body.classList.toggle("nolist", state.list !== true);
   const filter = document.getElementById("filter");
   // The app bar's height, for what sits sticky under it (the task list, the contents).
   const appbar = document.querySelector("header.appbar");
@@ -817,6 +819,11 @@ ${require("./board.js").BOARD_SCRIPT}
     switch (d.act) {
       case "filter": return setView({ filter: d.f, sel: null });
       case "scope": return setView({ all: d.all === "1" });
+      case "toggleList":
+        state.list = state.list !== true;
+        vscode.setState(state);
+        document.body.classList.toggle("nolist", !state.list);
+        return;
       case "ibucket": state.ibucket = state.ibucket === d.b ? null : d.b; return apply();
       case "itask": state.itask = state.itask === Number(d.id) ? null : Number(d.id); return apply();
       case "bmetric": state.board = { ...(state.board || { r: 30 }), m: d.m }; vscode.setState(state); return drawBoard();
