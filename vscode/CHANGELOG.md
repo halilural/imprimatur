@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.134.0] - 2026-11-09
+
+### Changed
+- Recommendations are no longer in the Tasks list (#170): the RECS task (and the old AUDIT / BEST) and the home folder's "Global (~)" group are gone from it. Recommendations stay in Agent Setup's Recommendations tree, and a link to RECS still opens its page.
+
 ## [0.133.0] - 2026-11-09
 
 ### Fixed

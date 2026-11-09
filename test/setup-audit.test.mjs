@@ -223,7 +223,7 @@ test("audit: the npx locate script runs from a private folder, removed after", (
   assert.equal(fs.existsSync(path.dirname(seen)), false);
 });
 
-test("audit: this repo's task list shows the global audit too, in a Global (~) group", () => {
+test("audit: recommendations stay out of the task list, this repo's and the global one (#170)", () => {
   const { tasksPage, tasksHtml } = require("../vscode/tasksView.js");
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "audit-tasks-"));
   const db = openDb({ path: path.join(dir, "imprimatur.db") });
@@ -235,11 +235,11 @@ test("audit: this repo's task list shows the global audit too, in a Global (~) g
     auditRoot(db, { root: h, home: h, global: true }, { bin: "agnix", spawn, report: { diagnostics: [d("B-1", path.join(h, ".claude/CLAUDE.md"), "b")] } });
     db.upsertTask(db.repoByRoot(h).id, "#9", { title: "Not shown", status: "active" });
     const m = tasksPage(db, root, { filter: "active" }, { home: h });
-    assert.deepEqual(m.groups.map((g) => [g.tasks.map((t) => t.key), Boolean(g.global)]), [[["RECS"], false], [["RECS"], true]]);
-    assert.match(tasksHtml(m), /Global \(~\)/);
-    // Every repo: the home is one of them, no copy.
+    assert.deepEqual(m.groups, []);
+    assert.doesNotMatch(tasksHtml(m), /Global \(~\)|RECS/);
+    // Every repo: the home's real work shows, its recommendations do not.
     const all = tasksPage(db, root, { filter: "active", all: true }, { home: h });
-    assert.equal(all.groups.flatMap((g) => g.tasks).filter((t) => t.key === "RECS").length, 2);
+    assert.deepEqual(all.groups.flatMap((g) => g.tasks).map((t) => t.key), ["#9"]);
   } finally {
     db.close();
   }
