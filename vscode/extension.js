@@ -736,7 +736,11 @@ function activate(ctx) {
           try {
             for (const root of roots) {
               const top = repoRoot(root) ?? root;
-              const r = await backfill(db, db.repoOf(top, { origin: require("./import.js").originOf(top) }).id, top);
+              const repoId = db.repoOf(top, { origin: require("./import.js").originOf(top) }).id;
+              const started = Date.now();
+              const r = await backfill(db, repoId, top);
+              // The hub's status line shows this run (#175).
+              db.setMeta(require("./analysis-backfill.js").metaKey(repoId), JSON.stringify({ status: "done", started, at: Date.now(), summary: summary(r) }));
               log.info(`analysis backfill ${top}: ${summary(r)}${r.tasks.length ? `; tasks ${r.tasks.join(", ")}` : ""}`);
               lines.push(`${path.basename(top)}: ${summary(r)}`);
             }

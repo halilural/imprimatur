@@ -644,7 +644,7 @@ function analysisHub(db, root) {
   const orphans = Object.entries(require("./analysis.js").orphans(db, repo.id)).sort((a, b) => b[1] - a[1]).map(([source, at]) => ({ source, at }));
   const tasks = db.tasksOf(repo.id).filter((/** @type {any} */ t) => !CONTAINERS.includes(t.key) && (t.status === "open" || t.status === "active"))
     .map((/** @type {any} */ t) => ({ id: t.id, key: t.key, title: t.title }));
-  return { repo: { id: repo.id, name: repo.name }, docs, orphans, tasks };
+  return { repo: { id: repo.id, name: repo.name }, docs, orphans, tasks, health: require("./analysis.js").health(db, repo.id) };
 }
 
 /**
@@ -706,8 +706,13 @@ function subHeads(body) {
  * @param {ReturnType<typeof analysisHub>} m
  */
 function analysisHubHtml(m) {
+  // How intake stands (#175): files the model could not judge, the backfill's last run, a retry.
+  const h = m.health;
+  const healthHtml = h && (h.unjudged || h.backfill?.status === "failed" || h.backfill?.summary)
+    ? `<div class="ahealth" data-k="ahealth">${h.backfill?.summary ? `<span class="dim">Past sessions: ${esc(h.backfill.summary)}</span>` : ""}${h.backfill?.status === "failed" ? `<span class="bad">Past sessions failed: ${esc(h.backfill.error ?? "")}</span>` : ""}${h.unjudged ? `<span class="bad">${h.unjudged} file${h.unjudged === 1 ? "" : "s"} not judged${h.error ? `: ${esc(h.error)}` : ""}</span>` : ""}<button class="mini" data-act="anaRetry" title="Read past sessions again and judge the files left">Retry</button></div>`
+    : "";
   if (!m.docs.length && !m.orphans.length) {
-    return `<div class="emptyhero" data-k="none">${require("./mascot.js").mascot(56)}<p>No task analyses in this repo yet. When the agent writes an analysis, plan or research note for a task, it shows up here; for past sessions, use "Imprimatur: Take Task Analyses from Past Sessions".</p></div>`;
+    return `<div class="emptyhero" data-k="none">${require("./mascot.js").mascot(56)}<p>No task analyses in this repo yet. When the agent writes an analysis, plan or research note for a task, it shows up here; for past sessions, use "Imprimatur: Take Task Analyses from Past Sessions".</p></div>${healthHtml}`;
   }
   const { renderMarkdown } = require("./docsView.js");
   const name = (/** @type {string} */ src) => (src.startsWith("plan:") ? "Plan (plan mode)" : src || "Analysis");
@@ -728,7 +733,7 @@ function analysisHubHtml(m) {
   const studyToc = (/** @type {any} */ d) => (d.study ? `<li class="afile astudy" data-k="tstudy-${esc(d.key)}">${goTo(`a${d.study.id}`, `${icon("analysis", 12)} ${titleHtml(d.study.title)}`)}${subs(d.study)}</li>` : "");
   const toc = (/** @type {any} */ d) => `<ol class="atoc" data-k="toc-${esc(d.key)}" data-ak="${esc(d.key)}">${d.files.map(fileToc).join("")}${studyToc(d)}</ol>`;
   const item = (/** @type {any} */ d) => `<button class="aitem" data-act="asel" data-key="${esc(d.key)}" data-nav data-q="${esc(`${d.key} ${d.task?.title ?? ""} ${d.files.map((/** @type {any} */ f) => f.source).join(" ")}`)}"><span class="mono key">${esc(d.key)}</span><span class="ttl">${titleHtml(d.task?.title, d.key) || esc(d.key)}</span><span class="dim">${d.files.length} file${d.files.length === 1 ? "" : "s"}${d.study ? " · study note" : ""} · ${esc(day(d.at))}</span></button>${toc(d)}`;
-  const aside = `<aside class="dtoc alist" data-k="alist" data-scroll="dtoc" data-navgroup="analysis"><div class="lbl" data-k="h">Tasks · ${m.docs.length}</div>${m.docs.map(item).join("")}${m.orphans.length ? `<button class="aitem orph" data-act="asel" data-key="__orphans" data-nav><span class="ttl">Analyses without a task</span><span class="dim">${m.orphans.length} file${m.orphans.length === 1 ? "" : "s"}</span></button>` : ""}</aside>`;
+  const aside = `<aside class="dtoc alist" data-k="alist" data-scroll="dtoc" data-navgroup="analysis"><div class="lbl" data-k="h">Tasks · ${m.docs.length}</div>${m.docs.map(item).join("")}${m.orphans.length ? `<button class="aitem orph" data-act="asel" data-key="__orphans" data-nav><span class="ttl">Analyses without a task</span><span class="dim">${m.orphans.length} file${m.orphans.length === 1 ? "" : "s"}</span></button>` : ""}${healthHtml}</aside>`;
   // No file names here: the text is the point. A file's first section opens it (its path in the tooltip).
   // A file under the wrong task moves to another from here (#173); a section written through MCP has no file to move.
   const move = (/** @type {any} */ f) => (f.source ? `<select class="amove" data-change="anaAssign" data-file="${esc(f.source)}" aria-label="Move ${esc(name(f.source))} to another task"><option value="">Move to task…</option>${options}</select>` : "");
@@ -1245,6 +1250,7 @@ const TASKS_CSS = `
   .orow.dsec { flex-direction: row; align-items: center; }
   .analink { opacity: 1; border-color: var(--acc); color: var(--acc); font-size: var(--fs-sm); font-weight: 700; cursor: pointer; padding: 2px 10px; }
   .orow select { margin-left: auto; max-width: 280px; }
+  .ahealth { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: var(--fs-sm); } .ahealth .bad { color: var(--vscode-errorForeground); font-weight: 600; } .ahealth .mini { align-self: flex-start; opacity: 1; }
   .amove { max-width: 220px; font-size: var(--fs-sm); padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); }
   .aorph { margin-top: 10px; } .orow { display: flex; gap: 8px; align-items: center; padding: 4px 0; } .orow .mini { margin-left: auto; }
   .ana .mini, .orow .mini { opacity: 1; padding: 2px 10px; border-color: var(--acc); color: var(--acc); font-size: var(--fs-sm); font-weight: 700; cursor: pointer; }

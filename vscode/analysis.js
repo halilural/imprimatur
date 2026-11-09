@@ -143,7 +143,8 @@ async function verdictOf(db, repoId, rel, text, o = {}) {
     const v = reply.startsWith("YES") ? "yes" : reply.startsWith("NO") ? "no" : undefined;
     if (v) db.setMeta(verdictKey(repoId, rel), JSON.stringify({ v, at: Date.now() }));
     return v;
-  } catch {
+  } catch (e) {
+    lastModelError = e instanceof Error ? e.message : String(e);
     return undefined;
   }
 }
@@ -440,7 +441,7 @@ async function handle(db, repoId, root, it, o = {}) {
 
 /**
  * The hook's part, quick: what the path, headings or a kept answer decide is done here;
- * a file only the model can judge goes to a background process (hooks/analysis.mjs).
+ * a file only the model can judge goes to a background process (hooks/analysis-verdict.mjs).
  * @param {any} db @param {number} repoId @param {string} root @param {Item} it
  * @param {{start?: (root: string, it: Item) => void}} [o] start: tests replace the background process
  * @returns {Outcome | {status: "later"}}
@@ -463,7 +464,7 @@ function onEdit(db, repoId, root, it, o = {}) {
 /** The model's verdict in its own process, outliving the hook; it reads the file again. @param {string} root @param {Item} it */
 function startDetached(root, it) {
   const { spawn } = require("node:child_process");
-  const args = [path.join(__dirname, "..", "hooks", "analysis.mjs"), root, it.rel, it.session ?? "", it.branch ?? "", String(it.at ?? Date.now())];
+  const args = [path.join(__dirname, "..", "hooks", "analysis-verdict.mjs"), root, it.rel, it.session ?? "", it.branch ?? "", String(it.at ?? Date.now())];
   spawn(process.execPath, args, { cwd: root, detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, IMPRIMATUR_CHILD: "1" } }).unref();
 }
 
@@ -475,9 +476,7 @@ function place(db, repoId, it, v) {
   if (v === "no") return { status: "not" };
   if (v === undefined) return { status: "unknown" };
   // A file already kept stays with its task, whatever the session is on now.
-  const kept = db.sqlite.prepare(`SELECT d.scope FROM doc_sources x JOIN documents d ON d.id = x.doc_id
-                                  WHERE d.repo_id = ? AND x.path = ? ORDER BY x.at DESC LIMIT 1`).get(repoId, it.rel)?.scope;
-  const task = kept ?? taskFor(db, repoId, it);
+  const task = keptTask(db, repoId, it.rel) ?? taskFor(db, repoId, it);
   if (!task) {
     setOrphan(db, repoId, it.rel, it.at ?? Date.now(), it.text);
     return { status: "orphan" };
@@ -485,6 +484,55 @@ function place(db, repoId, it, v) {
   setOrphan(db, repoId, it.rel, null);
   const r = ingest(db, repoId, task, it.rel, it.text, { actor: it.actor, at: it.at });
   return { status: "ingested", task, changed: r.changed };
+}
+
+/** The task a file was last read into, if any (the hook, the backfill). @param {any} db @param {number} repoId @param {string} rel @returns {string | undefined} */
+function keptTask(db, repoId, rel) {
+  return db.sqlite.prepare(`SELECT d.scope FROM doc_sources x JOIN documents d ON d.id = x.doc_id
+                            WHERE d.repo_id = ? AND x.path = ? ORDER BY x.at DESC LIMIT 1`).get(repoId, rel)?.scope ?? undefined;
+}
+
+/** The model's last error in this process (verdictOf), for the verdict child to keep. */
+let lastModelError = /** @type {string | undefined} */ (undefined);
+const takeModelError = () => {
+  const e = lastModelError;
+  lastModelError = undefined;
+  return e;
+};
+
+const unjudgedKey = (/** @type {number} */ repoId) => `analysis:unjudged:${repoId}`;
+/** Files the model could not judge (#175): path → {at, error}. @param {any} db @param {number} repoId @returns {Record<string, {at: number, error?: string}>} */
+function unjudged(db, repoId) {
+  try {
+    return JSON.parse(db.meta(unjudgedKey(repoId)) ?? "{}") ?? {};
+  } catch {
+    return {};
+  }
+}
+/**
+ * Keeps what came of a model verdict: a file not judged (and why) is listed, one judged leaves.
+ * @param {any} db @param {number} repoId @param {string} rel @param {{status: string}} out @param {string} [error]
+ */
+function noteVerdict(db, repoId, rel, out, error) {
+  const u = unjudged(db, repoId);
+  if (out.status === "unknown" || error) u[rel] = { at: Date.now(), ...(error && { error: error.slice(0, 200) }) };
+  else delete u[rel];
+  const kept = Object.fromEntries(Object.entries(u).sort((a, b) => b[1].at - a[1].at).slice(0, 200));
+  db.setMeta(unjudgedKey(repoId), Object.keys(kept).length ? JSON.stringify(kept) : null);
+}
+
+/**
+ * How the repo's analysis intake stands (#175), for the hub: the backfill's last run, files not
+ * judged with the latest error, files waiting for a task. @param {any} db @param {number} repoId
+ */
+function health(db, repoId) {
+  /** @type {any} */
+  let backfill;
+  try {
+    backfill = JSON.parse(db.meta(`analysis-backfill:${repoId}`) ?? "null") ?? undefined;
+  } catch {}
+  const u = Object.entries(unjudged(db, repoId)).sort((a, b) => b[1].at - a[1].at);
+  return { backfill, unjudged: u.length, error: u.find(([, v]) => v.error)?.[1].error, orphans: Object.keys(orphans(db, repoId)).length };
 }
 
 /** Files a rescan takes through the edit path at most; the rest wait for the next one. */
@@ -550,5 +598,5 @@ function rescan(db, repoId, root, o = {}) {
 
 module.exports = {
   settingsOf, relPath, absPath, isCandidate, heuristic, quickVerdict, verdictOf, onEdit, keyInPath, keyInBranch, taskFor,
-  sectionsOf, splitBody, ingest, orphans, setOrphan, assign, handle, hash, SPECIAL, chapterOf, rescan,
+  sectionsOf, splitBody, ingest, orphans, setOrphan, assign, handle, hash, SPECIAL, chapterOf, rescan, keptTask, noteVerdict, takeModelError, health, unjudged,
 };

@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.139.0] - 2026-11-09
+
+### Added
+- Analysis → Task analyses says how intake stands (#175): the files the model could not judge, with the latest error, and the last read of past sessions. A **Retry** reads past sessions again and judges the files left; files already judged keep their answer, so each retry gets further.
+
+### Changed
+- The detached verdict process is now `hooks/analysis-verdict.mjs`, named for its job. The "kept task" lookup is one function shared by the hook and the backfill.
+
 ## [0.138.0] - 2026-11-09
 
 ### Fixed

@@ -850,6 +850,7 @@ ${require("./board.js").BOARD_SCRIPT}
       case "openFile": return vscode.postMessage({ type: "openFile", file: d.file, line: Number(d.line) || 0 });
       case "anaAssign": el.closest(".orow")?.classList.add("sent"); return vscode.postMessage({ type: "anaAssign", file: d.file, task: Number(d.task) });
       case "bestRun": return vscode.postMessage({ type: "bestRun" });
+      case "anaRetry": return vscode.postMessage({ type: "anaRetry" });
       case "answer": return sendAnswer(d.id);
       case "exStep": el.closest(".xstep")?.classList.add("sent"); return vscode.postMessage({ type: "exStep", id: Number(d.id), status: d.status });
       case "exNote": {
@@ -1376,6 +1377,7 @@ function onMessage(m) {
   }
   if (m.type === "newTask") return newTask();
   if (m.type === "bestRun") return vscode.commands.executeCommand("imprimatur.bestPractices.run");
+  if (m.type === "anaRetry") return vscode.commands.executeCommand("imprimatur.analysisBackfill");
   if (m.type === "recDismiss") return recDismiss(Number(m.id));
   if (["rec", "recStep", "answer", "add", "taskStatus", "docSave", "docNew", "docStatus", "anaAssign", "exStep", "exNote", "exDrop", "exResume", "exReview"].includes(m.type)) return writeFromPanel(m);
   if (m.type === "exOpen") return openExerciseFile(String(m.file ?? ""), Number(m.line) || 0);
