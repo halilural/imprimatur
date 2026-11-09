@@ -47,6 +47,15 @@ function hookLang(env = process.env, config = readConfig(configPath(env))) {
   return text(env.IMPRIMATUR_LANG) ?? text(env.CLAUDE_PLUGIN_OPTION_LANGUAGE) ?? text(config.lang);
 }
 
+/**
+ * The language the agent replies to the user in (#176), one per machine: IMPRIMATUR_REPLY_LANG,
+ * the plugin's reply_language option, config.json "replyLang"; English without any.
+ * @param {NodeJS.ProcessEnv} [env] @param {{replyLang?: string}} [config]
+ */
+function replyLang(env = process.env, config = readConfig(configPath(env))) {
+  return text(env.IMPRIMATUR_REPLY_LANG) ?? text(env.CLAUDE_PLUGIN_OPTION_REPLY_LANGUAGE) ?? text(config.replyLang) ?? "English";
+}
+
 /** A repo's own settings, .claude/imprimatur.json; {} without or when it is not JSON. @param {string} root @returns {{lang?: string}} */
 function repoConfig(root) {
   return readConfig(path.join(root, ".claude", "imprimatur.json"));
@@ -81,12 +90,13 @@ function hookExts(args = [], env = process.env, config = readConfig(configPath(e
 }
 
 /**
- * config.json with lang and exts set (setup). Pure: a copy and whether it changed.
- * @param {any} config @param {{lang?: string, exts?: string[]}} opts
+ * config.json with lang, replyLang and exts set (setup). Pure: a copy and whether it changed.
+ * @param {any} config @param {{lang?: string, replyLang?: string, exts?: string[]}} opts
  */
-function mergeConfig(config, { lang, exts }) {
+function mergeConfig(config, { lang, replyLang, exts }) {
   const out = { ...(config && typeof config === "object" && !Array.isArray(config) ? config : {}) };
   if (lang) out.lang = lang;
+  if (replyLang) out.replyLang = replyLang;
   if (exts?.length) out.exts = parseExts(exts);
   return { config: out, changed: JSON.stringify(out) !== JSON.stringify(config ?? {}) };
 }
@@ -100,4 +110,4 @@ function imprimaturTool(name) {
   return MCP_TOOL.test(s) ? s.replace(MCP_TOOL, "") : undefined;
 }
 
-module.exports = { DEFAULT_EXTS, configPath, readConfig, repoConfig, repoRootOf, repoLang, ownLang, parseExts, hookLang, hookExts, mergeConfig, imprimaturTool, MCP_TOOL };
+module.exports = { DEFAULT_EXTS, configPath, readConfig, repoConfig, repoRootOf, repoLang, ownLang, replyLang, parseExts, hookLang, hookExts, mergeConfig, imprimaturTool, MCP_TOOL };

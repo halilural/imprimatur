@@ -28,13 +28,14 @@ type: explanation
   - [13. Project glossary: a third living document (#91)](#glossary-feature)
   - [14. Skills Imprimatur carries](#bundled-skills)
   - [15. A meeting's note lives where its work is (#167) — target state](#meeting-records)
+  - [16. Languages: the chat, the records, the hooks (#80, #176)](#languages)
 - [Metrics](#chapter-metrics)
-  - [16. Success metrics](#metrics)
+  - [17. Success metrics](#metrics)
 - [Unsorted](#chapter-unsorted)
-  - [17. Agent setup audit (planned)](#agent-setup-audit)
-  - [18. The agent's toolset: seen, versioned, installed, found (#138)](#agent-toolset)
-  - [19. The panel as a board, with analytics (#147)](#board)
-  - [20. The baseline every repo gets](#baseline)
+  - [18. Agent setup audit (planned)](#agent-setup-audit)
+  - [19. The agent's toolset: seen, versioned, installed, found (#138)](#agent-toolset)
+  - [20. The panel as a board, with analytics (#147)](#board)
+  - [21. The baseline every repo gets](#baseline)
 
 <a id="chapter-problem"></a>
 
@@ -396,13 +397,23 @@ A meeting app writes its notes into Imprimatur, so what was agreed reaches the t
 
 First user: a desktop meeting app writing work meeting notes to its work repo, then its past notes once.
 
+<a id="languages"></a>
+
+### 16. Languages: the chat, the records, the hooks (#80, #176)
+
+Three languages, each set in one place:
+
+- **Reply language** (#176): the language the agent talks to the user in, the same in every repo on the machine. It comes from `IMPRIMATUR_REPLY_LANG`, the plugin's **Reply language** option, or config.json `replyLang` (`npm run setup -- --reply-lang Turkish`). Without any of these it is English. Imprimatur says it at every session start.
+- **Repo language** (#80): a repo's `.claude/imprimatur.json` `"lang"` sets the language of its records, design documents, code comments and commits. A public repo can keep English records while the chat stays in the user's language.
+- **Hook language**: config.json `lang` (or `imprimatur.language`) sets the language of text the hooks and the extension's model calls write, such as edit descriptions and Waiting on you.
+
 <a id="chapter-metrics"></a>
 
 ## Metrics
 
 <a id="metrics"></a>
 
-### 16. Success metrics
+### 17. Success metrics
 
 The metrics are values measured in real repositories of different sizes.
 
@@ -444,7 +455,7 @@ The metrics are values measured in real repositories of different sizes.
 
 <a id="agent-setup-audit"></a>
 
-### 17. Agent setup audit (planned)
+### 18. Agent setup audit (planned)
 
 The agent setup (CLAUDE.md, AGENTS.md, `.claude/` settings, hooks, skills, subagents, MCP, plugins, Cursor/Codex/Copilot/Gemini/Kiro files) is audited with rules based on the official documentation. The rule engine is agnix and it is used with its full coverage: no rule or file is cut.
 
@@ -462,7 +473,7 @@ Epic [#76](https://github.com/halilural/imprimatur/issues/76), first piece of wo
 
 <a id="agent-toolset"></a>
 
-### 18. The agent's toolset: seen, versioned, installed, found (#138)
+### 19. The agent's toolset: seen, versioned, installed, found (#138)
 
 Epic #138, opened 2026-11-04 and the top priority. Imprimatur becomes the place where everything the agent uses is seen and managed. It builds on the Agent setup view, which already shows every agent file per repo and globally, the drift between copies, the effective settings, and the audit findings.
 
@@ -482,7 +493,7 @@ Anything brought in is vetted first: its license allows redistribution, its hook
 
 <a id="board"></a>
 
-### 19. The panel as a board, with analytics (#147)
+### 20. The panel as a board, with analytics (#147)
 
 Epic #147, opened 2026-11-04. The Imprimatur panel looks and works like the ponytail board. The VS Code side bar stays as it is.
 
@@ -500,7 +511,7 @@ Epic #147, opened 2026-11-04. The Imprimatur panel looks and works like the pony
 
 <a id="baseline"></a>
 
-### 20. The baseline every repo gets
+### 21. The baseline every repo gets
 
 Imprimatur's own plugin brings its hooks, its MCP server and its skills: issues, study, exercise, imprimatur-stats and social-post. It installs at user scope. Beyond that, every repo should have five third-party items. Imprimatur does not ship them: each is installed from its own marketplace or repo, at user scope, after the user confirms.
 
