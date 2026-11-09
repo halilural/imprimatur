@@ -257,6 +257,16 @@ function sectionsOf(rel, text) {
   return out;
 }
 
+/** A section heading's chapter of the task's design doc (#172), first match wins; else design. */
+const CHAPTER_HINTS = /** @type {const} */ ([
+  ["risks", /\b(risks?|open questions?|unknowns?|limits?|caveats?|riskler|açık sorular|sınırlar)\b/i],
+  ["alternatives", /\b(alternatives?|options?|considered|trade-?offs?|alternatifler|seçenekler)\b/i],
+  ["goals", /\b(goals?|non-goals?|objectives?|requirements?|user stories|acceptance|out of scope|success|hedefler?|amaç|gereksinimler|kabul|kapsam dışı)\b/i],
+  ["context", /\b(context|background|problem|scope|current state|findings|research|overview|why|bağlam|arka plan|mevcut durum|kapsam|bulgular|araştırma|neden)\b/i],
+]);
+/** @param {string} title @returns {string} */
+const chapterOf = (title) => CHAPTER_HINTS.find(([, re]) => re.test(title))?.[0] ?? "design";
+
 /**
  * The key prefix of a file's sections in a document: the one it has, else its name's slug,
  * with a part of its path's hash when another file of the document has that name.
@@ -306,7 +316,7 @@ function ingest(db, repoId, taskKey, rel, text, { actor, at }) {
       const key = `${prefix}--${part}`;
       keep.add(key);
       const before = db.docSection(doc.id, key);
-      const after = db.upsertSection(doc.id, key, { title: s.title, body: s.body, position: base + i / 1000, status: "current", source: rel }, actor, { at });
+      const after = db.upsertSection(doc.id, key, { title: s.title, body: s.body, position: base + i / 1000, status: "current", source: rel, chapter: chapterOf(s.title) }, actor, { at });
       if (!before || before.updated_at !== after.updated_at) changed++;
     });
     let superseded = 0;
@@ -432,5 +442,5 @@ function place(db, repoId, it, v) {
 
 module.exports = {
   settingsOf, relPath, absPath, isCandidate, heuristic, quickVerdict, verdictOf, onEdit, keyInPath, keyInBranch, taskFor,
-  sectionsOf, splitBody, ingest, orphans, setOrphan, assign, handle, hash, SPECIAL,
+  sectionsOf, splitBody, ingest, orphans, setOrphan, assign, handle, hash, SPECIAL, chapterOf,
 };
