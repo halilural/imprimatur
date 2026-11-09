@@ -1,7 +1,7 @@
 {
   "name": "imprimatur",
   "displayName": "Imprimatur",
-  "version": "0.140.1",
+  "version": "0.140.2",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it: Claude Code hooks that record each edit and what the agent waits on you for, and an MCP server for tasks and records. Pair it with the Imprimatur VS Code extension (npm run setup -- --plugin).",
   "author": {
     "name": "halilural",
@@ -29,7 +29,7 @@
     "language": {
       "type": "string",
       "title": "Language",
-      "description": "Language of model-written text (edit descriptions, Waiting on you), e.g. Turkish. Empty: the agent's own."
+      "description": "Language of model-written edit descriptions, e.g. Turkish. Empty: the agent's own. Waiting on you follows Reply language."
     },
     "reply_language": {
       "type": "string",

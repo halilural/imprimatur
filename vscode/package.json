@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.140.1",
+  "version": "0.140.2",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -836,7 +836,7 @@
         "imprimatur.language": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Language of the steps Scan history and Audit write, e.g. `Turkish`. Empty: the agent's language (the hooks use `IMPRIMATUR_LANG`). `npm run setup -- --lang …` sets both."
+          "markdownDescription": "Language of the edit descriptions the model writes, e.g. `Turkish`; Waiting on you follows the reply language (`npm run setup -- --reply-lang …`). Empty: the agent's language (the hooks use `IMPRIMATUR_LANG`). `npm run setup -- --lang …` sets both."
         },
         "imprimatur.editorAlsoFor": {
           "type": "array",
