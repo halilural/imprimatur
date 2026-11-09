@@ -923,26 +923,67 @@ function paneHtml(db, root, view, o = {}) {
  * not a tab of the task page. @param {any} db @param {string} root @param {any} view
  */
 function meetingsModel(db, root, view = {}) {
-  const repos = scopeRepos(db, root, !!view.all);
-  const names = new Map(repos.map((/** @type {any} */ r) => [r.id, r.name]));
-  const meetings = db.meetingsOf(repos.map((/** @type {any} */ r) => r.id)).map((/** @type {any} */ m) => ({
-    ...m,
-    date: day(m.created_at),
-    repo: names.get(m.task.repo_id) ?? "",
-    decisions: m.children.filter((/** @type {any} */ k) => k.kind === "decision"),
-    todos: m.children.filter((/** @type {any} */ k) => k.kind === "todo"),
-  }));
-  return { all: !!view.all, many: repos.length > 1, meetings };
+  // This repo only: the sticky "every repo" scope has no switch on this page, so it would mix repos in silently.
+  const repos = scopeRepos(db, root, false);
+  const meetings = db.meetingsOf(repos.map((/** @type {any} */ r) => r.id)).map((/** @type {any} */ m) => {
+    const d = new Date(m.created_at);
+    return {
+      ...m,
+      title: meetingTitle(m.title, m.body),
+      gist: meetingGist(m.body),
+      dd: d.getDate(),
+      mon: d.toLocaleDateString("en-GB", { month: "short" }),
+      month: d.toLocaleDateString("en-GB", { month: "long", year: "numeric" }),
+      decisions: m.children.filter((/** @type {any} */ k) => k.kind === "decision"),
+      todos: m.children.filter((/** @type {any} */ k) => k.kind === "todo").sort((/** @type {any} */ a, /** @type {any} */ b) => Number(b.owner === "K") - Number(a.owner === "K")),
+    };
+  });
+  return { meetings };
+}
+
+/** Titles a meeting app writes when it has none of its own. */
+const GENERIC_MEETING = /^(toplantı|meeting|yarıda kalan kayıt.*)$/i;
+/**
+ * The meeting's own name: a generic title gives way to the note's first bold line
+ * ("**Payments weekly**"), which is where meeting apps put the real one.
+ * @param {string} title @param {string | null} body
+ */
+function meetingTitle(title, body) {
+  if (!GENERIC_MEETING.test(title.trim())) return title;
+  const bold = /^\s*\*\*(?!Başlık\*\*)(.+?)\*\*\s*$/m.exec(body ?? "");
+  return bold ? bold[1].trim() : title;
+}
+/** The first sentence of the note's summary ("## Özet" / "## Summary"), plain text. @param {string | null} body */
+function meetingGist(body) {
+  const sec = /^##\s*(?:Özet|Summary)\s*\n+([\s\S]*?)(?:\n##\s|$)/im.exec(body ?? "");
+  if (!sec) return "";
+  const text = sec[1].replace(/[*_`#>]/g, "").replace(/\s+/g, " ").trim();
+  const one = /^.*?[.!?](?=\s|$)/.exec(text)?.[0] ?? text;
+  return one.length > 180 ? `${one.slice(0, 177)}…` : one;
 }
 
 /** @param {ReturnType<typeof meetingsModel>} m */
 function meetingsHtml(m) {
-  const top = `<div class="toprow" data-k="mtop"><div><h1>Meetings</h1><p class="lead">Every meeting a meeting app wrote here, newest first: its decisions and to-dos, and the note. Your to-dos also stay in their task's To-dos.</p></div></div>`;
-  if (!m.meetings.length) return `${top}<div class="card dempty" data-k="mempty"><p>No meetings yet. A meeting app writes them as <span class="mono">meeting</span> records.</p></div>`;
+  const top = `<div class="toprow" data-k="mtop"><div><h1>Meetings</h1><p class="lead">What was decided and what you took on, meeting by meeting. Your to-dos also stay in their task's To-dos.</p></div></div>`;
+  if (!m.meetings.length) return `<div class="meetings" data-k="meetings">${top}<div class="card dempty" data-k="mempty"><p>No meetings in this repo yet. A meeting app writes them as <span class="mono">meeting</span> records.</p></div></div>`;
   const item = (/** @type {any} */ k) =>
-    `<div class="ans">${kindChip(k.kind)} ${esc(k.title)}${k.owner === "K" ? ' <span class="owner me">You</span>' : ""}${k.status === "done" ? ` ${icon("check", 12)}` : ""}</div>`;
-  const card = (/** @type {any} */ x) => `<details class="card meet" id="rec-${x.id}" data-k="m${x.id}" data-q="${esc(x.title)}"><summary><span class="mono dim">${esc(x.date)}</span> <span class="ttl">${esc(x.title)}</span> <span class="dim">· ${openTask(x.task.id, x.task.status, x.task.key)}${m.many ? ` · ${esc(x.repo)}` : ""} · ${x.decisions.length} decisions · ${x.todos.length} to-dos</span></summary>${x.decisions.map(item).join("")}${x.todos.map(item).join("")}${x.body ? `<details class="mnote"><summary>Note</summary>${mdBody(x.body, x.id)}</details>` : ""}</details>`;
-  return `<div class="meetings" data-k="meetings">${top}<section class="blk" data-k="mlist" aria-label="Meetings" data-navgroup="meetings">${m.meetings.map(card).join("")}</section></div>`;
+    `<li class="mitem${k.status === "done" ? " done" : ""}"><span class="mbul">${k.status === "done" ? icon("check", 12) : ""}</span><span>${esc(k.title)}${k.owner === "K" ? ' <span class="owner me">You</span>' : ""}</span></li>`;
+  const col = (/** @type {string} */ name, /** @type {any[]} */ xs) =>
+    `<div class="mcol"><div class="lbl">${name} · ${xs.length}</div>${xs.length ? `<ul>${xs.map(item).join("")}</ul>` : '<p class="dim">None.</p>'}</div>`;
+  const card = (/** @type {any} */ x) => {
+    const mine = x.todos.filter((/** @type {any} */ k) => k.owner === "K" && k.status !== "done").length;
+    return `<details class="card meet" id="rec-${x.id}" data-k="m${x.id}" data-q="${esc(x.title)}"><summary>`
+      + `<span class="mdate"><b>${x.dd}</b><span>${esc(x.mon)}</span></span>`
+      + `<span class="mhead"><span class="mttl">${esc(x.title)}</span>${x.gist ? `<span class="mgist">${esc(x.gist)}</span>` : ""}</span>`
+      + `<span class="mcount">${x.decisions.length ? `<span class="mchip" title="Decisions">${icon("decision", 13)} ${x.decisions.length}</span>` : ""}${mine ? `<span class="mchip mine" title="Your open to-dos">${icon("todo", 13)} ${mine}</span>` : ""}</span>`
+      + `</summary><div class="mbody"><div class="mcols">${col("Decisions", x.decisions)}${col("To-dos", x.todos)}</div>`
+      + `<div class="mfoot dim">${openTask(x.task.id, x.task.status, x.task.key)}${x.body ? ` · <details class="mnote"><summary>Full note</summary>${mdBody(x.body, x.id)}</details>` : ""}</div></div></details>`;
+  };
+  /** @type {Map<string, any[]>} */
+  const byMonth = new Map();
+  for (const x of m.meetings) byMonth.set(x.month, [...(byMonth.get(x.month) ?? []), x]);
+  const groups = [...byMonth].map(([month, xs]) => `<h2 class="mmonth">${esc(month)}</h2>${xs.map(card).join("")}`).join("");
+  return `<div class="meetings" data-k="meetings">${top}<section class="blk" data-k="mlist" aria-label="Meetings" data-navgroup="meetings">${groups}</section></div>`;
 }
 
 /** Record actions from the page and the status each sets (a Map: no inherited keys). */
@@ -1129,6 +1170,25 @@ const TASKS_CSS = `
   .lbl { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--vscode-descriptionForeground); }
   .callout .lbl { color: var(--acc); } .ptitle { font-weight: 600; }
   .blk { display: flex; flex-direction: column; gap: 6px; }
+  .meetings { display: flex; flex-direction: column; gap: 14px; max-width: 980px; }
+  .mmonth { margin: 14px 0 2px; font-size: 13px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--acc); }
+  .meet { padding: 0; } .meet > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 16px; padding: 12px 16px; }
+  .meet > summary::-webkit-details-marker { display: none; } .meet > summary:hover { background: var(--vscode-list-hoverBackground); border-radius: inherit; }
+  .meet[open] > summary { border-bottom: 1px solid var(--line); }
+  .mdate { flex: none; width: 46px; display: flex; flex-direction: column; align-items: center; padding: 4px 0; border-radius: 8px; background: var(--acc-soft); color: var(--acc); line-height: 1.1; }
+  .mdate b { font-size: 20px; font-weight: 800; } .mdate span { font-size: 11px; font-weight: 700; text-transform: uppercase; }
+  .mhead { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .mttl { font-size: 15px; font-weight: 700; } .mgist { font-size: 13px; color: var(--vscode-descriptionForeground); }
+  .mcount { flex: none; display: flex; gap: 6px; }
+  .mchip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 10px; font-size: 12px; font-weight: 700; border: 1px solid var(--line); }
+  .mchip.mine { border-color: var(--acc); color: var(--acc); background: var(--acc-soft); }
+  .mbody { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .mcols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
+  .mcol ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .mitem { display: flex; gap: 8px; align-items: flex-start; } .mitem.done > span:last-child { text-decoration: line-through; color: var(--vscode-descriptionForeground); }
+  .mbul { flex: none; width: 14px; height: 14px; margin-top: 3px; border-radius: 50%; border: 2px solid var(--acc-line); display: inline-flex; align-items: center; justify-content: center; }
+  .mfoot { font-size: 12px; } .mnote { display: inline; } .mnote summary { display: inline; cursor: pointer; font-weight: 600; }
+  .mnote[open] { display: block; margin-top: 8px; font-size: 13px; color: var(--vscode-foreground); }
   .odot { width: 8px; height: 8px; border-radius: 50%; background: var(--acc); }
   .h2row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .todos { display: flex; flex-direction: column; gap: 1px; }
