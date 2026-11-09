@@ -17,7 +17,8 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const KINDS = ["todo", "question", "answer", "decision", "note", "fixme", "adr", "pdr", "test"];
+// meeting (#167): a meeting's note; its decisions and to-dos are records with parent_id = it.
+const KINDS = ["todo", "question", "answer", "decision", "note", "fixme", "adr", "pdr", "test", "meeting"];
 const ACTORS = ["agent", "user", "hook", "import"];
 
 /** Each entry takes the schema from version i to i + 1. */
@@ -439,6 +440,55 @@ const MIGRATIONS = [
   UPDATE tasks SET done_at = coalesce((SELECT max(r.updated_at) FROM records r WHERE r.task_id = tasks.id), created_at) WHERE status = 'done';`,
   // #162: the GitHub issue's description, pulled by the tracker sync, shown on the task page.
   `ALTER TABLE tasks ADD COLUMN issue_body TEXT;`,
+  // #167: the meeting kind. SQLite cannot change a CHECK, so records is rebuilt with the new
+  // kinds; its dependents are rebuilt pointing at records_new first, so dropping the old
+  // tables never trips a foreign key, and the rename carries their references to "records".
+  `CREATE TABLE records_new (
+    id INTEGER PRIMARY KEY,
+    uid TEXT NOT NULL UNIQUE,
+    task_id INTEGER NOT NULL REFERENCES tasks(id),
+    kind TEXT NOT NULL CHECK (kind IN (${KINDS.map((k) => `'${k}'`).join(", ")})),
+    owner TEXT CHECK (owner IN ('C', 'K')),
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'done', 'dropped')),
+    pointer INTEGER NOT NULL DEFAULT 0 CHECK (pointer IN (0, 1)),
+    title TEXT NOT NULL,
+    body TEXT,
+    position REAL NOT NULL,
+    parent_id INTEGER REFERENCES records_new(id),
+    links TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE record_versions_new (
+    id INTEGER PRIMARY KEY,
+    record_id INTEGER NOT NULL REFERENCES records_new(id),
+    at INTEGER NOT NULL,
+    actor_kind TEXT NOT NULL CHECK (actor_kind IN (${ACTORS.map((k) => `'${k}'`).join(", ")})),
+    actor TEXT,
+    op TEXT NOT NULL CHECK (op IN ('create', 'update')),
+    before TEXT,
+    after TEXT
+  );
+  CREATE TABLE doc_section_records_new (
+    section_id INTEGER NOT NULL REFERENCES doc_sections(id),
+    record_id INTEGER NOT NULL REFERENCES records_new(id),
+    PRIMARY KEY (section_id, record_id)
+  ) WITHOUT ROWID;
+  INSERT INTO records_new SELECT id, uid, task_id, kind, owner, status, pointer, title, body, position, parent_id, links, created_at, updated_at FROM records;
+  INSERT INTO record_versions_new SELECT id, record_id, at, actor_kind, actor, op, before, after FROM record_versions;
+  INSERT INTO doc_section_records_new SELECT section_id, record_id FROM doc_section_records;
+  DROP TABLE doc_section_records;
+  DROP TABLE record_versions;
+  DROP TABLE records;
+  ALTER TABLE records_new RENAME TO records;
+  ALTER TABLE record_versions_new RENAME TO record_versions;
+  ALTER TABLE doc_section_records_new RENAME TO doc_section_records;
+  CREATE INDEX records_task_position ON records(task_id, position);
+  CREATE INDEX records_open ON records(owner, created_at) WHERE status = 'open';
+  CREATE UNIQUE INDEX records_one_pointer ON records(task_id) WHERE pointer = 1;
+  CREATE INDEX record_versions_record ON record_versions(record_id, at);
+  CREATE INDEX doc_section_records_record ON doc_section_records(record_id);
+  `,
 ];
 const VERSION = MIGRATIONS.length;
 

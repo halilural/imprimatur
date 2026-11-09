@@ -23,7 +23,7 @@ const RECS_KEYS = ["RECS", "AUDIT", "BEST"];
 const STATUS_TR = { active: "In progress", open: "Open", done: "Done", dropped: "Dropped" };
 /** Tasks the importer opens to hold records (#59), not work (#75); db.whereWeLeftOff leaves them out too. */
 const CONTAINERS = ["ADR", "PDR", "TEST", "AUDIT", "BEST", "RECS"];
-const KIND_TR = { todo: "to-do", question: "question", answer: "answer", decision: "decision", note: "note", fixme: "fixme", adr: "ADR", pdr: "PDR", test: "test" };
+const KIND_TR = { todo: "to-do", question: "question", answer: "answer", decision: "decision", note: "note", fixme: "fixme", adr: "ADR", pdr: "PDR", test: "test", meeting: "meeting" };
 const WHO_TR = { user: "You", agent: "Agent", hook: "Hook", import: "Import" };
 /** The analysis section /study keeps its note in (study.js NOTE_KEY). */
 const STUDY_KEY = "study";
@@ -244,6 +244,11 @@ function taskPage(db, task, view, opts) {
       return { ...r, date: day(r.created_at), who: c ? (c === "user" ? "you" : c === "agent" ? "agent" : c) : "" };
     }),
     tests: recs.filter((/** @type {any} */ r) => r.kind === "test"),
+    // #167: newest first, each with its decisions and to-dos (parent_id = the meeting).
+    meetings: live
+      .filter((/** @type {any} */ r) => r.kind === "meeting")
+      .sort((/** @type {any} */ a, /** @type {any} */ b) => b.created_at - a.created_at)
+      .map((/** @type {any} */ r) => ({ ...r, date: day(r.created_at), children: live.filter((/** @type {any} */ k) => k.parent_id === r.id) })),
     analysis: repo ? analysisOf(db, repo.id, task.key) : undefined,
     notes: live
       .filter((/** @type {any} */ r) => (r.kind === "note" && !r.links?.bestSources) || (r.kind === "question" && r.status !== "open"))
@@ -483,7 +488,7 @@ function homeModel(db, root, { now = Date.now(), waiting, placeOf, openEdits } =
 
 /** @param {string} status */
 const statusChip = (status) => `<span class="st st-${esc(status)}">${esc(STATUS_TR[/** @type {keyof typeof STATUS_TR} */ (status)] ?? status)}</span>`;
-const KIND_LABEL = { question: "Question", todo: "Your to-do", test: "Manual test", decision: "Decision", adr: "ADR", pdr: "PDR", note: "Note", fixme: "Fixme", answer: "Answer" };
+const KIND_LABEL = { question: "Question", todo: "Your to-do", test: "Manual test", decision: "Decision", adr: "ADR", pdr: "PDR", note: "Note", fixme: "Fixme", answer: "Answer", meeting: "Meeting" };
 /** @param {string} kind @param {string} [label] */
 const kindChip = (kind, label) => `<span class="kchip k-${esc(kind)}">${esc(label ?? KIND_LABEL[/** @type {keyof typeof KIND_LABEL} */ (kind)] ?? kind)}</span>`;
 /** @param {number} id @param {string} status @param {string} key */
@@ -603,11 +608,16 @@ function taskBlocks(c) {
   const desc = c.issueBody
     ? `<section class="blk idesc" data-k="desc-${c.id}" aria-label="Description"><div class="body md">${require("./docsView.js").renderMarkdown(c.issueBody)}</div></section>`
     : "";
+  // #167: each meeting with its note folded, and its own decisions and to-dos under it.
+  const meetings = c.meetings.length
+    ? `<section class="blk" data-k="meet" aria-label="Meetings"><h2>Meetings <span class="dim">· ${c.meetings.length}</span></h2>${c.meetings.map((m) => `<details class="card${fl(m.id)}" id="rec-${m.id}" data-k="r${m.id}" data-q="${esc(m.title)}"><summary><span class="mono dim">${esc(m.date)}</span> <span class="ttl">${esc(m.title)}</span> <span class="dim">· ${m.children.length}</span></summary>${m.children.map((/** @type {any} */ k) => `<div class="ans">${kindChip(k.kind)} ${esc(k.title)}${k.owner === "K" ? ' <span class="owner me">You</span>' : ""}${k.status === "done" ? ` ${icon("check", 12)}` : ""}</div>`).join("")}${m.body ? mdBody(m.body, m.id) : ""}</details>`).join("")}</section>`
+    : "";
   // The tabs right under the head (and Where we left off): what waits on the user is the first, open by default.
   return head + desc + taskTabs(c, [
     { k: "asks", label: "Waiting on you", n: c.asks.length, html: asks },
     { k: "todos", label: recBlocks ? "Recommendations" : "To-dos", n: c.openTodos, html: recBlocks || todos },
     { k: "dec", label: "Decisions", n: c.decisions.length, html: decisions },
+    { k: "meet", label: "Meetings", n: c.meetings.length, html: meetings },
     { k: "notes", label: "Notes", n: c.notes.length, html: notes },
     { k: "tests", label: "Tests", n: c.tests.length, html: tests },
     { k: "act", label: "Activity", n: 0, html: activity },
