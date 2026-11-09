@@ -574,3 +574,38 @@ test("rescan: a Markdown file written past the edit hook goes through it; the fi
   // Not changed since: not taken again.
   assert.equal(a.rescan(db, repo.id, root, { list, now: 7000 }).seen, 0);
 });
+
+// ---- health (#175) ----
+
+test("health: a file the model could not judge is listed with why; judged later, it leaves", () => {
+  const { db, repo } = seeded();
+  a.noteVerdict(db, repo.id, "notes/x.md", { status: "unknown" }, "claude -p timed out");
+  a.noteVerdict(db, repo.id, "notes/y.md", { status: "unknown" });
+  let h = a.health(db, repo.id);
+  assert.equal(h.unjudged, 2);
+  assert.equal(h.error, "claude -p timed out");
+  a.noteVerdict(db, repo.id, "notes/x.md", { status: "ingested" });
+  a.noteVerdict(db, repo.id, "notes/y.md", { status: "not" });
+  h = a.health(db, repo.id);
+  assert.equal(h.unjudged, 0);
+});
+
+test("health: the model's error is kept for the verdict child, once", async () => {
+  const { db, repo } = seeded();
+  const v = await a.verdictOf(db, repo.id, "notes/z.md", "Some text with no clue.", { ask: async () => { throw new Error("boom"); } });
+  assert.equal(v, undefined);
+  assert.equal(a.takeModelError(), "boom");
+  assert.equal(a.takeModelError(), undefined);
+});
+
+test("health: the hub shows files not judged and the last backfill, with a Retry", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "health-hub-"));
+  const { db, repo } = seeded(root);
+  const tv = req("../vscode/tasksView.js");
+  a.noteVerdict(db, repo.id, "notes/x.md", { status: "unknown" }, "claude -p timed out");
+  db.setMeta(`analysis-backfill:${repo.id}`, JSON.stringify({ status: "done", summary: "3 files, 2 into analyses" }));
+  const hub = tv.paneHtml(db, root, { tab: "analysis" });
+  assert.match(hub, /1 file not judged: claude -p timed out/);
+  assert.match(hub, /Past sessions: 3 files, 2 into analyses/);
+  assert.match(hub, /data-act="anaRetry"/);
+});

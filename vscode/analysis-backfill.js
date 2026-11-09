@@ -225,9 +225,7 @@ async function backfill(db, repoId, root, o = {}) {
       report.unknown++;
       continue;
     }
-    const kept = db.sqlite.prepare(`SELECT d.id, d.scope FROM doc_sources x JOIN documents d ON d.id = x.doc_id
-                                    WHERE d.repo_id = ? AND x.path = ? ORDER BY x.at DESC LIMIT 1`).get(repoId, rel);
-    let task = kept?.scope;
+    let task = a.keptTask(db, repoId, rel);
     for (const st of [...states].reverse()) {
       if (task) break;
       task = a.taskFor(db, repoId, { rel, ...st });

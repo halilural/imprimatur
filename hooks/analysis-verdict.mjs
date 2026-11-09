@@ -2,7 +2,7 @@
 // A file only the model can judge as a task's analysis or not (vscode/analysis.js onEdit),
 // started detached by the PostToolUse hook so the hook stays quick:
 //
-//   node hooks/analysis.mjs <repo root> <path> [session] [branch] [at]
+//   node hooks/analysis-verdict.mjs <repo root> <path> [session] [branch] [at]
 import fs from "node:fs";
 import { createRequire } from "node:module";
 
@@ -14,9 +14,11 @@ try {
   const repo = db.repoByRoot(root);
   const text = repo && rel ? fs.readFileSync(a.absPath(root, rel), "utf8") : undefined;
   if (text !== undefined) {
-    await a.handle(db, repo.id, root, {
+    const out = await a.handle(db, repo.id, root, {
       rel, text, session: session || undefined, branch: branch || undefined, at: Number(at) || Date.now(), actor: { kind: "hook", id: session || undefined },
     });
+    // Not judged (the model failed or gave no answer) shows in the hub, with why (#175).
+    a.noteVerdict(db, repo.id, rel, out, a.takeModelError());
   }
   db.close();
 } catch (e) {
