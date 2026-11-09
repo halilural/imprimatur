@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.133.0] - 2026-11-09
+
+### Fixed
+- Meetings (#169): the page shows only this repo's meetings; the sticky "every repo" scope, which has no switch there, no longer mixes other repos in. The Meetings tab has its icon.
+
+### Changed
+- The Meetings page is easier to scan: meetings grouped by month, a date tile, the meeting's real name (a generic "Toplantı" gives way to the note's bold first line) with the summary's first sentence under it, and counts of decisions and your open to-dos. Opened, decisions and to-dos sit side by side, yours first, with the full note at the bottom.
+
 ## [0.132.0] - 2026-11-09
 
 ### Changed

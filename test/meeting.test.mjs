@@ -40,6 +40,17 @@ test("a meeting holds its note; its decisions and to-dos hang under it", () => {
   assert.match(html, /Payments weekly/);
   assert.match(html, /data-act="open" data-id="\d+"[^>]*>LATD-1<\/a>/);
   assert.match(html, /Write the retry policy <span class="owner me">You<\/span>/);
+  // A generic title gives way to the note's bold first line; the gist is the summary's first sentence.
+  const g = db.addRecord(t.id, { kind: "meeting", title: "Toplantı", body: "**Kafka cutover**\n\n## Özet\nWe agreed on **Kafka**. Then lunch.\n\n## Kararlar\n- x", uid: "meeting:m2" }, AGENT);
+  const gm = tv.meetingsModel(db, root, {}).meetings.find((/** @type {any} */ x) => x.id === g.id);
+  assert.equal(gm.title, "Kafka cutover");
+  assert.equal(gm.gist, "We agreed on Kafka.");
+  // Another repo's meetings stay out, even with the sticky "every repo" scope on.
+  const other = db.repoOf(path.join(dir, "other"), { name: "other" });
+  const ot = db.upsertTask(other.id, "X-1", { title: "Elsewhere" });
+  db.addRecord(ot.id, { kind: "meeting", title: "Elsewhere sync", uid: "meeting:m3" }, AGENT);
+  assert.equal(tv.meetingsModel(db, root, { all: true }).meetings.length, 2);
+  db.updateRecord(g.id, { status: "dropped" }, AGENT);
   const task = tv.paneHtml(db, root, { tab: "tasks", sel: t.id }, { waiting: [] });
   assert.doesNotMatch(task, /label="Meetings"|>Meetings</);
   // A dropped meeting leaves the list.
