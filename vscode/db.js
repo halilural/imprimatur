@@ -830,6 +830,17 @@ class Db {
     }
   }
 
+  /**
+   * A checkout moved to another folder (#169): the row with this origin whose root is gone from
+   * disk, the one with the most tasks. A clone or worktree still on disk is its own repo, and an
+   * "origin:" placeholder is the sync plugin's (adoptRepo). @param {string} origin normalised
+   */
+  movedRepo_(origin) {
+    return this.q(`SELECT r.*, (SELECT count(*) FROM tasks t WHERE t.repo_id = r.id) AS n FROM repos r
+                   WHERE r.origin IS NOT NULL AND r.root NOT LIKE 'origin:%' ORDER BY n DESC, r.id`).all()
+      .find((/** @type {any} */ r) => normOrigin(r.origin) === origin && !fs.existsSync(r.root));
+  }
+
   /** The repo row for a root, created on first sight. @param {string} root @param {{origin?: string, name?: string}} [info] */
   repoOf(root, info = {}) {
     const found = this.q("SELECT * FROM repos WHERE root = ?").get(root);
@@ -839,6 +850,14 @@ class Db {
       const row = this.q("SELECT * FROM repos WHERE root = ?").get(root);
       if (row) {
         if (row.origin || !origin) return row;
+        // Opened here before its origin was known: an empty row gives way to the moved checkout's.
+        const moved = this.movedRepo_(origin);
+        if (moved && !this.q("SELECT 1 FROM tasks WHERE repo_id = ? UNION ALL SELECT 1 FROM documents WHERE repo_id = ?").get(row.id, row.id)) {
+          this.q("DELETE FROM tracker_state WHERE repo_id = ?").run(row.id);
+          this.q("DELETE FROM repos WHERE id = ?").run(row.id);
+          this.q("UPDATE repos SET root = ? WHERE id = ?").run(root, moved.id);
+          return this.q("SELECT * FROM repos WHERE id = ?").get(moved.id);
+        }
         this.q("UPDATE repos SET origin = ? WHERE id = ?").run(info.origin, row.id);
         const learnt = this.q("SELECT * FROM repos WHERE id = ?").get(row.id);
         for (const p of this.plugins) if (p.onOrigin) this.guard_(p, () => p.onOrigin(this, learnt));
@@ -849,6 +868,11 @@ class Db {
       if (adopt) {
         this.q("UPDATE repos SET root = ?, name = ? WHERE id = ?").run(root, info.name ?? path.basename(root), adopt.id);
         return this.q("SELECT * FROM repos WHERE id = ?").get(adopt.id);
+      }
+      const moved = origin ? this.movedRepo_(origin) : undefined;
+      if (moved) {
+        this.q("UPDATE repos SET root = ? WHERE id = ?").run(root, moved.id);
+        return this.q("SELECT * FROM repos WHERE id = ?").get(moved.id);
       }
       this.q("INSERT OR IGNORE INTO repos (uid, root, origin, name, created_at) VALUES (?, ?, ?, ?, ?)").run(
         uid(), root, info.origin ?? null, info.name ?? path.basename(root), Date.now(),
