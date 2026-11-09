@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.137.0] - 2026-11-09
+
+### Fixed
+- A plan no task was found for can now be given one (#173): its text is kept while it waits. Before, assigning it failed with "cannot be read again".
+
+### Added
+- Each file of a task's analysis has a **Move to task…** picker (Analysis → Task analyses). The file moves with its sections, and its old sections are superseded. It works for a file that is gone from disk, too.
+
 ## [0.136.0] - 2026-11-09
 
 ### Added

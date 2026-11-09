@@ -341,25 +341,72 @@ function orphans(db, repoId) {
   }
 }
 
-/** @param {any} db @param {number} repoId @param {string} rel @param {number | null} at null: no longer an orphan */
-function setOrphan(db, repoId, rel, at) {
+/** A plan's text, kept while it waits for a task: a plan is no file to read again (#173). */
+const orphanTextKey = (/** @type {number} */ repoId, /** @type {string} */ rel) => `analysis:orphantext:${repoId}:${rel}`;
+
+/**
+ * @param {any} db @param {number} repoId @param {string} rel @param {number | null} at null: no longer an orphan
+ * @param {string} [text] a plan's text, kept with it
+ */
+function setOrphan(db, repoId, rel, at, text) {
   const o = orphans(db, repoId);
   if (at == null) delete o[rel];
   else o[rel] = at;
   // The newest 200: an old orphan is not worth keeping forever.
-  const kept = Object.fromEntries(Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, 200));
+  const all = Object.entries(o).sort((a, b) => b[1] - a[1]);
+  const kept = Object.fromEntries(all.slice(0, 200));
   db.setMeta(orphanKey(repoId), Object.keys(kept).length ? JSON.stringify(kept) : null);
+  if (at != null && text !== undefined && rel.startsWith("plan:")) db.setMeta(orphanTextKey(repoId, rel), text);
+  for (const [gone] of [...(at == null ? [[rel]] : []), ...all.slice(200)]) db.setMeta(orphanTextKey(repoId, gone), null);
+}
+
+/** The analysis files of the repo: those in a task's analysis or waiting for one. @param {any} db @param {number} repoId @param {string} rel */
+function known(db, repoId, rel) {
+  if (Object.hasOwn(orphans(db, repoId), rel)) return true;
+  return !!db.sqlite.prepare(`SELECT 1 FROM doc_sections s JOIN documents d ON d.id = s.doc_id
+                              WHERE d.repo_id = ? AND d.kind = 'analysis' AND s.source = ? LIMIT 1`).get(repoId, rel);
 }
 
 /**
- * Gives an orphan (or any analysis file) its task, read from where it is now.
+ * An analysis file's text: the file where it still is, a waiting plan's kept text, else its
+ * current sections put back together (a file gone, or synced from another machine).
+ * @param {any} db @param {number} repoId @param {string} root @param {string} rel @returns {string | undefined}
+ */
+function textOf(db, repoId, root, rel) {
+  if (rel.startsWith("plan:")) {
+    const kept = db.meta(orphanTextKey(repoId, rel));
+    if (kept != null) return kept;
+  } else {
+    try {
+      return fs.readFileSync(absPath(root, rel), "utf8");
+    } catch {}
+  }
+  const secs = db.sqlite.prepare(`SELECT s.title, s.body FROM doc_sections s JOIN documents d ON d.id = s.doc_id
+                                  WHERE d.repo_id = ? AND d.kind = 'analysis' AND s.source = ? AND s.status = 'current' ORDER BY s.position`).all(repoId, rel);
+  return secs.length ? `${secs.map((/** @type {any} */ s) => `## ${s.title}\n\n${s.body ?? ""}`.trimEnd()).join("\n\n")}\n` : undefined;
+}
+
+/**
+ * Gives an analysis file its task (#173): an orphan, or a file kept under another task, which
+ * then leaves that one (its sections there superseded).
  * @param {any} db @param {number} repoId @param {string} root @param {string} rel @param {string} taskKey @param {{kind: string, id?: string}} actor
  */
 function assign(db, repoId, root, rel, taskKey, actor) {
-  const text = rel.startsWith("plan:") ? undefined : fs.readFileSync(absPath(root, rel), "utf8");
+  if (!known(db, repoId, rel)) throw new Error(`Imprimatur: ${rel} is no analysis file of this repo`);
+  const text = textOf(db, repoId, root, rel);
   if (text === undefined) throw new Error(`Imprimatur: ${rel} cannot be read again`);
-  setOrphan(db, repoId, rel, null);
-  return ingest(db, repoId, taskKey, rel, text, { actor });
+  return db.tx(() => {
+    const from = db.sqlite.prepare(`SELECT DISTINCT d.id FROM doc_sections s JOIN documents d ON d.id = s.doc_id
+                                    WHERE d.repo_id = ? AND d.kind = 'analysis' AND d.scope != ? AND s.source = ?`).all(repoId, taskKey, rel);
+    for (const { id } of from) {
+      for (const s of db.docSections(id)) {
+        if (s.source === rel && s.status === "current") db.upsertSection(id, s.key, { status: "superseded" }, actor);
+      }
+      db.sqlite.prepare("DELETE FROM doc_sources WHERE doc_id = ? AND path = ?").run(id, rel);
+    }
+    setOrphan(db, repoId, rel, null);
+    return ingest(db, repoId, taskKey, rel, text, { actor });
+  });
 }
 
 /** @typedef {{rel: string, text: string, session?: string, prompt?: string, branch?: string, at?: number, actor: {kind: string, id?: string}}} Item */
@@ -432,7 +479,7 @@ function place(db, repoId, it, v) {
                                   WHERE d.repo_id = ? AND x.path = ? ORDER BY x.at DESC LIMIT 1`).get(repoId, it.rel)?.scope;
   const task = kept ?? taskFor(db, repoId, it);
   if (!task) {
-    setOrphan(db, repoId, it.rel, it.at ?? Date.now());
+    setOrphan(db, repoId, it.rel, it.at ?? Date.now(), it.text);
     return { status: "orphan" };
   }
   setOrphan(db, repoId, it.rel, null);
