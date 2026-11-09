@@ -1275,6 +1275,31 @@ class Db {
     ).map(recordOf);
   }
 
+  /**
+   * The meetings of these repos (#169), newest first, each with its task and its live
+   * children (decisions and to-dos, parent_id = the meeting). @param {number[]} repoIds
+   */
+  meetingsOf(repoIds) {
+    if (!repoIds.length) return [];
+    const marks = repoIds.map(() => "?").join(", ");
+    const meetings = this.q(
+      `SELECT r.*, t.key AS task_key, t.title AS task_title, t.status AS task_status, t.repo_id AS repo_id
+       FROM records r JOIN tasks t ON t.id = r.task_id
+       WHERE r.kind = 'meeting' AND r.status != 'dropped' AND t.repo_id IN (${marks})
+       ORDER BY r.created_at DESC, r.id DESC`,
+    ).all(...repoIds);
+    if (!meetings.length) return [];
+    const ids = meetings.map((/** @type {any} */ m) => m.id);
+    const kids = this.q(
+      `SELECT * FROM records WHERE status != 'dropped' AND parent_id IN (${ids.map(() => "?").join(", ")}) ORDER BY position`,
+    ).all(...ids).map(recordOf);
+    return meetings.map((/** @type {any} */ m) => ({
+      ...recordOf(m),
+      task: { id: m.task_id, key: m.task_key, title: m.task_title, status: m.task_status, repo_id: m.repo_id },
+      children: kids.filter((/** @type {any} */ k) => k.parent_id === m.id),
+    }));
+  }
+
   /** Every repo with records, by name. */
   repos() {
     return this.q("SELECT * FROM repos ORDER BY name, root").all();

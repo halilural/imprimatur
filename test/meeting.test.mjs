@@ -28,13 +28,23 @@ test("a meeting holds its note; its decisions and to-dos hang under it", () => {
   assert.ok(KINDS.includes("meeting"));
   assert.equal(d.parent_id, m.id);
 
-  const page = tv.tasksPage(db, root, { sel: t.id }).cur;
-  assert.equal(page.meetings.length, 1);
-  assert.deepEqual(page.meetings[0].children.map((/** @type {any} */ k) => k.title), ["Payments move to Kafka", "Write the retry policy"]);
-  const html = tv.paneHtml(db, root, { tab: "tasks", sel: t.id }, { waiting: [] });
-  assert.match(html, /Meetings <span class="dim">· 1<\/span>/);
+  // #169: meetings have a tab of their own, not one on the task page.
+  assert.ok(tv.TABS.includes("meetings"));
+  const model = tv.meetingsModel(db, root, {});
+  assert.equal(model.meetings.length, 1);
+  assert.equal(model.meetings[0].task.key, "LATD-1");
+  assert.deepEqual(model.meetings[0].decisions.map((/** @type {any} */ k) => k.title), ["Payments move to Kafka"]);
+  assert.deepEqual(model.meetings[0].todos.map((/** @type {any} */ k) => k.title), ["Write the retry policy"]);
+  const html = tv.paneHtml(db, root, { tab: "meetings" }, { waiting: [] });
+  assert.match(html, /<h1>Meetings<\/h1>/);
   assert.match(html, /Payments weekly/);
+  assert.match(html, /data-act="open" data-id="\d+"[^>]*>LATD-1<\/a>/);
   assert.match(html, /Write the retry policy <span class="owner me">You<\/span>/);
+  const task = tv.paneHtml(db, root, { tab: "tasks", sel: t.id }, { waiting: [] });
+  assert.doesNotMatch(task, /label="Meetings"|>Meetings</);
+  // A dropped meeting leaves the list.
+  db.updateRecord(m.id, { status: "dropped" }, AGENT);
+  assert.equal(tv.meetingsModel(db, root, {}).meetings.length, 0);
 });
 
 test("an existing database gets the meeting kind; its records, versions and links stay", () => {

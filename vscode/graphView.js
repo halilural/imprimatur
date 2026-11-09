@@ -111,7 +111,7 @@ function editsAnalytics(root) {
 
 /** The panel's tabs: key (also its icon) and label. */
 // No Waiting on you tab: a task's asks are on its page, the ones with no task on Home (its badge counts them all).
-const TAB_BUTTONS = [["home", "Home"], ["tasks", "Tasks"], ["analysis", "Analysis"], ["exercises", "Exercises"], ["edits", "Agent changes"]];
+const TAB_BUTTONS = [["home", "Home"], ["tasks", "Tasks"], ["analysis", "Analysis"], ["exercises", "Exercises"], ["meetings", "Meetings"], ["edits", "Agent changes"]];
 /** The pages under the Analysis tab (TASK-ANALYSIS): its button is on for each. */
 const HUB_TABS = ["architecture", "product", "glossary", "social", "analysis"];
 
