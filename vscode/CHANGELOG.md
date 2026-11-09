@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.131.0] - 2026-11-09
+
+### Added
+- A `meeting` record kind (#167): a meeting's note as one record, its decisions and to-dos as `decision` and `todo` records under it (`parent_id`). The task page has a **Meetings** tab with each meeting's date, decisions and to-dos, and the note folded. The database migrates on its own; records, versions and section links are kept.
+
 ## [0.130.0] - 2026-11-05
 
 Everything since 0.113.4.
