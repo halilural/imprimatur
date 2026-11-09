@@ -481,3 +481,25 @@ test("panel: titles read as text — a Markdown link keeps its text, a key the p
   assert.equal(plainTitle("#5", "#5"), "#5");
   assert.equal(plainTitle(undefined), "");
 });
+
+// ---- chapters (#172) ----
+
+test("chapters: a heading names its chapter of the design doc; the rest is design", () => {
+  const cases = [
+    ["Problem and background", "context"], ["Mevcut durum", "context"], ["Findings", "context"],
+    ["Goals and non-goals", "goals"], ["Out of scope", "goals"], ["Kabul kriterleri", "goals"],
+    ["Options considered", "alternatives"], ["Alternatifler", "alternatives"],
+    ["Risks and open questions", "risks"], ["Açık sorular", "risks"],
+    ["Implementation", "design"], ["Steps", "design"],
+  ];
+  for (const [title, chapter] of cases) assert.equal(a.chapterOf(title), chapter, title);
+});
+
+test("chapters: a file's sections land in their chapters", () => {
+  const { db, repo } = seeded();
+  const text = "# Plan\n\n## Context\n\nWhy.\n\n## Steps\n\n1. a\n\n## Risks\n\nSome.\n";
+  a.ingest(db, repo.id, "#5", "docs/plan.md", text, { actor: hook });
+  const doc = db.taskDocOf(repo.id, "#5");
+  const by = Object.fromEntries(db.sqlite.prepare("SELECT title, chapter FROM doc_sections WHERE doc_id = ? AND source = ?").all(doc.id, "docs/plan.md").map((r) => [r.title, r.chapter]));
+  assert.deepEqual(by, { Context: "context", Steps: "design", Risks: "risks" });
+});

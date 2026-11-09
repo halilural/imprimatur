@@ -588,6 +588,8 @@ function docUpsert(db, repo, a, actor) {
     }
   }
   const task = analysisTask(a);
+  // "<file>--<heading>" keys are the sections read from a task's files (#172): a written one would be overwritten.
+  if (task && a.key.includes("--")) throw new ToolError(`analysis section keys with "--" belong to sections read from files; pick a key without it, e.g. a chapter name ("design")`);
   const doc = task ? db.taskDocOf(repo.id, task) : db.docOf(repo.id, a.kind);
   const created = !db.docSection(doc.id, a.key);
   if (created && a.title === undefined) {

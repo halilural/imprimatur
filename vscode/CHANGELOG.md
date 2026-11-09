@@ -4,6 +4,15 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.136.0] - 2026-11-09
+
+### Added
+- An **analysis** skill (#172): `/analysis` writes a task's analysis as a short design doc in five chapters (context, goals, design, alternatives, risks). It sums up what is already settled, asks open decisions in numbered rounds with a recommended answer, hands fact-finding to a background agent, and writes new terms and hard-to-reverse choices down. Adapted from mattpocock/skills (skills/analysis/NOTICE.md).
+
+### Changed
+- A plan or note file's sections land in the chapter their heading names (Context, Goals, Options, Risks; anything else is Design).
+- MCP refuses a task-analysis section key with `--`: those keys are the sections read from files.
+
 ## [0.135.0] - 2026-11-09
 
 ### Fixed
