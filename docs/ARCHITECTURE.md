@@ -1115,27 +1115,32 @@ The panel's "Scan history" button (and, once, automatically the first time the p
 
 ### 30. Task analyses
 
-Every task has an analysis document: `kind = 'analysis'` in `documents`, `scope` = the task key (`''` for repo documents); a section's `source` field is the file it came from, and `doc_sources` holds the hash of the last read text of each file (the same text is not written twice). Migration 6 rebuilds the tables like the glossary migration.
+Every task has an analysis document: `kind = 'analysis'` in `documents`, with `scope` = the task key (`''` for repo documents). A section's `source` field is the file it came from. `doc_sources` holds the hash of the last read text of each file, so the same text is not written twice. Migration 6 rebuilds the tables like the glossary migration.
+
+**The model (#172):** an analysis is a short design doc in five chapters (`ANALYSIS_CHAPTERS`): context, goals, design, alternatives, risks. Agents write it with the `analysis` skill (skills/analysis, adapted from mattpocock/skills), one section per chapter key, through MCP. Files the agent writes (plans, spikes, notes) are still read in. `ingest` sets each section's chapter from its heading (`chapterOf`: Context/Problem/Findings → context, Goals/Out of scope → goals, Options → alternatives, Risks/Open questions → risks, anything else → design).
 
 ```mermaid
 flowchart LR
+  S[analysis skill] -->|doc_section_upsert key = chapter| D
   E[Edit / Write / ExitPlanMode] --> P[process.js PostToolUse]
   P --> Q{analysis.js onEdit}
-  Q -->|path, name, title or a stored decision| I[ingest: a section per ##]
+  Q -->|path, name, title or a stored decision| I[ingest: a section per ##, chapter from its heading]
   Q -->|no decision| H[hooks/analysis.mjs: Haiku, in the background] --> I
   T[~/.claude/projects transcripts] --> B[analysis-backfill.js: Write/Edit in order] --> I
   I --> D[(documents analysis:task)]
 ```
 
-- **Candidate:** `.md`/`.mdx`; except README, CHANGELOG, TODO.md, design documents, `docs/testing`, `todos/sprints`, `.claude/` tool folders and what Imprimatur generates; outside the repo only `~/.claude/plans`.
-- **Task:** the task folder → the key in the path (`spikes/81-x`, `80-paper.md`) → the branch → the task the session is writing records for at that moment (`db.sessionTaskAt`) → the prompt → the file heading. Only tasks that exist in the database; a file that cannot be placed waits in the `analysis:orphans:<repo>` meta list. A file that has once entered a task stays in that task.
-- **History:** each state in the transcript is a version at the time it was written; if the document has a newer section of that file (hook, another machine, MCP), the older state is skipped. At SessionStart once per repo (`analysis-backfill:<repo>` claim), by hand with `npm run analysis` or the command.
-- **Opt out:** `"analysis": {"sync": false}` → `analysis:nosync:<repo>` meta; analysis sections are then not passed to a plugin's `onChange` listener.
-- **MCP:** `doc_get` / `doc_section_upsert` with `kind: "analysis"` + `task`. The analysis document has no file of its own: sources are read, never written.
+- **Candidate:** a `.md` or `.mdx` file. Excluded: README, CHANGELOG, TODO.md, the design documents, `docs/testing`, `todos/sprints`, `.claude/` tool folders and what Imprimatur generates. Outside the repo, only `~/.claude/plans` counts.
+- **Task:** found in this order: the task folder, the key in the path (`spikes/81-x`, `80-paper.md`), the branch, the task the session is writing records for at that moment (`db.sessionTaskAt`), the prompt, then the file heading. Only tasks that exist in the database count. A file that cannot be placed waits in the `analysis:orphans:<repo>` meta list. A file that has once entered a task stays in that task.
+- **Keys:** a file's sections are `<file prefix>--<heading slug>`. MCP refuses analysis keys with `--`, so a written section is never overwritten by a file's.
+- **History:** each state in the transcript becomes a version dated when it was written. If the document already has a newer section of that file (from the hook, another machine or MCP), the older state is skipped. This runs at SessionStart once per repo (`analysis-backfill:<repo>` claim), or by hand with `npm run analysis` or the command.
+- **Opt out:** `"analysis": {"sync": false}` sets the `analysis:nosync:<repo>` meta. The sync plugin then keeps analysis sections on this machine.
+- **MCP:** `doc_get` and `doc_section_upsert` with `kind: "analysis"` and `task`. The analysis document has no file of its own: sources are read, never written.
 
 #### Decisions settled
 
-- 7077: a task's analysis is its own document kind (`documents.scope` = the task key, not a foreign key, so a placeholder repo merge never breaks the reference), with sections carrying a `source` file and `doc_sources` hashes so a file's text is not re-ingested once it is unchanged.
+- 7077: a task's analysis is its own document kind. `documents.scope` is the task key, not a foreign key, so a placeholder repo merge never breaks the reference. Sections carry a `source` file, and `doc_sources` hashes mean a file's text is not ingested again while it is unchanged.
+- 10556: one model, the five-chapter design doc, written with the `analysis` skill. File sections land in the chapter their heading names, and `--` keys are reserved for file sections.
 
 <!-- imprimatur:decisions --> Decisions: [ADR 0078](decisions/0078-gorev-analizi-dorduncu-belge-turu-documents-scope-gorev-anah.md)
 
