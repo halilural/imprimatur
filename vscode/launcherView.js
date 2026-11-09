@@ -23,6 +23,7 @@ const PARTS = [
 const ROWS = [
   { id: "home", label: "Home", icon: "home", command: "imprimatur.openHome", tooltip: "Where we left off, what is waiting on you, tasks" },
   { id: "tasks", label: "Tasks", icon: "checklist", command: "imprimatur.openTasks", tooltip: "Tasks and their records" },
+  { id: "meetings", label: "Meetings", icon: "comment-discussion", command: "imprimatur.openMeetings", tooltip: "Meetings: their decisions, to-dos and notes (#169)" },
   { id: "architecture", label: "Architecture", icon: "symbol-structure", command: "imprimatur.openArchitecture", tooltip: "Architecture design document: how it is built" },
   { id: "product", label: "Product", icon: "package", command: "imprimatur.openProduct", tooltip: "Product design document: what the user gets" },
   { id: "glossary", label: "Glossary", icon: "book", command: "imprimatur.openGlossary", tooltip: "Project glossary: terms and their meanings" },

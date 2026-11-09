@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.132.0] - 2026-11-09
+
+### Changed
+- Meetings have a place of their own (#169): a **Meetings** tab next to Exercises and a Meetings row in the launcher list every meeting of the repo, newest first, with the task it hangs on, its decisions and to-dos, and the note. The task page no longer has a Meetings tab; a meeting's to-dos stay in the task's To-dos.
+
 ## [0.131.0] - 2026-11-09
 
 ### Added

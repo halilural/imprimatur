@@ -11,7 +11,7 @@ const os = require("node:os");
 /** The user, as record versions name them. */
 const userActor = () => ({ kind: /** @type {"user"} */ ("user"), id: os.userInfo().username });
 
-const TABS = ["home", "tasks", "inbox", "architecture", "product", "glossary", "social", "analysis", "exercises", "edits"];
+const TABS = ["home", "tasks", "inbox", "architecture", "product", "glossary", "social", "analysis", "exercises", "meetings", "edits"];
 /** The Analysis tab's pages (TASK-ANALYSIS): the design documents, the glossary and the tasks' analyses. */
 const ANALYSIS_TABS = [["architecture", "Architecture"], ["product", "Product"], ["glossary", "Glossary"], ["social", "Social"], ["analysis", "Task analyses"]];
 /** The Analysis tab's pages in a repo: Social only where it is on (#109). @param {string} root */
@@ -244,11 +244,6 @@ function taskPage(db, task, view, opts) {
       return { ...r, date: day(r.created_at), who: c ? (c === "user" ? "you" : c === "agent" ? "agent" : c) : "" };
     }),
     tests: recs.filter((/** @type {any} */ r) => r.kind === "test"),
-    // #167: newest first, each with its decisions and to-dos (parent_id = the meeting).
-    meetings: live
-      .filter((/** @type {any} */ r) => r.kind === "meeting")
-      .sort((/** @type {any} */ a, /** @type {any} */ b) => b.created_at - a.created_at)
-      .map((/** @type {any} */ r) => ({ ...r, date: day(r.created_at), children: live.filter((/** @type {any} */ k) => k.parent_id === r.id) })),
     analysis: repo ? analysisOf(db, repo.id, task.key) : undefined,
     notes: live
       .filter((/** @type {any} */ r) => (r.kind === "note" && !r.links?.bestSources) || (r.kind === "question" && r.status !== "open"))
@@ -608,16 +603,11 @@ function taskBlocks(c) {
   const desc = c.issueBody
     ? `<section class="blk idesc" data-k="desc-${c.id}" aria-label="Description"><div class="body md">${require("./docsView.js").renderMarkdown(c.issueBody)}</div></section>`
     : "";
-  // #167: each meeting with its note folded, and its own decisions and to-dos under it.
-  const meetings = c.meetings.length
-    ? `<section class="blk" data-k="meet" aria-label="Meetings"><h2>Meetings <span class="dim">· ${c.meetings.length}</span></h2>${c.meetings.map((m) => `<details class="card${fl(m.id)}" id="rec-${m.id}" data-k="r${m.id}" data-q="${esc(m.title)}"><summary><span class="mono dim">${esc(m.date)}</span> <span class="ttl">${esc(m.title)}</span> <span class="dim">· ${m.children.length}</span></summary>${m.children.map((/** @type {any} */ k) => `<div class="ans">${kindChip(k.kind)} ${esc(k.title)}${k.owner === "K" ? ' <span class="owner me">You</span>' : ""}${k.status === "done" ? ` ${icon("check", 12)}` : ""}</div>`).join("")}${m.body ? mdBody(m.body, m.id) : ""}</details>`).join("")}</section>`
-    : "";
   // The tabs right under the head (and Where we left off): what waits on the user is the first, open by default.
   return head + desc + taskTabs(c, [
     { k: "asks", label: "Waiting on you", n: c.asks.length, html: asks },
     { k: "todos", label: recBlocks ? "Recommendations" : "To-dos", n: c.openTodos, html: recBlocks || todos },
     { k: "dec", label: "Decisions", n: c.decisions.length, html: decisions },
-    { k: "meet", label: "Meetings", n: c.meetings.length, html: meetings },
     { k: "notes", label: "Notes", n: c.notes.length, html: notes },
     { k: "tests", label: "Tests", n: c.tests.length, html: tests },
     { k: "act", label: "Activity", n: 0, html: activity },
@@ -923,7 +913,36 @@ function paneHtml(db, root, view, o = {}) {
     const x = require("./exerciseView.js");
     return x.exerciseHtml(x.exerciseModel(db));
   }
+  if (view.tab === "meetings") return meetingsHtml(meetingsModel(db, root, view));
   return "";
+}
+
+/**
+ * The Meetings tab (#169): every meeting of the repo (or all repos), newest first, each
+ * with the task it hangs on, its decisions and to-dos, and the note. A place of its own,
+ * not a tab of the task page. @param {any} db @param {string} root @param {any} view
+ */
+function meetingsModel(db, root, view = {}) {
+  const repos = scopeRepos(db, root, !!view.all);
+  const names = new Map(repos.map((/** @type {any} */ r) => [r.id, r.name]));
+  const meetings = db.meetingsOf(repos.map((/** @type {any} */ r) => r.id)).map((/** @type {any} */ m) => ({
+    ...m,
+    date: day(m.created_at),
+    repo: names.get(m.task.repo_id) ?? "",
+    decisions: m.children.filter((/** @type {any} */ k) => k.kind === "decision"),
+    todos: m.children.filter((/** @type {any} */ k) => k.kind === "todo"),
+  }));
+  return { all: !!view.all, many: repos.length > 1, meetings };
+}
+
+/** @param {ReturnType<typeof meetingsModel>} m */
+function meetingsHtml(m) {
+  const top = `<div class="toprow" data-k="mtop"><div><h1>Meetings</h1><p class="lead">Every meeting a meeting app wrote here, newest first: its decisions and to-dos, and the note. Your to-dos also stay in their task's To-dos.</p></div></div>`;
+  if (!m.meetings.length) return `${top}<div class="card dempty" data-k="mempty"><p>No meetings yet. A meeting app writes them as <span class="mono">meeting</span> records.</p></div>`;
+  const item = (/** @type {any} */ k) =>
+    `<div class="ans">${kindChip(k.kind)} ${esc(k.title)}${k.owner === "K" ? ' <span class="owner me">You</span>' : ""}${k.status === "done" ? ` ${icon("check", 12)}` : ""}</div>`;
+  const card = (/** @type {any} */ x) => `<details class="card meet" id="rec-${x.id}" data-k="m${x.id}" data-q="${esc(x.title)}"><summary><span class="mono dim">${esc(x.date)}</span> <span class="ttl">${esc(x.title)}</span> <span class="dim">· ${openTask(x.task.id, x.task.status, x.task.key)}${m.many ? ` · ${esc(x.repo)}` : ""} · ${x.decisions.length} decisions · ${x.todos.length} to-dos</span></summary>${x.decisions.map(item).join("")}${x.todos.map(item).join("")}${x.body ? `<details class="mnote"><summary>Note</summary>${mdBody(x.body, x.id)}</details>` : ""}</details>`;
+  return `<div class="meetings" data-k="meetings">${top}<section class="blk" data-k="mlist" aria-label="Meetings" data-navgroup="meetings">${m.meetings.map(card).join("")}</section></div>`;
 }
 
 /** Record actions from the page and the status each sets (a Map: no inherited keys). */
@@ -1219,5 +1238,5 @@ const TASKS_CSS = `
 
 module.exports = {
   TABS, ANALYSIS_TABS, analysisTabs, FILTERS, plainTitle, titleParts, subHeads, TASKS_CSS, analysisHub, analysisHubHtml, ICON, icon, KIND_LABEL, kindChip, bucketOf, userActor, parseQuickAdd, isAsk, repoOfRoot, scopeRepos, describeVersion,
-  tasksPage, inboxModel, inboxCount, openTurn, splitText, TITLE_MAX, BODY_MAX, homeModel, editsHtml, tasksHtml, inboxHtml, homeHtml, paneHtml, applyMessage, cleanView, esc,
+  meetingsModel, meetingsHtml, tasksPage, inboxModel, inboxCount, openTurn, splitText, TITLE_MAX, BODY_MAX, homeModel, editsHtml, tasksHtml, inboxHtml, homeHtml, paneHtml, applyMessage, cleanView, esc,
 };

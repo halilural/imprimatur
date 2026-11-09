@@ -51,7 +51,7 @@ suite("Design documents on the Imprimatur panel (#72)", () => {
       const section = db.upsertSection(doc.id, "storage", { title: "Storage", body: "**SQLite** in WAL mode.", addRecords: [adr.id] }, AGENT);
       return { section, adr };
     });
-    assert.deepEqual(launcher.getChildren().map((r) => r.id).slice(2, 4), ["architecture", "product"], "launcher rows after Tasks");
+    assert.deepEqual(launcher.getChildren().map((r) => r.id).slice(2, 5), ["meetings", "architecture", "product"], "launcher rows after Tasks");
 
     await vscode.commands.executeCommand("imprimatur.openArchitecture");
     await until(() => panelState().view.tab === "architecture" && panelState().html.includes('id="sec-storage"'), "the Architecture page drawn");

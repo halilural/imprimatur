@@ -663,6 +663,7 @@ function activate(ctx) {
     vscode.commands.registerCommand("imprimatur.openArchitecture", () => showGraph({ tab: "architecture" })),
     vscode.commands.registerCommand("imprimatur.openProduct", () => showGraph({ tab: "product" })),
     vscode.commands.registerCommand("imprimatur.openGlossary", () => showGraph({ tab: "glossary" })),
+    vscode.commands.registerCommand("imprimatur.openMeetings", () => showGraph({ tab: "meetings" })),
     // Social media (#109): off by default, per repo, in .claude/imprimatur.json.
     vscode.commands.registerCommand("imprimatur.openSocial", () => showGraph({ tab: "social" })),
     vscode.commands.registerCommand("imprimatur.social.on", () => toggleSocial(true)),

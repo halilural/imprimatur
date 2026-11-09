@@ -78,6 +78,6 @@ function panelStamp(root, { view, db, error, docs = "", now = Date.now() }) {
 }
 
 /** Tabs whose page reads only the database and the data folder: the stamp covers them. */
-const STAMPED_TABS = new Set(["home", "tasks", "inbox", "edits", "exercises", "architecture", "product", "glossary"]);
+const STAMPED_TABS = new Set(["home", "tasks", "inbox", "edits", "exercises", "meetings", "architecture", "product", "glossary"]);
 
 module.exports = { dataStamp, panelStamp, STAMPED_TABS };
