@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.138.0] - 2026-11-09
+
+### Fixed
+- Analyses keep up with files the edit hook never saw (#174). At each session start, a file read here that is gone from disk (deleted or renamed) has its sections superseded. A Markdown file changed since the last session by something other than Edit/Write (Bash, another editor) goes through the usual analysis path, at most 50 files at a time.
+
 ## [0.137.0] - 2026-11-09
 
 ### Fixed

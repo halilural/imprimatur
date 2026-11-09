@@ -357,6 +357,8 @@ function check(event, input, deps = {}) {
       if (id !== undefined) require("./docs-backfill.js").maybeStart(records.dbOf(), id, root, deps.backfill);
       // Past sessions' analyses, once per repo (analysis-backfill.js).
       if (id !== undefined) require("./analysis-backfill.js").maybeStart(records.dbOf(), id, root, deps.analysisBackfill);
+      // What the edit hook missed since the last session: gone files, files written by Bash (#174).
+      if (id !== undefined) require("./analysis.js").rescan(records.dbOf(), id, root, deps.analysisRescan);
     } catch {}
   }
   // A task's analysis (analysis.js): the Markdown file just written, or the plan the agent
