@@ -38,7 +38,7 @@ export const INSTRUCTIONS = [
   "Imprimatur holds this repo's tasks and records: the source of truth for where work stands.",
   "Call where_we_left_off first in every session.",
   "Tasks are keyed \"#58\" (a GitHub issue) or a Jira key such as \"PROJ-12\"; record_add creates a missing task.",
-  "Record kinds: todo, question (to the user), answer (parent_id = the question's id), decision, note, fixme, adr (architecture), pdr (product), test.",
+  "Record kinds: todo, question (to the user), answer (parent_id = the question's id), decision, note, fixme, adr (architecture), pdr (product), test, meeting (its decisions and to-dos: parent_id = its id).",
   "owner: C = the agent does it, K = the user does it.",
   "👉 is the task's pointer, where work stopped: pointer_set moves it (open records only), or record_add with pointer:true.",
   "Keep the task_upsert summary a one-line \"where we are\".",
@@ -83,7 +83,7 @@ const recordFields = {
   body: { type: "string", maxLength: MAX_BODY, description: "Details, result, reasoning (Markdown). Steps the user follows (a test, a todo of theirs) as \"- [ ] step\" lines: they tick each one in the panel, kept in the body" },
   owner: { type: "string", enum: ["C", "K"], description: "C = the agent does it, K = the user does it" },
   status: { type: "string", enum: RECORD_STATUS },
-  parent_id: { type: "integer", description: "For an answer: the question's record id" },
+  parent_id: { type: "integer", description: "For an answer: the question's record id; for a meeting's decision or to-do: the meeting's record id" },
   links: { type: "object", description: "Related things, e.g. {issue: 58, files: [...], commit: \"abc123\"}" },
 };
 
@@ -221,7 +221,7 @@ const TOOLS = [
   {
     name: "record_add",
     title: "Add a record to a task",
-    description: "Adds a record to a task (created if missing): todo, question (to the user), answer, decision, note, fixme, adr (architecture), pdr (product), test. pointer=true moves the task's 👉 to it.",
+    description: "Adds a record to a task (created if missing): todo, question (to the user), answer, decision, note, fixme, adr (architecture), pdr (product), test, meeting. pointer=true moves the task's 👉 to it.",
     inputSchema: input({
       repo: repoArg,
       task: { type: "string", description: "Task key, e.g. \"#58\"" },

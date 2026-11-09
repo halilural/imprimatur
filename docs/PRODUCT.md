@@ -27,13 +27,14 @@ type: explanation
   - [12. Social media: /social-post and the Social document (#109)](#social)
   - [13. Project glossary: a third living document (#91)](#glossary-feature)
   - [14. Skills Imprimatur carries](#bundled-skills)
+  - [15. A meeting's note lives where its work is (#167) — target state](#meeting-records)
 - [Metrics](#chapter-metrics)
-  - [15. Success metrics](#metrics)
+  - [16. Success metrics](#metrics)
 - [Unsorted](#chapter-unsorted)
-  - [16. Agent setup audit (planned)](#agent-setup-audit)
-  - [17. The agent's toolset: seen, versioned, installed, found (#138)](#agent-toolset)
-  - [18. The panel as a board, with analytics (#147)](#board)
-  - [19. The baseline every repo gets](#baseline)
+  - [17. Agent setup audit (planned)](#agent-setup-audit)
+  - [18. The agent's toolset: seen, versioned, installed, found (#138)](#agent-toolset)
+  - [19. The panel as a board, with analytics (#147)](#board)
+  - [20. The baseline every repo gets](#baseline)
 
 <a id="chapter-problem"></a>
 
@@ -380,13 +381,28 @@ A skill taken from elsewhere is read in full before it ships, keeps its LICENSE,
 
 <!-- imprimatur:decisions --> Decisions: [PDR 0099](decisions/0099-imprimatur-carries-the-adopted-skills-itself-and-installs-th.md)
 
+<a id="meeting-records"></a>
+
+### 15. A meeting's note lives where its work is (#167) — target state
+
+A meeting app writes its notes into Imprimatur, so what was agreed reaches the task it was about.
+
+- **A `meeting` record:** the whole note as its body, with date, title and participants. It hangs on the task the meeting was about (a ticket's task), or on the repo's "Meetings" task when it was about no single task.
+- **Decisions and to-dos as their own records:** each becomes a `decision` or `todo` record whose `parent_id` is the meeting; a to-do keeps who took it.
+- **Written again:** a regenerated note updates the same meeting record and replaces its children; no copies (keyed by the app's own meeting id).
+- **Undone:** the meeting and its children are dropped.
+- **Everywhere records are:** synced like every record, searchable through the MCP tools, and listed in the VS Code panel in a "Meetings" view per task.
+- **Limited writer:** an app device may push only meeting records and their children, never other records.
+
+First user: a desktop meeting app writing work meeting notes to its work repo, then its past notes once.
+
 <a id="chapter-metrics"></a>
 
 ## Metrics
 
 <a id="metrics"></a>
 
-### 15. Success metrics
+### 16. Success metrics
 
 The metrics are values measured in real repositories of different sizes.
 
@@ -428,7 +444,7 @@ The metrics are values measured in real repositories of different sizes.
 
 <a id="agent-setup-audit"></a>
 
-### 16. Agent setup audit (planned)
+### 17. Agent setup audit (planned)
 
 The agent setup (CLAUDE.md, AGENTS.md, `.claude/` settings, hooks, skills, subagents, MCP, plugins, Cursor/Codex/Copilot/Gemini/Kiro files) is audited with rules based on the official documentation. The rule engine is agnix and it is used with its full coverage: no rule or file is cut.
 
@@ -446,7 +462,7 @@ Epic [#76](https://github.com/halilural/imprimatur/issues/76), first piece of wo
 
 <a id="agent-toolset"></a>
 
-### 17. The agent's toolset: seen, versioned, installed, found (#138)
+### 18. The agent's toolset: seen, versioned, installed, found (#138)
 
 Epic #138, opened 2026-11-04 and the top priority. Imprimatur becomes the place where everything the agent uses is seen and managed. It builds on the Agent setup view, which already shows every agent file per repo and globally, the drift between copies, the effective settings, and the audit findings.
 
@@ -466,7 +482,7 @@ Anything brought in is vetted first: its license allows redistribution, its hook
 
 <a id="board"></a>
 
-### 18. The panel as a board, with analytics (#147)
+### 19. The panel as a board, with analytics (#147)
 
 Epic #147, opened 2026-11-04. The Imprimatur panel looks and works like the ponytail board. The VS Code side bar stays as it is.
 
@@ -484,7 +500,7 @@ Epic #147, opened 2026-11-04. The Imprimatur panel looks and works like the pony
 
 <a id="baseline"></a>
 
-### 19. The baseline every repo gets
+### 20. The baseline every repo gets
 
 Imprimatur's own plugin brings its hooks, its MCP server and its skills: issues, study, exercise, imprimatur-stats and social-post. It installs at user scope. Beyond that, every repo should have five third-party items. Imprimatur does not ship them: each is installed from its own marketplace or repo, at user scope, after the user confirms.
 

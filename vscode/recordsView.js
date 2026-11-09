@@ -98,6 +98,7 @@ function registerRecordCommands(ctx, log, onChange, reveal, setAllRepos) {
     { label: "adr", description: "architecture decision" },
     { label: "pdr", description: "product decision" },
     { label: "test", description: "a manual test" },
+    { label: "meeting", description: "a meeting's note" },
   ];
 
   ctx.subscriptions.push(
