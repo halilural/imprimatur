@@ -103,6 +103,10 @@ const gh = (args, cwd) => {
 /** Text for the agent: a block message or a warning, each a short line with its rule. @param {string} name @param {string} text */
 const say = (name, text) => `Imprimatur (${name}): ${text}`;
 
+// shortcut: one translation of the default status word; add a language when someone replies in it (#176).
+/** @type {Record<string, string>} */
+const STATUS_WORDS = { Turkish: "Neredeyiz" };
+
 const EDITS = /^(Edit|Write|MultiEdit|NotebookEdit)$/;
 /**
  * Does a shell command skip git hooks? Per simple command (split on newlines, ;, &, |):
@@ -389,7 +393,7 @@ function check(event, input, deps = {}) {
   const ownLang = start?.ownLang(root);
   const langLines = start ? [
     ...(ownLang ? [say("repoLang", `write this repo's records, design documents, code comments and commit messages in ${ownLang}.`)] : []),
-    say("replyLang", `reply to the user in ${start.replyLang()}, whatever language this repo or its records use.`),
+    say("replyLang", `reply to the user in ${start.replyLang()}, whatever language this repo or its records use; the headings in a reply too${STATUS_WORDS[start.replyLang()] ? ` (the status section is "${STATUS_WORDS[start.replyLang()]}")` : ""}.`),
   ] : [];
   const s = settingsOf(root);
   if (!s) return langLines.length ? { context: langLines } : {};
@@ -560,8 +564,11 @@ function check(event, input, deps = {}) {
 
   if (event === "Stop" && !input.stop_hook_active) {
     const msg = input.last_assistant_message ?? "";
-    if (s.status.mode && msg && !msg.toLocaleLowerCase("tr").includes(String(s.status.word).toLocaleLowerCase("tr"))) {
-      found(s.status, "status", `the answer has no "${s.status.word}" section: add what finished, open work and the next step.`, notice);
+    // The default word also counts in the reply language (#176), so a Turkish answer ends with "Neredeyiz".
+    const local = s.status.word === DEFAULTS.status.word ? STATUS_WORDS[require("./config.js").replyLang()] : undefined;
+    const has = (/** @type {unknown} */ w) => !!w && msg.toLocaleLowerCase("tr").includes(String(w).toLocaleLowerCase("tr"));
+    if (s.status.mode && msg && !has(s.status.word) && !has(local)) {
+      found(s.status, "status", `the answer has no "${local ?? s.status.word}" section: add what finished, open work and the next step.`, notice);
     }
     if (s.issueFields.mode) {
       for (const n of take(root, input.session_id, "created")) {

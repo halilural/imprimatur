@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.140.1] - 2026-11-10
+
+### Fixed
+- With a Turkish reply language the turn-end status section is asked as **Neredeyiz** and the session start tells the agent so (#176); before, a Turkish answer ended with an English "Where we are". "Where we are" still counts.
+
 ## [0.140.0] - 2026-11-10
 
 ### Added

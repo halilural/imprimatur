@@ -148,6 +148,21 @@ test("Stop: no status section blocks once (stop_hook_active ends it); the word i
   assert.deepEqual(check("Stop", { cwd: tr, last_assistant_message: "Bitti.\n\n## NEREDEYİZ\n- x" }), {});
 });
 
+test("Stop (#176): with a Turkish reply language the default status word is asked as \"Neredeyiz\"; English still counts", () => {
+  const root = repo({ process: {} });
+  const was = process.env.IMPRIMATUR_REPLY_LANG;
+  process.env.IMPRIMATUR_REPLY_LANG = "Turkish";
+  try {
+    assert.match(check("Stop", { cwd: root, last_assistant_message: "Bitti." }).block, /no "Neredeyiz" section/);
+    assert.deepEqual(check("Stop", { cwd: root, last_assistant_message: "Bitti.\n\n## Neredeyiz\n- x" }), {});
+    assert.deepEqual(check("Stop", { cwd: root, last_assistant_message: "Done.\n\n## Where we are\n- x" }), {});
+    assert.match(check("SessionStart", { cwd: root }, { records: noRecords }).context?.join("\n") ?? "", /status section is "Neredeyiz"/);
+  } finally {
+    if (was === undefined) delete process.env.IMPRIMATUR_REPLY_LANG;
+    else process.env.IMPRIMATUR_REPLY_LANG = was;
+  }
+});
+
 test("branchFinish: merged branches left behind are told to the agent at session start and after a merge", () => {
   const root = repo({ process: { whereWeLeftOff: false } });
   sh(root, "branch", "feat/3-new");
