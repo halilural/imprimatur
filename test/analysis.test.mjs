@@ -411,6 +411,8 @@ test("panel: the task page links its analysis; Analysis → Task analyses lists 
   const hub = tv.paneHtml(db, root, { tab: "analysis" });
   assert.match(hub, /data-tab="analysis" aria-current="page">[\s\S]*?Task analyses <span class="n">1<\/span>/);
   assert.match(hub, /data-act="asel" data-key="#5"/);
+  // #173: each file of a task's analysis can move to another task from here.
+  assert.match(hub, /<select class="amove" data-change="anaAssign" data-file="docs\/todos\/5\/ANALYSIS.md"[^>]*><option value="">Move to task…<\/option>/);
   // In full, like the architecture page: each section a document section, the task's contents on the left.
   assert.match(hub, /<div class="doc ahub"/);
   assert.match(hub, /<article class="dsec[^"]*" id="sec-a\d+"[^>]*><div class="dsec-h"><h2>Findings<\/h2>/);
@@ -428,7 +430,7 @@ test("panel: the task page links its analysis; Analysis → Task analyses lists 
   assert.match(hub, /<select data-change="anaAssign" data-file="loose.md"[\s\S]*?<option value="\d+">#80/);
   tv.applyMessage(db, { type: "anaAssign", file: "loose.md", task: t80.id }, { kind: "user" }, root);
   assert.equal(db.docSections(db.taskDocFind(repo.id, "#80").id)[0].source, "loose.md");
-  assert.throws(() => tv.applyMessage(db, { type: "anaAssign", file: "../etc/passwd", task: t80.id }, { kind: "user" }, root), /not an analysis waiting/);
+  assert.throws(() => tv.applyMessage(db, { type: "anaAssign", file: "../etc/passwd", task: t80.id }, { kind: "user" }, root), /no analysis file/);
   assert.match(tv.paneHtml(openDb({ path: tmpDb() }), gitRepo(), { tab: "analysis" }), /No task analyses in this repo yet/);
 });
 
@@ -502,4 +504,38 @@ test("chapters: a file's sections land in their chapters", () => {
   const doc = db.taskDocOf(repo.id, "#5");
   const by = Object.fromEntries(db.sqlite.prepare("SELECT title, chapter FROM doc_sections WHERE doc_id = ? AND source = ?").all(doc.id, "docs/plan.md").map((r) => [r.title, r.chapter]));
   assert.deepEqual(by, { Context: "context", Steps: "design", Risks: "risks" });
+});
+
+// ---- assign and move (#173) ----
+
+test("assign: a plan waiting for a task keeps its text and can be given one", () => {
+  const { db, repo } = seeded();
+  const text = "# Plan\n\n## Steps\n\n1. a\n";
+  // As place() leaves a plan no task was found for.
+  a.setOrphan(db, repo.id, "plan:abcdef12", Date.now(), text);
+  const r = a.assign(db, repo.id, "/a/proj", "plan:abcdef12", "#5", hook);
+  assert.ok(r.changed > 0);
+  const doc = db.taskDocOf(repo.id, "#5");
+  assert.ok(db.docSections(doc.id).some((s) => s.source === "plan:abcdef12" && s.title === "Steps" && s.status === "current"));
+  assert.equal(Object.hasOwn(a.orphans(db, repo.id), "plan:abcdef12"), false);
+  assert.equal(db.meta("analysis:orphantext:" + repo.id + ":plan:abcdef12") ?? null, null);
+});
+
+test("assign: a file kept under the wrong task moves; its sections there are superseded", () => {
+  const { db, repo } = seeded();
+  a.ingest(db, repo.id, "#5", "notes/cache.md", "# Cache\n\n## Context\n\nSlow.\n", { actor: hook });
+  // The file is gone from disk (or synced from another machine): its sections give the text back.
+  a.assign(db, repo.id, "/a/proj", "notes/cache.md", "#80", hook);
+  const from = db.docSections(db.taskDocOf(repo.id, "#5").id).filter((s) => s.source === "notes/cache.md");
+  const to = db.docSections(db.taskDocOf(repo.id, "#80").id).filter((s) => s.source === "notes/cache.md");
+  assert.ok(from.length && from.every((s) => s.status === "superseded"));
+  assert.ok(to.some((s) => s.title === "Context" && s.body.includes("Slow.") && s.status === "current"));
+  // It stays with its new task from now on.
+  const again = a.ingest(db, repo.id, "#80", "notes/cache.md", "# Cache\n\n## Context\n\nSlow.\n", { actor: hook });
+  assert.equal(again.changed, 0);
+});
+
+test("assign: only the repo's analysis files; any other path is refused unread", () => {
+  const { db, repo } = seeded();
+  assert.throws(() => a.assign(db, repo.id, "/a/proj", "../../etc/passwd", "#5", hook), /no analysis file/);
 });

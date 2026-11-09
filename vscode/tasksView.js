@@ -730,7 +730,13 @@ function analysisHubHtml(m) {
   const item = (/** @type {any} */ d) => `<button class="aitem" data-act="asel" data-key="${esc(d.key)}" data-nav data-q="${esc(`${d.key} ${d.task?.title ?? ""} ${d.files.map((/** @type {any} */ f) => f.source).join(" ")}`)}"><span class="mono key">${esc(d.key)}</span><span class="ttl">${titleHtml(d.task?.title, d.key) || esc(d.key)}</span><span class="dim">${d.files.length} file${d.files.length === 1 ? "" : "s"}${d.study ? " · study note" : ""} · ${esc(day(d.at))}</span></button>${toc(d)}`;
   const aside = `<aside class="dtoc alist" data-k="alist" data-scroll="dtoc" data-navgroup="analysis"><div class="lbl" data-k="h">Tasks · ${m.docs.length}</div>${m.docs.map(item).join("")}${m.orphans.length ? `<button class="aitem orph" data-act="asel" data-key="__orphans" data-nav><span class="ttl">Analyses without a task</span><span class="dim">${m.orphans.length} file${m.orphans.length === 1 ? "" : "s"}</span></button>` : ""}</aside>`;
   // No file names here: the text is the point. A file's first section opens it (its path in the tooltip).
-  const open = (/** @type {any} */ f) => (f.local && !f.source.startsWith("plan:") ? `<div class="dacts"><button class="mini aopen" data-act="anaOpen" data-file="${esc(f.source)}" data-repo="${m.repo?.id ?? ""}" title="Open the file: ${esc(name(f.source))}">${icon("external", 12)} open</button></div>` : "");
+  // A file under the wrong task moves to another from here (#173); a section written through MCP has no file to move.
+  const move = (/** @type {any} */ f) => (f.source ? `<select class="amove" data-change="anaAssign" data-file="${esc(f.source)}" aria-label="Move ${esc(name(f.source))} to another task"><option value="">Move to task…</option>${options}</select>` : "");
+  const open = (/** @type {any} */ f) => {
+    const btn = f.local && !f.source.startsWith("plan:") ? `<button class="mini aopen" data-act="anaOpen" data-file="${esc(f.source)}" data-repo="${m.repo?.id ?? ""}" title="Open the file: ${esc(name(f.source))}">${icon("external", 12)} open</button>` : "";
+    const sel = move(f);
+    return btn || sel ? `<div class="dacts">${btn}${sel}</div>` : "";
+  };
   // "###" headings get ids, for the tree's links.
   const bodyHtml = (/** @type {any} */ s) => {
     let n = 0;
@@ -1034,13 +1040,13 @@ function applyMessage(db, m, actor, root) {
       return db.addRecord(task.id, fields, actor);
     }
     case "anaAssign": {
-      // An analysis file with no task given this one: only a file in the repo's orphans list.
+      // An analysis file given this task (#173): one waiting for a task, or moved from another
+      // (assign takes only the repo's analysis files, so no other path is read).
       const task = db.taskById(num(m.task));
       if (!task) throw new Error(`Imprimatur: no task ${m.task}`);
+      if (typeof m.file !== "string") throw new Error("Imprimatur: no file to assign");
       const repo = db.repos().find((/** @type {any} */ r) => r.id === task.repo_id);
-      const a = require("./analysis.js");
-      if (typeof m.file !== "string" || !Object.hasOwn(a.orphans(db, task.repo_id), m.file)) throw new Error(`Imprimatur: ${m.file} is not an analysis waiting for a task`);
-      return a.assign(db, task.repo_id, repo.root, m.file, task.key, actor);
+      return require("./analysis.js").assign(db, task.repo_id, repo.root, m.file, task.key, actor);
     }
     case "taskStatus": {
       const task = db.taskById(num(m.task));
@@ -1239,6 +1245,7 @@ const TASKS_CSS = `
   .orow.dsec { flex-direction: row; align-items: center; }
   .analink { opacity: 1; border-color: var(--acc); color: var(--acc); font-size: var(--fs-sm); font-weight: 700; cursor: pointer; padding: 2px 10px; }
   .orow select { margin-left: auto; max-width: 280px; }
+  .amove { max-width: 220px; font-size: var(--fs-sm); padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); }
   .aorph { margin-top: 10px; } .orow { display: flex; gap: 8px; align-items: center; padding: 4px 0; } .orow .mini { margin-left: auto; }
   .ana .mini, .orow .mini { opacity: 1; padding: 2px 10px; border-color: var(--acc); color: var(--acc); font-size: var(--fs-sm); font-weight: 700; cursor: pointer; }
   .ana .mini:hover, .orow .mini:hover { background: var(--acc-soft); }
