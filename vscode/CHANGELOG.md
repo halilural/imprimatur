@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.135.0] - 2026-11-09
+
+### Fixed
+- One repo, not two, when a checkout moves or is opened from another folder (#169): a folder whose origin matches a repo whose folder is gone takes that repo over, its tasks, meetings and documents with it. Before, it became a second, empty repo of the same name, and its pages showed nothing. A clone or worktree still on disk stays its own repo.
+
 ## [0.134.0] - 2026-11-09
 
 ### Changed
