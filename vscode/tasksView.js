@@ -92,16 +92,6 @@ function repoOfRoot(db, root) {
   return undefined;
 }
 
-/**
- * The global setup's audit (#77, the home's AUDIT task): it applies to every repo, so
- * "this repo" lists it too, in its own group. Not when this repo is the home itself.
- * @param {any} db @param {string} root @param {string} [home]
- */
-function globalAudit(db, root, home = os.homedir()) {
-  const h = repoOfRoot(db, home);
-  if (!h || h.id === repoOfRoot(db, root)?.id) return [];
-  return taskSummaries(db, h).filter((/** @type {any} */ t) => t.key === "RECS" || t.key === "AUDIT").map((/** @type {any} */ t) => ({ ...t, global: true }));
-}
 
 /** This root's repo, or every repo (this one first). @param {any} db @param {string} root @param {boolean} all */
 function scopeRepos(db, root, all) {
@@ -322,8 +312,8 @@ function tasksPage(db, root, view = {}, opts = {}) {
   const repos = scopeRepos(db, root, all);
   const here = repoOfRoot(db, root);
   // The edits are this repo's (the open panel's graph); other repos show their sections only.
-  const tasks = [...repos.flatMap((repo) => taskSummaries(db, repo).map((t) => ({ ...t, openEdits: repo.id === here?.id ? opts.openEdits?.get(t.key) ?? 0 : 0 }))),
-    ...(all ? [] : globalAudit(db, root, opts.home))];
+  // Recommendations are no work: they live in Agent Setup's Recommendations, not in the task list (#170).
+  const tasks = repos.flatMap((repo) => taskSummaries(db, repo).filter((t) => !RECS_KEYS.includes(t.key)).map((t) => ({ ...t, openEdits: repo.id === here?.id ? opts.openEdits?.get(t.key) ?? 0 : 0 })));
   const filter = FILTERS.includes(view.filter ?? "") ? /** @type {string} */ (view.filter) : "active";
   const counts = { active: 0, open: 0, done: 0 };
   for (const t of tasks) counts[/** @type {keyof typeof counts} */ (bucketOf(t.status))]++;
@@ -335,12 +325,12 @@ function tasksPage(db, root, view = {}, opts = {}) {
     const first = list[0] ?? tasks.find((t) => t.status === "active") ?? tasks[0];
     task = first && db.taskById(first.id);
   }
-  /** @type {Array<{repo: any, tasks: typeof list, global?: boolean}>} */
+  /** @type {Array<{repo: any, tasks: typeof list}>} */
   const groups = [];
   for (const t of list) {
     const g = groups.find((x) => x.repo.id === t.repo.id);
     if (g) g.tasks.push(t);
-    else groups.push({ repo: t.repo, tasks: [t], ...(t.global && { global: true }) });
+    else groups.push({ repo: t.repo, tasks: [t] });
   }
   return {
     all, filter, counts, groups, sel: task?.id,
@@ -558,7 +548,7 @@ function tasksHtml(m) {
   const row = (/** @type {any} */ t) => `<button class="trow${t.id === m.sel ? " on" : ""}" id="t-${t.id}" data-k="t${t.id}" data-act="sel" data-id="${t.id}" data-nav data-q="${esc(t.q)}"${t.id === m.sel ? ' aria-current="true"' : ""}>
 <span class="sdot s-${esc(t.status)}" aria-hidden="true"></span><span class="tcol"><span class="tmeta"><span class="mono">${esc(t.key)}</span><span>${esc(STATUS_TR[/** @type {keyof typeof STATUS_TR} */ (t.status)] ?? t.status)}</span></span><span class="tttl">${esc(t.title || t.key)}</span><span class="tmeta">${t.asks ? `<b class="mine">${t.asks} on you</b>` : ""}${t.openEdits ? `<b class="toacc">${t.openEdits} to accept</b>` : ""}<span>${esc(todoLine(t))}</span></span></span></button>`;
   const rows = m.groups.length
-    ? m.groups.map((g) => `<div class="grp" data-k="g${g.repo.id}">${m.all || g.global ? `<div class="grp-h">${esc(g.global && !m.all ? "Global (~)" : g.repo.name)}</div>` : ""}${g.tasks.map(row).join("")}</div>`).join("")
+    ? m.groups.map((g) => `<div class="grp" data-k="g${g.repo.id}">${m.all ? `<div class="grp-h">${esc(g.repo.name)}</div>` : ""}${g.tasks.map(row).join("")}</div>`).join("")
     : `<p class="empty" data-k="empty">No tasks in this filter.</p>`;
   const list = `<aside class="tlist" data-k="list" data-scroll="tlist" aria-label="Tasks"><div class="pills" data-k="filters" role="group" aria-label="Status">${f("active", "Active")}${f("open", "Open")}${f("done", "Done")}</div><div class="tl-head" data-k="head"><span>${esc(m.all ? "All repos" : m.repoName)}</span><button class="link" data-act="scope" data-all="${m.all ? 0 : 1}">${m.all ? "This repo" : "All repos"}</button></div><div class="rows" data-k="rows" data-navgroup="list">${rows}</div><button class="dashed" data-k="new" data-act="newTask">${icon("plus")} New task</button></aside>`;
   const c = m.cur;
