@@ -15,7 +15,7 @@
 //   VS Code's machine settings (~/.vscode-server/data/Machine/settings.json on
 //   a remote/WSL machine, else the user settings);
 // - checks that the `claude` CLI is on PATH (the model features use it);
-// - with --lang / --exts, <database folder>/config.json, read by hooks started
+// - with --lang / --reply-lang / --exts, <database folder>/config.json, read by hooks started
 //   without args (the plugin's; vscode/config.js).
 // With --plugin (#67), Claude Code gets the hooks and the MCP server from the
 // Imprimatur plugin instead: this checkout is added as the "imprimatur"
@@ -27,7 +27,7 @@
 // The extension is packaged and installed from this checkout, unless VS Code already has it
 // from the Marketplace or Open VSX (it updates itself there): --vsix installs the local build anyway.
 //
-//   npm run setup -- [--plugin] [--lang Turkish] [--show-in both] [--exts md,mdx] [--no-extension] [--vsix] [--no-allow] [--dry-run]
+//   npm run setup -- [--plugin] [--lang Turkish] [--reply-lang Turkish] [--show-in both] [--exts md,mdx] [--no-extension] [--vsix] [--no-allow] [--dry-run]
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -496,6 +496,7 @@ function options(argv) {
   };
   return {
     lang: get("--lang"),
+    replyLang: get("--reply-lang"),
     showIn: get("--show-in"),
     exts: get("--exts")?.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
     extension: !argv.includes("--no-extension"),
@@ -633,10 +634,10 @@ function main() {
   }
 
   // Language and extensions for hooks started without args (the plugin's): vscode/config.js.
-  if (opts.lang || opts.exts?.length) {
+  if (opts.lang || opts.replyLang || opts.exts?.length) {
     const { configPath, readConfig, mergeConfig } = require("../vscode/config.js");
     const cfgFile = configPath();
-    const { config, changed } = mergeConfig(readConfig(cfgFile), { lang: opts.lang, exts: opts.exts });
+    const { config, changed } = mergeConfig(readConfig(cfgFile), { lang: opts.lang, replyLang: opts.replyLang, exts: opts.exts });
     console.log(`Hook config ${cfgFile}: ${changed ? JSON.stringify(config) : "already set"}`);
     if (changed && !opts.dry) {
       fs.mkdirSync(path.dirname(cfgFile), { recursive: true });

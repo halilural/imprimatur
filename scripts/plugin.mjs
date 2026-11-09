@@ -36,6 +36,11 @@ export const pluginManifest = (version) => ({
       title: "Language",
       description: "Language of model-written text (edit descriptions, Waiting on you), e.g. Turkish. Empty: the agent's own.",
     },
+    reply_language: {
+      type: "string",
+      title: "Reply language",
+      description: "Language the agent replies to you in, in every repo, e.g. Turkish. Empty: English (or config.json from npm run setup -- --reply-lang).",
+    },
     extensions: {
       type: "string",
       title: "File extensions",

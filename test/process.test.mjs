@@ -156,7 +156,7 @@ test("branchFinish: merged branches left behind are told to the agent at session
   sh(root, "switch", "-q", "main");
   sh(root, "merge", "-q", "--ff-only", "feat/2-done");
   const want = ["Imprimatur (branchFinish): merged into main but not deleted: feat/2-done. Delete them: git branch -d feat/2-done."];
-  assert.deepEqual(check("SessionStart", { cwd: root }).context, want);
+  assert.deepEqual(check("SessionStart", { cwd: root }).context?.filter((l) => !/replyLang/.test(l)), want);
   assert.deepEqual(check("PostToolUse", { cwd: root, tool_name: "Bash", tool_input: { command: "git merge --ff-only feat/2-done" } }).context, want);
   assert.deepEqual(check("PostToolUse", { cwd: root, tool_name: "Bash", tool_input: { command: "npm test" } }), {});
   // The default status section is there, so only the timing is under test.
@@ -167,14 +167,14 @@ test("SessionStart: the repo's tasks and their 👉 from the database", () => {
   const root = repo({ process: {} });
   const records = { ...noRecords, repoId: () => 1, dbOf: () => ({ whereWeLeftOff: () => [{ key: "#56", title: "Process", status: "active", pointer_title: "process.mjs", open_records: 2 }] }) };
   const r = check("SessionStart", { cwd: root }, { records });
-  assert.match(r.context[0], /Where we left off[\s\S]*- #56 Process \[active\] 👉 process\.mjs \(2 open\)/);
+  assert.match(r.context.find((l) => /Where we left off/.test(l)) ?? "", /Where we left off[\s\S]*- #56 Process \[active\] 👉 process\.mjs \(2 open\)/);
   const long = { ...records, dbOf: () => ({ whereWeLeftOff: () => Array.from({ length: 15 }, (_, i) => ({ key: `#${i}`, title: "t".repeat(500), status: "active", pointer_title: "p".repeat(500) })) }) };
-  const big = check("SessionStart", { cwd: root }, { records: long }).context[0];
+  const big = check("SessionStart", { cwd: root }, { records: long }).context.find((l) => /Where we left off/.test(l)) ?? "";
   assert.ok(big.length <= 1500, `${big.length} characters: short enough for every session start (#29)`);
   assert.match(big, /t{59}…/);
   assert.match(big, /\(7 more open tasks: where_we_left_off lists them all\.\)$/, "at most 8 listed");
   const mixed = { ...records, dbOf: () => ({ whereWeLeftOff: () => [{ key: "#1", title: "Idle epic", status: "open" }, { key: "#2", title: "Busy", status: "open", pointer_title: "next" }] }) };
-  const m = check("SessionStart", { cwd: root }, { records: mixed }).context[0];
+  const m = check("SessionStart", { cwd: root }, { records: mixed }).context.find((l) => /Where we left off/.test(l)) ?? "";
   assert.match(m, /- #2 Busy \[open\] 👉 next/);
   assert.doesNotMatch(m, /Idle epic/, "a task with no work in hand is left to the count");
   assert.match(m, /\(1 more open task: /);
@@ -222,8 +222,9 @@ test("repo language (#80): \"lang\" alone says it at SessionStart and turns no c
   const root = repo({ lang: "English" });
   assert.equal(settingsOf(root), undefined);
   const r = check("SessionStart", { cwd: root, source: "startup" }, { records: noRecords });
-  assert.equal(r.context?.length, 1);
+  assert.equal(r.context?.length, 2);
   assert.match(r.context[0], /repoLang.*in English/);
+  assert.match(r.context[1], /replyLang/);
   assert.deepEqual(check("PreToolUse", { cwd: root, tool_name: "Bash", tool_input: { command: "git commit --no-verify" } }), {});
 });
 
@@ -234,4 +235,5 @@ test("repo language (#80): with process settings, the line comes first; none wit
   assert.match(r.context?.[0] ?? "", /repoLang/);
   const plain = check("SessionStart", { cwd: repo(), source: "startup" }, { records: noRecords });
   assert.ok(!(plain.context ?? []).some((l) => /repoLang/.test(l)));
+  assert.ok((plain.context ?? []).some((l) => /replyLang.*reply to the user in \w+/.test(l)), "the reply language is said in every repo (#176)");
 });

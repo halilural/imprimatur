@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.140.0] - 2026-11-10
+
+### Added
+- A reply language for the agent (#176), one per machine: at session start Imprimatur tells the agent in every repo to reply to you in it. Set it with `npm run setup -- --reply-lang Turkish` (config.json `replyLang`), the plugin's **Reply language** option or `IMPRIMATUR_REPLY_LANG`; without one it is English. A repo's `lang` still sets the language of its records, documents and commits.
+
 ## [0.139.0] - 2026-11-09
 
 ### Added

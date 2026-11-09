@@ -384,11 +384,16 @@ function check(event, input, deps = {}) {
   }
   // The repo's language (#80, .claude/imprimatur.json "lang"): what the agent writes here. Said
   // with or without process settings: "lang" alone does not turn the checks on.
-  const ownLang = event === "SessionStart" ? require("./config.js").ownLang(root) : undefined;
-  const langLine = ownLang && say("repoLang", `write this repo's records, design documents, code comments and commit messages in ${ownLang}; replies to the user stay in the user's language.`);
+  // The reply language (#176) is said in every repo, settings or not.
+  const start = event === "SessionStart" ? require("./config.js") : undefined;
+  const ownLang = start?.ownLang(root);
+  const langLines = start ? [
+    ...(ownLang ? [say("repoLang", `write this repo's records, design documents, code comments and commit messages in ${ownLang}.`)] : []),
+    say("replyLang", `reply to the user in ${start.replyLang()}, whatever language this repo or its records use.`),
+  ] : [];
   const s = settingsOf(root);
-  if (!s) return langLine ? { context: [langLine] } : {};
-  /** @type {string[]} */ const context = langLine ? [langLine] : [];
+  if (!s) return langLines.length ? { context: langLines } : {};
+  /** @type {string[]} */ const context = [...langLines];
   /** @type {string[]} */ const notice = [];
   /** @type {string | undefined} */ let block;
   /** A finding: block, or tell. @param {{mode: any}} c @param {string} name @param {string} text @param {string[]} [to] */

@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 
 const require = createRequire(import.meta.url);
-const { repoLang, ownLang, repoRootOf } = require("../vscode/config.js");
+const { repoLang, ownLang, repoRootOf, replyLang, mergeConfig } = require("../vscode/config.js");
 
 /** A repo folder (with .git) and, when given, its settings. @param {any} [settings] */
 function repo(settings) {
@@ -44,4 +44,11 @@ test("repoRootOf: the folder with .git above a subfolder; the folder itself when
   assert.equal(repoRootOf(sub), root);
   const loose = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-nogit-"));
   assert.equal(repoRootOf(loose), loose);
+});
+
+test("replyLang (#176): IMPRIMATUR_REPLY_LANG, the plugin option, config.json; English without", () => {
+  assert.equal(replyLang({ IMPRIMATUR_REPLY_LANG: "Turkish", CLAUDE_PLUGIN_OPTION_REPLY_LANGUAGE: "French" }, { replyLang: "German" }), "Turkish");
+  assert.equal(replyLang({ CLAUDE_PLUGIN_OPTION_REPLY_LANGUAGE: " " }, { replyLang: "German" }), "German");
+  assert.equal(replyLang({}, { lang: "Turkish" }), "English");
+  assert.deepEqual(mergeConfig({ lang: "Turkish" }, { replyLang: "Turkish" }).config, { lang: "Turkish", replyLang: "Turkish" });
 });
