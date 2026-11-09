@@ -487,7 +487,68 @@ function place(db, repoId, it, v) {
   return { status: "ingested", task, changed: r.changed };
 }
 
+/** Files a rescan takes through the edit path at most; the rest wait for the next one. */
+const RESCAN_MAX = 50;
+
+/** The repo's Markdown files, tracked or new and not ignored. @param {string} root @returns {string[]} */
+function mdFiles(root) {
+  const out = require("node:child_process").execFileSync("git", ["-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "*.md", "*.mdx"], { encoding: "utf8", timeout: 10_000, maxBuffer: 32 * 1024 * 1024 });
+  return out.split("\0").filter(Boolean);
+}
+
+/**
+ * What the edit hook could not see, at SessionStart (#174): a file read here and gone from
+ * disk since (deleted, or renamed) has its sections superseded; a Markdown file changed since
+ * the last rescan by something other than Edit/Write (Bash, another editor) goes through the
+ * edit path. The first rescan only marks the time: the backfill has the past.
+ * @param {any} db @param {number} repoId @param {string} root
+ * @param {{now?: number, list?: (root: string) => string[], start?: (root: string, it: Item) => void}} [o]
+ * @returns {{gone: number, seen: number}}
+ */
+function rescan(db, repoId, root, o = {}) {
+  if (!settingsOf(root).on) return { gone: 0, seen: 0 };
+  const now = o.now ?? Date.now();
+  const key = `analysis:rescan:${repoId}`;
+  const last = Number(db.meta(key) ?? 0);
+  db.setMeta(key, now);
+  const actor = { kind: "hook", id: "rescan" };
+  let gone = 0;
+  const kept = db.sqlite.prepare(`SELECT x.doc_id, x.path FROM doc_sources x JOIN documents d ON d.id = x.doc_id
+                                  WHERE d.repo_id = ? AND d.kind = 'analysis'`).all(repoId);
+  for (const k of kept) {
+    if (k.path.startsWith("plan:") || fs.existsSync(absPath(root, k.path))) continue;
+    db.tx(() => {
+      for (const s of db.docSections(k.doc_id)) {
+        if (s.source === k.path && s.status === "current") db.upsertSection(k.doc_id, s.key, { status: "superseded" }, actor);
+      }
+      db.sqlite.prepare("DELETE FROM doc_sources WHERE doc_id = ? AND path = ?").run(k.doc_id, k.path);
+    });
+    gone++;
+  }
+  let seen = 0;
+  if (!last) return { gone, seen };
+  /** @type {string[]} */
+  let files = [];
+  try {
+    files = (o.list ?? mdFiles)(root);
+  } catch {}
+  for (const rel of files) {
+    if (seen >= RESCAN_MAX) break;
+    const abs = absPath(root, rel);
+    let st;
+    try {
+      st = fs.statSync(abs);
+    } catch {
+      continue;
+    }
+    if (!st.isFile() || st.mtimeMs <= last || st.size > HOOK_MAX) continue;
+    seen++;
+    onEdit(db, repoId, root, { rel, text: fs.readFileSync(abs, "utf8"), at: Math.round(st.mtimeMs), actor }, { start: o.start });
+  }
+  return { gone, seen };
+}
+
 module.exports = {
   settingsOf, relPath, absPath, isCandidate, heuristic, quickVerdict, verdictOf, onEdit, keyInPath, keyInBranch, taskFor,
-  sectionsOf, splitBody, ingest, orphans, setOrphan, assign, handle, hash, SPECIAL, chapterOf,
+  sectionsOf, splitBody, ingest, orphans, setOrphan, assign, handle, hash, SPECIAL, chapterOf, rescan,
 };

@@ -539,3 +539,38 @@ test("assign: only the repo's analysis files; any other path is refused unread",
   const { db, repo } = seeded();
   assert.throws(() => a.assign(db, repo.id, "/a/proj", "../../etc/passwd", "#5", hook), /no analysis file/);
 });
+
+// ---- rescan (#174) ----
+
+test("rescan: a file read here and gone from disk has its sections superseded", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "rescan-gone-"));
+  const { db, repo } = seeded(root);
+  fs.mkdirSync(path.join(root, "notes"));
+  fs.writeFileSync(path.join(root, "notes/a.md"), "# A\n\n## Context\n\nX.\n");
+  a.ingest(db, repo.id, "#5", "notes/a.md", "# A\n\n## Context\n\nX.\n", { actor: hook });
+  a.setOrphan(db, repo.id, "plan:zz", Date.now(), "# P\n");
+  assert.deepEqual(a.rescan(db, repo.id, root, { list: () => [] }), { gone: 0, seen: 0 });
+  fs.rmSync(path.join(root, "notes/a.md"));
+  assert.deepEqual(a.rescan(db, repo.id, root, { list: () => [] }), { gone: 1, seen: 0 });
+  const secs = db.docSections(db.taskDocOf(repo.id, "#5").id).filter((s) => s.source === "notes/a.md");
+  assert.ok(secs.length && secs.every((s) => s.status === "superseded"));
+  // Once: nothing more to do.
+  assert.equal(a.rescan(db, repo.id, root, { list: () => [] }).gone, 0);
+});
+
+test("rescan: a Markdown file written past the edit hook goes through it; the first rescan only marks the time", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "rescan-new-"));
+  const { db, repo } = seeded(root);
+  fs.mkdirSync(path.join(root, "docs/todos/5"), { recursive: true });
+  const f = path.join(root, "docs/todos/5/ANALYSIS.md");
+  fs.writeFileSync(f, DOC);
+  const list = () => ["docs/todos/5/ANALYSIS.md", "README.md"];
+  // First: the backfill has the past; only the time is kept.
+  assert.equal(a.rescan(db, repo.id, root, { list, now: 1000 }).seen, 0);
+  fs.utimesSync(f, new Date(5000), new Date(5000));
+  const r = a.rescan(db, repo.id, root, { list, now: 6000, start: () => {} });
+  assert.equal(r.seen, 1);
+  assert.ok(db.docSections(db.taskDocOf(repo.id, "#5").id).some((s) => s.source === "docs/todos/5/ANALYSIS.md" && s.status === "current"));
+  // Not changed since: not taken again.
+  assert.equal(a.rescan(db, repo.id, root, { list, now: 7000 }).seen, 0);
+});
