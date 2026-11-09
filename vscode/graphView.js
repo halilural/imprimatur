@@ -1842,7 +1842,7 @@ async function auditAll() {
   await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur: auditing Waiting on you" }, async () => {
     for (const log of withOpen) {
       try {
-        closed += (await audit(log, { lang: modelLang() })).settled.length;
+        closed += (await audit(log, { lang: require("./config.js").replyLang() })).settled.length;
       } catch {
         failed++;
       }
@@ -1875,7 +1875,7 @@ async function scanAll(again = false) {
   let res;
   await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur: scanning past sessions" }, async (p) => {
     try {
-      res = await scanHistory(root, { lang: modelLang(), again, progress: (done, total) => p.report({ message: `${done}/${total}` }) });
+      res = await scanHistory(root, { lang: require("./config.js").replyLang(), again, progress: (done, total) => p.report({ message: `${done}/${total}` }) });
     } catch (e) {
       vscode.window.showWarningMessage(`Imprimatur: scan failed: ${e instanceof Error ? e.message : e}`);
     }

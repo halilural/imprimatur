@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.140.2] - 2026-11-10
+
+### Changed
+- **Waiting on you** is written in the reply language (#176), since you read it: the turn-end audit, Settle and Scan history. Edit descriptions keep the repo's language.
+
 ## [0.140.1] - 2026-11-10
 
 ### Fixed

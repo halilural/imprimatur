@@ -34,7 +34,7 @@ export async function auditTurn(log, turn, ask) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [log, message = "", request, title] = process.argv.slice(2);
-  auditTurn(log, { message, request: request || undefined, title: title || undefined, lang: (({ repoLang, repoRootOf }) => repoLang(repoRootOf(process.cwd())))(require("../vscode/config.js")) })
+  auditTurn(log, { message, request: request || undefined, title: title || undefined, lang: require("../vscode/config.js").replyLang() }) // "Waiting on you" is read by the user: the reply language (#176)
     .catch((e) => process.stderr.write(`imprimatur audit: ${e.message}\n`))
     .finally(() => process.exit(0));
 }

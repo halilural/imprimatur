@@ -403,9 +403,9 @@ First user: a desktop meeting app writing work meeting notes to its work repo, t
 
 Three languages, each set in one place:
 
-- **Reply language** (#176): the language the agent talks to the user in, the same in every repo on the machine. It comes from `IMPRIMATUR_REPLY_LANG`, the plugin's **Reply language** option, or config.json `replyLang` (`npm run setup -- --reply-lang Turkish`). Without any of these it is English. Imprimatur says it at every session start.
-- **Repo language** (#80): a repo's `.claude/imprimatur.json` `"lang"` sets the language of its records, design documents, code comments and commits. A public repo can keep English records while the chat stays in the user's language.
-- **Hook language**: config.json `lang` (or `imprimatur.language`) sets the language of text the hooks and the extension's model calls write, such as edit descriptions and Waiting on you.
+- **Reply language** (#176): the language of everything addressed to the user. That means the agent's chat replies, with their headings (for Turkish the turn-end status section is "Neredeyiz"), and the **Waiting on you** list (turn-end audit, Settle, Scan history). It is the same in every repo on the machine and comes from `IMPRIMATUR_REPLY_LANG`, the plugin's **Reply language** option, or config.json `replyLang` (`npm run setup -- --reply-lang Turkish`). Without any of these it is English. Imprimatur says it at every session start.
+- **Repo language** (#80): a repo's `.claude/imprimatur.json` `"lang"` sets the language of its records, design documents, code comments, commits and edit descriptions. A public repo can keep English records while the chat stays in the user's language.
+- **Hook language**: config.json `lang` (or `imprimatur.language`) sets the language of edit descriptions in repos without their own `lang`.
 
 <a id="chapter-metrics"></a>
 

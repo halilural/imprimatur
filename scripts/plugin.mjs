@@ -34,7 +34,7 @@ export const pluginManifest = (version) => ({
     language: {
       type: "string",
       title: "Language",
-      description: "Language of model-written text (edit descriptions, Waiting on you), e.g. Turkish. Empty: the agent's own.",
+      description: "Language of model-written edit descriptions, e.g. Turkish. Empty: the agent's own. Waiting on you follows Reply language.",
     },
     reply_language: {
       type: "string",
