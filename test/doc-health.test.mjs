@@ -65,7 +65,7 @@ test("docUpdate: a decision is followed once a section links it; an unlinked one
   assert.match(run("Stop").block, new RegExp(`Decision #${dec.id} updated, but the section it is linked to \\(architecture/export\\)`));
 });
 
-test("where_we_left_off and session start tell how the design documents stand", () => {
+test("where_we_left_off and session start: ADRs no section links are no problem (#186); the counts still read", () => {
   const { root, db, repo, task, run } = setup({ whereWeLeftOff: true });
   db.addRecord(task.id, { kind: "adr", title: "One" }, agent);
   db.addRecord(task.id, { kind: "adr", title: "Two" }, agent);
@@ -73,16 +73,9 @@ test("where_we_left_off and session start tell how the design documents stand", 
   db.upsertSection(db.docOf(repo.id, "product").id, "tabs", { title: "Tabs", addRecords: [pdr.id] }, agent);
   const out = callTool(db, "where_we_left_off", { repo: root });
   assert.deepEqual(out.docs, { architecture: { sections: 0, unlinked: 2, conflicts: [] }, product: { sections: 1, unlinked: 0, conflicts: [] }, glossary: { sections: 0, unlinked: 0, conflicts: [] } });
-  assert.match(out.docs_problem, /^Design documents: architecture: 0 sections, 2 ADRs no section links\./);
-  assert.match(digest("where_we_left_off", out), /\nDesign documents: architecture: 0 sections, 2 ADRs/);
-  assert.match(run("SessionStart").context.join("\n"), /Design documents: architecture: 0 sections, 2 ADRs no section links/);
-  // All linked: no line.
-  const doc = db.docOf(repo.id, "architecture");
-  const ids = db.recordsByKind(repo.id, ["adr"], { limit: 10 }).map((r) => r.id);
-  db.upsertSection(doc.id, "all", { title: "All", addRecords: ids }, agent);
-  const ok = callTool(db, "where_we_left_off", { repo: root });
-  assert.equal(ok.docs_problem, undefined);
-  assert.doesNotMatch(digest("where_we_left_off", ok), /Design documents/);
+  assert.equal(out.docs_problem, undefined);
+  assert.doesNotMatch(digest("where_we_left_off", out), /Design documents/);
+  assert.doesNotMatch(run("SessionStart").context?.join("\n") ?? "", /Design documents/);
 });
 
 test("where_we_left_off leaves out the importer's record containers (ADR, PDR, TEST) unless one has a 👉 (#75)", () => {

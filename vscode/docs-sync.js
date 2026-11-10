@@ -411,7 +411,7 @@ function syncDocs(db, root, { dryRun = false, take, rev, adopt } = {}) {
 
 /**
  * How a repo's design documents stand (#74): db.docHealth plus the conflicts the last sync
- * left; problem, when one of them has records no section links, or a conflict.
+ * left; problem, when one of them has a conflict with its file.
  * @param {any} db @param {number} repoId
  */
 function health(db, repoId) {
@@ -421,16 +421,11 @@ function health(db, repoId) {
   const docs = {};
   for (const kind of Object.keys(h)) docs[kind] = { ...h[kind], conflicts: conflicts[kind] ?? [] };
   const parts = Object.entries(docs).flatMap(([kind, d]) => {
-    const label = kind;
-    const rk = kind === "architecture" ? "ADR" : "PDR";
-    const bits = [
-      d.unlinked && `${d.sections} section${d.sections === 1 ? "" : "s"}, ${d.unlinked} ${rk}${d.unlinked === 1 ? "" : "s"} no section links`,
-      d.conflicts.length && `conflict with its file in ${d.conflicts.join(", ")}`,
-    ].filter(Boolean);
-    return bits.length ? [`${label}: ${bits.join("; ")}`] : [];
+    // #186: an ADR stands alone (Pocock's model): records no section links are no problem now.
+    return d.conflicts.length ? [`${kind}: conflict with its file in ${d.conflicts.join(", ")}`] : [];
   });
   const problem = parts.length
-    ? `Design documents: ${parts.join(" · ")}. Link records with doc_section_upsert (records), bring back files gone after an import with npm run docs -- sync --rev <commit>, settle a conflict with --take file|db.`
+    ? `Design documents: ${parts.join(" · ")}. Settle a conflict with npm run docs -- sync --take file|db.`
     : undefined;
   return { docs, problem };
 }
