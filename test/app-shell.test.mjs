@@ -75,3 +75,16 @@ test("task page (#197): the gates in order with the next one to approve; spec, t
   assert.match(appHtml(appModel(db, repo, root, { area: "tasks", task: "#5", tab: "activity" }), o), /create · decision · Approved/);
   assert.match(appHtml(appModel(db, repo, root, { area: "tasks" }), o), /Active · 2/);
 });
+
+test("docs editing (#198): database documents get Edit and New section; ADRs and the wiki do not", () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-198-")));
+  const db = openDb({ path: path.join(root, "x.db") });
+  const repo = db.repoOf(root);
+  db.upsertSection(db.docOf(repo.id, "project").id, "why", { title: "Why", chapter: "mission", body: "Agents remember." }, agent);
+  const proj = appHtml(appModel(db, repo, root, { area: "docs", doc: "project" }), o);
+  assert.match(proj, /<form class="editor" data-save data-kind="project" data-dscope="" data-key="why">/);
+  assert.match(proj, /data-new="1">[\s\S]*<select name="chapter"><option value="mission">Mission<\/option>/);
+  assert.doesNotMatch(appHtml(appModel(db, repo, root, { area: "docs", doc: "adrs" }), o), /<form class="editor"/);
+  assert.doesNotMatch(appHtml(appModel(db, repo, root, { area: "docs", doc: "wiki" }), o), /<form class="editor"/);
+  assert.match(appHtml(appModel(db, repo, root, { area: "docs", doc: "glossary" }), o), /New section/);
+});

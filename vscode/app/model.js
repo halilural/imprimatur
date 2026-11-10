@@ -66,7 +66,7 @@ function docReading(db, repo, root, doc, scope) {
     const caps = db.q("SELECT * FROM documents WHERE repo_id = ? AND kind = 'capability' ORDER BY scope").all(repo.id);
     const pick = caps.find((/** @type {any} */ c) => c.scope === scope) ?? caps[0];
     if (!pick) return { ...reading("Capabilities", [], "How the system behaves now. A capability appears when a task with a spec is done and its changes merge."), scopes: [] };
-    return { ...reading(`Capability · ${pick.scope}`, current(pick)), scopes: caps.map((/** @type {any} */ c) => c.scope), scope: pick.scope };
+    return { ...reading(`Capability · ${pick.scope}`, current(pick)), scopes: caps.map((/** @type {any} */ c) => c.scope), scope: pick.scope, edit: { kind: "capability", scope: pick.scope } };
   }
   if (doc === "wiki") {
     const fs = require("node:fs");
@@ -83,11 +83,13 @@ function docReading(db, repo, root, doc, scope) {
   }
   const kind = DOCS.find((d) => d.id === doc)?.kind ?? "project";
   const label = DOCS.find((d) => d.id === doc)?.label ?? "Project";
-  return reading(label, current(db.docFind(repo.id, kind)), {
+  const r = reading(label, current(db.docFind(repo.id, kind)), {
     project: "Mission, constraints, tech stack and roadmap.",
     glossary: "The words this project uses, one entry each.",
     "out-of-scope": "What the project decided not to do, and why.",
   }[kind]);
+  // The database is the source of these: they are edited here (#198); ADRs live in records, the wiki is generated.
+  return { ...r, edit: { kind, chapters: kind === "project" ? require("../db.js").CHAPTERS.project : undefined } };
 }
 
 /** The spec's gates in order (Kiro's, decided for #179): each approval is a decision record with links.gate. */
