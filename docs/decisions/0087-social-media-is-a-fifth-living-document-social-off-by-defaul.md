@@ -1,5 +1,5 @@
 ---
-type: pdr
+type: adr
 status: accepted
 date: 2026-10-24
 record: 96d7d5c9-f8ed-4e4f-8260-0cdd933ca604
@@ -38,5 +38,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Social document: a per-repo opt-in document kind (#109)](../ARCHITECTURE.md#social)
-- [Product: Social media: /social-post and the Social document (#109)](../PRODUCT.md#social)
+- No section links this decision yet.

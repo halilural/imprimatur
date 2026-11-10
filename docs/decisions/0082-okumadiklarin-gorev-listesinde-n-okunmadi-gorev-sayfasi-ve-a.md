@@ -1,6 +1,6 @@
 ---
 type: pdr
-status: accepted
+status: rejected
 date: 2026-10-22
 record: be183525-ff8f-4d2f-9a74-38d6dbd70e2f
 ---
@@ -27,4 +27,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Product: Unread: comprehension debt (#91, #92)](../PRODUCT.md#unread)
+- No section links this decision yet.

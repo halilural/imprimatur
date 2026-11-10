@@ -1,6 +1,6 @@
 ---
 type: pdr
-status: accepted
+status: rejected
 date: 2026-11-03
 record: 297b186c-4183-438c-b1c7-4f4ed28f5bab
 ---
@@ -43,4 +43,4 @@ Vetting rules for anything brought in (from #128): the license allows redistribu
 
 ## Sections
 
-- [Product: The agent's toolset: seen, versioned, installed, found (#138)](../PRODUCT.md#agent-toolset)
+- No section links this decision yet.

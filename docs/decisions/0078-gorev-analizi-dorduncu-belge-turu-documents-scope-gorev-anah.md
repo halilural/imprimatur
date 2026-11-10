@@ -31,4 +31,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Task analyses](../ARCHITECTURE.md#task-analysis)
+- No section links this decision yet.

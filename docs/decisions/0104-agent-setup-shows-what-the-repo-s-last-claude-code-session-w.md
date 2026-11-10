@@ -56,5 +56,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Agent setup inventory: plugins, synced skills and the session's context (#139)](../ARCHITECTURE.md#agent-inventory)
-- [Product: The agent's toolset: seen, versioned, installed, found (#138)](../PRODUCT.md#agent-toolset)
+- No section links this decision yet.

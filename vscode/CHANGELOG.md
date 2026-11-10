@@ -4,6 +4,12 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.160.0] - 2026-11-10
+
+### Changed
+- Every repo's old documents moved to Matt Pocock's model (#185): Architecture and Product became the small project page (docs/PROJECT.md), capabilities (docs/capabilities/), ADRs (docs/adr/) and out-of-scope notes (.out-of-scope/); a target state of an open issue went into that task's spec; task analyses were retired. A backup of the database was taken first, and the old sections are marked superseded, not deleted.
+- A document whose every section is superseded loses the file Imprimatur generated for it (docs/ARCHITECTURE.md, docs/PRODUCT.md); a hand-written file is never touched.
+
 ## [0.159.0] - 2026-11-10
 
 ### Removed

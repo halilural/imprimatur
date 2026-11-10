@@ -39,4 +39,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Agent files: AGENTS.md, CLAUDE.md and the docs rule (#133)](../ARCHITECTURE.md#agent-files)
+- No section links this decision yet.

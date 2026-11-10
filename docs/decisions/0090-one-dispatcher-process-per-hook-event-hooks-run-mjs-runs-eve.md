@@ -49,4 +49,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Hooks and flows](../ARCHITECTURE.md#hooks)
+- No section links this decision yet.

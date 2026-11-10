@@ -37,4 +37,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Decision records: ADR and PDR as MADR 4 files](../ARCHITECTURE.md#decision-records)
+- No section links this decision yet.

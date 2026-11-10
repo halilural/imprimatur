@@ -33,4 +33,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: File-based review data](../ARCHITECTURE.md#review-data)
+- No section links this decision yet.

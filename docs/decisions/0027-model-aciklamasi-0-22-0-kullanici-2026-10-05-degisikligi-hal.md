@@ -27,4 +27,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Model calls and cost](../ARCHITECTURE.md#model-calls)
+- No section links this decision yet.

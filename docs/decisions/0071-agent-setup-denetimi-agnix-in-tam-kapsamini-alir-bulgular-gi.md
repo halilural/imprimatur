@@ -1,5 +1,5 @@
 ---
-type: pdr
+type: adr
 status: accepted
 date: 2026-10-12
 record: be1c3a6a-4e65-4c70-9616-91f856d0c783
@@ -31,4 +31,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Product: Agent setup audit (planned)](../PRODUCT.md#agent-setup-audit)
+- No section links this decision yet.

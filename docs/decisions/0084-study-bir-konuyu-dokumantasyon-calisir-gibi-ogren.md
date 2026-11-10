@@ -1,6 +1,6 @@
 ---
 type: pdr
-status: accepted
+status: rejected
 date: 2026-10-22
 record: 891b2357-2aba-4c44-a26d-864c9b91dceb
 ---
@@ -27,4 +27,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Product: /study: studying a topic (#95)](../PRODUCT.md#study)
+- No section links this decision yet.

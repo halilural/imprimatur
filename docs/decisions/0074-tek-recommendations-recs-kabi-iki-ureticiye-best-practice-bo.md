@@ -36,4 +36,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Recommendations: project best-practice review (#86, #87)](../ARCHITECTURE.md#best-practice-review)
+- No section links this decision yet.

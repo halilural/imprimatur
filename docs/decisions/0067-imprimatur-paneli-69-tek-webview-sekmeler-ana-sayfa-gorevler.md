@@ -35,4 +35,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Panel and views](../ARCHITECTURE.md#panel)
+- No section links this decision yet.

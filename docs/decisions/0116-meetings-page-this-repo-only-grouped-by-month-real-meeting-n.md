@@ -1,6 +1,6 @@
 ---
 type: pdr
-status: accepted
+status: rejected
 date: 2026-11-09
 record: 678ac4ec-bb06-438b-9fe0-2f519ba2e242
 ---

@@ -37,4 +37,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Live updates](../ARCHITECTURE.md#live)
+- No section links this decision yet.
