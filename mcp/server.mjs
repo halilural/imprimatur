@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const {
-  openDb, KINDS, DOC_KINDS, CHAPTERS, ANALYSIS_CHAPTERS, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, analysisTitle,
+  openDb, KINDS, DOC_KINDS, CHAPTERS, ANALYSIS_CHAPTERS, ANALYSIS, SCOPED_KINDS, scopedTitle, TICKET_TYPES, DELTAS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, analysisTitle,
   EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, REVIEW_DAYS, REVIEW_RESULTS, weakText,
 } = require("../vscode/db.js");
 const { repoRoot } = require("../vscode/review-state.js");
@@ -63,8 +63,8 @@ const MAX_TITLE = 300;
 const MAX_BODY = 20_000;
 /** A design document section's body (#72): longer than a record's, short enough to sync (db.js). */
 const MAX_SECTION_BODY = SECTION_BODY_MAX;
-const DOC_KIND = { type: "string", enum: [...Object.keys(DOC_KINDS), ANALYSIS], description: "architecture (how it is built), product (what the user gets), glossary (the project's terms, one section each), social (the repo's social media posts, one section per channel; only where the repo turned it on) or analysis (a task's analysis, plan and research files; task needed)" };
-const DOC_TASK = { type: "string", description: "kind analysis: the task's key, e.g. \"#58\"" };
+const DOC_KIND = { type: "string", enum: [...Object.keys(DOC_KINDS), ...Object.keys(SCOPED_KINDS)], description: "Matt Pocock's (#179): spec (a task's spec; task needed), map (a wayfinder map; task needed), capability (how the system behaves now; task = the capability's name), project (mission, constraints, tech stack, roadmap), out-of-scope (one section per rejected concept), glossary (the project's terms, one section each). Until #185 moves them: architecture, product, analysis (a task's analysis, plan and research files; task needed). social: the repo's posts, only where the repo turned it on" };
+const DOC_TASK = { type: "string", description: "kinds spec, map, analysis: the task's key, e.g. \"#58\"; kind capability: its name, e.g. \"search\"" };
 const SECTION_KEY_ARG = { type: "string", maxLength: 64, description: "The section's slug, e.g. \"storage\" (a-z, 0-9, -); unique in the document" };
 /** task_get's lean body (#120): its first line, at most this many chars. */
 const LINE_CUT = 160;
@@ -141,7 +141,7 @@ const output = (properties, required = Object.keys(properties)) => ({ type: "obj
 const RECORD_OUT = output({ record: RECORD });
 const DOCUMENT = {
   type: "object",
-  properties: { id: int, uid: str, repo_id: int, kind: { type: "string", enum: [...Object.keys(DOC_KINDS), ANALYSIS] }, scope: { type: "string", description: "kind analysis: the task's key" }, title: str, updated_at: int },
+  properties: { id: int, uid: str, repo_id: int, kind: { type: "string", enum: [...Object.keys(DOC_KINDS), ...Object.keys(SCOPED_KINDS)] }, scope: { type: "string", description: "a scoped kind's task key, or a capability's name" }, title: str, updated_at: int },
   required: ["id", "kind", "title", "updated_at"],
 };
 const SECTION = {
@@ -213,7 +213,9 @@ const TOOLS = [
       title: { type: "string", maxLength: MAX_TITLE },
       status: { type: "string", enum: TASK_STATUS },
       summary: { type: "string", description: "One line: where we are" },
-      epic: { type: "string", description: "The epic's key, e.g. \"#53\"" },
+      epic: { type: "string", description: "The epic's key, e.g. \"#53\"; for a ticket, the task whose spec or map it belongs to" },
+      ticket_type: { type: ["string", "null"], enum: [...TICKET_TYPES, null], description: "A wayfinder ticket's type (Pocock): research, prototype, grilling, task; null for none" },
+      blocked_by: { type: "array", items: { type: "string" }, description: "The keys of the tasks this one waits on; [] for none" },
     }, ["key"]),
     outputSchema: output({ task: TASK }),
     idempotent: true,
@@ -293,6 +295,7 @@ const TOOLS = [
         enum: [...new Set([...Object.values(CHAPTERS), ANALYSIS_CHAPTERS].flatMap((c) => Object.keys(c)))],
         description: `The fixed chapter the section sits in (every new architecture or product section needs one): ${Object.entries(CHAPTERS).map(([k, c]) => `${k}: ${Object.keys(c).join(", ")}`).join("; ")}; analysis, a mini design doc (a new task analysis: one section per chapter): ${Object.keys(ANALYSIS_CHAPTERS).join(", ")}`,
       },
+      delta: { type: ["string", "null"], enum: [...DELTAS, null], description: "kind spec only: how this section changes a capability (OpenSpec): added, modified, removed, renamed; key it \"<capability>--<requirement>\"; it merges into the capability when the task is done" },
       records: { type: "array", items: int, description: "Record ids that contribute to the section (linked, never unlinked here)" },
       repo: repoArg,
     }, ["kind", "key"]),
@@ -544,9 +547,9 @@ function taskRecords(db, task, a) {
 function docGet(db, repo, a) {
   socialGate(repo, a);
   const task = analysisTask(a);
-  const found = task ? db.taskDocFind(repo.id, task) : db.docFind(repo.id, a.kind);
+  const found = task ? db.taskDocFind(repo.id, task, a.kind) : db.docFind(repo.id, a.kind);
   // Not made by a read: an empty document until something is written.
-  const document = found ?? { id: 0, repo_id: repo.id, kind: a.kind, ...(task && { scope: task }), title: task ? analysisTitle(task) : DOC_KINDS[a.kind], updated_at: 0 };
+  const document = found ?? { id: 0, repo_id: repo.id, kind: a.kind, ...(task && { scope: task }), title: task ? scopedTitle(task, a.kind) : DOC_KINDS[a.kind], updated_at: 0 };
   const all = found ? db.docSections(found.id) : [];
   if (a.section !== undefined && !all.some((s) => s.key === a.section)) {
     throw new ToolError(`no section ${JSON.stringify(a.section)} in the ${a.kind} document. ${all.length ? `Sections: ${all.map((s) => s.key).join(", ")}.` : "It has no sections yet."} doc_section_upsert with this key and a title creates it.`);
@@ -554,7 +557,8 @@ function docGet(db, repo, a) {
   const sections = all.map(({ contributors, ...s }) => (a.full || s.key === a.section ? s : { ...s, body: undefined }));
   /** @type {any} */
   const out = { document, sections: sections.map((s) => Object.fromEntries(Object.entries(s).filter(([, v]) => v !== undefined))) };
-  if (!all.length) out.hint = task ? `no analysis kept for ${task} yet: analysis files written for it come in by themselves; doc_section_upsert {kind: "analysis", task: "${task}", key, title, body} writes one here`
+  if (!all.length) out.hint = task ? (a.kind === ANALYSIS ? `no analysis kept for ${task} yet: analysis files written for it come in by themselves; doc_section_upsert {kind: "analysis", task: "${task}", key, title, body} writes one here`
+    : `no ${a.kind} for ${task} yet: doc_section_upsert {kind: "${a.kind}", task: "${task}", key, title, body${a.kind === "capability" ? "" : ", chapter"}} writes its first section`)
     : `empty: write its first section with doc_section_upsert {kind: "${a.kind}", key, title, body, records}`;
   else if (!a.full && a.section === undefined) out.hint = "bodies left out: section:<key> gives one, full:true all";
   return out;
@@ -567,14 +571,14 @@ function socialGate(repo, a) {
   }
 }
 
-/** The task of an analysis call, or undefined for the repo's documents. @param {any} a */
+/** The scope of a scoped kind's call (analysis, spec, map: a task's key; capability: its name), or undefined for the repo's documents. @param {any} a */
 function analysisTask(a) {
-  if (a.kind !== ANALYSIS) {
-    if (a.task !== undefined) throw new ToolError(`task is for kind analysis; the ${a.kind} document is the repo's`);
+  if (!Object.hasOwn(SCOPED_KINDS, a.kind)) {
+    if (a.task !== undefined) throw new ToolError(`task is for kinds ${Object.keys(SCOPED_KINDS).join(", ")}; the ${a.kind} document is the repo's`);
     return undefined;
   }
   const key = typeof a.task === "string" ? a.task.trim() : "";
-  if (!key) throw new ToolError('kind analysis needs task: the task\'s key, e.g. "#58"');
+  if (!key) throw new ToolError(a.kind === "capability" ? 'kind capability needs task: the capability\'s name, e.g. "search"' : `kind ${a.kind} needs task: the task's key, e.g. "#58"`);
   return key;
 }
 
@@ -589,13 +593,13 @@ function docUpsert(db, repo, a, actor) {
   }
   const task = analysisTask(a);
   // "<file>--<heading>" keys are the sections read from a task's files (#172): a written one would be overwritten.
-  if (task && a.key.includes("--")) throw new ToolError(`analysis section keys with "--" belong to sections read from files; pick a key without it, e.g. a chapter name ("design")`);
-  const doc = task ? db.taskDocOf(repo.id, task) : db.docOf(repo.id, a.kind);
+  if (task && a.kind === ANALYSIS && a.key.includes("--")) throw new ToolError(`analysis section keys with "--" belong to sections read from files; pick a key without it, e.g. a chapter name ("design")`);
+  const doc = task ? db.taskDocOf(repo.id, task, a.kind) : db.docOf(repo.id, a.kind);
   const created = !db.docSection(doc.id, a.key);
   if (created && a.title === undefined) {
     throw new ToolError(`no section ${JSON.stringify(a.key)} in the ${a.kind} document yet: give a title to create it (doc_get lists the sections)`);
   }
-  const section = db.upsertSection(doc.id, a.key, { ...pick(a, ["title", "body", "position", "status", "chapter"]), addRecords: a.records ?? [] }, actor);
+  const section = db.upsertSection(doc.id, a.key, { ...pick(a, ["title", "body", "position", "status", "chapter", "delta"]), addRecords: a.records ?? [] }, actor);
   /** @type {any} */
   const out = { document: db.docById(doc.id), section, created };
   // The repo's file follows (#73); a section also edited in the file is a conflict, told back.
@@ -630,7 +634,13 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
     case "where_we_left_off": {
       const rid = repoOf(db, a.repo).id;
       const { docs, problem } = docsHealth(db, rid);
-      return { tasks: db.whereWeLeftOff(rid), docs, ...(problem && { docs_problem: problem }) };
+      // #184: which tasks have a spec or a wayfinder map (Pocock's), so the agent reads it first.
+      const scoped = db.q("SELECT kind, scope FROM documents WHERE repo_id = ? AND kind IN ('spec', 'map')").all(rid);
+      const tasks = db.whereWeLeftOff(rid).map((/** @type {any} */ t) => {
+        const has = scoped.filter((/** @type {any} */ d) => d.scope === t.key).map((/** @type {any} */ d) => d.kind);
+        return has.length ? { ...t, docs: has } : t;
+      });
+      return { tasks, docs, ...(problem && { docs_problem: problem }) };
     }
     case "task_list":
       return { tasks: db.tasksOf(repoOf(db, a.repo).id, { status: a.status }) };
@@ -639,6 +649,8 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
     case "task_upsert": {
       const rid = repoOf(db, a.repo).id;
       const fields = pick(a, ["title", "status", "summary"]);
+      if (a.ticket_type !== undefined) fields.ticketType = a.ticket_type;
+      if (a.blocked_by !== undefined) fields.blockedBy = a.blocked_by;
       if (a.epic) fields.epicId = (db.taskByKey(rid, a.epic) ?? db.upsertTask(rid, a.epic, {}, actor)).id;
       return { task: db.upsertTask(rid, a.key, fields, actor) };
     }

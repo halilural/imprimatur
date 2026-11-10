@@ -347,3 +347,19 @@ test("docUpdate: an ADR added and not linked is told to the agent at its next to
   run("PostToolUse", { tool_name: "mcp__imprimatur__record_add", tool_input: { task: "#72", kind: "note", title: "n" }, tool_response: `Added [${note.id}] note/open` });
   assert.deepEqual(run("Stop"), {});
 });
+
+test("MCP (#184): a spec section with a delta, a map hint, a capability needs a name, a ticket's type and blockers", async () => {
+  const root = gitRepo();
+  const db = openDb({ path: tmpDb() });
+  db.repoOf(root);
+  const call = (name, a) => callTool(db, name, { repo: root, ...a }, { client: "test" });
+  const sp = await call("doc_section_upsert", { kind: "spec", task: "#40", key: "problem", title: "Finding a record", chapter: "problem", body: "Search misses words." });
+  assert.equal(sp.document.title, "Spec · #40");
+  const d = await call("doc_section_upsert", { kind: "spec", task: "#40", key: "search--ranking", title: "Ranked", chapter: "implementation", delta: "added" });
+  assert.equal(d.section.delta, "added");
+  assert.equal((await call("doc_get", { kind: "spec", task: "#40" })).sections.length, 2);
+  assert.match((await call("doc_get", { kind: "map", task: "#41" })).hint, /no map for #41 yet/);
+  await assert.rejects(async () => call("doc_get", { kind: "capability" }), /capability's name/);
+  const t = await call("task_upsert", { key: "#42", title: "Which index?", epic: "#40", ticket_type: "research", blocked_by: ["#43"] });
+  assert.deepEqual([t.task.ticket_type, t.task.blocked_by], ["research", '["#43"]']);
+});

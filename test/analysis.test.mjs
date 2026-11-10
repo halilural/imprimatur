@@ -378,7 +378,7 @@ test("MCP: doc_get and doc_section_upsert read and write a task's analysis; task
   assert.equal(w.created, true);
   assert.equal(db.taskDocFind(repo.id, "#80").id, w.document.id);
   assert.throws(() => callTool(db, "doc_get", { kind: "analysis", repo: root }), /needs task/);
-  assert.throws(() => callTool(db, "doc_get", { kind: "architecture", task: "#5", repo: root }), /task is for kind analysis/);
+  assert.throws(() => callTool(db, "doc_get", { kind: "architecture", task: "#5", repo: root }), /task is for kinds analysis, spec, map, capability/);
 });
 
 test("panel: the task page links its analysis; Analysis → Task analyses lists the tasks' files and the orphans, each to be given a task", () => {
