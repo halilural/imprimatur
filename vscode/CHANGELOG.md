@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.154.0] - 2026-11-10
+
+### Added
+- **Current File** in the side bar (#200): for the file open in the editor, the decisions and records that name it (ADRs first), the agent's edits to it, and the document sections read from it.
+
+### Security
+- A gate approval counts only when every change to its record was yours, and it is marked done.
+
 ## [0.153.1] - 2026-11-10
 
 ### Security
