@@ -14,11 +14,11 @@ const AREAS = [
   { id: "edits", label: "Edits", key: "e", icon: "git-merge" },
   { id: "setup", label: "Setup", key: "s", icon: "settings-gear" },
 ];
-/** Under More: the pages that are not daily work. */
+/** Under More: the pages that are not daily work (#202: in this panel, no longer the old one's tabs). */
 const MORE = [
-  { id: "exercises", label: "Exercises", command: "imprimatur.openExercises" },
-  { id: "meetings", label: "Meetings", command: "imprimatur.openMeetings" },
-  { id: "social", label: "Social", command: "imprimatur.openSocial" },
+  { id: "exercises", label: "Exercises" },
+  { id: "meetings", label: "Meetings" },
+  { id: "social", label: "Social" },
 ];
 /** The documents of the Docs area, in reading order (Pocock's, then the wiki). */
 const DOCS = [
@@ -183,9 +183,15 @@ function boardOf(db, repoId, now = Date.now()) {
  * @param {{area?: string, doc?: string, scope?: string, task?: string, tab?: string, rows?: any[]}} at
  */
 function appModel(db, repo, root, at = {}) {
-  const area = AREAS.some((a) => a.id === at.area) ? /** @type {string} */ (at.area) : "home";
+  const area = [...AREAS, ...MORE].some((a) => a.id === at.area) ? /** @type {string} */ (at.area) : "home";
   const waiting = db.openAsks ? db.openAsks({ repoId: repo.id, limit: 200 }).length : 0;
-  const base = { repo: { name: repo.name ?? path.basename(root), root }, areas: AREAS, more: MORE, area, waiting };
+  // Social is off by default, per repo (#109): its page shows only where it is on.
+  let social = false;
+  try {
+    social = require("../docs-export.js").socialOn(root);
+  } catch {}
+  const more = MORE.filter((x) => x.id !== "social" || social || area === "social");
+  const base = { repo: { name: repo.name ?? path.basename(root), root }, areas: AREAS, more, area, waiting };
   if (area === "docs") {
     const doc = DOCS.some((d) => d.id === at.doc) ? /** @type {string} */ (at.doc) : "project";
     return { ...base, docs: DOCS, doc, reading: docReading(db, repo, root, doc, at.scope) };
@@ -197,6 +203,14 @@ function appModel(db, repo, root, at = {}) {
     return { ...base, lists: [{ id: "active", label: "Active", tasks: list("active", 50) }, { id: "open", label: "Open", tasks: list("open", 80) }, { id: "done", label: "Done", tasks: list("done", 20) }] };
   }
   if (area === "edits") return { ...base, edits: editsQueue(root, at.rows) };
+  // Exercises belong to no repo; meetings are this repo's meeting records; social is a document.
+  if (area === "exercises") return { ...base, exercises: require("../exerciseView.js").exerciseModel(db) };
+  if (area === "meetings") return { ...base, meetings: require("../tasksView.js").meetingsModel(db, root).meetings };
+  if (area === "social") {
+    const d = db.docFind(repo.id, "social");
+    const r = reading("Social", d ? db.docSections(d.id).filter((/** @type {any} */ s) => s.status === "current") : [], "Posts written for each platform after reading its rules (/social-post).");
+    return { ...base, reading: { ...r, edit: { kind: "social" } } };
+  }
   if (area === "setup") {
     const recs = db.q(`SELECT count(*) AS n FROM records r JOIN tasks t ON t.id = r.task_id WHERE t.repo_id = ? AND t.key = 'RECS' AND r.status = 'open'`).get(repo.id)?.n ?? 0;
     return { ...base, setup: { recommendations: recs } };

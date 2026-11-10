@@ -23,7 +23,7 @@ test("app shell: five areas and More; Home lists the tasks in progress; a docume
   assert.deepEqual(AREAS.map((a) => a.id), ["home", "tasks", "docs", "edits", "setup"]);
   const home = appHtml(appModel(db, repo, root, {}), o);
   assert.match(home, /data-go="docs"/);
-  assert.match(home, /More<\/div>.*Exercises.*Meetings.*Social/s);
+  assert.match(home, /More<\/div>.*Exercises.*Meetings/s);
   assert.match(home, /data-task="#1"[\s\S]*👉 Rank the results/);
   // A document: its sections left, the page with the summary first, "On this page" right.
   const g = db.docOf(repo.id, "glossary");
@@ -112,4 +112,32 @@ test("Edits and Setup (#199): the review queue per file, newest first; setup lin
   assert.doesNotMatch(html, /data-file="b\.md"/);
   assert.match(appHtml(appModel(db, repo, root, { area: "edits", rows: [] }), o), /Every agent edit is reviewed/);
   assert.match(appHtml(appModel(db, repo, root, { area: "setup" }), o), /data-cmd="imprimatur\.setup\.focus"[\s\S]*data-task="RECS"/);
+});
+
+test("More (#202): Exercises, Meetings and Social open in this panel; a step's box ticks it through the exercise messages", () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-202-")));
+  const db = openDb({ path: path.join(root, "x.db") });
+  const repo = db.repoOf(root);
+  const nav = appHtml(appModel(db, repo, root, {}), o);
+  assert.match(nav, /data-go="exercises">Exercises/);
+  assert.doesNotMatch(nav, /data-go="social"/, "social is off by default");
+  assert.doesNotMatch(nav, /imprimatur\.open(Exercises|Meetings|Social)/, "no hop to the old panel");
+  const e = db.saveExercise({ topic: "Bedrock", goal: "Call it", steps: [{ title: "Read the docs", kind: "learn" }, { title: "Call it" }] });
+  const ex = appModel(db, repo, root, { area: "exercises" });
+  assert.equal(ex.area, "exercises");
+  const html = appHtml(ex, o);
+  assert.match(html, new RegExp(`data-ex="exStep" data-id="${e.steps[0].id}" data-status="done"`));
+  assert.match(html, /Bedrock[\s\S]*0 \/ 2 steps/);
+  const { applyExerciseMessage } = req("../vscode/exerciseView.js");
+  applyExerciseMessage(db, { type: "exStep", id: e.steps[0].id, status: "done" });
+  assert.match(appHtml(appModel(db, repo, root, { area: "exercises" }), o), /1 \/ 2 steps/);
+  const t = db.upsertTask(repo.id, "#5", { title: "Payments" });
+  const m = db.addRecord(t.id, { kind: "meeting", title: "Payments weekly", body: "## Özet\nKafka it is." }, agent);
+  db.addRecord(t.id, { kind: "decision", title: "Use Kafka", parent_id: m.id }, agent);
+  const mh = appHtml(appModel(db, repo, root, { area: "meetings" }), o);
+  assert.match(mh, /Payments weekly[\s\S]*Kafka it is\.[\s\S]*1 decisions[\s\S]*Use Kafka[\s\S]*data-task="#5"/);
+  db.upsertSection(db.docOf(repo.id, "social").id, "launch", { title: "Launch on Reddit", body: "Draft." }, agent);
+  const sm = appModel(db, repo, root, { area: "social" });
+  assert.equal(sm.reading.edit.kind, "social");
+  assert.match(appHtml(sm, o), /<section id="launch"><h2>Launch on Reddit/);
 });

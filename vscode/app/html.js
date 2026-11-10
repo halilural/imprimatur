@@ -71,6 +71,18 @@ h2.sub { font-size: 16px; margin: 0 0 10px; }
 details.edit > summary, details.newsec > summary { font-size: 12px; color: var(--vscode-descriptionForeground); }
 details.newsec { margin-bottom: 14px; }
 .btn { padding: 6px 14px; border-radius: 6px; border: 0; background: var(--vscode-button-background); color: var(--vscode-button-foreground); font: inherit; font-weight: 600; cursor: pointer; }
+.xcard { border: 1px solid var(--vscode-panel-border); border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; }
+.xcard h2 { display: flex; gap: 10px; align-items: center; font-size: 17px; margin: 0 0 6px; } .xcard h2 .ptr { font-weight: 400; margin-left: auto; }
+.bar { height: 4px; border-radius: 2px; background: var(--vscode-panel-border); margin: 4px 0 10px; } .bar div { height: 4px; border-radius: 2px; background: var(--vscode-progressBar-background); }
+.step { display: flex; gap: 10px; align-items: flex-start; padding: 6px 8px; border-radius: 6px; }
+.step:hover { background: var(--vscode-list-hoverBackground); } .step.now { box-shadow: inset 3px 0 0 var(--vscode-focusBorder); }
+.step.sub { margin-left: 28px; } .step.done .ttl, .step.skipped .ttl { text-decoration: line-through; color: var(--vscode-descriptionForeground); }
+.step .col { flex: 1; min-width: 0; } .step .ttl p { display: inline; margin: 0; } .step .why { font-size: 13px; color: var(--vscode-descriptionForeground); }
+.box { flex: none; width: 18px; height: 18px; margin-top: 3px; border-radius: 4px; border: 1px solid var(--vscode-checkbox-border, var(--vscode-panel-border)); background: var(--vscode-checkbox-background, transparent); color: var(--vscode-foreground); cursor: pointer; padding: 0; font-size: 12px; line-height: 16px; }
+.box.split { border-style: dashed; cursor: default; }
+.link { border: 0; background: transparent; color: var(--vscode-textLink-foreground); cursor: pointer; font: inherit; font-size: 12px; padding: 0 4px; }
+.meet { border: 1px solid var(--vscode-panel-border); border-radius: 8px; margin-bottom: 8px; } .meet > summary { cursor: pointer; padding: 10px 12px; display: flex; gap: 12px; }
+.meet .mbody { padding: 0 12px 12px; } .meet .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; } .meet ul { margin: 4px 0; padding-left: 18px; }
 @media (max-width: 900px) { .reading { grid-template-columns: minmax(0, 1fr); } .reading .toc, .reading .onpage { display: none; } .shell { grid-template-columns: 1fr; } nav.areas { display: flex; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--vscode-panel-border); } nav.areas button { width: auto; } }
 `;
 
@@ -78,10 +90,11 @@ const SCRIPT = `
 const vscode = acquireVsCodeApi();
 const send = (m) => vscode.postMessage(m);
 document.addEventListener("click", (e) => {
-  const el = e.target.closest("[data-gate],[data-tab],[data-file],[data-go],[data-cmd],[data-doc],[data-scope],[data-task]");
+  const el = e.target.closest("[data-ex],[data-gate],[data-tab],[data-file],[data-go],[data-cmd],[data-doc],[data-scope],[data-task]");
   if (!el) return;
   e.preventDefault();
-  if (el.dataset.gate) send({ type: "gate", key: el.dataset.key, gate: el.dataset.gate });
+  if (el.dataset.ex) send({ type: "ex", act: el.dataset.ex, id: Number(el.dataset.id), status: el.dataset.status, result: el.dataset.result });
+  else if (el.dataset.gate) send({ type: "gate", key: el.dataset.key, gate: el.dataset.gate });
   else if (el.dataset.file) send({ type: "file", file: el.dataset.file });
   else if (el.dataset.tab) send({ type: "go", area: "tasks", task: el.dataset.key, tab: el.dataset.tab });
   else if (el.dataset.go) send({ type: "go", area: el.dataset.go });
@@ -91,6 +104,8 @@ document.addEventListener("click", (e) => {
   else if (el.dataset.cmd) send({ type: "cmd", command: el.dataset.cmd });
 });
 document.addEventListener("submit", (e) => {
+  const n = e.target.closest("form[data-exnote]");
+  if (n) { e.preventDefault(); return send({ type: "ex", act: "exNote", id: Number(n.dataset.exnote), text: n.elements.text.value }); }
   const f = e.target.closest("form[data-save]");
   if (!f) return;
   e.preventDefault();
@@ -169,12 +184,60 @@ function mainHtml(m, render) {
     return `<h1>Edits</h1><p class="summary">${total ? `${total} agent edit${total === 1 ? "" : "s"} in ${m.edits.length} file${m.edits.length === 1 ? "" : "s"} wait for your review. Open a file: its changes are marked in the editor, to accept or undo.` : "Every agent edit is reviewed."}</p>
     <button class="btn" data-cmd="imprimatur.openGraph">Review all in the change graph</button><div class="rows" style="margin-top:14px">${rows}</div>`;
   }
+  if (m.area === "exercises") return exercisesHtml(m.exercises, render);
+  if (m.area === "meetings") return meetingsHtml(m.meetings, render);
+  if (m.area === "social") return readingHtml(m.reading, render);
   if (m.area === "setup") {
     return `<h1>Setup</h1><p class="summary">How the agent is set up here: its files, skills, hooks and MCP servers, and what to improve.</p>
     <div class="rows"><div class="row" data-cmd="imprimatur.setup.focus"><span class="key">⚙</span><span><b>Agent setup</b><br><span class="ptr">The checklist of what is missing or out of date, in the side bar</span></span></div>
     <div class="row" data-task="RECS"><span class="key">${m.setup.recommendations}</span><span><b>Recommendations</b><br><span class="ptr">Open recommendations for the agent setup and the project</span></span></div></div>`;
   }
   return "";
+}
+
+const KIND = { learn: "Learn", example: "Example", predict: "Predict", do: "Do", vary: "Vary", explain: "Explain", recall: "Recall" };
+
+/** Exercises (#202, from the old tab of #108): recalls due today, each going exercise's steps to tick, the finished ones. @param {any} x exerciseModel's result @param {(md: string) => string} render */
+function exercisesHtml(x, render) {
+  const recall = x.reviews.length ? `<h2 class="sub">Recall today · ${x.reviews.length}</h2><p class="summary">Say or write each one without your notes, then mark how it went.</p><div class="rows">${x.reviews.map((/** @type {any} */ r) =>
+    `<div class="row rec"><span><b>${render(String(r.prompt))}</b><span class="ptr">${esc(r.topic)}</span></span><span style="margin-left:auto;white-space:nowrap">${[["right", "Got it"], ["partly", "Partly"], ["missed", "Missed"]].map(([k, l]) => `<button class="btn small" data-ex="exReview" data-id="${r.id}" data-result="${k}">${l}</button>`).join(" ")}</span></div>`).join("")}</div>` : "";
+  const step = (/** @type {any} */ e, /** @type {any} */ s) => {
+    const done = s.status === "done", split = e.split.has(s.id);
+    const box = split ? `<span class="box split" title="Done when its smaller steps are">${done ? "✓" : ""}</span>`
+      : `<button class="box" data-ex="exStep" data-id="${s.id}" data-status="${done ? "open" : "done"}" aria-label="${done ? "Open again" : "Mark as done"}">${done ? "✓" : ""}</button>`;
+    const acts = !split && s.status === "open" ? `<button class="link" data-ex="exStep" data-id="${s.id}" data-status="skipped" title="Skip it; say why in its note">skip</button>`
+      : s.status === "skipped" ? `<button class="link" data-ex="exStep" data-id="${s.id}" data-status="open">undo skip</button>` : "";
+    const why = [["Why", s.why], ["Done when", s.done_when], ["Note", s.note]].filter(([, v]) => v).map(([l, v]) => `<div class="why"><b>${l}</b> ${render(String(v))}</div>`).join("");
+    const note = `<details><summary class="ptr">${s.note ? "Edit the note" : "Add a note"}</summary><form class="editor" data-exnote="${s.id}"><textarea name="text" rows="2" maxlength="4000">${esc(s.note ?? "")}</textarea><button class="btn small" type="submit">Save</button></form></details>`;
+    return `<div class="step${done ? " done" : ""}${s.status === "skipped" ? " skipped" : ""}${s.parent_id ? " sub" : ""}${e.now?.id === s.id ? " now" : ""}">${box}<div class="col"><span class="ttl">${render(String(s.title))}</span> <span class="tag">${esc(/** @type {any} */ (KIND)[s.kind] ?? s.kind)}</span>${s.minutes ? ` <span class="ptr">${s.minutes} min</span>` : ""}${e.now?.id === s.id ? ' <span class="tag">now</span>' : ""} ${acts}${why}${note}</div></div>`;
+  };
+  const card = (/** @type {any} */ e) => {
+    const pct = e.total ? Math.round((e.closed / e.total) * 100) : 0;
+    return `<section class="xcard"><h2>${esc(e.topic)}<span class="ptr">${e.closed} / ${e.total} steps</span><button class="link" data-ex="exDrop" data-id="${e.id}" title="Give up on it; it stays under Finished">drop</button></h2>
+      <div class="bar" role="progressbar" aria-label="${esc(e.topic)} progress" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div style="width:${pct}%"></div></div>
+      ${e.goal ? `<div class="why"><b>Goal</b> ${render(String(e.goal))}</div>` : ""}${e.proof ? `<div class="why"><b>Checked by</b> ${render(String(e.proof))}</div>` : ""}
+      ${e.steps.map((/** @type {any} */ s) => step(e, s)).join("")}
+      ${e.weak?.length ? `<div class="why"><b>Weak points</b><ul>${e.weak.map((/** @type {any} */ w) => `<li>${esc(typeof w === "string" ? w : w.front)}</li>`).join("")}</ul></div>` : ""}</section>`;
+  };
+  const finished = x.finished.length ? `<details><summary><b>Finished · ${x.finished.length}</b></summary><div class="rows">${x.finished.map((/** @type {any} */ e) =>
+    `<div class="row rec"><span class="tag">${esc(e.status)}</span><span><b>${esc(e.topic)}</b> <span class="ptr">${e.closed ?? 0} / ${e.step_count ?? 0} steps</span></span>${e.status === "dropped" ? `<button class="link" data-ex="exResume" data-id="${e.id}">resume</button>` : ""}</div>`).join("")}</div></details>` : "";
+  return `<h1>Exercises</h1><p class="summary">Any topic in small steps you tick. Start one in Claude Code: <code>/exercise &lt;topic&gt;</code>.</p>${recall}
+  ${x.active.length ? x.active.map(card).join("") : '<div class="empty">No exercise going. Type /exercise and a topic in Claude Code.</div>'}${finished}`;
+}
+
+/** Meetings (#202, from the old tab of #169): newest first by month, each with its decisions, to-dos and note. @param {any[]} list meetingsModel's meetings @param {(md: string) => string} render */
+function meetingsHtml(list, render) {
+  const top = `<h1>Meetings</h1><p class="summary">What was decided and what you took on, meeting by meeting.</p>`;
+  if (!list.length) return `${top}<div class="empty">No meetings in this repo yet. A meeting app writes them as meeting records.</div>`;
+  const items = (/** @type {any[]} */ xs) => (xs.length ? `<ul>${xs.map((k) => `<li>${k.status === "done" ? "✓ " : ""}${esc(k.title)}${k.owner === "K" ? ' <span class="tag">You</span>' : ""}</li>`).join("")}</ul>` : '<div class="none">None</div>');
+  /** @type {Map<string, any[]>} */ const byMonth = new Map();
+  for (const x of list) byMonth.set(x.month, [...(byMonth.get(x.month) ?? []), x]);
+  return top + [...byMonth].map(([month, xs]) => `<h2 class="sub">${esc(month)}</h2>${xs.map((x) => {
+    const mine = x.todos.filter((/** @type {any} */ k) => k.owner === "K" && k.status !== "done").length;
+    return `<details class="meet"><summary><b>${x.dd} ${esc(x.mon)}</b><span><b>${esc(x.title)}</b>${x.gist ? `<br><span class="ptr">${esc(x.gist)}</span>` : ""}</span><span class="ptr" style="margin-left:auto">${x.decisions.length} decisions${mine ? ` · ${mine} yours` : ""}</span></summary>
+      <div class="mbody"><div class="cols"><div><b>Decisions</b>${items(x.decisions)}</div><div><b>To-dos</b>${items(x.todos)}</div></div>
+      <p class="ptr"><a href="#" data-task="${esc(x.task.key)}">${esc(x.task.key)}</a></p>${x.body ? `<details><summary>Full note</summary>${render(String(x.body))}</details>` : ""}</div></details>`;
+  }).join("")}`).join("");
 }
 
 const STATUS = { open: "open", active: "claimed", done: "resolved", dropped: "dropped" };
@@ -203,7 +266,7 @@ function taskPageHtml(p, render) {
  */
 function appHtml(m, o) {
   const nav = m.areas.map((/** @type {any} */ a) => `<button data-go="${esc(a.id)}" class="${a.id === m.area ? "on" : ""}" title="g ${esc(a.key)}">${esc(a.label)}<kbd>g ${esc(a.key)}</kbd></button>`).join("")
-    + `<div class="more">More</div>` + m.more.map((/** @type {any} */ x) => `<button class="sub" data-cmd="${esc(x.command)}">${esc(x.label)}</button>`).join("");
+    + `<div class="more">More</div>` + m.more.map((/** @type {any} */ x) => `<button class="sub${x.id === m.area ? " on" : ""}" data-go="${esc(x.id)}">${esc(x.label)}</button>`).join("");
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${o.cspSource} https: data:; style-src 'unsafe-inline'; script-src 'nonce-${o.nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Imprimatur</title><style>${CSS}</style></head><body>
