@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.146.0] - 2026-11-10
+
+### Added
+- Matt Pocock's skills come with Imprimatur (#183): `/to-spec`, `/to-tickets`, `/wayfinder`, `/grill-with-docs`, `/grill-me`, `/grilling`, `/domain-modeling`, `/research`, `/triage`, `/prototype`, `/codebase-design`, `/implement`, `/implement-spec`, `/tdd`, `/code-review`, `/improve-codebase-architecture`, `/ask-matt`, `/handoff`, `/to-questionnaire`. Their text is his; they use Imprimatur as the issue tracker. `/to-spec` asks for your approval at each step: stories, design, an analysis of gaps, then tickets.
+
+### Removed
+- The `analysis` skill: a task's spec is written with `/to-spec` now.
+
 ## [0.145.0] - 2026-11-10
 
 ### Added
