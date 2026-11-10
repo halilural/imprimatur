@@ -23,6 +23,15 @@ const statusOf = (status) => (status === "active" ? "claimed" : status === "done
 /** A task's status from a ticket's Status line; undefined: not one of Pocock's. @param {string} s */
 const taskStatusOf = (s) => ({ open: "open", claimed: "active", resolved: "done" })[/** @type {"open"} */ (String(s).trim().toLowerCase())];
 
+/** Whether a path is a symbolic link (never followed for a write or a delete). @param {string} f */
+const isLink = (f) => {
+  try {
+    return fs.lstatSync(f).isSymbolicLink();
+  } catch {
+    return false;
+  }
+};
+
 /** Whether the repo keeps .scratch/ in git. @param {string} root */
 function committed(root) {
   return require("./docs-export.js").repoSettings(root)?.scratch?.commit === true;
@@ -80,10 +89,24 @@ function writeOne(db, repo, root, rel, make, take, changedAt, keep, io) {
   db.setMeta(metaKey(repo.id, rel), JSON.stringify({ hash: hash(want), at: Date.now() }));
   if (old === want) return false;
   fs.mkdirSync(path.dirname(f), { recursive: true });
+  // Made just now (or raced): checked again.
+  if (!io.inside(f)) return false;
   const tmp = `${f}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, want);
   fs.renameSync(tmp, f);
   return true;
+}
+
+/**
+ * A generated document file's edited sections into the database: a title or body that differs.
+ * @param {any} db @param {number} docId @param {string} text @param {any} actor
+ */
+function takeSections(db, docId, text, actor) {
+  const now = new Map(db.docSections(docId).map((/** @type {any} */ s) => [s.key, s]));
+  for (const s of require("./docs-sync.js").parseManaged(text)) {
+    const cur = now.get(s.key);
+    if (cur && (cur.title !== s.title || String(cur.body ?? "").trim() !== s.body.trim())) db.upsertSection(docId, s.key, { title: s.title, body: s.body || null }, actor);
+  }
 }
 
 /**
@@ -95,7 +118,6 @@ function exportScratch(db, repo, root, io) {
   const docs = db.q("SELECT * FROM documents WHERE repo_id = ? AND kind IN ('spec', 'map') ORDER BY scope, kind").all(repo.id);
   if (!docs.length) return [];
   const { docMarkdown } = require("./docs-export.js");
-  const { parseManaged } = require("./docs-sync.js");
   const actor = { kind: /** @type {const} */ ("import"), name: "scratch" };
   const written = [];
   const dir = path.join(root, DIR);
@@ -103,8 +125,9 @@ function exportScratch(db, repo, root, io) {
   fs.mkdirSync(dir, { recursive: true });
   // Out of git unless the repo keeps it.
   const ignore = path.join(dir, ".gitignore");
+  if (!io.inside(ignore)) return [];
   if (committed(root)) fs.rmSync(ignore, { force: true });
-  else if (!fs.existsSync(ignore)) fs.writeFileSync(ignore, "# Written by Imprimatur: .scratch/ stays out of git unless .claude/imprimatur.json says {\"scratch\": {\"commit\": true}}.\n*\n");
+  else if (!fs.existsSync(ignore) && !isLink(ignore)) fs.writeFileSync(ignore, "# Written by Imprimatur: .scratch/ stays out of git unless .claude/imprimatur.json says {\"scratch\": {\"commit\": true}}.\n*\n");
   const tasks = new Set();
   for (const doc of docs) {
     const task = db.taskByKey(repo.id, doc.scope);
@@ -112,13 +135,7 @@ function exportScratch(db, repo, root, io) {
     tasks.add(doc.scope);
     const rel = path.join(DIR, folder, `${doc.kind}.md`);
     const note = (/** @type {string} */ text) => task && db.addRecord(task.id, { kind: "note", title: `${rel}: an edit of the file was not taken, the ${doc.kind} changed too`, body: text }, actor);
-    const take = (/** @type {string} */ text) => {
-      const now = new Map(db.docSections(doc.id).map((/** @type {any} */ s) => [s.key, s]));
-      for (const s of parseManaged(text)) {
-        const cur = now.get(s.key);
-        if (cur && (cur.title !== s.title || String(cur.body ?? "").trim() !== s.body.trim())) db.upsertSection(doc.id, s.key, { title: s.title, body: s.body || null }, actor);
-      }
-    };
+    const take = (/** @type {string} */ text) => takeSections(db, doc.id, text, actor);
     if (writeOne(db, repo, root, rel, () => docMarkdown(db, doc.id), take, () => db.docById(doc.id).updated_at, note, io)) written.push(path.join(root, rel));
   }
   // The tickets: the children of each task that has a spec or a map, numbered in key order.
@@ -144,10 +161,11 @@ function exportScratch(db, repo, root, io) {
     }
     // A ticket renamed or renumbered: its old generated file goes.
     const issues = path.join(root, DIR, folderOf(key), "issues");
-    if (fs.existsSync(issues))
+    if (fs.existsSync(issues) && io.inside(path.join(issues, "x")))
       for (const name of fs.readdirSync(issues)) {
         if (want.has(name) || !/^\d{2}-.*\.md$/.test(name)) continue;
         const f = path.join(issues, name);
+        if (isLink(f)) continue;
         try {
           if (io.generatedText(fs.readFileSync(f, "utf8"))) fs.rmSync(f);
         } catch {}
@@ -156,4 +174,4 @@ function exportScratch(db, repo, root, io) {
   return written;
 }
 
-module.exports = { exportScratch, ticketText, parseTicket, folderOf, statusOf, DIR };
+module.exports = { exportScratch, writeOne, takeSections, ticketText, parseTicket, folderOf, statusOf, DIR };
