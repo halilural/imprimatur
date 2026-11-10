@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 
 const req = createRequire(import.meta.url);
 const { openDb } = req("../vscode/db.js");
-const tv = req("../vscode/tasksView.js");
+const tv = req("../vscode/inbox.js");
 
 const AGENT = { kind: "agent", id: "claude-code:s1" };
 const USER = { kind: "user", id: "me" };
@@ -29,55 +29,6 @@ function seed() {
   return { dir, file, db, root, repo, task, q, todo, dec };
 }
 const answersOf = (s) => s.db.recordsOf(s.task.id).filter((r) => r.kind === "answer");
-
-test("review 1: an answer and its question's done commit together, or neither", () => {
-  const s = seed();
-  const update = s.db.updateRecord;
-  s.db.updateRecord = () => {
-    throw new Error("disk full");
-  };
-  try {
-    assert.throws(() => tv.applyMessage(s.db, { type: "answer", id: s.q.id, text: "This one" }, USER), /disk full/);
-  } finally {
-    s.db.updateRecord = update;
-  }
-  assert.deepEqual(answersOf(s), [], "no answer left without its question closed");
-  assert.equal(s.db.record(s.q.id).status, "open");
-  const a = tv.applyMessage(s.db, { type: "answer", id: s.q.id, text: "This one" }, USER);
-  assert.equal(a.parent_id, s.q.id);
-  assert.equal(s.db.record(s.q.id).status, "done");
-});
-
-test("review 2: only an open question takes an answer", () => {
-  const s = seed();
-  assert.throws(() => tv.applyMessage(s.db, { type: "answer", id: s.todo.id, text: "x" }, USER), /is a todo, not a question/);
-  tv.applyMessage(s.db, { type: "answer", id: s.q.id, text: "first" }, USER);
-  assert.throws(() => tv.applyMessage(s.db, { type: "answer", id: s.q.id, text: "again" }, USER), /is done, not open/);
-  assert.equal(answersOf(s).length, 1);
-});
-
-test("review 3: record actions are looked up as own keys only", () => {
-  const s = seed();
-  for (const op of ["constructor", "__proto__", "toString", "hasOwnProperty"])
-    assert.throws(() => tv.applyMessage(s.db, { type: "rec", id: s.todo.id, op }, USER), /unknown record action/, op);
-  assert.equal(s.db.record(s.todo.id).status, "open");
-});
-
-test("review 4: text must be a string; the title is cut at 300, the rest kept in the body (at most 20k)", () => {
-  const s = seed();
-  assert.throws(() => tv.applyMessage(s.db, { type: "answer", id: s.q.id, text: { a: 1 } }, USER), /empty/);
-  assert.throws(() => tv.applyMessage(s.db, { type: "add", task: s.task.id, text: ["? x"] }, USER), /nothing to add/);
-  assert.equal(tv.parseQuickAdd(42), undefined);
-  const long = "x".repeat(1000);
-  const added = tv.applyMessage(s.db, { type: "add", task: s.task.id, text: long }, USER);
-  assert.equal(added.title.length, tv.TITLE_MAX);
-  assert.equal(added.body, long, "the whole text in the body");
-  const huge = `title\n${"y".repeat(30_000)}`;
-  const a = tv.applyMessage(s.db, { type: "answer", id: s.q.id, text: huge }, USER);
-  assert.equal(a.title, "title");
-  assert.equal(a.body.length, tv.BODY_MAX);
-  assert.deepEqual(tv.splitText("one line"), { title: "one line" });
-});
 
 test("review 5 + 6: a scoped inbox asks for its repo (complete past any limit) and one count serves everyone", () => {
   const s = seed();
@@ -116,58 +67,4 @@ test("review 7: a Jira key is matched as text, not as a pattern", () => {
   } finally {
     records.reset();
   }
-});
-
-test("review 8: the hidden tab's table says it loads, not empty; a stale pane is dimmed", () => {
-  const Module = req("node:module");
-  const load = Module._load;
-  Module._load = function (r, ...a) {
-    return r === "vscode" ? { window: {}, workspace: {}, commands: {}, env: {}, Uri: {} } : load.call(this, r, ...a);
-  };
-  try {
-    const { html } = req("../vscode/graphView.js");
-    const data = { rows: [{ file: "a.md", n: 1, t: Date.now(), added: 1, removed: 0, lane: 0 }], lanes: [{ first: 0, last: 0 }], sessions: [] };
-    const onTasks = html(data, "/tmp/x", "N", [], { view: { tab: "tasks" }, pane: "<div data-k='x'></div>" });
-    assert.match(onTasks.split('<section id="edits"')[1].split("</tbody>")[0], /Loading…/);
-    assert.ok(!onTasks.includes('<section id="waiting"'), "turn-end asks are cards in Waiting on you, no table");
-    const onEdits = html(data, "/tmp/x", "N", [], { view: { tab: "edits" } });
-    assert.match(onEdits.split('<section id="pane"')[1].split("</section>")[0], /Loading…/);
-    assert.match(onEdits, /#pane\.stale::before/);
-    assert.match(onEdits, /paneEl\.className = "stale"/);
-  } finally {
-    Module._load = load;
-  }
-});
-
-test("review 9: a todo of yours shows in both lists with distinct ids; a link lights the todo row", () => {
-  const s = seed();
-  const page = tv.paneHtml(s.db, s.root, { tab: "tasks", sel: s.task.id, flash: s.todo.id });
-  const ids = [...page.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(ids.filter((id, i) => ids.indexOf(id) !== i), [], "no id twice");
-  assert.ok(ids.includes(`ask-${s.todo.id}`) && ids.includes(`rec-${s.todo.id}`));
-  assert.match(page, new RegExp(`class="trec flash" id="rec-${s.todo.id}"`));
-  assert.doesNotMatch(page, new RegExp(`flash" id="ask-${s.todo.id}"`));
-});
-
-test("review 10: the list and decision authors are read once per database change", () => {
-  const s = seed();
-  let reads = 0;
-  let versions = 0;
-  const all = s.db.recordsOfRepo.bind(s.db);
-  s.db.recordsOfRepo = (id) => (reads++, all(id));
-  const versionsOf = s.db.versionsOf.bind(s.db);
-  s.db.versionsOf = (id) => (versions++, versionsOf(id));
-  const page = () => tv.tasksPage(s.db, s.root, { sel: s.task.id });
-  assert.equal(page().cur.decisions[0].who, "you");
-  page();
-  assert.equal(reads, 1, "the second draw reads nothing again");
-  assert.equal(versions, 0, "authors in one query, not one per decision");
-  s.db.addRecord(s.task.id, { kind: "note", title: "new" }, AGENT);
-  page();
-  assert.equal(reads, 2, "a write through this connection is seen");
-  const other = openDb({ path: s.file });
-  other.addRecord(s.task.id, { kind: "note", title: "from another connection" }, AGENT);
-  other.close();
-  assert.ok(page().groups[0].tasks[0].q.includes("from another connection"), "a write elsewhere is seen");
-  assert.equal(reads, 3);
 });

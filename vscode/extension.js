@@ -8,7 +8,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { review, acceptHunk, acceptLines, acceptGroups } = require("./diff.js");
 const { markdownItPlugin, markdownBlocks, reviewHtml } = require("./preview.js");
-const { openGraph, refreshGraph, syncRecords, graphCommands, graphTrusted, setGraphLog, setGraphExtensionUri, setPanelScope, setPanelHooks, panelState, panelMessage, inboxNow: panelInbox, inboxParts } = require("./graphView.js");
+const { inboxNow: panelInbox, inboxParts, syncWaiting } = require("./inbox.js");
+const appPanel = require("./app/panel.js");
 const { acceptEdit, spotsOf, graphRows } = require("./graph.js");
 const { registerSetupView } = require("./setupView.js");
 const { registerRecordCommands } = require("./recordsView.js");
@@ -230,7 +231,7 @@ function acceptEditOf(file, n) {
   renderAll();
   codeLensChanged.fire();
   refreshPreview();
-  refreshGraph();
+  appPanel.refreshApp();
 }
 
 /**
@@ -262,14 +263,17 @@ function graphRoot() {
 }
 
 /**
- * Opens the Imprimatur panel, on a tab or a task (#69), or a document's section (#72).
+ * Opens the Imprimatur panel (#202: the new one; the old panel's tabs map to its areas), on a task
+ * (by key or by one of its records), a document, or an area.
  * @param {{tab?: string, root?: string, task?: string, record?: number, sel?: number | null, section?: string}} [at]
  */
-function showGraph(at) {
-  // A task of a repo not open in this window shows in this window's panel (with every repo on).
-  const root = (at?.root && roots.has(norm(at.root)) ? at.root : undefined) ?? graphRoot();
+function showPanel(at = {}) {
+  const root = (at.root && roots.has(norm(at.root)) ? at.root : undefined) ?? graphRoot();
   if (!root) return void vscode.window.showInformationMessage("Imprimatur: open a folder first, the repo you work on with Claude Code (File → Open Folder).");
-  openGraph(root, openEditDiff, currentText, acceptEditOf, goToEdit, renderEdit, undefined, at);
+  const AREA = /** @type {Record<string, string>} */ ({ edits: "edits", home: "home", tasks: "tasks", architecture: "docs", product: "docs", glossary: "docs", social: "social", meetings: "meetings", exercises: "exercises" });
+  let task = at.task;
+  if (!task && at.record) task = records.dbOf()?.q("SELECT t.key FROM records r JOIN tasks t ON t.id = r.task_id WHERE r.id = ?").get(at.record)?.key;
+  appPanel.openApp({ root, area: task ? "tasks" : AREA[at.tab ?? ""] ?? "home", task, ...(at.tab === "glossary" && { doc: "glossary" }) });
 }
 
 /**
@@ -287,7 +291,7 @@ async function toggleSocial(on) {
   } catch (e) {
     return void vscode.window.showErrorMessage(e instanceof Error ? e.message : String(e));
   }
-  if (on) showGraph({ root, tab: "social" });
+  if (on) vscode.commands.executeCommand("imprimatur.app.open", { root, area: "social" });
   vscode.window.showInformationMessage(on
     ? "Imprimatur: social media tracking is on for this repo: Analysis → Social, kept in docs/SOCIAL.md. Commit .claude/imprimatur.json to keep it on."
     : "Imprimatur: social media tracking is off for this repo. Its document is kept; turning it on again brings it back.");
@@ -335,7 +339,7 @@ async function runBestPractices() {
     for (const d of r.dropped) log.info(`review dropped ${d.category} ${d.key}: ${d.why.join("; ")}`);
     log.info(`review: ${JSON.stringify(r.timings)} ms, ${r.excerpts} excerpts, ${r.kept} kept (${r.merged} merged), $${r.cost.toFixed(2)}`);
     const errors = r.categories.filter((c) => c.error);
-    showGraph({ tab: "tasks", root, task: require("./recs.js").TASK });
+    showPanel({ tab: "tasks", root, task: require("./recs.js").TASK });
     vscode.window.showInformationMessage(`Imprimatur: ${r.added} new, ${r.refreshed} refreshed recommendations in ${Math.round(r.timings.total / 1000)} s. ${r.summary}${errors.length ? `. Failed: ${errors.map((e) => e.category).join(", ")} (Output → Imprimatur)` : ""}`);
   } catch (e) {
     vscode.window.showErrorMessage(`Imprimatur project review failed: ${e instanceof Error ? e.message : e}`);
@@ -344,22 +348,9 @@ async function runBestPractices() {
   }
 }
 
-/** What waits on the user: one count for the launcher, the status bar and the panel (graphView.inboxNow). */
+/** What waits on the user: one count for the launcher, the status bar and the panel (inbox.js). */
 const inboxNow = () => panelInbox(graphRoot());
 
-/**
- * A graph panel open before a reload comes back (WebviewPanelSerializer) with the
- * repo its page saved, if it is still there; else the usual one.
- * @param {vscode.WebviewPanel} panel @param {any} state the page's vscode.setState
- */
-async function restoreGraph(panel, state) {
-  const saved = typeof state?.root === "string" && state.root;
-  const root = saved && (roots.has(norm(saved)) || fs.existsSync(saved)) ? saved : graphRoot();
-  if (!root) return void panel.dispose();
-  // Its tab, task and filters too (#69); graphView keeps only what it knows.
-  const { tab, sel, filter, all, showDone, old } = state ?? {};
-  openGraph(root, openEditDiff, currentText, acceptEditOf, goToEdit, renderEdit, panel, { tab, sel, filter, all, showDone, old });
-}
 
 /** Status bar button, always there like Git Graph's: opens the graph, shows open asks. */
 function updateGraphButton() {
@@ -393,7 +384,7 @@ async function showHistory() {
       description: "copy before the agent's first edit ↔ now",
       open: () => vscode.commands.executeCommand("vscode.diff", historyUri(file, "base", "before"), doc.uri, `${path.basename(file)} · all agent changes`),
     });
-  items.unshift({ label: "$(git-merge) Open Agent Change Graph", description: "every agent edit in this repo", open: async () => showGraph() });
+  items.unshift({ label: "$(git-merge) Open Edits", description: "every agent edit in this repo under review", open: async () => showPanel({ tab: "edits" }) });
   const pick = await vscode.window.showQuickPick(items, { title: `Agent edits · ${path.basename(file)}`, matchOnDescription: true });
   await pick?.open();
 }
@@ -509,7 +500,7 @@ function refreshPreview() {
 function refreshEverything() {
   renderAll();
   updateGraphButton();
-  refreshGraph();
+  appPanel.refreshApp();
   codeLensChanged.fire();
 }
 
@@ -597,7 +588,7 @@ function addFolder(folder, ctx) {
     const flush = () => {
       clearTimeout(waitingTimer);
       waitingFirst = 0;
-      refreshGraph();
+      appPanel.refreshApp();
       updateGraphButton();
     };
     waitingFirst ||= Date.now();
@@ -641,36 +632,37 @@ const exportSoon = require("./docs-export.js").debounce(() => {
 function activate(ctx) {
   log = vscode.window.createOutputChannel("Imprimatur", { log: true });
   ctx.subscriptions.push(log);
-  setGraphLog((msg) => log.info(msg));
-  setGraphExtensionUri(ctx.extensionUri);
   status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
   graphButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 48);
   graphButton.command = "imprimatur.openGraph";
   ctx.subscriptions.push(
     status,
     graphButton,
-    ...Object.entries(graphCommands).map(([id, fn]) => vscode.commands.registerCommand(id, fn)),
     ...Object.values(types),
     vscode.workspace.registerTextDocumentContentProvider(SCHEME, { provideTextDocumentContent: historyContent }),
     vscode.commands.registerCommand("imprimatur.showHistory", showHistory),
-    vscode.commands.registerCommand("imprimatur.openGraph", () => showGraph({ tab: "edits" })),
-    vscode.commands.registerCommand("imprimatur.openHome", () => showGraph({ tab: "home" })),
-    vscode.commands.registerCommand("imprimatur.openTasks", () => showGraph({ tab: "tasks" })),
+    vscode.commands.registerCommand("imprimatur.openGraph", () => showPanel({ tab: "edits" })),
+    vscode.commands.registerCommand("imprimatur.openHome", () => showPanel({ tab: "home" })),
+    vscode.commands.registerCommand("imprimatur.openTasks", () => showPanel({ tab: "tasks" })),
     vscode.commands.registerCommand("imprimatur.bestPractices.run", () => runBestPractices()),
     // Waiting on you is gone (asks are on their task pages): the old command opens Home.
-    vscode.commands.registerCommand("imprimatur.openInbox", () => showGraph({ tab: "home" })),
+    vscode.commands.registerCommand("imprimatur.openInbox", () => showPanel({ tab: "home" })),
     // Design documents (#72): the Architecture, Product and Glossary tabs; docs.reveal opens one on a section.
-    vscode.commands.registerCommand("imprimatur.openArchitecture", () => showGraph({ tab: "architecture" })),
-    vscode.commands.registerCommand("imprimatur.openProduct", () => showGraph({ tab: "product" })),
-    vscode.commands.registerCommand("imprimatur.openGlossary", () => showGraph({ tab: "glossary" })),
-    vscode.commands.registerCommand("imprimatur.openMeetings", () => showGraph({ tab: "meetings" })),
+    vscode.commands.registerCommand("imprimatur.openArchitecture", () => showPanel({ tab: "architecture" })),
+    vscode.commands.registerCommand("imprimatur.openProduct", () => showPanel({ tab: "product" })),
+    vscode.commands.registerCommand("imprimatur.openGlossary", () => showPanel({ tab: "glossary" })),
+    vscode.commands.registerCommand("imprimatur.openMeetings", () => vscode.commands.executeCommand("imprimatur.app.open", { area: "meetings" })),
     // Social media (#109): off by default, per repo, in .claude/imprimatur.json.
-    vscode.commands.registerCommand("imprimatur.openSocial", () => showGraph({ tab: "social" })),
+    // The new panel's Edits (#202): one agent edit accepted, its diff, or the file at it; not in the palette.
+    vscode.commands.registerCommand("imprimatur.edit.accept", (/** @type {string} */ file, /** @type {number} */ n) => acceptEditOf(file, n)),
+    vscode.commands.registerCommand("imprimatur.edit.diff", (/** @type {string} */ file, /** @type {number} */ n) => openEditDiff(file, n)),
+    vscode.commands.registerCommand("imprimatur.edit.go", (/** @type {string} */ file, /** @type {number} */ n) => goToEdit(file, n)),
+    vscode.commands.registerCommand("imprimatur.openSocial", () => vscode.commands.executeCommand("imprimatur.app.open", { area: "social" })),
     vscode.commands.registerCommand("imprimatur.social.on", () => toggleSocial(true)),
     vscode.commands.registerCommand("imprimatur.social.off", () => toggleSocial(false)),
     vscode.commands.registerCommand("imprimatur.docs.reveal", (/** @type {{root?: string, kind?: string, section?: string}} */ at) => {
       const kind = at?.kind === "product" || at?.kind === "glossary" || at?.kind === "social" ? at.kind : "architecture";
-      return showGraph({ root: at?.root, tab: kind, ...(typeof at?.section === "string" && { section: at.section }) });
+      return showPanel({ root: at?.root, tab: kind, ...(typeof at?.section === "string" && { section: at.section }) });
     }),
     vscode.commands.registerCommand("imprimatur.acceptRange", acceptRange),
     // Process checks (#56): a repo turns them on with a committed .claude/imprimatur.json.
@@ -790,11 +782,10 @@ function activate(ctx) {
   );
   for (const f of vscode.workspace.workspaceFolders ?? []) addFolder(f, ctx);
   ctx.subscriptions.push(
-    vscode.window.registerWebviewPanelSerializer("imprimatur.graph", { deserializeWebviewPanel: restoreGraph }),
     // Trusted now: what was skipped (descriptions, the first scan) may run.
     vscode.workspace.onDidGrantWorkspaceTrust(() => {
       log.info("workspace trusted: model calls allowed");
-      graphTrusted();
+      appPanel.refreshApp();
       refreshEverything();
     }),
   );
@@ -837,7 +828,7 @@ function activate(ctx) {
         // The preview re-renders a changed document by itself; no extra refresh here.
         if (copy && fs.existsSync(copy)) {
           codeLensChanged.fire();
-          refreshGraph();
+          appPanel.refreshApp();
         }
       }, 150);
     }),
@@ -944,21 +935,12 @@ function activate(ctx) {
     }
   }));
   try {
-    // The repos as git spells them: roots are normalised (lower case on Windows).
-    // The panel's "every repo" switch, kept per workspace as the record views kept it.
-    setPanelScope({
-      get: () => ctx.workspaceState.get("imprimatur.records.allRepos", false),
-      set: (v) => {
-        ctx.workspaceState.update("imprimatur.records.allRepos", v);
-        // The counts follow the panel's scope.
-        setTimeout(updateGraphButton);
-      },
-    });
     recordCommands = registerRecordCommands(
       ctx,
       (msg) => log.warn(msg),
       () => {
-        syncRecords();
+        syncWaiting(graphRoot());
+        appPanel.refreshApp();
         updateGraphButton();
         exportSoon();
         try {
@@ -977,14 +959,14 @@ function activate(ctx) {
           trackerQueued = n;
         } catch {}
       },
-      (at) => showGraph({ ...at, tab: "tasks" }),
-      (all) => panelMessage({ type: "view", view: { all } }),
+      (at) => showPanel({ ...at, tab: "tasks" }),
+      () => {},
     );
     // While the panel is visible, a 500 ms look at the database backs up the file watcher;
     // a write from the page draws through the same look, once (#71).
     const rc = recordCommands;
-    setPanelHooks({ visible: (v) => (v ? rc.backstop.start() : rc.backstop.stop()), afterWrite: () => rc.changed(true) });
-    if (panelState().visible) rc.backstop.start();
+    appPanel.setAppVisible((v) => (v ? rc.backstop.start() : rc.backstop.stop()));
+    if (appPanel.appState().visible) rc.backstop.start();
     // #124: keys and tokens out of config.json into secrets.json, for the readers that take them there.
     try {
       const db = records.dbOf();
@@ -1003,6 +985,10 @@ function activate(ctx) {
     log.error(`records: ${e instanceof Error ? e.message : e}`);
   }
   // The side bar's launcher (#69): the panel's tabs, what waits on the user as its badge.
+  // The new panel (#195): Home, Tasks, Docs, Edits, Setup; the old one stays until #201.
+  appPanel.registerApp(ctx);
+  // What the agent did and decided about the open file (#200).
+  require("./currentFile.js").registerCurrentFile(ctx);
   launcher = registerLauncher(ctx, () => {
     const root = graphRoot();
     if (!root) return { edits: 0, inbox: 0 };
@@ -1053,8 +1039,7 @@ function activate(ctx) {
     recordUi: recordCommands?.ui,
     // #71: the database backstop poll, running only while the panel is visible.
     backstop: recordCommands?.backstop,
-    panelState,
-    panelMessage,
+    appState: appPanel.appState,
     launcher,
     // #114: a write under .claude/imprimatur/ as the watcher sees it (its events are not reliable in tests).
     watchChanged: (/** @type {string} */ file) => {

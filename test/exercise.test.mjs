@@ -15,12 +15,10 @@ const load = Module._load;
 Module._load = function (r, ...a) {
   return r === "vscode" ? {} : load.call(this, r, ...a);
 };
-const tasksView = req("../vscode/tasksView.js");
-const { exerciseModel, exerciseHtml } = req("../vscode/exerciseView.js");
+const { exerciseModel, applyExerciseMessage } = req("../vscode/exercises.js");
 Module._load = load;
 
 const tmp = () => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-108-")));
-const user = { kind: "user", id: "me" };
 const steps = [
   { kind: "learn", title: "Read JEP 444", why: "See the problem", done_when: "Two sentences written", minutes: 15 },
   { kind: "predict", title: "Predict the timings" },
@@ -114,37 +112,6 @@ test("MCP: exercise_save and exercise_get, with the text the agent reads", () =>
   assert.throws(() => callTool(db, "exercise_save", { topic: "t", repo: "/x" }), /unknown argument "repo"/, "no repo: exercises are the user's");
 });
 
-test("the Exercises tab: the now step, split and skip, notes; its writes; finished ones below", () => {
-  const db = openDb({ path: path.join(tmp(), "i.db") });
-  assert.match(tasksView.paneHtml(db, "/any/repo", { tab: "exercises" }), /No exercise going/);
-  const e = db.saveExercise({ topic: "Virtual <threads>", goal: "Explain & measure", steps });
-  const [read, predict, recall] = e.steps;
-  db.saveExercise({ id: e.id, steps: [{ parent_id: predict.id, title: "Platform pool" }] });
-  tasksView.applyMessage(db, { type: "exStep", id: read.id, status: "done" }, user);
-  tasksView.applyMessage(db, { type: "exNote", id: read.id, text: "Two sentences: <done>" }, user);
-  const html = tasksView.paneHtml(db, "/any/repo", { tab: "exercises" });
-  assert.ok(html.includes("Virtual &lt;threads&gt;") && html.includes("Explain &amp; measure") && html.includes("Two sentences: &lt;done&gt;"), "text is escaped");
-  assert.equal((html.match(/> now<\/span>/g) ?? []).length, 1, "one now step");
-  const sub = db.exercise(e.id).steps.find((s) => s.parent_id);
-  assert.match(html, new RegExp(`id="xs-${sub.id}"[^>]*>.*?</li>`), "the smaller step is listed");
-  assert.ok(html.includes(`data-k="x${e.id}" `) && html.includes(`data-draft="exnote-${read.id}"`), "a stable card key; notes kept as drafts over redraws");
-  assert.match(html, new RegExp(`class="xstep sub now"[^>]*id="xs-${sub.id}"`), "the smaller step is now, not the split one");
-  assert.ok(!html.includes(`data-act="exStep" data-id="${predict.id}" data-status="done"`), "a split step has no box of its own");
-  assert.ok(html.includes(`/exercise split step ${recall.id} of exercise ${e.id}`), "an open step can be split");
-  assert.ok(!html.includes(`split step ${sub.id} `), "a smaller step cannot");
-  assert.throws(() => tasksView.applyMessage(db, { type: "exStep", id: recall.id, status: "gone" }, user), /bad step status/);
-  assert.throws(() => tasksView.applyMessage(db, { type: "exNote", id: recall.id, text: "x".repeat(4001) }, user), /bad note/);
-
-  tasksView.applyMessage(db, { type: "exDrop", id: e.id }, user);
-  let m = exerciseModel(db);
-  assert.deepEqual([m.active.length, m.finished.map((x) => x.status)], [0, ["dropped"]]);
-  assert.match(exerciseHtml(m), /Finished <span class="dim">· 1<\/span>[\s\S]*data-act="exResume"/);
-  tasksView.applyMessage(db, { type: "exResume", id: e.id }, user);
-  m = exerciseModel(db);
-  assert.equal(m.active.length, 1);
-  assert.deepEqual(tasksView.cleanView({ tab: "exercises" }), { tab: "exercises" });
-});
-
 test("the /exercise skill: its name, the tools it names, and the rules that make it work", () => {
   const md = fs.readFileSync(new URL("../skills/exercise/SKILL.md", import.meta.url), "utf8");
   assert.match(md, /^---\nname: exercise\ndescription: .+\n---\n/);
@@ -187,7 +154,7 @@ test("v2 recalls: weak points and a finished exercise come back; right, partly a
   assert.deepEqual(db.reviewCounts(t1), { due: 1, next: null });
 });
 
-test("v2 MCP and panel: exercise_review lists and records; the tab and Home show today's recalls; links open", () => {
+test("v2 MCP: exercise_review lists and records; the model has today's recalls; a grade from the page; links open", () => {
   const db = openDb({ path: path.join(tmp(), "i.db") });
   const e = db.saveExercise({ topic: "VT", goal: "Read [JEP 444](https://openjdk.org/jeps/444) and run `~/vt/Demo.java:12`", weak: ["carrier `src/Main.java:3`"] });
   db.sqlite.prepare("UPDATE exercise_reviews SET due_at = ?").run(Date.now() - 1000);
@@ -199,14 +166,9 @@ test("v2 MCP and panel: exercise_review lists and records; the tab and Home show
   assert.throws(() => callTool(db, "exercise_review", { id: 1, result: "nah" }), /must be one of/);
 
   db.sqlite.prepare("UPDATE exercise_reviews SET due_at = ?").run(Date.now() - 1000);
-  const html = tasksView.paneHtml(db, "/any/repo", { tab: "exercises" });
-  assert.match(html, /Recall today <span class="dim">· 1<\/span>[\s\S]*data-act="exReview"[^>]*data-result="missed"/);
-  assert.match(html, /<a href="https:\/\/openjdk.org\/jeps\/444">JEP 444<\/a>/, "a link in the goal is clickable");
-  assert.match(html, /data-act="exOpen" data-file="~\/vt\/Demo.java" data-line="12"/, "a path from the home opens");
-  assert.match(html, /data-act="exOpen" data-file="src\/Main.java" data-line="3"/);
-  assert.match(tasksView.homeHtml(tasksView.homeModel(db, "/any/repo")), /1 recall due today/);
-  tasksView.applyMessage(db, { type: "exReview", id: list.reviews[0].id, result: "missed" }, user);
+  assert.equal(exerciseModel(db).reviews.length, 1);
+  applyExerciseMessage(db, { type: "exReview", id: list.reviews[0].id, result: "missed" });
   assert.equal(db.reviews({ upcoming: true })[0].lapses, 1);
-  assert.throws(() => tasksView.applyMessage(db, { type: "exReview", id: 1, result: "maybe" }, user), /bad recall result/);
+  assert.throws(() => applyExerciseMessage(db, { type: "exReview", id: 1, result: "maybe" }), /bad recall result/);
   assert.ok(e.id);
 });

@@ -649,7 +649,10 @@ function nextReady(db, repoId, now = Date.now()) {
     const t = db.q("SELECT status FROM tasks WHERE repo_id = ? AND key = ?").get(repoId, key);
     return !t || t.status === "done" || t.status === "dropped";
   };
-  const next = leaves.sort((a, b) => num(a) - num(b)).find((t) => blockersOf(t).every(closed));
+  // A task whose 👉 is the user's (owner K, or an open question to them) waits on them, not on the agent.
+  const waitsOnUser = (/** @type {any} */ t) => !!db.q(`SELECT 1 FROM records WHERE task_id = ? AND status = 'open'
+                                                         AND ((pointer = 1 AND owner = 'K') OR kind = 'question') LIMIT 1`).get(t.id);
+  const next = leaves.sort((a, b) => num(a) - num(b)).find((t) => blockersOf(t).every(closed) && !waitsOnUser(t));
   return next ? { epic, next } : undefined;
 }
 

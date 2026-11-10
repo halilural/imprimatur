@@ -4,6 +4,80 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.159.0] - 2026-11-10
+
+### Removed
+- The old panel is gone (#202): the new one is the only Imprimatur panel. Every command that opened the old one (Agent Change Graph, Home, Tasks, Architecture, Product, Glossary, Meetings, Social) opens the new panel at the matching place. Gone with it: answering and ticking records in the panel, the 30-day agent stats, New task, the full call timeline with turn ticks, and the automatic history scan on first open.
+
+### Changed
+- The new panel redraws by itself when the database changes (an agent's record, another window), in a few milliseconds.
+
+## [0.158.0] - 2026-11-10
+
+### Changed
+- Edits in the new panel reviews one agent edit at a time (#202): open a file's row to see its edits under review, newest first, each with Accept, Diff and Go.
+
+## [0.157.0] - 2026-11-10
+
+### Changed
+- Exercises, Meetings and Social open in the new panel, under More (#202): tick, skip and note an exercise's steps and grade today's recalls there; meetings by month with their decisions and to-dos; Social shows only where it is turned on. The old panel is still there for the full change graph.
+
+### Fixed
+- The agent no longer goes back on its own to a task that waits on you (its 👉 is your to-do, or a question to you is open).
+
+## [0.156.0] - 2026-11-10
+
+### Changed
+- The new panel is the default (#201): the side bar's **Home** opens it, with what is waiting on you still under it. The side bar keeps Home, Agent changes and Setup checklist; Tasks, Architecture, Product, Glossary and Meetings live in the new panel. The command palette shows 21 Imprimatur commands instead of 37; the rest stay in their views' menus or moved into the new panel. The old panel's code goes once Exercises, Meetings, Social and the change graph move over (#202).
+
+## [0.155.0] - 2026-11-10
+
+### Added
+- Edits and Setup in the new panel (#199): Edits lists the files with agent edits still waiting for your review, newest first; open one and its changes are marked in the editor, or review them all in the change graph. Setup leads to the agent setup checklist and the open recommendations.
+
+## [0.154.0] - 2026-11-10
+
+### Added
+- **Current File** in the side bar (#200): for the file open in the editor, the decisions and records that name it (ADRs first), the agent's edits to it, and the document sections read from it.
+
+### Security
+- A gate approval counts only when every change to its record was yours, and it is marked done.
+
+## [0.153.1] - 2026-11-10
+
+### Security
+- A spec's gate opens only with your own approval (#197): an approval an agent recorded shows as *agent-recorded* with a **Confirm** button, and does not open the next gate.
+
+## [0.153.0] - 2026-11-10
+
+### Added
+- Edit documents in the new panel (#198): the project page, capabilities, glossary and out-of-scope notes get **Edit** under each section and **New section** on top (with its chapter on the project page). The change goes through the same write as the agent's, so the files follow. ADRs are edited as records, and the wiki is generated.
+
+## [0.152.0] - 2026-11-10
+
+### Added
+- Tasks in the new panel (#197): the list (active, open, last done), then a task page with its spec in the reading layout, its tickets (status, type, what blocks them), its records and its activity. The spec's four gates (problem and user stories, design, analysis of gaps, tickets) show which are approved; **Approve** on the next one records your approval.
+
+## [0.151.0] - 2026-11-10
+
+### Added
+- The new panel's Home (#196): one board of what needs you (tasks with a question or to-do you own), what is active and what finished this week, then where each task in progress stopped, with its spec or map tagged.
+
+## [0.150.0] - 2026-11-10
+
+### Added
+- **The new Imprimatur panel** (#195, first part of the rebuild #190): open it from the side bar's first row, **Imprimatur**, or the command *Imprimatur: Open*. Five areas, Home, Tasks, Docs, Edits and Setup, with More for Exercises, Meetings and Social; `g h`, `g t`, `g d`, `g e`, `g s` jump between them and `/` searches. Docs shows the project page, capabilities, ADRs, glossary, out-of-scope notes and the wiki in one reading layout: sections on the left, the page with its summary first, "on this page" on the right. Tasks, Edits and Setup still open the old panel until they move over.
+
+## [0.149.0] - 2026-11-10
+
+### Added
+- A generated wiki of the repo (#188): `npm run wiki` writes `docs/wiki/`, one page per code folder (what it does, a diagram, its parts, the ADRs about it, its terms) and an index. It is made from the code's own comments, the ADRs and the glossary, and a page is written again only when those change; edit them, not the page.
+
+## [0.148.0] - 2026-11-10
+
+### Added
+- **Search and Ask** (#189, ctrl/cmd+alt+k): one box over every record and document section, ranked as you type, Turkish letters matching their plain forms (ı/i, ş/s, ç/c…), with the matching line under each result. The first row asks your question instead: the answer comes from the best matches and cites them, with the sources listed under it. The agent's `search` tool ranks the same way and also returns matching document sections.
+
 ## [0.147.0] - 2026-11-10
 
 ### Added

@@ -182,12 +182,6 @@ test("best: a review — map once (haiku), docs fetched by code, one call per ca
     assert.equal(groups[0].label, "Open");
     assert.equal(groups[0].children[0].label, "Compatibility · ISO 25010");
     assert.deepEqual(groups[0].children[0].children.map((g) => g.label), ["co-existence", "interoperability"]);
-    const { tasksPage, tasksHtml } = require("../vscode/tasksView.js");
-    const html = tasksHtml(tasksPage(db, root, { sel: t.id, filter: "active" }, { home: fs.mkdtempSync(path.join(os.tmpdir(), "h-")) }));
-    assert.match(html, /Agent setup/);
-    assert.match(html, /Project <span class="dim">· ISO\/IEC 25010 \+ NIST SSDF/);
-    assert.match(html, /data-act="recDismiss"/);
-    assert.match(html, /Source map/);
     const { recommendationsRow } = require("../vscode/setup-audit-tree.js");
     const row = recommendationsRow([{ label: "repo", root, records: all() }]);
     assert.equal(row.label, "Recommendations (3)");

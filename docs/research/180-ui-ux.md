@@ -62,6 +62,27 @@ Counted in the code on 2026-11-10:
 
 - *Unverified*, but the repo already carries a Diátaxis skill (`documentation-writer`): tutorials, how-to guides, reference and explanation are kept apart because a reader comes with one of four needs. Mixing them is a common cause of "I can't follow this".
 
+## The direct competitors' screens
+
+Added 2026-11-10 after the user asked where the direct competitors were. Sources are mostly vendor docs and forum posts.
+
+| Product | Where it lives | What the screen does |
+| --- | --- | --- |
+| **claude-mem** | A web viewer at `localhost:37777`, beside Claude Code | A live stream of what the agent stores, as a timeline with session markers and a project filter; a newer "My Work" view first, the memory timeline, sessions and settings under it ([docs](https://docs.claude-mem.ai/introduction), [v5.1.0](https://newreleases.io/project/github/thedotmack/claude-mem/release/v5.1.0), [guide](https://horadecodar.com.br/web-viewer-claude-mem/)) |
+| **SpecStory** | Files in `.specstory/history/`, plus a cloud web app | One search bar over every synced project's sessions, filtered by project and time; you search for words you remember from a prompt, an error or a decision ([docs](https://docs.specstory.com/cloud/search-and-organization)) |
+| **Conductor** | A Mac app | One workspace per task (branch, files, chat, terminal, preview, diff); a dashboard of every workspace with which agent is active, which needs attention and what is done; a diff viewer (Cmd+Shift+D) whose comments go back to the agent; then a PR, merge or archive ([docs](https://www.conductor.build/docs/concepts/workflow), [The New Stack](https://thenewstack.io/a-hands-on-review-of-conductor-an-ai-parallel-runner-app/)) |
+| **Cursor** | In the editor | A review panel and inline diffs with Keep All / Undo and per-file accept or reject. When an update made agent edits apply without review in 2026, users protested on the forum until it came back behind a setting ([forum](https://forum.cursor.com/t/bring-back-per-change-apply-inline-diff-review-you-re-throwing-away-your-best-ux-advantage/160856), [forum](https://forum.cursor.com/t/agent-mode-no-longer-shows-review-accept-interface-and-applies-file-changes-automatically-after-recent-update/152581)) |
+| **Swimm** | VS Code and JetBrains side bar | "Repo Docs", and a **Current File** panel with only the docs about the file open; a wave icon beside code a doc quotes, which opens those docs ([docs](https://docs.swimm.io/ide-integrations/vs-code/ide-plugins-vscode-finding-docs)) |
+| **Backlog.md** | Terminal and a local web app (`backlog browser`, port 6420) | A Kanban board with drag and drop over Markdown task files ([GitHub](https://github.com/MrLesk/Backlog.md)) |
+
+What they add to the list above:
+
+- **Start from where the reader is** (Swimm): a Current File view, "what the agent did, decided and documented about this file", and a mark in the editor beside code an ADR or spec is about. Imprimatur has the edits and the records per file already.
+- **One status board of what needs you** (Conductor): active, needs attention, done, per task. Imprimatur's Waiting on you is the start of it.
+- **Never hide review** (Cursor): accept and reject stay visible; Imprimatur's Agent Change Graph is the part users would miss most.
+- **A view outside the editor** (claude-mem, SpecStory, Backlog.md): a local web page, which can also be opened from a phone on the same network.
+- **Search by what you remember** (SpecStory): words from a prompt, an error or a decision; #189's Search and Ask covers it.
+
 ## What this means for Imprimatur
 
 | User's problem | What competitors do | Candidate for Imprimatur |

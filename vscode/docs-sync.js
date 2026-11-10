@@ -26,7 +26,7 @@ const { docMarkdown, fileOf, inside, docsSettings, kindsOf, FILES, generatedText
 /** The line of decision links export adds under a section (#130): not part of its body. */
 const { LINKS_MARK } = require("./decisions.js");
 const { fenceTracker, filesAt, importRepo, originOf } = require("./import.js");
-const { slugify } = require("./docsView.js");
+const { slugify } = require("./markdown.js");
 const { CHAPTER_ANCHOR } = require("./db.js");
 
 const ACTOR = { kind: /** @type {"import"} */ ("import"), id: "file" };

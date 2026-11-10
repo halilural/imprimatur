@@ -16,7 +16,6 @@ const load = Module._load;
 Module._load = function (r, ...a) {
   return r === "vscode" ? {} : load.call(this, r, ...a);
 };
-const tasksView = req("../vscode/tasksView.js");
 Module._load = load;
 
 const repoDir = () => {
@@ -64,21 +63,4 @@ test("MCP: the social document is refused while off; on, sections are written an
   db.upsertSection(db.docFind(db.repoByRoot(root).id, "social").id, "reddit-claudecode", { body: "changed while off" }, { kind: "user" });
   assert.ok(!exportDocs(db, root).some((r) => r.kind === "social"), "not exported while off");
   assert.equal(fs.readFileSync(fileOf(root, "social"), "utf8"), md);
-});
-
-test("panel: Social shows under Analysis only where it is on; off, its page says how to turn it on", () => {
-  const root = repoDir();
-  const db = openDb({ path: path.join(root, "i.db") });
-  db.repoOf(root);
-  const off = tasksView.paneHtml(db, root, { tab: "architecture" });
-  assert.ok(!off.includes('data-tab="social"'));
-  assert.match(tasksView.paneHtml(db, root, { tab: "social" }), /Social media tracking is off in this repo/);
-  setSocial(root, true);
-  const on = tasksView.paneHtml(db, root, { tab: "social" });
-  assert.match(on, /data-tab="social"[^>]*aria-current="page"/);
-  assert.match(on, /No posts yet[\s\S]*\/social-post/);
-  assert.throws(() => tasksView.applyMessage(db, { type: "docNew", kind: "social", title: "X" }, { kind: "user" }, repoDir()), /off in this repo/);
-  tasksView.applyMessage(db, { type: "docNew", kind: "social", title: "Show HN", body: "Write it by hand." }, { kind: "user" }, root);
-  assert.match(tasksView.paneHtml(db, root, { tab: "social" }), /Show HN/);
-  assert.deepEqual(tasksView.cleanView({ tab: "social" }), { tab: "social" });
 });

@@ -28,21 +28,3 @@ test("#50: the preview's stylesheet is scoped to the hover", () => {
   const css = scopeCss("/* c */\n.a,\n.b { color: red; }\n.c del { x: 1; }\n", "#pop .review");
   assert.equal(css, "#pop .review .a, #pop .review .b { color: red; }\n#pop .review .c del { x: 1; }");
 });
-
-test("#50: the graph page's script parses, with the scoped review styles and a CSP that blocks forms", async () => {
-  const Module = req("node:module");
-  const load = Module._load;
-  Module._load = function (r, ...a) {
-    return r === "vscode" ? { window: {}, workspace: {}, commands: {}, env: {}, Uri: {} } : load.call(this, r, ...a);
-  };
-  try {
-    const { html } = req("../vscode/graphView.js");
-    const page = html({ rows: [], lanes: [], sessions: [] }, "/tmp/x", "N", []);
-    const js = page.match(/<script nonce="N">([\s\S]*?)<\/script>/)[1];
-    assert.doesNotThrow(() => new Function(js));
-    assert.match(page, /#pop \.review \.imprimatur-added/);
-    assert.match(page, /form-action 'none'; base-uri 'none'/);
-  } finally {
-    Module._load = load;
-  }
-});

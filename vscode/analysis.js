@@ -211,7 +211,7 @@ function taskFor(db, repoId, it) {
 
 /** A slug for a key part. @param {string} s @param {number} n */
 const slug = (s, n) => {
-  const { slugify } = require("./docsView.js");
+  const { slugify } = require("./markdown.js");
   return slugify(s).slice(0, n).replace(/-+$/, "") || "x";
 };
 

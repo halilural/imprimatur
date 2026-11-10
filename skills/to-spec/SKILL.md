@@ -76,7 +76,7 @@ Any further notes about the feature.
 
 ## Gates (Imprimatur)
 
-In Imprimatur, write the spec in this order and wait for the user's approval at each gate (Kiro's gates, decided for #179); record each approval with `record_add` kind `decision`, links `{"gate": "<name>"}`:
+In Imprimatur, write the spec in this order and wait for the user's approval at each gate (Kiro's gates, decided for #179). The user approves with **Approve** on the task's page in the Imprimatur panel; when they say yes in the chat instead, record it with `record_add` kind `decision`, links `{"gate": "<name>"}`, and tell them the panel shows it as agent-recorded until they confirm it there. Only the user's own approval opens the next gate:
 
 1. **stories**: Problem Statement, Solution and User Stories.
 2. **design**: Implementation Decisions and Testing Decisions.

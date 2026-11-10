@@ -20,7 +20,7 @@ test("waiting on you: a closed task's open asks and a turn-end ask older than a 
   db.upsertTask(repo.id, "#2", { status: "done" });
   assert.deepEqual(db.openAsks({ repoId: repo.id }).map((r) => r.title), ["do this"]);
   assert.deepEqual(db.openTests({ repoId: repo.id }).map((r) => r.title), []);
-  const { inboxCount } = require("../vscode/tasksView.js");
+  const { inboxCount } = require("../vscode/inbox.js");
   const now = Date.now();
   const turn = [{ session: "s", state: "open", kind: "verify", t: new Date(now - 3600e3).toISOString(), item: "a", i: 0, text: "x" },
     { session: "s", state: "open", kind: "verify", t: new Date(now - 8 * 86400e3).toISOString(), item: "b", i: 0, text: "y" },
