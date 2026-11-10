@@ -3,6 +3,8 @@
 // repo it lists what goes where and changes nothing. Haiku (the user's Claude subscription through
 // `claude -p`, never an API key) sorts each Architecture and Product section and each PDR into
 //   project:<mission|constraints|stack|roadmap>  the small project page
+//   capability   how a feature works today (docs/capabilities/<name>.md, OpenSpec style)
+//   spec         the target state of an issue still open: it goes into that task's spec
 //   adr          a decision that passes Pocock's test (hard to reverse, surprising, a real trade-off)
 //   glossary     a term and its meaning
 //   out-of-scope a concept the project rejected
@@ -24,23 +26,26 @@ const argv = process.argv.slice(2);
 const opt = (name) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
 const only = opt("--repo");
 const out = opt("--out") ?? path.join(os.homedir(), ".local", "share", "imprimatur", "migrate", `dry-run-${new Date().toISOString().slice(0, 10)}.json`);
-export const TARGETS = ["project:mission", "project:constraints", "project:stack", "project:roadmap", "adr", "glossary", "out-of-scope", "drop"];
+export const TARGETS = ["project:mission", "project:constraints", "project:stack", "project:roadmap", "capability", "spec", "adr", "glossary", "out-of-scope", "drop"];
 
+const slugOf = (s) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "general";
 const clip = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 
-/** The prompt for one batch of items. @param {string} repo @param {string} what @param {Array<{key: string, title: string, body: string}>} items */
+/** The prompt for one batch of items. @param {string} repo @param {string} what @param {Array<{key: string, title: string, body: string, issue?: string}>} items */
 export function promptFor(repo, what, items) {
   return [
     `You sort the old design notes of the software repo "${repo}" into Matt Pocock's model. These are ${what}.`,
     "For each item pick exactly one target:",
-    "- project:mission (why the project exists, who it is for), project:constraints (limits that are not visible in the code), project:stack (the technology used), project:roadmap (what comes next): the small project page.",
-    "- adr: a decision that is ALL of: hard to reverse, surprising without its context, and the result of a real trade-off.",
+    "- project:mission (why the project exists, who it is for), project:constraints (limits that are not visible in the code), project:stack (the technology used), project:roadmap (one line of what comes next for the whole project, never a single feature): the small project page.",
+    "- capability: how a feature of the product works today, its current behaviour (shipped, or its issue is done). Also give \"name\": a short kebab-case name of the capability (e.g. meeting-notes), the same name for items about the same feature.",
+    "- spec: the target state or plan of a feature whose issue is still open (\"issue\" says open or active).",
+    "- adr: a decision that is ALL of: hard to reverse, surprising without its context, and the result of a real trade-off between named options. A description of how something works is a capability, not an adr; expect few adrs.",
     "- glossary: it defines a term of the project.",
     "- out-of-scope: a concept or feature the project decided not to do.",
     "- drop: it repeats what the code, a spec or another note says, it is a log of work done, or it is no longer true.",
-    'Answer with JSON only: an array of {"key": "...", "target": "...", "reason": "at most 12 words"}, one per item, in the same order.',
+    'Answer with JSON only: an array of {"key": "...", "target": "...", "name": "only for capability", "reason": "at most 12 words"}, one per item, in the same order.',
     "",
-    JSON.stringify(items.map((i) => ({ key: i.key, title: clip(i.title, 200), body: clip(i.body, 1200) }))),
+    JSON.stringify(items.map((i) => ({ key: i.key, title: clip(i.title, 200), ...(i.issue && { issue: i.issue }), body: clip(i.body, 1200) }))),
   ].join("\n");
 }
 
@@ -75,7 +80,7 @@ async function sortItems(repo, what, items, size = 8) {
       }
       return [];
     }));
-    for (const a of answers) for (const x of a) got.set(x.key, { target: x.target, reason: clip(x.reason, 120) });
+    for (const a of answers) for (const x of a) got.set(x.key, { target: x.target, ...(x.target === "capability" && { name: slugOf(x.name) }), reason: clip(x.reason, 120) });
   }
   const left = items.filter((i) => !got.has(i.key));
   if (left.length && size > 2) for (const [k, v] of await sortItems(repo, what, left, 2)) got.set(k, v);
@@ -88,17 +93,25 @@ async function main() {
   const report = { at: new Date().toISOString(), repos: [] };
   for (const repo of repos) {
     const docs = db.q("SELECT * FROM documents WHERE repo_id = ?").all(repo.id);
+    // A section names its issue in its title, "(#788)": the issue and its status tell spec from capability.
+    const issueOf = (title) => {
+      const k = /\(#(\d+)/.exec(title)?.[1];
+      const t = k && db.taskByKey(repo.id, `#${k}`);
+      return t ? { task: t.key, issue: `${t.key} ${t.status}` } : {};
+    };
     const analyses = docs.filter((d) => d.kind === "analysis");
     const sections = [];
     for (const d of docs.filter((x) => x.kind === "architecture" || x.kind === "product")) {
-      for (const s of db.docSections(d.id).filter((x) => x.status === "current")) sections.push({ key: `${d.kind}/${s.key}`, title: s.title, body: s.body ?? "" });
+      for (const s of db.docSections(d.id).filter((x) => x.status === "current")) sections.push({ key: `${d.kind}/${s.key}`, title: s.title, body: s.body ?? "", ...issueOf(s.title) });
     }
-    const pdrs = db.q(`SELECT r.* FROM records r JOIN tasks t ON t.id = r.task_id WHERE t.repo_id = ? AND r.kind = 'pdr' AND r.status <> 'dropped'`).all(repo.id)
-      .map((r) => ({ key: `pdr/${r.id}`, title: r.title, body: r.body ?? "" }));
+    const pdrs = db.q(`SELECT r.*, t.key AS task_key, t.status AS task_status FROM records r JOIN tasks t ON t.id = r.task_id WHERE t.repo_id = ? AND r.kind = 'pdr' AND r.status <> 'dropped'`).all(repo.id)
+      .map((r) => ({ key: `pdr/${r.id}`, title: r.title, body: r.body ?? "", task: r.task_key, issue: `${r.task_key} ${r.task_status}` }));
     if (!analyses.length && !sections.length && !pdrs.length) continue;
     process.stderr.write(`${repo.name}: ${sections.length} sections, ${pdrs.length} PDRs…\n`);
     const sorted = new Map([...(await sortItems(repo.name, "sections of its Architecture and Product documents", sections)), ...(await sortItems(repo.name, "product decision records (PDRs)", pdrs))]);
-    const items = [...sections, ...pdrs].map((i) => ({ key: i.key, title: clip(i.title, 140), ...(sorted.get(i.key) ?? { target: "unsorted", reason: "the model gave no answer" }) }));
+    const items = [...sections, ...pdrs].map((i) => ({ key: i.key, title: clip(i.title, 140), ...(i.task && { task: i.task }), ...(sorted.get(i.key) ?? { target: "unsorted", reason: "the model gave no answer" }) }));
+    // A spec needs the task it belongs to; one with no task is the task-less plan of a roadmap line.
+    for (const i of items) if (i.target === "spec" && !i.task) i.target = "project:roadmap";
     const count = Object.fromEntries([...TARGETS, "unsorted"].map((t) => [t, items.filter((i) => i.target === t).length]).filter(([, n]) => n));
     report.repos.push({
       name: repo.name, root: repo.root,
