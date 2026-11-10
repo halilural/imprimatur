@@ -63,8 +63,10 @@ test("an existing database gets the meeting kind; its records, versions and link
   // The database as the version before #167 left it: the old kinds in the CHECK.
   const old = new DatabaseSync(file);
   old.exec("PRAGMA foreign_keys = ON");
-  for (const sql of MIGRATIONS.slice(0, VERSION - 1)) old.exec(sql.replaceAll(", 'meeting'", ""));
-  old.exec(`PRAGMA user_version = ${VERSION - 1}`);
+  // The meeting migration is the one that rebuilds records; later ones run on top of it.
+  const MEET = MIGRATIONS.findIndex((sql) => sql.includes("CREATE TABLE records_new"));
+  for (const sql of MIGRATIONS.slice(0, MEET)) old.exec(sql.replaceAll(", 'meeting'", ""));
+  old.exec(`PRAGMA user_version = ${MEET}`);
   const now = Date.now();
   old.exec(`INSERT INTO repos (uid, name, root, created_at) VALUES ('r', 'repo', '/x', ${now})`);
   old.exec(`INSERT INTO tasks (uid, repo_id, key, title, status, created_at, updated_at) VALUES ('t', 1, '#1', 'T', 'open', ${now}, ${now})`);

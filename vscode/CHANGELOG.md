@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.141.0] - 2026-11-10
+
+### Added
+- The database holds Matt Pocock's artifacts (#181): a task's spec and a wayfinder map, capabilities (how the system behaves now) with change deltas, a project page and out-of-scope notes; tickets carry a type and what blocks them. They sync between machines. Nothing shows them yet: the views come with #184 and #190.
+
 ## [0.140.2] - 2026-11-10
 
 ### Changed
