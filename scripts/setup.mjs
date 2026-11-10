@@ -214,6 +214,16 @@ export function pluginEnabled(list) {
 }
 
 /**
+ * The installed Imprimatur plugin when its version is not this checkout's: Claude Code keeps a
+ * copy of the plugin per version, so a pull alone leaves it on the old one (#204).
+ * @param {any} list `claude plugin list --json` @param {string} version @returns {any}
+ */
+export function pluginStale(list, version) {
+  const p = Array.isArray(list) ? list.find((x) => String(x?.id ?? "").startsWith("imprimatur@") && (x.scope ?? "user") === "user") : undefined;
+  return p && p.version !== version ? p : undefined;
+}
+
+/**
  * A settings matcher for the plugin: each mcp__imprimatur__ tool also under the
  * plugin's own server name (mcp__plugin_imprimatur_imprimatur__…). An exact list
  * stays an exact list, a regex stays a regex (`|` is alternation there).
@@ -571,6 +581,27 @@ function installPlugin(root, { dry, lang, exts }) {
   return true;
 }
 
+/**
+ * A pull brought a new version but the installed plugin is an older one: the marketplace (this
+ * checkout) refreshed and the plugin updated to it (#204). @param {string} root @param {any} list @param {boolean} dry
+ */
+function updatePlugin(root, list, dry) {
+  const version = JSON.parse(fs.readFileSync(path.join(root, ".claude-plugin", "plugin.json"), "utf8")).version;
+  const stale = pluginStale(list, version);
+  if (!stale) return;
+  console.log(`Plugin ${stale.id}: ${stale.version} installed, the checkout is ${version}; updating${dry ? " (dry run)" : ""}`);
+  if (dry) return;
+  for (const step of [["plugin", "marketplace", "update", stale.id.split("@")[1]], ["plugin", "update", stale.id]]) {
+    try {
+      execFileSync("claude", step, { stdio: "inherit" });
+    } catch {
+      console.log(`  failed: run claude ${step.join(" ")} by hand, then start a new Claude Code session`);
+      return;
+    }
+  }
+  console.log("  updated: start a new Claude Code session for it");
+}
+
 /** @param {string} cmd @param {string[]} args */
 const has = (cmd, args = ["--version"]) => {
   try {
@@ -594,7 +625,9 @@ function main() {
     process.exitCode = 1;
     return;
   }
-  const fromPlugin = opts.plugin || pluginEnabled(has("claude") ? claudeJson(["plugin", "list", "--json"]) : undefined);
+  const plugins = has("claude") ? claudeJson(["plugin", "list", "--json"]) : undefined;
+  const fromPlugin = opts.plugin || pluginEnabled(plugins);
+  updatePlugin(root, plugins, opts.dry);
   const hooked = opts.plugin ? removeOurHooks(before) : fromPlugin ? { settings: before, changes: [] } : mergeHooks(before, { root, lang: opts.lang, exts: opts.exts });
   const status = mergeStatusLine(hooked.settings, { root });
   // The rule names the server Claude Code runs: the plugin's or ours (#113).
