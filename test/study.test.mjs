@@ -69,6 +69,13 @@ test("a task's material: decisions, the sections they feed, analysis, terms, the
   assert.deepEqual(m.files.map((f) => f.path), ["vscode/db.js"]);
   // An epic gives its tasks.
   assert.deepEqual(studyMaterial(db, repo, epic, { git: () => "" }).tasks.map((t) => t.key), ["#92"]);
+  // #203: the note lives in the task's spec now, ahead of the old analysis; the spec reads first.
+  const spec = db.taskDocOf(repo.id, "#92", "spec");
+  db.upsertSection(spec.id, "problem", { title: "Problem", chapter: "problem", body: "Reads are lost." }, agent);
+  db.upsertSection(spec.id, "study", { title: "Study note: reads", chapter: "notes", body: "### What and why, new" }, agent);
+  const m2 = studyMaterial(db, repo, task, { git: () => "" });
+  assert.match(m2.note.body, /new/);
+  assert.deepEqual(m2.analysis.map((s) => s.key), ["problem", "plan"]);
   db.close();
 });
 

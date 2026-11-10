@@ -14,7 +14,6 @@
     "package": "node scripts/package.mjs",
     "setup": "node scripts/setup.mjs",
     "import": "node scripts/import.mjs",
-    "analysis": "node scripts/analysis.mjs",
     "docs": "node scripts/docs.mjs",
     "migrate": "node scripts/migrate-pocock.mjs",
     "wiki": "node scripts/wiki.mjs",

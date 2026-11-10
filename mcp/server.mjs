@@ -312,7 +312,7 @@ const TOOLS = [
   {
     name: "study_material",
     title: "Material to study a task",
-    description: `Everything to learn one task end to end (the /study skill, #95): the task (an epic's tasks too), its decisions with full bodies, notes, todos, the document sections its records feed (its spec among them), its old analysis, the glossary terms the material uses, the commits that name its key with the files they changed (most changed first), the study note kept in its analysis (section "${STUDY_NOTE}", stale when a commit or decision came after it) and the last study's mastery (weak questions first, what changed since). Read-only: write the note with doc_section_upsert {kind: "analysis", task, key: "${STUDY_NOTE}"} and the mastery as a note record with links.study {topic, questions: [{q, type, result: full|partial|miss, gap, refs}]}.`,
+    description: `Everything to learn one task end to end (the /study skill, #95): the task (an epic's tasks too), its decisions with full bodies, notes, todos, the document sections its records feed (its spec among them), its old analysis, the glossary terms the material uses, the commits that name its key with the files they changed (most changed first), the study note kept in its spec (section "${STUDY_NOTE}", stale when a commit or decision came after it) and the last study's mastery (weak questions first, what changed since). Read-only: write the note with doc_section_upsert {kind: "spec", task, key: "${STUDY_NOTE}", chapter: "notes"} and the mastery as a note record with links.study {topic, questions: [{q, type, result: full|partial|miss, gap, refs}]}.`,
     inputSchema: input({ key: { type: "string", description: "The task's key, e.g. \"#58\"; an epic gives its tasks too" }, repo: repoArg }, ["key"]),
     outputSchema: output({
       task: { type: "object" }, tasks: { type: "array" }, decisions: { type: "array" }, notes: { type: "array" }, todos: { type: "array" },
@@ -557,7 +557,7 @@ function docGet(db, repo, a) {
   const sections = all.map(({ contributors, ...s }) => (a.full || s.key === a.section ? s : { ...s, body: undefined }));
   /** @type {any} */
   const out = { document, sections: sections.map((s) => Object.fromEntries(Object.entries(s).filter(([, v]) => v !== undefined))) };
-  if (!all.length) out.hint = task ? (a.kind === ANALYSIS ? `no analysis kept for ${task} yet: analysis files written for it come in by themselves; doc_section_upsert {kind: "analysis", task: "${task}", key, title, body} writes one here`
+  if (!all.length) out.hint = task ? (a.kind === ANALYSIS ? `no analysis for ${task}: analyses are retired; its spec is doc_get {kind: "spec", task: "${task}"}`
     : `no ${a.kind} for ${task} yet: doc_section_upsert {kind: "${a.kind}", task: "${task}", key, title, body${a.kind === "capability" ? "" : ", chapter"}} writes its first section`)
     : `empty: write its first section with doc_section_upsert {kind: "${a.kind}", key, title, body, records}`;
   else if (!a.full && a.section === undefined) out.hint = "bodies left out: section:<key> gives one, full:true all";
@@ -592,8 +592,8 @@ function docUpsert(db, repo, a, actor) {
     }
   }
   const task = analysisTask(a);
-  // "<file>--<heading>" keys are the sections read from a task's files (#172): a written one would be overwritten.
-  if (task && a.kind === ANALYSIS && a.key.includes("--")) throw new ToolError(`analysis section keys with "--" belong to sections read from files; pick a key without it, e.g. a chapter name ("design")`);
+  // #203: task analyses are retired (#185); an old one still reads with doc_get.
+  if (a.kind === ANALYSIS) throw new ToolError(`task analyses are retired: write the task's spec instead, doc_section_upsert {kind: "spec", task: "${task ?? "<key>"}", key, title, body, chapter} (or /to-spec)`);
   const doc = task ? db.taskDocOf(repo.id, task, a.kind) : db.docOf(repo.id, a.kind);
   const created = !db.docSection(doc.id, a.key);
   if (created && a.title === undefined) {
@@ -882,7 +882,7 @@ function studyDigest(out) {
     if (m.changed.length) L.push("Changed since (answers may be out of date):", ...m.changed.map((c) => `- ${c}`));
   }
   if (out.note) L.push("", `## Study note (${out.note.stale ? "STALE: commits or decisions came after it, update it" : "current"})`, block(out.note.body, 8000));
-  else L.push("", `## Study note: none yet (write it to the analysis, section "${STUDY_NOTE}")`);
+  else L.push("", `## Study note: none yet (write it to the spec, section "${STUDY_NOTE}", chapter notes)`);
   const of = (/** @type {any} */ r) => (r.task ? ` (${r.task})` : "");
   if (out.decisions.length) L.push("", "## Decisions", ...out.decisions.flatMap((d) => [`- [${d.id}] ${d.kind}/${d.status}${of(d)} ${oneLine(d.title, 300)}`, ...(d.body ? [block(d.body)] : [])]));
   if (out.sections.length) L.push("", "## Design-document sections its records feed", ...out.sections.flatMap((x) => [`- ${x.kind}/${x.key}: ${x.title}`, block(x.body)]));
