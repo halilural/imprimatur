@@ -269,6 +269,12 @@ test("keepGoing (#194): the epic's next ready child blocks the stop; a question,
   assert.deepEqual(stop("Shipped. 👉 Which one first?"), {}, "a question to the user ends the turn");
   assert.match(stop("Shipped #13.").block ?? "", /\(2\/2\)/);
   assert.deepEqual(stop("Shipped again."), {}, "the limit ends it");
+  const t13 = db.taskByKey(rid, "#13");
+  const ok = db.addRecord(t13.id, { kind: "todo", owner: "K", title: "Approve the report", pointer: true }, { kind: "agent" });
+  assert.equal(stop("Report is ready.", "s4").block, undefined, "a task whose 👉 is the user's is not ready");
+  db.updateRecord(ok.id, { status: "done" }, { kind: "user" });
+  db.addRecord(t13.id, { kind: "question", title: "Which target?" }, { kind: "agent" });
+  assert.equal(stop("Asked.", "s5").block, undefined, "an open question to the user is not ready either");
   db.upsertTask(rid, "#13", { status: "done" });
   db.upsertTask(rid, "#14", { status: "done" });
   assert.match(stop("Parts done.", "s2").block ?? "", /#11 Part/, "a part whose children are done is next: close it");
