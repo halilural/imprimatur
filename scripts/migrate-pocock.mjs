@@ -12,6 +12,7 @@
 // Task analyses are all deleted (user decision, 2026-11-10); glossary and decision records stay.
 //
 //   npm run migrate -- [--repo <name>] [--out <file.json>]          the dry run: a report, nothing changed
+//   npm run migrate -- --refine <report.json>                      capability items that are decisions → adr; names grouped
 //   npm run migrate -- --apply <report.json> [--repo <name>]        moves what an approved report says
 // Apply backs the database up first (VACUUM INTO, beside it), then per repo in one transaction: every
 // item is copied to its target, its source marked superseded (a section) or dropped (a PDR moved
@@ -44,7 +45,7 @@ export function promptFor(repo, what, items) {
     "- project:mission (why the project exists, who it is for), project:constraints (limits that are not visible in the code), project:stack (the technology used), project:roadmap (one line of what comes next for the whole project, never a single feature): the small project page.",
     "- capability: how a feature of the product works today, its current behaviour (shipped, or its issue is done). Also give \"name\": a short kebab-case name of the capability (e.g. meeting-notes), the same name for items about the same feature.",
     "- spec: the target state or plan of a feature whose issue is still open (\"issue\" says open or active).",
-    "- adr: a decision that is ALL of: hard to reverse, surprising without its context, and the result of a real trade-off between named options. A description of how something works is a capability, not an adr; expect few adrs.",
+    "- adr: a decision that is ALL of: hard to reverse, surprising without its context, and the result of a real trade-off between named options. A plain description of how something works is a capability, not an adr.",
     "- glossary: it defines a term of the project.",
     "- out-of-scope: a concept or feature the project decided not to do.",
     "- drop: it repeats what the code, a spec or another note says, it is a log of work done, or it is no longer true.",
@@ -155,6 +156,83 @@ export function applyRepo(db, repo, items) {
   });
 }
 
+/** The prompt asking whether capability items are really decisions. @param {string} repo @param {any[]} items */
+export function adrPrompt(repo, items) {
+  return [
+    `These notes of the software repo "${repo}" were sorted as descriptions of how a feature works. Some are really architecture decisions.`,
+    "An item is an adr when its main content is choosing one option over a named other for a stated reason (a trade-off), and the choice is hard to reverse or surprising without that reason. Otherwise it stays a capability.",
+    'Answer with JSON only: an array of {"key": "...", "adr": true|false}, one per item, in the same order.',
+    "",
+    JSON.stringify(items.map((i) => ({ key: i.key, title: clip(i.title, 200), body: clip(i.body, 1200) }))),
+  ].join("\n");
+}
+
+/** The prompt grouping a repo's capability names into a few. @param {string} repo @param {any[]} items */
+export function namesPrompt(repo, items) {
+  return [
+    `These are the current-behaviour notes of the software repo "${repo}", each with a draft capability name. Group them into capabilities the way a product is split into features: about one capability per area a user would name (e.g. meetings, live-hints, job-search, sync), ${Math.max(3, Math.min(25, Math.round(items.length / 6)))} or fewer.`,
+    'Answer with JSON only: an object mapping each key to its capability name (short kebab-case), {"<key>": "<name>", ...}, every key once.',
+    "",
+    JSON.stringify(items.map((i) => ({ key: i.key, title: clip(i.title, 120), draft: i.name }))),
+  ].join("\n");
+}
+
+/**
+ * The refine pass over a dry run's report: capability items that are really decisions become adr,
+ * and each repo's capability names are grouped into a few. Writes a new report, changes nothing.
+ * @param {string} file
+ */
+async function refine(file) {
+  const report = JSON.parse(fs.readFileSync(file, "utf8"));
+  const db = openDb();
+  const bodyOf = (repo, key) => {
+    const [from, ref] = key.split("/");
+    if (from === "pdr") return db.record(Number(ref))?.body ?? "";
+    const doc = db.docFind(repo.id, from);
+    return (doc && db.docSection(doc.id, ref)?.body) ?? "";
+  };
+  for (const r of report.repos.filter((x) => !only || x.name === only)) {
+    const repo = db.repos().find((x) => x.root === r.root);
+    const caps = r.items.filter((i) => i.target === "capability");
+    if (!repo || !caps.length) continue;
+    process.stderr.write(`${r.name}: ${caps.length} capability items…\n`);
+    const full = caps.map((i) => ({ ...i, body: bodyOf(repo, i.key) }));
+    for (let i = 0; i < full.length; i += 32) {
+      await Promise.all([0, 8, 16, 24].map(async (o) => {
+        const batch = full.slice(i + o, i + o + 8);
+        if (!batch.length) return;
+        for (let t = 0; t < 2; t++) {
+          try {
+            const m = /\[[\s\S]*\]/.exec(await askModel(adrPrompt(r.name, batch)));
+            const a = m ? JSON.parse(m[0]) : undefined;
+            if (!Array.isArray(a)) continue;
+            for (const x of a) {
+              const item = caps.find((c) => c.key === x?.key);
+              if (item && x.adr === true) Object.assign(item, { target: "adr", reason: "refine: a decision (a trade-off)" }), delete item.name;
+            }
+            return;
+          } catch {}
+        }
+      }));
+    }
+    const left = caps.filter((i) => i.target === "capability");
+    for (let t = 0; t < 2 && left.length; t++) {
+      try {
+        const m = /\{[\s\S]*\}/.exec(await askModel(namesPrompt(r.name, left), "sonnet", 180000));
+        const map = m ? JSON.parse(m[0]) : {};
+        for (const i of left) if (typeof map[i.key] === "string") i.name = slugOf(map[i.key]);
+        break;
+      } catch {}
+    }
+    r.count = Object.fromEntries([...TARGETS, "unsorted"].map((t) => [t, r.items.filter((i) => i.target === t).length]).filter(([, n]) => n));
+    r.capabilities = Object.fromEntries([...new Set(left.map((i) => i.name))].map((n) => [n, left.filter((i) => i.name === n).length]));
+  }
+  const out = file.replace(/\.json$/, "-refined.json");
+  fs.writeFileSync(out, JSON.stringify(report, null, 2) + "\n");
+  for (const r of report.repos) console.log(`${r.name}: ${Object.entries(r.count).map(([k, n]) => `${k} ${n}`).join(", ")}; ${Object.keys(r.capabilities ?? {}).length} capabilities`);
+  console.log(`Refined, nothing changed. Report: ${out}`);
+}
+
 async function apply(file) {
   const report = JSON.parse(fs.readFileSync(file, "utf8"));
   const db = openDb();
@@ -174,6 +252,7 @@ async function apply(file) {
 
 async function main() {
   if (opt("--apply")) return apply(opt("--apply"));
+  if (opt("--refine")) return refine(opt("--refine"));
   const db = openDb();
   const repos = db.repos().filter((r) => !only || r.name === only);
   const report = { at: new Date().toISOString(), repos: [] };

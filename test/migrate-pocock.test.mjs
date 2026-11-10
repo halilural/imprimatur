@@ -54,3 +54,12 @@ test("migrate apply: each item lands at its target, its source is marked, a seco
   assert.equal(db.docSections(an.id)[0].status, "superseded");
   assert.deepEqual(applyRepo(db, repo, []), { skipped: true });
 });
+
+test("migrate refine: the prompts carry the items and ask for one answer per key", async () => {
+  const { adrPrompt, namesPrompt } = await import("../scripts/migrate-pocock.mjs");
+  const items = Array.from({ length: 60 }, (_, i) => ({ key: `architecture/s${i}`, title: `S${i}`, body: "b", name: `n${i}` }));
+  assert.match(adrPrompt("r", items.slice(0, 2)), /"adr": true\|false[\s\S]*"key":"architecture\/s0"/);
+  const np = namesPrompt("r", items);
+  assert.match(np, /10 or fewer/);
+  assert.match(np, /"draft":"n59"/);
+});
