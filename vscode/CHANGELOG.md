@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.147.0] - 2026-11-10
+
+### Added
+- The agent's tools speak Pocock's language (#184): `doc_get` and `doc_section_upsert` read and write a task's spec or wayfinder map, a capability, the project page and out-of-scope notes, with a spec section's change to a capability; `task_upsert` sets a ticket's type and what blocks it; `where_we_left_off` says which tasks have a spec or a map.
+
 ## [0.146.1] - 2026-11-10
 
 ### Changed
