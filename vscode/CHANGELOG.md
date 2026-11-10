@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.145.0] - 2026-11-10
+
+### Added
+- The rest of Pocock's layout (#193): `.out-of-scope/<concept>.md` for what the project will not do, `docs/PROJECT.md` (mission, constraints, tech stack, roadmap), `docs/capabilities/<name>.md` for how the system behaves now, and `docs/agents/` pointing his skills at Imprimatur. When a task with a spec is done, its changes land in the capabilities once. Edits in these files reach the database.
+
+### Security
+- Generated files are never written or removed through a symlink that leads out of the repo, also when the linked folder is above one still to be made.
+
 ## [0.144.0] - 2026-11-10
 
 ### Added

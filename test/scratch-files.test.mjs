@@ -42,3 +42,17 @@ test(".scratch/: spec and tickets written, a ticket's Status and a spec's text r
   sideFiles(db, repo, root);
   assert.ok(!fs.existsSync(path.join(root, ".scratch/.gitignore")));
 });
+
+test(".scratch/ that leads out of the repo through a symlink is not written to", () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-192s-")));
+  const away = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-192away-")));
+  fs.mkdirSync(path.join(root, ".git"));
+  fs.symlinkSync(away, path.join(root, ".scratch"));
+  const db = openDb({ path: path.join(root, "x.db") });
+  const repo = db.repoOf(root);
+  const task = db.upsertTask(repo.id, "#20", { title: "Search" });
+  db.upsertSection(db.taskDocOf(repo.id, "#20", "spec").id, "p", { title: "P", chapter: "problem", body: "x" }, agent);
+  db.upsertTask(repo.id, "#21", { title: "T", epicId: task.id });
+  sideFiles(db, repo, root);
+  assert.deepEqual(fs.readdirSync(away), [], "nothing written through the link");
+});

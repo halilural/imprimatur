@@ -218,11 +218,11 @@ function fileState(root, kind) {
 function inside(root, file) {
   try {
     const realRoot = fs.realpathSync(root);
-    const dir = path.dirname(file);
-    if (fs.existsSync(dir)) {
-      const rel = path.relative(realRoot, fs.realpathSync(dir));
-      if (rel.startsWith("..") || path.isAbsolute(rel)) return false;
-    }
+    // The deepest folder that exists already: a symlink above a folder still to be made leads there too.
+    let dir = path.dirname(file);
+    while (!fs.existsSync(dir) && path.dirname(dir) !== dir) dir = path.dirname(dir);
+    const rel = path.relative(realRoot, fs.realpathSync(dir));
+    if (rel.startsWith("..") || path.isAbsolute(rel)) return false;
     try {
       if (fs.lstatSync(file).isSymbolicLink()) return false;
     } catch {}
@@ -310,6 +310,10 @@ function sideFiles(db, repo, root) {
   // Pocock's local tracker: specs, maps and their tickets under .scratch/ (#192).
   try {
     require("./scratch-files.js").exportScratch(db, repo, root, io(`${HEADER_START}; edit this file or the task in Imprimatur. -->`));
+  } catch {}
+  // The rest of Pocock's layout: .out-of-scope/, docs/capabilities/, docs/agents/ (#193).
+  try {
+    require("./pocock-files.js").exportPocock(db, repo, root, io(`${HEADER_START}; edit this file or the document in Imprimatur. -->`));
   } catch {}
   const was = path.join(dirOf(root), FILES.glossary);
   try {
