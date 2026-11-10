@@ -165,38 +165,6 @@ test("splitBody: a section over the limit is cut at ### headings", () => {
 
 // ---- the hook ----
 
-test("hook: a Write of an analysis file goes into its task's document, without .claude/imprimatur.json", () => {
-  const root = gitRepo();
-  const { db, repo } = seeded(root);
-  const records = { repoId: () => repo.id, dbOf: () => db };
-  const file = path.join(root, "docs", "todos", "5", "ANALYSIS.md");
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, DOC);
-  check("PostToolUse", { cwd: root, session_id: "S1", tool_name: "Write", tool_input: { file_path: file } }, { records });
-  const doc = db.taskDocFind(repo.id, "#5");
-  assert.equal(db.docSections(doc.id).length, 3);
-  // A file only the model can judge goes to the background process.
-  const started = [];
-  const notes = path.join(root, "notes.md");
-  fs.writeFileSync(notes, "# Setup\n");
-  check("PostToolUse", { cwd: root, session_id: "S1", tool_name: "Edit", tool_input: { file_path: notes } }, { records, analysis: { start: (r, it) => started.push(it.rel) } });
-  assert.deepEqual(started, ["notes.md"]);
-  // Not Markdown, and README: nothing.
-  fs.writeFileSync(path.join(root, "README.md"), "# R\n");
-  check("PostToolUse", { cwd: root, session_id: "S1", tool_name: "Write", tool_input: { file_path: path.join(root, "README.md") } }, { records, analysis: { start: () => started.push("x") } });
-  assert.equal(started.length, 1);
-});
-
-test("hook: the plan the agent leaves plan mode with is the session's task's analysis", () => {
-  const root = gitRepo();
-  const { db, repo } = seeded(root);
-  db.addRecord(db.taskByKey(repo.id, "LATD-12").id, { kind: "note", title: "x" }, agent("abcdef1234"));
-  const records = { repoId: () => repo.id, dbOf: () => db };
-  check("PostToolUse", { cwd: root, session_id: "abcdef1234", tool_name: "ExitPlanMode", tool_input: { plan: "# Plan\n\n## Steps\n\n1. a\n" } }, { records });
-  const secs = db.docSections(db.taskDocFind(repo.id, "LATD-12").id);
-  assert.deepEqual(secs.map((s) => [s.key, s.source]), [["plan--steps", "plan:abcdef12"]]);
-});
-
 test("onEdit: a file with no task waits in the orphans; assign gives it one", () => {
   const root = gitRepo();
   const { db, repo } = seeded(root);

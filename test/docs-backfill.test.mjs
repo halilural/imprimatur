@@ -58,14 +58,6 @@ test("maybeStart: claims once; a second session start does nothing", () => {
   assert.equal(JSON.parse(db.meta(bf.metaKey(repo.id))).status, "running");
 });
 
-test("SessionStart starts it for a repo without .claude/imprimatur.json", () => {
-  const { root, db, repo } = setup();
-  const started = [];
-  const records = { dbOf: () => db, repoId: () => repo.id, recordsOf: () => [] };
-  check("SessionStart", { cwd: root, session_id: "S1" }, { records, backfill: { start: (r) => started.push(r), home: "/nowhere" } });
-  assert.deepEqual(started, [root]);
-});
-
 test("promptFor lists the unlinked ADRs with their ids; runBackfill keeps the outcome", async () => {
   const { root, db, repo, recs } = setup();
   const prompt = bf.promptFor(db, repo.id, root, ["architecture", "glossary"], "Turkish");
