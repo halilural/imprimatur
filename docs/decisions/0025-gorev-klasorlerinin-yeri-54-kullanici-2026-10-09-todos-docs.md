@@ -27,4 +27,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: History scan and TODO.md task tracking](../ARCHITECTURE.md#history-scan-todo)
+- No section links this decision yet.

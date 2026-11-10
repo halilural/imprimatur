@@ -29,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: MCP server](../ARCHITECTURE.md#mcp)
+- No section links this decision yet.

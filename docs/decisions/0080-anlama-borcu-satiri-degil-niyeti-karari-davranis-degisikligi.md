@@ -1,6 +1,6 @@
 ---
 type: pdr
-status: accepted
+status: rejected
 date: 2026-10-22
 record: 0676c516-3894-48b5-8ffc-71f18c3eaab3
 ---
@@ -29,6 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Understanding debt: read marks and the unread count (#92)](../ARCHITECTURE.md#unread)
-- [Product: /study: studying a topic (#95)](../PRODUCT.md#study)
-- [Product: Unread: comprehension debt (#91, #92)](../PRODUCT.md#unread)
+- No section links this decision yet.

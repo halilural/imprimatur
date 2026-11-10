@@ -1,5 +1,5 @@
 ---
-type: pdr
+type: adr
 status: accepted
 date: 2026-11-09
 record: a48fc3fe-a1bf-435e-85a9-2f348a5d9abf
@@ -29,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Product: A meeting's note lives where its work is (#167) — target state](../PRODUCT.md#meeting-records)
+- No section links this decision yet.

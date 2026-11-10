@@ -33,4 +33,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Components and their boundaries](../ARCHITECTURE.md#components)
+- No section links this decision yet.

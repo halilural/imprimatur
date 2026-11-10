@@ -39,4 +39,4 @@ Limit: a machine has to get this code once. After that, updates arrive by themse
 
 ## Sections
 
-- [Architecture: Device sync heals itself (#169)](../ARCHITECTURE.md#sync-self-heal)
+- No section links this decision yet.

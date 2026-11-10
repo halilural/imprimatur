@@ -1,5 +1,5 @@
 ---
-type: pdr
+type: adr
 status: accepted
 date: 2026-11-03
 record: b9df74aa-101a-44b6-82f7-d8b0705a5f22
@@ -39,5 +39,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Product: The baseline every repo gets](../PRODUCT.md#baseline)
-- [Product: Skills Imprimatur carries](../PRODUCT.md#bundled-skills)
+- No section links this decision yet.

@@ -33,4 +33,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Security](../ARCHITECTURE.md#security)
+- No section links this decision yet.

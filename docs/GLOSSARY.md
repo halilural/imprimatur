@@ -98,7 +98,7 @@ A task that gathers other tasks. Its subtasks are linked to it; the panel and th
 
 A topic the user practises, made by `/exercise` (#108): a "can do" goal, how it is checked, and 5 to 9 small steps (learn, example, predict, do, vary, explain, recall), each with why and done-when, that the user ticks in the panel's Exercises tab. The user's own, of no repo or task. A step too big is split into smaller steps under it.
 
-<!-- imprimatur:decisions --> Decisions: [PDR 0086](decisions/0086-exercise-mode-exercise-turns-any-topic-into-5-9-ticked-steps.md)
+<!-- imprimatur:decisions --> Decisions: [ADR 0086](decisions/0086-exercise-mode-exercise-turns-any-topic-into-5-9-ticked-steps.md)
 
 <a id="hook"></a>
 
@@ -154,7 +154,7 @@ A row of a task. Kinds: `todo`, `question` (a question to the user), `answer` (t
 
 What `/social-post` writes down for a channel before writing its post: the date, where each rule was read (an official page, pasted by the user, or "not readable"), and only the rules that change the post: length, title format, self-promotion, where links go, flair, required parts, timing, what is forbidden.
 
-<!-- imprimatur:decisions --> Decisions: [PDR 0087](decisions/0087-social-media-is-a-fifth-living-document-social-off-by-defaul.md)
+<!-- imprimatur:decisions --> Decisions: [ADR 0087](decisions/0087-social-media-is-a-fifth-living-document-social-off-by-defaul.md)
 
 <a id="section"></a>
 
@@ -174,7 +174,7 @@ One Claude Code session. The hooks write the session onto records and edits them
 
 A repo's living document of its social media posts (#109), one section per channel: the rules card read for it, the post, its status, results and what was learned. Off by default; a repo turns it on with `{"social": true}` in `.claude/imprimatur.json`. Kept in `docs/SOCIAL.md`. See also: rules card.
 
-<!-- imprimatur:decisions --> Decisions: [PDR 0087](decisions/0087-social-media-is-a-fifth-living-document-social-off-by-defaul.md)
+<!-- imprimatur:decisions --> Decisions: [ADR 0087](decisions/0087-social-media-is-a-fifth-living-document-social-off-by-defaul.md)
 
 <a id="superseded"></a>
 

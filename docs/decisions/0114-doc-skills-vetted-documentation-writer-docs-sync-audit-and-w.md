@@ -49,4 +49,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Product: Skills Imprimatur carries](../PRODUCT.md#bundled-skills)
+- No section links this decision yet.

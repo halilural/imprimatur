@@ -37,4 +37,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Understanding debt: read marks and the unread count (#92)](../ARCHITECTURE.md#unread)
+- No section links this decision yet.

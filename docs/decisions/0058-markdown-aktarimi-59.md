@@ -33,4 +33,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Design documents ↔ Markdown files (docs sync)](../ARCHITECTURE.md#docs-sync)
+- No section links this decision yet.

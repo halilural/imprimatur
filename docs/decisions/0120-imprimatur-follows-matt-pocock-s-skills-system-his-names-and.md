@@ -1,6 +1,6 @@
 ---
 type: pdr
-status: accepted
+status: rejected
 date: 2026-11-09
 record: 01e5d53b-7428-4f82-b811-ba25219b090c
 ---
@@ -37,4 +37,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Product: Moving to Matt Pocock's skills system (#179) — target state](../PRODUCT.md#pocock-system)
+- No section links this decision yet.

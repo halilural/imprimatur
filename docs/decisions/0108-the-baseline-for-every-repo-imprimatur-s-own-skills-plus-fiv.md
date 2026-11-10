@@ -1,5 +1,5 @@
 ---
-type: pdr
+type: adr
 status: accepted
 date: 2026-11-05
 record: 94f6a460-3d53-4a0e-a93d-3ab846c63e01
@@ -41,4 +41,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Product: The baseline every repo gets](../PRODUCT.md#baseline)
+- No section links this decision yet.

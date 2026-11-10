@@ -42,4 +42,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Panel design layer: theme variables, icons, mascot](../ARCHITECTURE.md#ui-design)
+- No section links this decision yet.

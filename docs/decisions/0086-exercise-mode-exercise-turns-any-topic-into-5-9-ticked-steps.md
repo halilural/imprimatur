@@ -1,5 +1,5 @@
 ---
-type: pdr
+type: adr
 status: accepted
 date: 2026-10-24
 record: e2d5f609-935e-4b8c-9798-9514cccfc715
@@ -43,5 +43,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: /exercise: exercise mode (#108)](../ARCHITECTURE.md#exercise)
-- [Product: /exercise: practise any topic in small steps (#108)](../PRODUCT.md#exercise)
+- No section links this decision yet.

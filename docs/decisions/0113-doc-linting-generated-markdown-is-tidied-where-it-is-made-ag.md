@@ -43,4 +43,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Documentation linters (#132)](../ARCHITECTURE.md#doc-linting)
+- No section links this decision yet.

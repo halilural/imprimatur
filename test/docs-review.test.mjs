@@ -56,3 +56,26 @@ test("export: a docs/ symlinked out of the repo, or a symlinked file, is refused
   assert.deepEqual(exportDocs(db, root).map((r) => r.skipped), ["outside"]);
   assert.equal(fs.readFileSync(target, "utf8"), `${HEADER}\n`);
 });
+
+test("#185: a document with every section superseded loses its generated file; a hand-written one, or none in the database yet, stays", () => {
+  const root = tmpDir();
+  const { db, repo } = seeded(root);
+  const doc = db.docOf(repo.id, "architecture");
+  db.upsertSection(doc.id, "storage", { title: "Storage", body: "x" }, agent);
+  exportDocs(db, root);
+  const file = path.join(root, "docs", "ARCHITECTURE.md");
+  assert.ok(fs.existsSync(file));
+  db.upsertSection(doc.id, "storage", { status: "superseded" }, agent);
+  const r = exportDocs(db, root).find((x) => x.kind === "architecture");
+  assert.equal(r?.removed, true);
+  assert.ok(!fs.existsSync(file), "the generated file goes");
+  // Hand-written: never removed.
+  fs.writeFileSync(file, "# Ours\n\nBy hand.\n");
+  exportDocs(db, root);
+  assert.ok(fs.existsSync(file));
+  // A product document never written on this machine: its file is left alone.
+  const pf = path.join(root, "docs", "PRODUCT.md");
+  fs.writeFileSync(pf, `${HEADER}\n\nold\n`);
+  exportDocs(db, root);
+  assert.ok(fs.existsSync(pf), "no product document in the database: kept");
+});

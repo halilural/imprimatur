@@ -39,4 +39,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Documentation rules in the audit (IMP-DOC, #131)](../ARCHITECTURE.md#doc-rules)
+- No section links this decision yet.

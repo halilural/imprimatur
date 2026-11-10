@@ -46,5 +46,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Panel design layer: theme variables, icons, mascot](../ARCHITECTURE.md#ui-design)
-- [Product: The panel as a board, with analytics (#147)](../PRODUCT.md#board)
+- No section links this decision yet.

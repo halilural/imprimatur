@@ -1,6 +1,6 @@
 ---
 type: pdr
-status: accepted
+status: rejected
 date: 2026-10-20
 record: e5f37a3c-e4d1-412c-b7b2-0e881e1f1b3f
 ---
@@ -29,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Product: A task's analysis](../PRODUCT.md#task-analysis)
+- No section links this decision yet.

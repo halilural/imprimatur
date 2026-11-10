@@ -1,6 +1,6 @@
 ---
 type: pdr
-status: accepted
+status: rejected
 date: 2026-10-16
 record: a0eb0042-ada7-450a-a5ce-3deb58599ba3
 ---
@@ -27,4 +27,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Product: Project glossary: a third living document (#91)](../PRODUCT.md#glossary-feature)
+- No section links this decision yet.

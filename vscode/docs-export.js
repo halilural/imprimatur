@@ -239,6 +239,28 @@ function inside(root, file) {
  * @param {any} db @param {string} root a repo root on this machine
  * @returns {Array<{kind: string, file: string, written: boolean, skipped?: "manual" | "outside"}>}
  */
+/**
+ * A document whose every section was superseded (#185 moved Architecture and Product into the
+ * project page, capabilities and ADRs): its generated file goes. Only one Imprimatur wrote, and only
+ * when the document exists with superseded sections, so a machine whose database is still empty
+ * never deletes files. @param {any} db @param {any} doc @param {string} root @param {string} file
+ * @returns {boolean} the file was removed
+ */
+function dropEmptied(db, doc, root, file) {
+  if (!doc) return false;
+  const all = db.docSections(doc.id);
+  if (!all.length || all.some((/** @type {any} */ s) => s.status === "current")) return false;
+  let text;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    return false;
+  }
+  if (!inside(root, file) || !generatedText(text)) return false;
+  fs.rmSync(file);
+  return true;
+}
+
 function exportDocs(db, root) {
   let repo = db.repoByRoot(root);
   if (!repo) {
@@ -257,8 +279,11 @@ function exportDocs(db, root) {
   for (const kind of kindsOf(root)) {
     const doc = db.docFind(repo.id, kind);
     const text = doc && docMarkdown(db, doc.id);
-    if (!text) continue;
     const file = fileOf(root, kind);
+    if (!text) {
+      if (dropEmptied(db, doc, root, file)) out.push({ kind, file, written: true, removed: true });
+      continue;
+    }
     if (!inside(root, file)) {
       out.push({ kind, file, written: false, skipped: /** @type {const} */ ("outside") });
       continue;
@@ -336,4 +361,4 @@ function debounce(fn, ms = 2000) {
   return call;
 }
 
-module.exports = { docMarkdown, exportDocs, sideFiles, debounce, fileState, fileOf, dirOf, docsSettings, syncOn, repoSettings, socialOn, setSocial, kindsOf, handWritten, inside, FILES, HEADER, isHeader, generatedText, TYPES };
+module.exports = { docMarkdown, exportDocs, dropEmptied, sideFiles, debounce, fileState, fileOf, dirOf, docsSettings, syncOn, repoSettings, socialOn, setSocial, kindsOf, handWritten, inside, FILES, HEADER, isHeader, generatedText, TYPES };

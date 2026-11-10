@@ -32,4 +32,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: /study: study mode (#95)](../ARCHITECTURE.md#study)
+- No section links this decision yet.

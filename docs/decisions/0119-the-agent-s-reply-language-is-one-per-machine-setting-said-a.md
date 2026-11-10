@@ -1,5 +1,5 @@
 ---
-type: pdr
+type: adr
 status: accepted
 date: 2026-11-09
 record: e5d4e984-fbb4-43c9-a208-0c77702b489d
@@ -29,4 +29,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Product: Languages: the chat, the records, the hooks (#80, #176)](../PRODUCT.md#languages)
+- No section links this decision yet.

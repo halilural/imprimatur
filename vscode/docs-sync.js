@@ -22,7 +22,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
-const { docMarkdown, fileOf, inside, docsSettings, kindsOf, FILES, generatedText } = require("./docs-export.js");
+const { docMarkdown, fileOf, inside, docsSettings, kindsOf, FILES, generatedText, dropEmptied } = require("./docs-export.js");
 /** The line of decision links export adds under a section (#130): not part of its body. */
 const { LINKS_MARK } = require("./decisions.js");
 const { fenceTracker, filesAt, importRepo, originOf } = require("./import.js");
@@ -352,6 +352,7 @@ function syncKind(db, repo, root, kind, { dryRun = false, take, adopt, adoptFile
     return report;
   }
   const out = theDoc ? docMarkdown(db, theDoc.id) : undefined;
+  if (out === undefined && !dryRun && dropEmptied(db, theDoc, root, file)) report.written = true;
   if (out !== undefined && out !== text) {
     if (!inside(root, file)) return { ...report, skipped: "outside" };
     fs.mkdirSync(path.dirname(file), { recursive: true });

@@ -32,4 +32,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Issue tracker sync](../ARCHITECTURE.md#tracker)
+- No section links this decision yet.

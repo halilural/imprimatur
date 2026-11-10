@@ -41,4 +41,4 @@ Consequence: existing file sections get their chapter the next time their file c
 
 ## Sections
 
-- [Architecture: Task analyses](../ARCHITECTURE.md#task-analysis)
+- No section links this decision yet.

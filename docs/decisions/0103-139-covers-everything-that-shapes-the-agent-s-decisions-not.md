@@ -1,6 +1,6 @@
 ---
 type: pdr
-status: accepted
+status: rejected
 date: 2026-11-04
 record: 3ad0f114-9ad2-49d4-a622-f56c16801848
 ---
@@ -40,4 +40,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Product: The agent's toolset: seen, versioned, installed, found (#138)](../PRODUCT.md#agent-toolset)
+- No section links this decision yet.

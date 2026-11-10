@@ -1,6 +1,6 @@
 ---
 type: pdr
-status: accepted
+status: rejected
 date: 2026-11-04
 record: 423bb8c3-302c-4213-a81a-3f841435f7b4
 ---
@@ -46,4 +46,4 @@ The whole Imprimatur panel becomes a board in the ponytail board style, with ses
 
 ## Sections
 
-- [Product: The panel as a board, with analytics (#147)](../PRODUCT.md#board)
+- No section links this decision yet.

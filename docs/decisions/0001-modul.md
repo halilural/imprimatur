@@ -27,4 +27,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Installation and distribution](../ARCHITECTURE.md#deployment)
+- No section links this decision yet.

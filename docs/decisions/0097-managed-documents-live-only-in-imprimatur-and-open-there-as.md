@@ -1,5 +1,5 @@
 ---
-type: pdr
+type: adr
 status: accepted
 date: 2026-11-03
 record: 2bdd8633-d22b-45d1-9f1a-87abfd58a7e3
@@ -44,4 +44,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- [Architecture: Design documents ↔ Markdown files (docs sync)](../ARCHITECTURE.md#docs-sync)
+- No section links this decision yet.
