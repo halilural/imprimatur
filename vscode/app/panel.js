@@ -6,7 +6,7 @@ const vscode = require("vscode");
 const records = require("../records.js");
 
 /** @type {vscode.WebviewPanel | undefined} */ let panel;
-/** @type {{root?: string, area?: string, doc?: string, scope?: string}} */ let at = {};
+/** @type {{root?: string, area?: string, doc?: string, scope?: string, task?: string, tab?: string}} */ let at = {};
 
 /** The repo to show: the one asked for, else the first folder of this window that Imprimatur knows. @param {string} [root] */
 function repoFor(root) {
@@ -36,6 +36,19 @@ function render() {
   panel.webview.html = appHtml(m, { nonce: crypto.randomBytes(16).toString("hex"), cspSource: panel.webview.cspSource, render: (md) => renderMarkdown(md) });
 }
 
+/**
+ * Approves a spec's gate (#197): a decision record on the task with links.gate, by the user.
+ * @param {string} key @param {string} gate
+ */
+function approveGate(key, gate) {
+  const got = repoFor(at.root);
+  const { GATES } = require("./model.js");
+  const g = GATES.find((/** @type {any} */ x) => x.id === gate);
+  const task = got && g && got.db.taskByKey(got.repo.id, key);
+  if (!task) return;
+  got.db.addRecord(task.id, { kind: "decision", status: "done", title: `Approved: ${g.label}`, links: { gate } }, { kind: "user", id: "panel" });
+}
+
 /** Opens the panel (or brings it forward) at a place. @param {{root?: string, area?: string, doc?: string, scope?: string}} [to] */
 function openApp(to = {}) {
   at = { ...at, ...to };
@@ -47,10 +60,14 @@ function openApp(to = {}) {
   panel.onDidDispose(() => (panel = undefined));
   panel.webview.onDidReceiveMessage((/** @type {any} */ msg) => {
     if (msg?.type === "go") {
-      at = { ...at, area: msg.area, doc: msg.doc, scope: msg.scope };
+      at = { ...at, area: msg.area, doc: msg.doc, scope: msg.scope, task: msg.task, tab: msg.tab };
       render();
     } else if (msg?.type === "task") {
-      vscode.commands.executeCommand("imprimatur.records.reveal", { root: repoFor(at.root)?.root, task: String(msg.key) });
+      at = { ...at, area: "tasks", task: String(msg.key), tab: undefined };
+      render();
+    } else if (msg?.type === "gate") {
+      approveGate(String(msg.key), String(msg.gate));
+      render();
     } else if (msg?.type === "cmd" && typeof msg.command === "string" && msg.command.startsWith("imprimatur.")) {
       vscode.commands.executeCommand(msg.command);
     }
@@ -65,4 +82,4 @@ function registerApp(ctx) {
   );
 }
 
-module.exports = { registerApp, openApp };
+module.exports = { registerApp, openApp, approveGate };

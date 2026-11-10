@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.152.0] - 2026-11-10
+
+### Added
+- Tasks in the new panel (#197): the list (active, open, last done), then a task page with its spec in the reading layout, its tickets (status, type, what blocks them), its records and its activity. The spec's four gates (problem and user stories, design, analysis of gaps, tickets) show which are approved; **Approve** on the next one records your approval.
+
 ## [0.151.0] - 2026-11-10
 
 ### Added

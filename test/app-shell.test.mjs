@@ -56,3 +56,22 @@ test("Home board (#196): needs you (an open ask the user owns), active, done thi
   assert.match(html, /Needs you · 1[\s\S]*Which index\?/);
   assert.match(html, /data-task="#2"><span class="key">#2<\/span><span><b>Wiki<\/b> <span class="tag">spec<\/span>/);
 });
+
+test("task page (#197): the gates in order with the next one to approve; spec, tickets, records, activity", () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-197-")));
+  const db = openDb({ path: path.join(root, "x.db") });
+  const repo = db.repoOf(root);
+  const t = db.upsertTask(repo.id, "#5", { title: "Search", status: "active", summary: "Spec written" });
+  db.upsertSection(db.taskDocOf(repo.id, "#5", "spec").id, "problem", { title: "Finding a record", chapter: "problem", body: "Search misses words." }, agent);
+  db.upsertTask(repo.id, "#6", { title: "Which index?", epicId: t.id, ticketType: "research", status: "active" });
+  db.addRecord(t.id, { kind: "decision", status: "done", title: "Approved: Problem and user stories", links: { gate: "stories" } }, agent);
+  let m = appModel(db, repo, root, { area: "tasks", task: "#5" });
+  assert.deepEqual(m.page.gates.map((g) => [g.id, g.done, g.next]), [["stories", true, false], ["design", false, true], ["analyze", false, false], ["tickets", false, false]]);
+  let html = appHtml(m, o);
+  assert.match(html, /<h2>Problem Statement · Finding a record<\/h2>/);
+  assert.match(html, /data-gate="design" data-key="#5">Approve/);
+  m = appModel(db, repo, root, { area: "tasks", task: "#5", tab: "tickets" });
+  assert.match(appHtml(m, o), /Which index\?<\/b><br><span class="ptr">claimed · research/);
+  assert.match(appHtml(appModel(db, repo, root, { area: "tasks", task: "#5", tab: "activity" }), o), /create · decision · Approved/);
+  assert.match(appHtml(appModel(db, repo, root, { area: "tasks" }), o), /Active · 2/);
+});
