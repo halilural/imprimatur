@@ -1,7 +1,7 @@
 // @ts-check
 // Plain-words description of one agent edit, for the graph's Description column
 // (#8, #63). The graph asks for it when it shows an edit nothing else describes
-// (vscode/graphView.js describeShown); hooks/describe.mjs runs it by hand.
+// (the old panel did, before #202); hooks/describe.mjs runs it by hand.
 // It diffs the edit (its `before` ↔ the next edit's `before`, or the file now),
 // asks a small model for one short sentence (`claude -p --model haiku`, no
 // tools, no MCP, no settings: so no hooks run again) and appends

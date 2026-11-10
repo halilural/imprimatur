@@ -11,7 +11,6 @@ import { callTool } from "../mcp/server.mjs";
 
 const req = createRequire(import.meta.url);
 const { openDb } = req("../vscode/db.js");
-const docs = req("../vscode/docsView.js");
 const { exportDocs, HEADER } = req("../vscode/docs-export.js");
 
 const agent = { kind: "agent", id: "claude-code:S1" };
@@ -26,7 +25,7 @@ function seeded(root = "/a/proj", origin) {
   return { db, repo, task, adr, pdr };
 }
 
-test("export: a hand-written docs file is never overwritten; the tab says so", () => {
+test("export: a hand-written docs file is never overwritten; ours is rewritten", () => {
   const root = tmpDir();
   const { db, repo } = seeded(root);
   const doc = db.docOf(repo.id, "architecture");
@@ -36,12 +35,9 @@ test("export: a hand-written docs file is never overwritten; the tab says so", (
   fs.writeFileSync(file, "# Our architecture\n\nWritten by hand.\n");
   assert.deepEqual(exportDocs(db, root).map((r) => [r.kind, r.written, r.skipped]), [["architecture", false, "manual"]]);
   assert.equal(fs.readFileSync(file, "utf8"), "# Our architecture\n\nWritten by hand.\n");
-  assert.match(docs.docHtml(docs.docModel(db, root, "architecture")), /docs\/ARCHITECTURE\.md was written by hand and was not overwritten/);
-  assert.ok(!docs.docHtml(docs.docModel(db, root, "product")).includes("was written by hand"));
   // Ours (the header first): rewritten, and no note.
   fs.writeFileSync(file, `${HEADER}\n\nold\n`);
   assert.equal(exportDocs(db, root)[0].written, true);
-  assert.ok(!docs.docHtml(docs.docModel(db, root, "architecture")).includes("was written by hand"));
 });
 
 test("export: a docs/ symlinked out of the repo, or a symlinked file, is refused", () => {

@@ -381,59 +381,6 @@ test("MCP: doc_get and doc_section_upsert read and write a task's analysis; task
   assert.throws(() => callTool(db, "doc_get", { kind: "architecture", task: "#5", repo: root }), /task is for kinds analysis, spec, map, capability/);
 });
 
-test("panel: the task page links its analysis; Analysis → Task analyses lists the tasks' files and the orphans, each to be given a task", () => {
-  const tv = req("../vscode/tasksView.js");
-  const root = gitRepo();
-  const { db, repo } = seeded(root);
-  a.ingest(db, repo.id, "#5", "docs/todos/5/ANALYSIS.md", DOC, { actor: hook });
-  fs.writeFileSync(path.join(root, "loose.md"), "# Loose\n\n## Findings\n\nq\n");
-  a.setOrphan(db, repo.id, "loose.md", Date.now());
-  const t5 = db.taskByKey(repo.id, "#5");
-  const page = tv.tasksPage(db, root, { sel: t5.id });
-  assert.deepEqual(page.cur.analysis.files.map((f) => [f.source, f.sections.length]), [["docs/todos/5/ANALYSIS.md", 3]]);
-  // The task page is todo-first: a link to its analysis, no cards; tabs below what waits.
-  const html = tv.tasksHtml(page);
-  assert.match(html, /data-act="anaGo" data-key="#5"[^>]*>[\s\S]*?Analysis · 1 file/);
-  assert.doesNotMatch(html, /class="card ana"/);
-  // The tabs right under the head; with nothing waiting on the user, the todos tab opens first.
-  assert.match(html, new RegExp(`class="ttabs"[^>]*data-task="${t5.id}" data-def="todos"`));
-  assert.ok(html.indexOf('class="ttabs"') < html.indexOf('data-tp="todos"'));
-  // Something waiting on the user: the asks tab is the first tab, open by default.
-  db.addRecord(t5.id, { kind: "question", owner: "K", title: "Merge?" }, agent());
-  const asked = tv.tasksHtml(tv.tasksPage(db, root, { sel: t5.id }));
-  assert.match(asked, /data-def="asks"/);
-  assert.ok(asked.indexOf('class="ttabs"') < asked.indexOf('data-k="asks"'), "the asks are in a tab, under the strip");
-  assert.match(html, /data-tp="act"/);
-  // No analysis: no link.
-  const t80 = db.taskByKey(repo.id, "#80");
-  assert.doesNotMatch(tv.tasksHtml(tv.tasksPage(db, root, { sel: t80.id })), /data-act="anaGo"/);
-  // The hub: its sub-pages, the task with its cards, the orphans with a task picker.
-  const hub = tv.paneHtml(db, root, { tab: "analysis" });
-  assert.match(hub, /data-tab="analysis" aria-current="page">[\s\S]*?Task analyses <span class="n">1<\/span>/);
-  assert.match(hub, /data-act="asel" data-key="#5"/);
-  // #173: each file of a task's analysis can move to another task from here.
-  assert.match(hub, /<select class="amove" data-change="anaAssign" data-file="docs\/todos\/5\/ANALYSIS.md"[^>]*><option value="">Move to task…<\/option>/);
-  // In full, like the architecture page: each section a document section, the task's contents on the left.
-  assert.match(hub, /<div class="doc ahub"/);
-  assert.match(hub, /<article class="dsec[^"]*" id="sec-a\d+"[^>]*><div class="dsec-h"><h2>Findings<\/h2>/);
-  assert.match(hub, /<ol class="atoc"[^>]*data-ak="#5">[\s\S]*?data-act="docGo" data-key="a\d+">Findings<\/a>/);
-  assert.doesNotMatch(hub, /<details class="card ana"/);
-  // No file names on the page: only in the "Open the file" tooltip (and on the orphans, to choose one).
-  assert.doesNotMatch(hub, />docs\/todos\/5\/ANALYSIS\.md</);
-  // The file is not in this repo's tree (only ingested): no "Open the file".
-  assert.doesNotMatch(hub, /title="Open the file: docs\/todos\/5\/ANALYSIS\.md"/);
-  fs.mkdirSync(path.join(root, "docs", "todos", "5"), { recursive: true });
-  fs.writeFileSync(path.join(root, "docs", "todos", "5", "ANALYSIS.md"), DOC);
-  // There: "Open the file" names the task's repo (on "All repos" the panel's repo is another one).
-  assert.match(tv.paneHtml(db, root, { tab: "analysis" }), new RegExp(`data-act="anaOpen" data-file="docs/todos/5/ANALYSIS.md" data-repo="${repo.id}" title="Open the file: docs/todos/5/ANALYSIS.md"`));
-  assert.match(hub, /data-key="__orphans"/);
-  assert.match(hub, /<select data-change="anaAssign" data-file="loose.md"[\s\S]*?<option value="\d+">#80/);
-  tv.applyMessage(db, { type: "anaAssign", file: "loose.md", task: t80.id }, { kind: "user" }, root);
-  assert.equal(db.docSections(db.taskDocFind(repo.id, "#80").id)[0].source, "loose.md");
-  assert.throws(() => tv.applyMessage(db, { type: "anaAssign", file: "../etc/passwd", task: t80.id }, { kind: "user" }, root), /no analysis file/);
-  assert.match(tv.paneHtml(openDb({ path: tmpDb() }), gitRepo(), { tab: "analysis" }), /No task analyses in this repo yet/);
-});
-
 test("review fixes: long headings alike stay two sections; an older replayed state sets nothing back; one model call per file at a time", () => {
   const { db, repo } = seeded();
   const long = "Risks of migrating the database schema from the old layout";
@@ -473,15 +420,6 @@ test("taskFor: every folder of the path, nearest first; a number prefix only whe
   db.upsertTask(repo.id, "#1", {});
   assert.equal(t("docs/analysis/LATD-9999/01-initpayload/analysis.md"), "#1");
   assert.equal(t("docs/analysis/unknown/x.md"), undefined);
-});
-
-test("panel: titles read as text — a Markdown link keeps its text, a key the page shows already goes", () => {
-  const { plainTitle } = req("../vscode/tasksView.js");
-  assert.equal(plainTitle("[#620](https://github.com/u/r/issues/620) — T6: Crash recovery", "#620"), "T6: Crash recovery");
-  assert.equal(plainTitle("[LATD-14041](https://jira/x) Fix it", "LATD-14041"), "Fix it");
-  assert.equal(plainTitle("[#620](https://x) — Crash: [test](https://y)"), "#620 — Crash: test");
-  assert.equal(plainTitle("#5", "#5"), "#5");
-  assert.equal(plainTitle(undefined), "");
 });
 
 // ---- chapters (#172) ----
@@ -596,16 +534,4 @@ test("health: the model's error is kept for the verdict child, once", async () =
   assert.equal(v, undefined);
   assert.equal(a.takeModelError(), "boom");
   assert.equal(a.takeModelError(), undefined);
-});
-
-test("health: the hub shows files not judged and the last backfill, with a Retry", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "health-hub-"));
-  const { db, repo } = seeded(root);
-  const tv = req("../vscode/tasksView.js");
-  a.noteVerdict(db, repo.id, "notes/x.md", { status: "unknown" }, "claude -p timed out");
-  db.setMeta(`analysis-backfill:${repo.id}`, JSON.stringify({ status: "done", summary: "3 files, 2 into analyses" }));
-  const hub = tv.paneHtml(db, root, { tab: "analysis" });
-  assert.match(hub, /1 file not judged: claude -p timed out/);
-  assert.match(hub, /Past sessions: 3 files, 2 into analyses/);
-  assert.match(hub, /data-act="anaRetry"/);
 });

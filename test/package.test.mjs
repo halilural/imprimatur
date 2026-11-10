@@ -25,7 +25,7 @@ test("package: main and every file the manifest points at are packaged", () => {
     ...Object.values(c.viewsContainers ?? {}).flat().map((v) => v.icon),
   ].map((p) => p.replace(/^\.\//, ""));
   assert.deepEqual(wanted.filter((p) => !packaged.has(p)), []);
-  // The bundle reads preview.css from the folder above it (graphView.js cssPaths).
+  // The bundle reads preview.css from the folder above it (the panel's styles).
   assert.ok(packaged.has("preview.css"));
   // README.md and LICENSE are the repo's, copied in while packaging (scripts/package.mjs).
   const copied = new Set(["README.md", "LICENSE"]);
@@ -35,11 +35,10 @@ test("package: main and every file the manifest points at are packaged", () => {
   }
 });
 
-test("package: the manifest declares workspace trust, kind and the graph's restore", () => {
+test("package: the manifest declares workspace trust and kind", () => {
   assert.deepEqual(manifest.extensionKind, ["workspace"]);
   assert.equal(manifest.capabilities.untrustedWorkspaces.supported, "limited");
   assert.equal(manifest.capabilities.virtualWorkspaces, false);
-  assert.ok(manifest.activationEvents.includes("onWebviewPanel:imprimatur.graph"));
 });
 
 /** A vscode stand-in: every property, call and `new` gives itself back. */

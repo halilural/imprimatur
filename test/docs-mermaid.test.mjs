@@ -1,4 +1,4 @@
-// ```mermaid blocks in the document tabs (#72): docsView leaves them as escaped source in
+// ```mermaid blocks in the document tabs (#72): markdown.js leaves them as escaped source in
 // a .mermaid-src block; the panel page loads the extension's mermaid and draws an <svg>.
 // The second test opens the real page in headless Chromium (skipped when none is found).
 import fs from "node:fs";
@@ -11,7 +11,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const req = createRequire(import.meta.url);
-const dv = req("../vscode/docsView.js");
+const dv = req("../vscode/markdown.js");
 const MERMAID = path.resolve(import.meta.dirname, "../node_modules/mermaid/dist/mermaid.min.js");
 
 test("#72 a mermaid fence becomes a .mermaid-src block with its escaped source and a key", () => {
@@ -51,76 +51,3 @@ function chrome() {
 }
 
 const bin = chrome();
-
-test("#72 the panel's document tab draws a mermaid block as an <svg> under its CSP", { skip: !bin && "no Chromium found" }, () => {
-  const Module = req("node:module");
-  const load = Module._load;
-  Module._load = function (r, ...a) {
-    return r === "vscode" ? { window: {}, workspace: {}, commands: {}, env: {}, Uri: {} } : load.call(this, r, ...a);
-  };
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-mermaid-"));
-  try {
-    const { html } = req("../vscode/graphView.js");
-    fs.copyFileSync(MERMAID, path.join(dir, "mermaid.min.js"));
-    const src = pathToFileURL(path.join(dir, "mermaid.min.js")).href;
-    const section = (id, body) => ({ id, key: `s${id}`, title: `S${id}`, status: "current", n: id, body, html: dv.renderMarkdown(body), contributors: [], versions: [], editing: false, flash: false });
-    const model = {
-      kind: "architecture", label: "Architecture", title: "Architecture", repoName: "repo", last: undefined, adding: false, empty: false, manual: undefined, superseded: [],
-      current: [section(1, "```mermaid\ngraph TD\n  A[Hook] --> B[(DB)]\n```"), section(2, "```mermaid\ngraph TD\n  A --> \n```")],
-    };
-    const page = html({ rows: [], lanes: [], sessions: [] }, dir, "N", [], { view: { tab: "architecture" }, pane: dv.docHtml(model), repoName: "repo", mermaid: { src, csp: "file:" } });
-    assert.ok(page.includes("script-src 'nonce-N' file:;"), "the nonce and the webview's cspSource");
-    const csp = page.match(/Content-Security-Policy" content="([^"]*)"/)[1];
-    assert.ok(!/unsafe-eval/.test(csp));
-    // Images only from the webview's own resources (the documents folder), nothing remote.
-    assert.deepEqual(csp.match(/img-src [^;]*/g), ["img-src file:"]);
-    // The webview's API, and a probe that reports what the shadow roots hold in the title.
-    const stub = `<script nonce="N">window.acquireVsCodeApi = () => ({ postMessage() {}, setState() {}, getState() {} });
-const errs = []; document.addEventListener("securitypolicyviolation", (e) => errs.push(e.violatedDirective + " " + e.blockedURI));
-setInterval(() => { const d = [...document.querySelectorAll(".mermaid-src")].map((x) => x.shadowRoot ? (x.shadowRoot.querySelector(".vp svg") && x.shadowRoot.querySelectorAll(".tools button").length === 4 ? "svg" : x.shadowRoot.querySelector(".err") ? "err" : "?") : "-");
-document.title = "R:" + d.join(",") + "|CSP:" + errs.join(";"); }, 50);</script></head>`;
-    const file = path.join(dir, "page.html");
-    fs.writeFileSync(file, page.replace("</head>", stub));
-    const r = spawnSync(bin, ["--headless", "--no-sandbox", "--disable-gpu", "--allow-file-access-from-files", "--virtual-time-budget=15000", "--dump-dom", pathToFileURL(file).href], { encoding: "utf8", timeout: 60000 });
-    const title = r.stdout.match(/<title>([^<]*)<\/title>/)?.[1];
-    assert.equal(title, "R:svg,err|CSP:", `${title} ${r.stderr.slice(-500)}`);
-  } finally {
-    Module._load = load;
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("#72 a click in the contents brings its section into view, in a narrow panel too", { skip: !bin && "no Chromium found" }, () => {
-  const Module = req("node:module");
-  const load = Module._load;
-  Module._load = function (r, ...a) {
-    return r === "vscode" ? { window: {}, workspace: {}, commands: {}, env: {}, Uri: {} } : load.call(this, r, ...a);
-  };
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-toc-"));
-  try {
-    const { html } = req("../vscode/graphView.js");
-    const body = Array.from({ length: 30 }, (_, i) => `Paragraph ${i}.`).join("\n\n");
-    const section = (id) => ({ id, key: `s${id}`, title: `S${id}`, status: "current", n: id, body, html: dv.renderMarkdown(body), contributors: [], versions: [], editing: false, flash: false });
-    const model = { kind: "architecture", label: "Architecture", title: "Architecture", repoName: "repo", last: undefined, adding: false, empty: false, manual: undefined, superseded: [], current: [1, 2, 3, 4, 5, 6].map(section) };
-    const page = html({ rows: [], lanes: [], sessions: [] }, dir, "N", [], { view: { tab: "architecture" }, pane: dv.docHtml(model), repoName: "repo", mermaid: { src: "", csp: "file:" } });
-    // Clicks the 4th entry, then reports what lies under the section's top-left corner.
-    // VS Code's webview handles link clicks on the window: an <a href="#"> scrolls to the top.
-    const probe = `<script nonce="N">window.acquireVsCodeApi = () => ({ postMessage() {}, setState() {}, getState() {} });
-addEventListener("click", (e) => { const a = e.target.closest("a[href]"); if (!a) return;
-  if (a.getAttribute("href") === "#") scrollTo(0, 0); else if (a.hash) document.getElementById(decodeURIComponent(a.hash.slice(1)))?.scrollIntoView();
-  e.preventDefault(); });
-setTimeout(() => { document.querySelector('.dtoc a[data-key="s4"]').click(); setTimeout(() => {
-const r = document.getElementById("sec-s4").getBoundingClientRect();
-// The section lands 12px under the sticky app bar (static in a narrow panel), not under it.
-document.title = "T:" + Math.round(r.top - (parseFloat(document.body.style.getPropertyValue("--appbar-h")) || 0)) + ":" + document.elementFromPoint(r.left + 20, r.top + 20)?.closest(".dsec, .dtoc")?.id; }, 300); }, 500);</script></head>`;
-    const file = path.join(dir, "page.html");
-    fs.writeFileSync(file, page.replace("</head>", probe));
-    for (const width of [500, 1200]) {
-      const r = spawnSync(bin, ["--headless", "--no-sandbox", "--disable-gpu", `--window-size=${width},700`, "--virtual-time-budget=3000", "--dump-dom", pathToFileURL(file).href], { encoding: "utf8", timeout: 60000 });
-      assert.equal(r.stdout.match(/<title>([^<]*)<\/title>/)?.[1], "T:12:sec-s4", `${width}px ${r.stderr.slice(-500)}`);
-    }
-  } finally {
-    Module._load = load;
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});

@@ -8,7 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const req = createRequire(import.meta.url);
-const { fileRef, renderMarkdown } = req("../vscode/docsView.js");
+const { fileRef, renderMarkdown } = req("../vscode/markdown.js");
 const { repoFileOf } = req("../vscode/review-state.js");
 
 test("which inline code is a file reference", () => {
