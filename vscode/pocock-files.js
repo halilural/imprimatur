@@ -53,8 +53,18 @@ function mergeDeltas(db, repoId) {
   }
 }
 
-/** Pocock's docs/agents files, pointing his skills at Imprimatur. @param {string} header */
-const agentFiles = (header) => ({
+/**
+ * The kept documents as domain.md lists them (#206): each with when to read it, none loaded up front.
+ * @param {Array<{path: string, when?: string}>} kept
+ */
+const keptLines = (kept) => kept.length
+  ? ["## Kept documents: read only when you need them",
+    "Hand-written documents this repo keeps as they are. Do not read them up front; `search` finds inside them (its `files`), then read the file at that line.",
+    kept.map((k) => `- \`${k.path}\`${k.when ? `: ${k.when}` : ""}`).join("\n")]
+  : [];
+
+/** Pocock's docs/agents files, pointing his skills at Imprimatur. @param {string} header @param {Array<{path: string, when?: string}>} [kept] */
+const agentFiles = (header, kept = []) => ({
   "issue-tracker.md": [header, "# Issue tracker: Imprimatur",
     "Issues and specs for this repo live in Imprimatur's database, written out as Pocock's local Markdown tracker under `.scratch/`. Read and write them with the Imprimatur MCP tools; the files follow.",
     "## Conventions",
@@ -71,7 +81,8 @@ const agentFiles = (header) => ({
     "How the engineering skills read this repo's domain documentation.",
     "## Before exploring, read these",
     "- **`GLOSSARY.md`** at the repo root.\n- **`docs/adr/`**: the ADRs that touch the area you are about to work in.\n- **`docs/PROJECT.md`**: mission, constraints, tech stack, roadmap.\n- **`docs/capabilities/`**: how the system behaves now.",
-    "If any of these files don't exist, proceed silently. Terms and ADRs are written with Imprimatur's tools (`doc_section_upsert` kind `glossary`, `record_add` kind `adr`); the files follow."].join("\n\n") + "\n",
+    "If any of these files don't exist, proceed silently. Terms and ADRs are written with Imprimatur's tools (`doc_section_upsert` kind `glossary`, `record_add` kind `adr`); the files follow.",
+    ...keptLines(kept)].join("\n\n") + "\n",
 });
 
 /**
@@ -107,7 +118,7 @@ function exportPocock(db, repo, root, io) {
   // Pocock's setup files, once the repo uses his layout (a spec, a map, a capability or out-of-scope).
   const uses = db.q("SELECT 1 FROM documents WHERE repo_id = ? AND kind IN ('spec', 'map', 'capability', 'out-of-scope', 'project') LIMIT 1").get(repo.id);
   if (uses)
-    for (const [name, text] of Object.entries(agentFiles(io.header))) {
+    for (const [name, text] of Object.entries(agentFiles(io.header, require("./doc-rules.js").keepOf(root)))) {
       const f = path.join(root, "docs", "agents", name);
       if (!io.inside(f)) continue;
       let old;

@@ -253,12 +253,14 @@ const TOOLS = [
   {
     name: "search",
     title: "Search records",
-    description: "Records whose title or body contains the text, newest first: id, task, kind, status, owner and title (more: true when there are more). full:true gives whole records with bodies; task_get gives a task's. repo \"*\" searches every repo.",
+    description: "Records whose title or body contains the text, newest first: id, task, kind, status, owner and title (more: true when there are more), the document sections and the hand-written documents (files: path, line; kept or not yet adopted, read them at that line) that match. full:true gives whole records with bodies; task_get gives a task's. repo \"*\" searches every repo.",
     inputSchema: input({
       text: str, repo: repoArg, kind: { type: "string", enum: KINDS }, limit: { type: "integer", minimum: 1, maximum: 100, default: 8 },
       full: { type: "boolean", default: false, description: "Whole records with their bodies" },
     }, ["text"]),
-    outputSchema: output({ records: { type: "array", items: RECORD }, more: { type: "boolean", description: "More records match: raise limit or narrow the text" }, hint: { type: "string" } }, ["records"]),
+    outputSchema: output({ records: { type: "array", items: RECORD }, sections: { type: "array", items: { type: "object" } },
+      files: { type: "array", items: { type: "object", properties: { path: str, line: int, title: str, snippet: str } } },
+      more: { type: "boolean", description: "More records match: raise limit or narrow the text" }, hint: { type: "string" } }, ["records"]),
     readOnly: true,
   },
   {
@@ -739,12 +741,14 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
       const hits = rows.slice(0, limit);
       const sections = a.kind ? [] : rankedSearch(db, a.text, { repoId, limit: 5, type: "section" })
         .map((h) => ({ kind: h.doc_kind, ...(h.scope && { scope: h.scope }), key: h.key, title: h.title, snippet: h.snippet }));
+      // #206: hand-written documents (kept or not yet adopted), found where they are.
+      const files = a.kind ? [] : rankedSearch(db, a.text, { repoId, limit: 5, type: "file" }).map((h) => ({ path: h.rel, line: h.line, title: h.title, snippet: h.snippet }));
       const records = a.full
         ? hits
         : hits.map((r) => ({ id: r.id, task_key: r.task_key, kind: r.kind, status: r.status, ...(r.owner && { owner: r.owner }), ...(r.pointer && { pointer: true }),
             // Older imports have titles of 1,000+ chars: the index cuts them like a body's first line.
             title: r.title.length > LINE_CUT ? r.title.slice(0, LINE_CUT - 1) + "…" : r.title, ...(r.snippet && !r.snippet.startsWith(r.title.slice(0, 40)) && { snippet: r.snippet.slice(0, 120) }) }));
-      return { records, ...(sections.length && { sections }), ...(rows.length > limit && { more: true }), ...(!a.full && hits.length && { hint: "bodies left out: full:true, or task_get for a task's records" }) };
+      return { records, ...(sections.length && { sections }), ...(files.length && { files }), ...(rows.length > limit && { more: true }), ...(!a.full && hits.length && { hint: "bodies left out: full:true, or task_get for a task's records" }) };
     }
     default:
       throw Object.assign(new Error(`unknown tool ${name}`), { code: -32602 });
@@ -838,10 +842,13 @@ export function digest(name, out, a = {}) {
       if (out.exercise) return exerciseDigest(out.exercise);
       if (!out.exercises.length) return `No ${a.status && a.status !== "all" ? `${a.status} ` : a.status ? "" : "active "}exercises.`;
       return [`${plural(out.exercises.length, "exercise")}:`, ...out.exercises.map((e) => `- [${e.id}] ${e.topic} [${e.status}] ${e.closed}/${e.step_count} steps${e.goal ? ` — ${oneLine(e.goal, 160)}` : ""}`)].join("\n");
-    case "search":
-      if (!out.records.length) return `No records match ${JSON.stringify(a.text ?? "")}.`;
+    case "search": {
+      const files = (out.files ?? []).map((f) => `- ${f.path}:${f.line} ${f.title}${f.snippet ? `\n    ${oneLine(f.snippet, 120)}` : ""}`);
+      const fileLines = files.length ? ["Hand-written documents (read the file at the line):", ...files] : [];
+      if (!out.records.length) return [`No records match ${JSON.stringify(a.text ?? "")}.`, ...fileLines].join("\n");
       return [`${plural(out.records.length, "record")}${out.more ? " (more match: raise limit)" : ""}:`, ...out.records.map((r) =>
-        `- ${r.task_key} ${recordLine(r)}${r.body ? `\n    ${oneLine(r.body, 120)}` : ""}`)].join("\n");
+        `- ${r.task_key} ${recordLine(r)}${r.body ? `\n    ${oneLine(r.body, 120)}` : ""}`), ...fileLines].join("\n");
+    }
     default:
       return JSON.stringify(out);
   }

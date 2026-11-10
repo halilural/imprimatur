@@ -24,13 +24,66 @@ function itemsOf(db, repoId) {
   const secs = db.q(`SELECT s.id, s.key, s.title, s.body, s.updated_at, d.kind AS doc_kind, d.scope, d.repo_id FROM doc_sections s JOIN documents d ON d.id = s.doc_id
                      WHERE s.status = 'current' AND ($repo IS NULL OR d.repo_id = $repo)`).all({ repo: repoId ?? null })
     .map((/** @type {any} */ s) => ({ type: "section", ...s }));
-  return [...recs, ...secs];
+  const repos = db.q("SELECT id, root FROM repos WHERE $repo IS NULL OR id = $repo").all({ repo: repoId ?? null });
+  return [...recs, ...secs, ...repos.flatMap((/** @type {any} */ r) => filesOf(r).items)];
+}
+
+/** Per repo root: its hand-written documents' chunks and the signature they were read at, for FILE_TTL. @type {Map<string, {at: number, sig: string, items: any[]}>} */
+const fileCache = new Map();
+const FILE_TTL = 30_000;
+
+/**
+ * A repo's hand-written documents, kept or not yet adopted (#206), cut at their headings (to ###):
+ * found where they are, never copied into the database. Read again when one changed, at most every FILE_TTL.
+ * @param {{id: number, root: string}} repo @returns {{sig: string, items: any[]}}
+ */
+function filesOf(repo, now = Date.now()) {
+  const hit = fileCache.get(repo.root);
+  if (hit && now - hit.at < FILE_TTL) return hit;
+  /** @type {Array<{file: string, rel: string, mtime: number}>} */
+  let files = [];
+  try {
+    const fs = require("node:fs");
+    if (fs.existsSync(repo.root))
+      files = require("./doc-rules.js").handWrittenDocs(repo.root, require("./docs-export.js").dirOf(repo.root), { kept: true })
+        .map((/** @type {any} */ f) => ({ ...f, mtime: fs.statSync(f.file).mtimeMs }));
+  } catch {}
+  const sig = files.map((f) => `${f.rel}:${f.mtime}`).join("|");
+  if (hit?.sig === sig) return fileCache.set(repo.root, { ...hit, at: now }).get(repo.root);
+  const items = files.flatMap((f) => chunks(require("node:fs").readFileSync(f.file, "utf8")).map((c) => ({
+    type: "file", id: `${f.rel}:${c.line}`, title: c.heading ? `${f.rel} › ${c.heading}` : f.rel, body: c.text,
+    updated_at: f.mtime, repo_id: repo.id, rel: f.rel, file: f.file, line: c.line,
+  })));
+  const out = { at: now, sig, items };
+  fileCache.set(repo.root, out);
+  return out;
+}
+
+/** A Markdown text cut at its headings (# to ###), each part with its first line. @param {string} text */
+function chunks(text) {
+  const lines = String(text).replace(/\r\n/g, "\n").split("\n");
+  /** @type {Array<{heading: string, line: number, text: string}>} */
+  const out = [];
+  let cur = { heading: "", line: 1, lines: /** @type {string[]} */ ([]) };
+  let fence = false;
+  lines.forEach((l, i) => {
+    if (/^\s*(```|~~~)/.test(l)) fence = !fence;
+    const h = !fence && /^#{1,3}\s+(.+)/.exec(l);
+    if (h && cur.lines.some((x) => x.trim())) {
+      out.push({ heading: cur.heading, line: cur.line, text: cur.lines.join("\n") });
+      cur = { heading: h[1].trim(), line: i + 1, lines: [] };
+    } else if (h) cur = { heading: h[1].trim(), line: i + 1, lines: [] };
+    else cur.lines.push(l);
+  });
+  if (cur.lines.some((x) => x.trim()) || cur.heading) out.push({ heading: cur.heading, line: cur.line, text: cur.lines.join("\n") });
+  return out;
 }
 
 /** The index for a repo (or all), rebuilt when a record or section changed. @param {any} db @param {number | undefined} repoId */
 function indexOf(db, repoId) {
+  const files = db.q("SELECT id, root FROM repos WHERE $repo IS NULL OR id = $repo").all({ repo: repoId ?? null }).map((/** @type {any} */ r) => filesOf(r).sig).join("#");
   const sig = JSON.stringify(db.q(`SELECT (SELECT max(updated_at) FROM records) a, (SELECT count(*) FROM records) b,
-                                          (SELECT max(updated_at) FROM doc_sections) c, (SELECT count(*) FROM doc_sections) d`).get());
+                                          (SELECT max(updated_at) FROM doc_sections) c, (SELECT count(*) FROM doc_sections) d`).get()) + files;
   const key = String(repoId ?? "*");
   let cache = caches.get(db);
   if (!cache) caches.set(db, (cache = new Map()));
@@ -65,7 +118,7 @@ function snippet(text, terms) {
 
 /**
  * Items ranked by BM25 for the query; the last word also matches words it starts.
- * @param {any} db @param {string} query @param {{repoId?: number, limit?: number, type?: "record" | "section"}} [o]
+ * @param {any} db @param {string} query @param {{repoId?: number, limit?: number, type?: "record" | "section" | "file"}} [o]
  * @returns {Array<any>} the items with score and snippet
  */
 function rankedSearch(db, query, { repoId, limit = 20, type } = {}) {
@@ -108,8 +161,11 @@ function rankedSearch(db, query, { repoId, limit = 20, type } = {}) {
  * @param {string} question @param {any[]} hits
  */
 function askPrompt(question, hits) {
-  const src = hits.map((h, i) => `[${i + 1}] ${h.type === "record" ? `${h.task_key} ${h.kind}` : `${h.doc_kind}${h.scope ? ` ${h.scope}` : ""}`}: ${h.title}\n${String(h.body ?? "").slice(0, 1500)}`).join("\n\n");
+  const src = hits.map((h, i) => `[${i + 1}] ${sourceOf(h)}: ${h.title}\n${String(h.body ?? "").slice(0, 1500)}`).join("\n\n");
   return `Answer the question from these sources only. Cite each claim with its number in brackets, like [2]. If the sources do not answer it, say so in one line. Be brief: at most eight sentences.\n\nQuestion: ${question}\n\nSources:\n${src}`;
 }
 
-module.exports = { rankedSearch, askPrompt, fold, tokens, snippet };
+/** Where a hit is from, one short label: "#58 decision", "capability search", "docs/jira.md:12". @param {any} h */
+const sourceOf = (h) => (h.type === "record" ? `${h.task_key} ${h.kind}` : h.type === "file" ? `${h.rel}:${h.line}` : `${h.doc_kind}${h.scope ? ` ${h.scope}` : ""}`);
+
+module.exports = { rankedSearch, askPrompt, sourceOf, chunks, filesOf, fold, tokens, snippet };

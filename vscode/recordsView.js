@@ -148,7 +148,7 @@ function registerRecordCommands(ctx, log, onChange, reveal, setAllRepos) {
     // answers from the best hits, each claim citing its source.
     vscode.commands.registerCommand("imprimatur.records.search", async () => {
       if (!records.dbOf()) return;
-      const { rankedSearch, askPrompt } = require("./search-index.js");
+      const { rankedSearch, askPrompt, sourceOf } = require("./search-index.js");
       const here = new Set((vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath));
       const qp = vscode.window.createQuickPick();
       qp.placeholder = "Search records and documents, or ask a question";
@@ -165,8 +165,8 @@ function registerRecordCommands(ctx, log, onChange, reveal, setAllRepos) {
         qp.items = [ask, ...hits.map((/** @type {any} */ h) => {
           const repo = repos.get(h.repo_id);
           return {
-            label: `${h.type === "record" ? "$(note)" : "$(book)"} ${h.title.slice(0, 120)}`,
-            description: `${repo?.name ?? ""} · ${h.type === "record" ? `${h.task_key} · ${h.kind}` : `${h.doc_kind}${h.scope ? ` ${h.scope}` : ""}`}`,
+            label: `${h.type === "record" ? "$(note)" : h.type === "file" ? "$(file)" : "$(book)"} ${h.title.slice(0, 120)}`,
+            description: `${repo?.name ?? ""} · ${sourceOf(h)}`,
             detail: h.snippet, alwaysShow: true, hit: h, root: repo?.root,
           };
         })];
@@ -182,6 +182,11 @@ function registerRecordCommands(ctx, log, onChange, reveal, setAllRepos) {
         if (!pick) return;
         if (pick.ask) return askWithSources(text);
         const h = pick.hit;
+        if (h.type === "file") {
+          const doc = await vscode.workspace.openTextDocument(h.file);
+          const at = new vscode.Position(Math.max(0, h.line - 1), 0);
+          return void vscode.window.showTextDocument(doc, { selection: new vscode.Range(at, at) });
+        }
         if (h.type === "record") vscode.commands.executeCommand("imprimatur.records.reveal", { root: pick.root, record: h.id });
         else vscode.commands.executeCommand("imprimatur.docs.reveal", { root: pick.root, kind: h.doc_kind, section: h.key });
       });
@@ -195,7 +200,7 @@ function registerRecordCommands(ctx, log, onChange, reveal, setAllRepos) {
         if (!hits.length) return void vscode.window.showInformationMessage(`Nothing in Imprimatur matches "${text}".`);
         const answer = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur: asking…" },
           () => require("./model.js").askModel(askPrompt(text, hits), "sonnet").catch((/** @type {any} */ e) => `The model could not answer: ${e.message}`));
-        const sources = hits.map((/** @type {any} */ h, /** @type {number} */ i) => `${i + 1}. ${h.type === "record" ? `${h.task_key} ${h.kind}` : `${h.doc_kind}${h.scope ? ` ${h.scope}` : ""}`}: ${h.title.replace(/\s+/g, " ").slice(0, 140)}`).join("\n");
+        const sources = hits.map((/** @type {any} */ h, /** @type {number} */ i) => `${i + 1}. ${sourceOf(h)}: ${h.title.replace(/\s+/g, " ").slice(0, 140)}`).join("\n");
         const doc = await vscode.workspace.openTextDocument({ language: "markdown", content: `# ${text}\n\n${String(answer).trim()}\n\n## Sources\n\n${sources}\n` });
         await vscode.commands.executeCommand("markdown.showPreview", doc.uri);
       }

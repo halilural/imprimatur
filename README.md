@@ -56,6 +56,7 @@ and split with `/to-tickets`. The panel's **Docs** page reads them all in one la
 Documents written by hand before (notes, runbooks, old designs) show in Agent setup's
 Recommendations; `/adopt-docs` sorts each with you: kept and linked, rewritten from the code
 into a capability, its terms and decisions extracted, or deleted when the code shows it stale.
+What you keep as it is (`docs.keep`) stays a file: search finds inside it and agents are told when to read it.
 
 ## /study
 
