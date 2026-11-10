@@ -90,6 +90,36 @@ function docReading(db, repo, root, doc, scope) {
   }[kind]);
 }
 
+/** The spec's gates in order (Kiro's, decided for #179): each approval is a decision record with links.gate. */
+const GATES = [
+  { id: "stories", label: "Problem and user stories" },
+  { id: "design", label: "Design" },
+  { id: "analyze", label: "Analysis of gaps" },
+  { id: "tickets", label: "Tickets" },
+];
+const TABS = ["spec", "tickets", "records", "activity"];
+
+/**
+ * A task's page (#197): its spec in the reading layout, its tickets, its records, its activity, and
+ * the spec's gates with which are approved.
+ * @param {any} db @param {any} repo @param {string} key @param {string} [tab]
+ */
+function taskPage(db, repo, key, tab) {
+  const task = db.taskByKey(repo.id, key);
+  if (!task) return undefined;
+  const recs = db.recordsOf(task.id);
+  const approved = new Set(recs.filter((/** @type {any} */ r) => r.kind === "decision" && r.links?.gate).map((/** @type {any} */ r) => r.links.gate));
+  const gates = GATES.map((g, i) => ({ ...g, done: approved.has(g.id), next: !approved.has(g.id) && GATES.slice(0, i).every((x) => approved.has(x.id)) }));
+  const spec = db.taskDocFind(repo.id, key, "spec");
+  const chapters = require("../db.js").CHAPTERS.spec;
+  const specReading = reading(`Spec · ${key}`, spec ? db.docSections(spec.id).filter((/** @type {any} */ s) => s.status === "current")
+    .map((/** @type {any} */ s) => ({ key: s.key, title: `${chapters[s.chapter] ? `${chapters[s.chapter]} · ` : ""}${s.title}${s.delta ? ` (${s.delta})` : ""}`, body: s.body })) : [],
+    spec ? undefined : "No spec yet: /to-spec writes it, then the gates below take it to tickets.");
+  const tickets = db.q("SELECT * FROM tasks WHERE epic_id = ? AND id <> ? ORDER BY id").all(task.id, task.id);
+  const activity = db.taskVersions(task.id, { limit: 40 }).list;
+  return { task, tab: TABS.includes(/** @type {string} */ (tab)) ? tab : "spec", tabs: TABS, gates, spec: specReading, tickets, records: recs.filter((/** @type {any} */ r) => r.status !== "dropped"), activity };
+}
+
 /**
  * One board of the work (#196, after Conductor): what the agent is on (active), what waits on the
  * user (an open question or to-do they own), what finished in the last seven days.
@@ -112,7 +142,7 @@ function boardOf(db, repoId, now = Date.now()) {
 /**
  * The panel's model for a place.
  * @param {any} db @param {any} repo @param {string} root
- * @param {{area?: string, doc?: string, scope?: string}} at
+ * @param {{area?: string, doc?: string, scope?: string, task?: string, tab?: string}} at
  */
 function appModel(db, repo, root, at = {}) {
   const area = AREAS.some((a) => a.id === at.area) ? /** @type {string} */ (at.area) : "home";
@@ -121,6 +151,12 @@ function appModel(db, repo, root, at = {}) {
   if (area === "docs") {
     const doc = DOCS.some((d) => d.id === at.doc) ? /** @type {string} */ (at.doc) : "project";
     return { ...base, docs: DOCS, doc, reading: docReading(db, repo, root, doc, at.scope) };
+  }
+  if (area === "tasks") {
+    const page = at.task ? taskPage(db, repo, at.task, at.tab) : undefined;
+    if (page) return { ...base, page };
+    const list = (/** @type {string} */ status, /** @type {number} */ n) => db.q(`SELECT key, title, summary, status FROM tasks WHERE repo_id = ? AND status = ? ORDER BY updated_at DESC LIMIT ${n}`).all(repo.id, status);
+    return { ...base, lists: [{ id: "active", label: "Active", tasks: list("active", 50) }, { id: "open", label: "Open", tasks: list("open", 80) }, { id: "done", label: "Done", tasks: list("done", 20) }] };
   }
   if (area === "home") {
     const tasks = db.whereWeLeftOff(repo.id).slice(0, 12);
@@ -132,4 +168,4 @@ function appModel(db, repo, root, at = {}) {
   return base;
 }
 
-module.exports = { appModel, boardOf, docReading, reading, summaryOf, AREAS, MORE, DOCS };
+module.exports = { appModel, taskPage, GATES, boardOf, docReading, reading, summaryOf, AREAS, MORE, DOCS };
