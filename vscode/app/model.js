@@ -112,10 +112,15 @@ function taskPage(db, repo, key, tab) {
   const recs = db.recordsOf(task.id);
   // A gate is approved only by the user's own record (who created it, from its first version): an
   // approval an agent recorded shows as such until the user confirms it, so no agent can pass a gate.
-  const by = (/** @type {number} */ id) => db.q("SELECT actor_kind FROM record_versions WHERE record_id = ? AND op = 'create' ORDER BY id LIMIT 1").get(id)?.actor_kind;
-  const gated = recs.filter((/** @type {any} */ r) => r.kind === "decision" && r.status !== "dropped" && r.links?.gate);
-  const approved = new Set(gated.filter((/** @type {any} */ r) => by(r.id) === "user").map((/** @type {any} */ r) => r.links.gate));
-  const claimed = new Set(gated.filter((/** @type {any} */ r) => by(r.id) !== "user").map((/** @type {any} */ r) => r.links.gate));
+  // Every version of it the user's: an agent that edits a user's record into an approval does not count either.
+  const usersOnly = (/** @type {number} */ id) => db.q("SELECT count(*) AS n, sum(actor_kind <> 'user') AS other FROM record_versions WHERE record_id = ?").get(id);
+  const gated = recs.filter((/** @type {any} */ r) => r.kind === "decision" && r.status === "done" && r.links?.gate);
+  const mine = (/** @type {any} */ r) => {
+    const v = usersOnly(r.id);
+    return v.n > 0 && !v.other;
+  };
+  const approved = new Set(gated.filter(mine).map((/** @type {any} */ r) => r.links.gate));
+  const claimed = new Set(gated.filter((/** @type {any} */ r) => !mine(r)).map((/** @type {any} */ r) => r.links.gate));
   const gates = GATES.map((g, i) => ({ ...g, done: approved.has(g.id), agent: !approved.has(g.id) && claimed.has(g.id),
     next: !approved.has(g.id) && GATES.slice(0, i).every((x) => approved.has(x.id)) }));
   const spec = db.taskDocFind(repo.id, key, "spec");

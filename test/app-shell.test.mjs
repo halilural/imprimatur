@@ -69,12 +69,16 @@ test("task page (#197): the gates in order with the next one to approve; spec, t
   let m = appModel(db, repo, root, { area: "tasks", task: "#5" });
   assert.deepEqual(m.page.gates.map((g) => [g.id, g.done, g.agent, g.next]).slice(0, 2), [["stories", false, true, true], ["design", false, false, false]]);
   assert.match(appHtml(m, o), /agent-recorded[\s\S]*data-gate="stories" data-key="#5">Confirm/);
+  // A user's record an agent turned into an approval does not count.
+  const note = db.addRecord(t.id, { kind: "note", title: "My note" }, { kind: "user", id: "u" });
+  db.updateRecord(note.id, { kind: "decision", status: "done", links: { gate: "design" } }, agent);
+  assert.equal(appModel(db, repo, root, { area: "tasks", task: "#5" }).page.gates[1].done, false);
   db.addRecord(t.id, { kind: "decision", status: "done", title: "Approved: Problem and user stories", links: { gate: "stories" } }, { kind: "user", id: "panel" });
   m = appModel(db, repo, root, { area: "tasks", task: "#5" });
   assert.deepEqual(m.page.gates.map((g) => [g.id, g.done, g.next]), [["stories", true, false], ["design", false, true], ["analyze", false, false], ["tickets", false, false]]);
   let html = appHtml(m, o);
   assert.match(html, /<h2>Problem Statement · Finding a record<\/h2>/);
-  assert.match(html, /data-gate="design" data-key="#5">Approve/);
+  assert.match(html, /data-gate="design" data-key="#5">Confirm/);
   m = appModel(db, repo, root, { area: "tasks", task: "#5", tab: "tickets" });
   assert.match(appHtml(m, o), /Which index\?<\/b><br><span class="ptr">claimed · research/);
   assert.match(appHtml(appModel(db, repo, root, { area: "tasks", task: "#5", tab: "activity" }), o), /create · decision · Approved/);
