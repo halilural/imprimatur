@@ -167,15 +167,52 @@ export function adrPrompt(repo, items) {
   ].join("\n");
 }
 
-/** The prompt grouping a repo's capability names into a few. @param {string} repo @param {any[]} items */
-export function namesPrompt(repo, items) {
+/** The prompt naming a repo's capabilities from its notes' titles: a short list. @param {string} repo @param {any[]} items */
+export function listPrompt(repo, items) {
   return [
-    `These are the current-behaviour notes of the software repo "${repo}", each with a draft capability name. Group them into capabilities the way a product is split into features: about one capability per area a user would name (e.g. meetings, live-hints, job-search, sync), ${Math.max(3, Math.min(25, Math.round(items.length / 6)))} or fewer.`,
-    'Answer with JSON only: an object mapping each key to its capability name (short kebab-case), {"<key>": "<name>", ...}, every key once.',
+    `These are the titles of the current-behaviour notes of the software repo "${repo}". Name the product's capabilities they fall into, the way a product is split into features a user would name (e.g. meetings, live-hints, job-search, sync): ${Math.max(3, Math.min(25, Math.round(items.length / 6)))} or fewer, short kebab-case.`,
+    'Answer with JSON only: an array of names, ["...", ...].',
+    "",
+    JSON.stringify(items.map((i) => clip(i.title, 100))),
+  ].join("\n");
+}
+
+/** The prompt putting each item under one of the given capabilities. @param {string[]} names @param {any[]} items */
+export function assignPrompt(names, items) {
+  return [
+    `Put each note under exactly one of these capabilities: ${JSON.stringify(names)}.`,
+    'Answer with JSON only: an object {"<key>": "<capability>", ...}, every key once, names only from the list.',
     "",
     JSON.stringify(items.map((i) => ({ key: i.key, title: clip(i.title, 120), draft: i.name }))),
   ].join("\n");
 }
+
+/** Groups items' capability names: one short list for the repo, then each item assigned in batches. @param {string} repo @param {any[]} items */
+async function groupNames(repo, items) {
+  let names;
+  for (let t = 0; t < 3 && !names; t++) {
+    try {
+      const m = /\[[\s\S]*\]/.exec(await askModel(listPrompt(repo, items), "sonnet", 180000));
+      const a = m ? JSON.parse(m[0]) : undefined;
+      if (Array.isArray(a) && a.length) names = [...new Set(a.map(slugOf))];
+    } catch {}
+  }
+  if (!names) return;
+  for (let i = 0; i < items.length; i += 80) {
+    await Promise.all([0, 20, 40, 60].map(async (o) => {
+      const batch = items.slice(i + o, i + o + 20);
+      for (let t = 0; t < 2 && batch.length; t++) {
+        try {
+          const m = /\{[\s\S]*\}/.exec(await askModel(assignPrompt(names, batch)));
+          const map = m ? JSON.parse(m[0]) : {};
+          for (const it of batch) if (names.includes(slugOf(map[it.key]))) it.name = slugOf(map[it.key]);
+          return;
+        } catch {}
+      }
+    }));
+  }
+}
+
 
 /**
  * The refine pass over a dry run's report: capability items that are really decisions become adr,
@@ -195,6 +232,12 @@ async function refine(file) {
     const repo = db.repos().find((x) => x.root === r.root);
     const caps = r.items.filter((i) => i.target === "capability");
     if (!repo || !caps.length) continue;
+    // --names-only: the ADR pass already ran on this report; only the names are grouped again.
+    if (argv.includes("--names-only")) {
+      await groupNames(r.name, caps);
+      r.capabilities = Object.fromEntries([...new Set(caps.map((i) => i.name))].map((n) => [n, caps.filter((i) => i.name === n).length]));
+      continue;
+    }
     process.stderr.write(`${r.name}: ${caps.length} capability items…\n`);
     const full = caps.map((i) => ({ ...i, body: bodyOf(repo, i.key) }));
     for (let i = 0; i < full.length; i += 32) {
@@ -216,18 +259,11 @@ async function refine(file) {
       }));
     }
     const left = caps.filter((i) => i.target === "capability");
-    for (let t = 0; t < 2 && left.length; t++) {
-      try {
-        const m = /\{[\s\S]*\}/.exec(await askModel(namesPrompt(r.name, left), "sonnet", 180000));
-        const map = m ? JSON.parse(m[0]) : {};
-        for (const i of left) if (typeof map[i.key] === "string") i.name = slugOf(map[i.key]);
-        break;
-      } catch {}
-    }
+    if (left.length) await groupNames(r.name, left);
     r.count = Object.fromEntries([...TARGETS, "unsorted"].map((t) => [t, r.items.filter((i) => i.target === t).length]).filter(([, n]) => n));
     r.capabilities = Object.fromEntries([...new Set(left.map((i) => i.name))].map((n) => [n, left.filter((i) => i.name === n).length]));
   }
-  const out = file.replace(/\.json$/, "-refined.json");
+  const out = file.replace(/(-refined)?\.json$/, "-refined.json");
   fs.writeFileSync(out, JSON.stringify(report, null, 2) + "\n");
   for (const r of report.repos) console.log(`${r.name}: ${Object.entries(r.count).map(([k, n]) => `${k} ${n}`).join(", ")}; ${Object.keys(r.capabilities ?? {}).length} capabilities`);
   console.log(`Refined, nothing changed. Report: ${out}`);

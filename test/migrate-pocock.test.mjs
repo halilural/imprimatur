@@ -56,10 +56,9 @@ test("migrate apply: each item lands at its target, its source is marked, a seco
 });
 
 test("migrate refine: the prompts carry the items and ask for one answer per key", async () => {
-  const { adrPrompt, namesPrompt } = await import("../scripts/migrate-pocock.mjs");
+  const { adrPrompt, listPrompt, assignPrompt } = await import("../scripts/migrate-pocock.mjs");
   const items = Array.from({ length: 60 }, (_, i) => ({ key: `architecture/s${i}`, title: `S${i}`, body: "b", name: `n${i}` }));
   assert.match(adrPrompt("r", items.slice(0, 2)), /"adr": true\|false[\s\S]*"key":"architecture\/s0"/);
-  const np = namesPrompt("r", items);
-  assert.match(np, /10 or fewer/);
-  assert.match(np, /"draft":"n59"/);
+  assert.match(listPrompt("r", items), /10 or fewer[\s\S]*"S59"/);
+  assert.match(assignPrompt(["meetings", "sync"], items.slice(0, 1)), /\["meetings","sync"\][\s\S]*"key":"architecture\/s0"/);
 });
