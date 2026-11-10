@@ -15,27 +15,28 @@ type: explanation
 - [Goals](#chapter-goals)
   - [3. Product summary](#summary)
   - [4. Principles](#principles)
+  - [5. Moving to Matt Pocock's skills system (#179) — target state](#pocock-system)
 - [Non-goals](#chapter-non-goals)
-  - [5. Out of scope](#non-goals)
+  - [6. Out of scope](#non-goals)
 - [Features](#chapter-features)
-  - [6. Main flows](#flows)
-  - [7. Surfaces and features](#surfaces)
-  - [8. A task's analysis](#task-analysis)
-  - [9. Unread: comprehension debt (#91, #92)](#unread)
-  - [10. /study: studying a topic (#95)](#study)
-  - [11. /exercise: practise any topic in small steps (#108)](#exercise)
-  - [12. Social media: /social-post and the Social document (#109)](#social)
-  - [13. Project glossary: a third living document (#91)](#glossary-feature)
-  - [14. Skills Imprimatur carries](#bundled-skills)
-  - [15. A meeting's note lives where its work is (#167) — target state](#meeting-records)
-  - [16. Languages: the chat, the records, the hooks (#80, #176)](#languages)
+  - [7. Main flows](#flows)
+  - [8. Surfaces and features](#surfaces)
+  - [9. A task's analysis](#task-analysis)
+  - [10. Unread: comprehension debt (#91, #92)](#unread)
+  - [11. /study: studying a topic (#95)](#study)
+  - [12. /exercise: practise any topic in small steps (#108)](#exercise)
+  - [13. Social media: /social-post and the Social document (#109)](#social)
+  - [14. Project glossary: a third living document (#91)](#glossary-feature)
+  - [15. Skills Imprimatur carries](#bundled-skills)
+  - [16. A meeting's note lives where its work is (#167) — target state](#meeting-records)
+  - [17. Languages: the chat, the records, the hooks (#80, #176)](#languages)
 - [Metrics](#chapter-metrics)
-  - [17. Success metrics](#metrics)
+  - [18. Success metrics](#metrics)
 - [Unsorted](#chapter-unsorted)
-  - [18. Agent setup audit (planned)](#agent-setup-audit)
-  - [19. The agent's toolset: seen, versioned, installed, found (#138)](#agent-toolset)
-  - [20. The panel as a board, with analytics (#147)](#board)
-  - [21. The baseline every repo gets](#baseline)
+  - [19. Agent setup audit (planned)](#agent-setup-audit)
+  - [20. The agent's toolset: seen, versioned, installed, found (#138)](#agent-toolset)
+  - [21. The panel as a board, with analytics (#147)](#board)
+  - [22. The baseline every repo gets](#baseline)
 
 <a id="chapter-problem"></a>
 
@@ -136,13 +137,19 @@ It is used daily by a developer who works with an AI agent across several reposi
 - In an untrusted folder no model, `gh` or repo script runs; secrets live in a `0600` file; comments sent to the tracker are fixed text.
 - Process checks do not run unless the repo explicitly turns them on.
 
+<a id="pocock-system"></a>
+
+### 5. Moving to Matt Pocock's skills system (#179) — target state
+
+Decided 2026-11-10, not started. Imprimatur takes Matt Pocock's skills system (mattpocock/skills) as is: specs, wayfinder maps with decision tickets, tracer-bullet tickets, `GLOSSARY.md`, `docs/adr/`, `.out-of-scope/`. Imprimatur becomes the backend of his local tracker, so the agent can read and write these where Jira or GitHub is out of its reach; it does not become a task manager. Task analyses, this Product document, the Architecture document and PDRs go away; their lasting knowledge moves to ADRs, the glossary and out-of-scope notes (#185).
+
 <a id="chapter-non-goals"></a>
 
 ## Non-goals
 
 <a id="non-goals"></a>
 
-### 5. Out of scope
+### 6. Out of scope
 
 - **A cost dashboard or enterprise FinOps:** providers (Claude Code `/usage`, Cursor, Copilot) and free tools already report cost. Imprimatur shows what eats context and what does not help.
 - **Being a code review tool:** review is for documents (`md`, `mdx` by default); for code, git diff and existing tools are enough. The extension list can be widened but that is not the goal.
@@ -159,7 +166,7 @@ It is used daily by a developer who works with an AI agent across several reposi
 
 <a id="flows"></a>
 
-### 6. Main flows
+### 7. Main flows
 
 ```mermaid
 flowchart TD
@@ -214,7 +221,7 @@ When a task is done, its GitHub issue closes (or moves to Done in Jira); an issu
 
 <a id="surfaces"></a>
 
-### 7. Surfaces and features
+### 8. Surfaces and features
 
 #### VS Code panel (the Imprimatur panel)
 
@@ -256,7 +263,7 @@ Optional per repo (`.claude/imprimatur.json`): where we left off at session star
 
 <a id="task-analysis"></a>
 
-### 8. A task's analysis
+### 9. A task's analysis
 
 STORY: I read a task's analyses, plans, spike results and research notes (wherever the agent wrote the file, including the plan it came out of plan mode with) in one place, the **Analysis** tab; the task page stays focused on to-dos.
 
@@ -275,7 +282,7 @@ STORY: I read a task's analyses, plans, spike results and research notes (wherev
 
 <a id="unread"></a>
 
-### 9. Unread: comprehension debt (#91, #92)
+### 10. Unread: comprehension debt (#91, #92)
 
 The agent writes code and documents faster than a person can read them; Imprimatur shows how much you have not yet seen.
 
@@ -292,7 +299,7 @@ Next: a "since your last read" diff (#93), an end-of-turn briefing (#94).
 
 <a id="study"></a>
 
-### 10. /study: studying a topic (#95)
+### 11. /study: studying a topic (#95)
 
 To learn a design decision, a feature or a document the agent made well enough to explain it, defend it and point to it in the code: `/study #92` (or "I want to study the section_reads design").
 
@@ -306,7 +313,7 @@ Why it is this way: in Anthropic's 2026 study, people who asked for explanations
 
 <a id="exercise"></a>
 
-### 11. /exercise: practise any topic in small steps (#108)
+### 12. /exercise: practise any topic in small steps (#108)
 
 The user picks any topic (a language feature, a concept for an interview, a spoken language, a book chapter, a sport) and wants to practise it, not only read about it. `/exercise <topic>` in Claude Code turns it into an exercise they tick in the panel's **Exercises** tab.
 
@@ -334,7 +341,7 @@ Later: spaced recall of weak points (1, 3, 7 days, then FSRS-like) on Home; a qu
 
 <a id="social"></a>
 
-### 12. Social media: /social-post and the Social document (#109)
+### 13. Social media: /social-post and the Social document (#109)
 
 Announcing a project means a different post for each channel, and each channel has its own rules: a subreddit's sidebar, X's character counting, Show HN's guidelines, Product Hunt's launch page. Rules change, and a post that breaks one is removed or ignored.
 
@@ -356,7 +363,7 @@ Announcing a project means a different post for each channel, and each channel h
 
 <a id="glossary-feature"></a>
 
-### 13. Project glossary: a third living document (#91)
+### 14. Project glossary: a third living document (#91)
 
 #### Decisions settled
 
@@ -366,7 +373,7 @@ Announcing a project means a different post for each channel, and each channel h
 
 <a id="bundled-skills"></a>
 
-### 14. Skills Imprimatur carries
+### 15. Skills Imprimatur carries
 
 Imprimatur brings its skills to every repo with no manual step: setup links each folder of `skills/` into `~/.claude/skills` (or the plugin carries them), and an Imprimatur update brings their new versions.
 
@@ -384,7 +391,7 @@ A skill taken from elsewhere is read in full before it ships, keeps its LICENSE,
 
 <a id="meeting-records"></a>
 
-### 15. A meeting's note lives where its work is (#167) — target state
+### 16. A meeting's note lives where its work is (#167) — target state
 
 A meeting app writes its notes into Imprimatur, so what was agreed reaches the task it was about.
 
@@ -399,7 +406,7 @@ First user: a desktop meeting app writing work meeting notes to its work repo, t
 
 <a id="languages"></a>
 
-### 16. Languages: the chat, the records, the hooks (#80, #176)
+### 17. Languages: the chat, the records, the hooks (#80, #176)
 
 Three languages, each set in one place:
 
@@ -413,7 +420,7 @@ Three languages, each set in one place:
 
 <a id="metrics"></a>
 
-### 17. Success metrics
+### 18. Success metrics
 
 The metrics are values measured in real repositories of different sizes.
 
@@ -455,7 +462,7 @@ The metrics are values measured in real repositories of different sizes.
 
 <a id="agent-setup-audit"></a>
 
-### 18. Agent setup audit (planned)
+### 19. Agent setup audit (planned)
 
 The agent setup (CLAUDE.md, AGENTS.md, `.claude/` settings, hooks, skills, subagents, MCP, plugins, Cursor/Codex/Copilot/Gemini/Kiro files) is audited with rules based on the official documentation. The rule engine is agnix and it is used with its full coverage: no rule or file is cut.
 
@@ -473,7 +480,7 @@ Epic [#76](https://github.com/halilural/imprimatur/issues/76), first piece of wo
 
 <a id="agent-toolset"></a>
 
-### 19. The agent's toolset: seen, versioned, installed, found (#138)
+### 20. The agent's toolset: seen, versioned, installed, found (#138)
 
 Epic #138, opened 2026-11-04 and the top priority. Imprimatur becomes the place where everything the agent uses is seen and managed. It builds on the Agent setup view, which already shows every agent file per repo and globally, the drift between copies, the effective settings, and the audit findings.
 
@@ -493,7 +500,7 @@ Anything brought in is vetted first: its license allows redistribution, its hook
 
 <a id="board"></a>
 
-### 20. The panel as a board, with analytics (#147)
+### 21. The panel as a board, with analytics (#147)
 
 Epic #147, opened 2026-11-04. The Imprimatur panel looks and works like the ponytail board. The VS Code side bar stays as it is.
 
@@ -511,7 +518,7 @@ Epic #147, opened 2026-11-04. The Imprimatur panel looks and works like the pony
 
 <a id="baseline"></a>
 
-### 21. The baseline every repo gets
+### 22. The baseline every repo gets
 
 Imprimatur's own plugin brings its hooks, its MCP server and its skills: issues, study, exercise, imprimatur-stats and social-post. It installs at user scope. Beyond that, every repo should have five third-party items. Imprimatur does not ship them: each is installed from its own marketplace or repo, at user scope, after the user confirms.
 
