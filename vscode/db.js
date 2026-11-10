@@ -489,6 +489,86 @@ const MIGRATIONS = [
   CREATE INDEX record_versions_record ON record_versions(record_id, at);
   CREATE INDEX doc_section_records_record ON doc_section_records(record_id);
   `,
+  // #181, Pocock's system: the spec, the wayfinder map and the capability (current behaviour, after
+  // OpenSpec) are scoped like the analysis (a task's key, a capability's name); the project page and
+  // the out-of-scope notes are one per repo. A section can be a change to a capability (delta). The
+  // old kinds stay readable until their content has moved (#185). Rebuilt as in the social migration.
+  `
+  CREATE TABLE documents_new (
+    id INTEGER PRIMARY KEY,
+    uid TEXT NOT NULL UNIQUE,
+    repo_id INTEGER NOT NULL REFERENCES repos(id),
+    kind TEXT NOT NULL CHECK (kind IN ('architecture', 'product', 'glossary', 'analysis', 'social', 'spec', 'map', 'capability', 'project', 'out-of-scope')),
+    scope TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE (repo_id, kind, scope),
+    CHECK ((kind IN ('analysis', 'spec', 'map', 'capability')) = (scope <> ''))
+  );
+  CREATE TABLE doc_sections_new (
+    id INTEGER PRIMARY KEY,
+    uid TEXT NOT NULL UNIQUE,
+    doc_id INTEGER NOT NULL REFERENCES documents_new(id),
+    key TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    position REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'current' CHECK (status IN ('current', 'superseded')),
+    source TEXT,
+    updated_at INTEGER NOT NULL,
+    chapter TEXT,
+    delta TEXT CHECK (delta IN ('added', 'modified', 'removed', 'renamed')),
+    UNIQUE (doc_id, key)
+  );
+  CREATE TABLE doc_section_records_new (
+    section_id INTEGER NOT NULL REFERENCES doc_sections_new(id),
+    record_id INTEGER NOT NULL REFERENCES records(id),
+    PRIMARY KEY (section_id, record_id)
+  ) WITHOUT ROWID;
+  CREATE TABLE doc_versions_new (
+    id INTEGER PRIMARY KEY,
+    section_id INTEGER NOT NULL REFERENCES doc_sections_new(id),
+    at INTEGER NOT NULL,
+    actor_kind TEXT NOT NULL CHECK (actor_kind IN (${ACTORS.map((k) => `'${k}'`).join(", ")})),
+    actor TEXT,
+    before TEXT,
+    after TEXT
+  );
+  CREATE TABLE doc_sources_new (
+    doc_id INTEGER NOT NULL REFERENCES documents_new(id),
+    path TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    PRIMARY KEY (doc_id, path)
+  ) WITHOUT ROWID;
+  CREATE TABLE section_reads_new (
+    section_id INTEGER PRIMARY KEY REFERENCES doc_sections_new(id),
+    version_id INTEGER NOT NULL,
+    at INTEGER NOT NULL
+  );
+  INSERT INTO documents_new SELECT id, uid, repo_id, kind, scope, title, updated_at FROM documents;
+  INSERT INTO doc_sections_new SELECT id, uid, doc_id, key, title, body, position, status, source, updated_at, chapter, NULL FROM doc_sections;
+  INSERT INTO doc_section_records_new SELECT section_id, record_id FROM doc_section_records;
+  INSERT INTO doc_versions_new SELECT id, section_id, at, actor_kind, actor, before, after FROM doc_versions;
+  INSERT INTO doc_sources_new SELECT doc_id, path, hash, at FROM doc_sources;
+  INSERT INTO section_reads_new SELECT section_id, version_id, at FROM section_reads;
+  DROP TABLE section_reads;
+  DROP TABLE doc_sources;
+  DROP TABLE doc_versions;
+  DROP TABLE doc_section_records;
+  DROP TABLE doc_sections;
+  DROP TABLE documents;
+  ALTER TABLE documents_new RENAME TO documents;
+  ALTER TABLE doc_sections_new RENAME TO doc_sections;
+  ALTER TABLE doc_section_records_new RENAME TO doc_section_records;
+  ALTER TABLE doc_versions_new RENAME TO doc_versions;
+  ALTER TABLE doc_sources_new RENAME TO doc_sources;
+  ALTER TABLE section_reads_new RENAME TO section_reads;
+  CREATE INDEX doc_section_records_record ON doc_section_records(record_id);
+  CREATE INDEX doc_versions_section ON doc_versions(section_id, at);
+  ALTER TABLE tasks ADD COLUMN ticket_type TEXT CHECK (ticket_type IN ('research', 'prototype', 'grilling', 'task'));
+  ALTER TABLE tasks ADD COLUMN blocked_by TEXT;
+  `,
 ];
 const VERSION = MIGRATIONS.length;
 
@@ -499,10 +579,14 @@ const VERSION = MIGRATIONS.length;
  */
 const FIELDS = {
   repo: ["name"],
-  task: ["title", "status", "summary", "epic", "pointer"],
+  task: ["title", "status", "summary", "epic", "pointer", "ticket_type", "blocked_by"],
   record: ["task", "kind", "owner", "status", "title", "body", "position", "parent", "links", "created_at"],
-  section: ["title", "body", "position", "status", "records", "source", "chapter"],
+  section: ["title", "body", "position", "status", "records", "source", "chapter", "delta"],
 };
+/** #181: a wayfinder ticket's type (Pocock); a task with none is an ordinary ticket or task. */
+const TICKET_TYPES = ["research", "prototype", "grilling", "task"];
+/** #181: how a spec's section changes a capability (OpenSpec's delta markers). */
+const DELTAS = ["added", "modified", "removed", "renamed"];
 /** Design documents (#72) and the project glossary: kind → the title a new one gets. */
 /**
  * The fixed chapters of a document kind (#129, #128), in order: the same in every repo.
@@ -513,16 +597,26 @@ const CHAPTERS = {
   architecture: { goals: "Goals", context: "Context and scope", strategy: "Solution strategy", "building-blocks": "Building blocks",
     deployment: "Deployment", crosscutting: "Crosscutting concepts", decisions: "Decisions", risks: "Risks and technical debt" },
   product: { problem: "Problem", users: "Users", goals: "Goals", "non-goals": "Non-goals", features: "Features", metrics: "Metrics" },
+  // #181: Pocock's to-spec template, his wayfinder map body, and the project page (after Agent OS).
+  spec: { problem: "Problem Statement", solution: "Solution", stories: "User Stories", implementation: "Implementation Decisions",
+    testing: "Testing Decisions", "out-of-scope": "Out of Scope", notes: "Further Notes" },
+  map: { destination: "Destination", notes: "Notes", decisions: "Decisions so far", fog: "Not yet specified", "out-of-scope": "Out of scope" },
+  project: { mission: "Mission", constraints: "Constraints", stack: "Tech stack", roadmap: "Roadmap" },
 };
 /** A task analysis's chapters (#129): a mini design doc. Analyses come from files too, so these only sort and label; the file is never rewritten. */
 const ANALYSIS_CHAPTERS = { context: "Context and scope", goals: "Goals and non-goals", design: "Design", alternatives: "Alternatives considered", risks: "Risks and open questions" };
 /** A chapter's anchor in the file; no section key may start with it. */
 const CHAPTER_ANCHOR = "chapter-";
-const DOC_KINDS = { architecture: "Architecture Design Document", product: "Product Design Document", glossary: "Project Glossary", social: "Social Media" };
+const DOC_KINDS = { architecture: "Architecture Design Document", product: "Product Design Document", glossary: "Project Glossary", social: "Social Media",
+  project: "Project", "out-of-scope": "Out of Scope" };
 /** A task's analysis document (TASK-ANALYSIS): one per task, its scope the task's key. */
 const ANALYSIS = "analysis";
+/** Documents with a scope (#181): kind → the title's prefix. A task's key scopes the analysis, spec and map; a name scopes a capability. */
+const SCOPED_KINDS = { analysis: "Analysis", spec: "Spec", map: "Map", capability: "Capability" };
+/** The title a new scoped document gets. @param {string} scope @param {string} [kind] */
+const scopedTitle = (scope, kind = ANALYSIS) => `${/** @type {any} */ (SCOPED_KINDS)[kind]} · ${scope}`;
 /** The title a new analysis document gets. @param {string} taskKey */
-const analysisTitle = (taskKey) => `Analysis · ${taskKey}`;
+const analysisTitle = (taskKey) => scopedTitle(taskKey);
 /** A section source's path, at most. */
 const SOURCE_MAX = 1000;
 const SECTION_STATUSES = ["current", "superseded"];
@@ -892,10 +986,16 @@ class Db {
    *   (tracker_outbox), unless the writer is an import (the tracker's own pull, Markdown).
    * Changes pulled from other machines (applyRemote) do not come here: no cascade, no push.
    * @param {number} repoId @param {string} key
-   * @param {{title?: string, status?: string, epicId?: number | null, summary?: string | null}} [fields]
+   * ticketType (#181): a wayfinder ticket's type (TICKET_TYPES), null for none; blockedBy: the keys of the
+   * tasks it waits on, [] or null for none.
+   * @param {{title?: string, status?: string, epicId?: number | null, summary?: string | null, ticketType?: string | null, blockedBy?: string[] | null}} [fields]
    * @param {Actor} [actor] who writes (the epic lines' version rows); a user by default
    */
   upsertTask(repoId, key, fields = {}, actor = { kind: "user" }) {
+    if (fields.ticketType != null && !TICKET_TYPES.includes(fields.ticketType)) throw new Error(`Imprimatur: ticket type must be one of ${TICKET_TYPES.join(", ")}`);
+    if (fields.blockedBy != null && (!Array.isArray(fields.blockedBy) || !fields.blockedBy.every((k) => typeof k === "string" && k.trim() && k !== key))) {
+      throw new Error("Imprimatur: blocked by is a list of other tasks' keys");
+    }
     return this.tx(() => {
       const now = Date.now();
       const before = this.q("SELECT * FROM tasks WHERE repo_id = ? AND key = ?").get(repoId, key);
@@ -910,13 +1010,18 @@ class Db {
         "epicId" in fields ? 1 : 0, fields.epicId ?? null,
         "summary" in fields ? 1 : 0, fields.summary ?? null, now,
       );
+      if ("ticketType" in fields) this.q("UPDATE tasks SET ticket_type = ? WHERE repo_id = ? AND key = ?").run(fields.ticketType ?? null, repoId, key);
+      if ("blockedBy" in fields) {
+        const keys = [...new Set((fields.blockedBy ?? []).map((k) => k.trim()))].sort();
+        this.q("UPDATE tasks SET blocked_by = ? WHERE repo_id = ? AND key = ?").run(keys.length ? JSON.stringify(keys) : null, repoId, key);
+      }
       let after = this.q("SELECT * FROM tasks WHERE repo_id = ? AND key = ?").get(repoId, key);
       // #150: the moment it became done; leaving done clears it.
       if (before?.status !== after.status && (after.status === "done" || before?.status === "done")) {
         this.q("UPDATE tasks SET done_at = ? WHERE id = ?").run(after.status === "done" ? now : null, after.id);
         after = this.q("SELECT * FROM tasks WHERE id = ?").get(after.id);
       }
-      const col = { title: "title", status: "status", summary: "summary", epic: "epic_id" };
+      const col = { title: "title", status: "status", summary: "summary", epic: "epic_id", ticket_type: "ticket_type", blocked_by: "blocked_by" };
       this.changed_("task", after, FIELDS.task.filter((f) => !before || before[col[f]] !== after[col[f]]), now);
       if (before?.status !== after.status && CLOSED.has(after.status)) this.closeEpicLines_(after, actor, now);
       // done ↔ dropped changes no issue, unless its close is still waiting (the reason changes).
@@ -1565,20 +1670,24 @@ class Db {
     return this.q("SELECT * FROM documents WHERE repo_id = ? AND kind = ? AND scope = ''").get(repoId, kind);
   }
 
-  /** A task's analysis document, without creating it. @param {number} repoId @param {string} taskKey */
-  taskDocFind(repoId, taskKey) {
-    return this.q("SELECT * FROM documents WHERE repo_id = ? AND kind = 'analysis' AND scope = ?").get(repoId, taskKey);
+  /**
+   * A scoped document (#181; SCOPED_KINDS), without creating it: a task's analysis, spec or map, or a capability.
+   * @param {number} repoId @param {string} scope the task's key, or the capability's name @param {string} [kind]
+   */
+  taskDocFind(repoId, scope, kind = ANALYSIS) {
+    return this.q("SELECT * FROM documents WHERE repo_id = ? AND kind = ? AND scope = ?").get(repoId, kind, scope);
   }
 
-  /** A task's analysis document, created on first use. @param {number} repoId @param {string} taskKey */
-  taskDocOf(repoId, taskKey) {
-    if (typeof taskKey !== "string" || !taskKey.trim() || taskKey.includes("\t")) throw new Error("Imprimatur: an analysis needs a task key");
-    const found = this.taskDocFind(repoId, taskKey);
+  /** A scoped document, created on first use. @param {number} repoId @param {string} scope @param {string} [kind] */
+  taskDocOf(repoId, scope, kind = ANALYSIS) {
+    if (!Object.hasOwn(SCOPED_KINDS, kind)) throw new Error(`Imprimatur: a scoped document is one of ${Object.keys(SCOPED_KINDS).join(", ")}`);
+    if (typeof scope !== "string" || !scope.trim() || scope.includes("\t")) throw new Error(`Imprimatur: a ${kind} needs a ${kind === "capability" ? "capability name" : "task key"}`);
+    const found = this.taskDocFind(repoId, scope, kind);
     if (found) return found;
     return this.tx(() => {
-      this.q("INSERT OR IGNORE INTO documents (uid, repo_id, kind, scope, title, updated_at) VALUES (?, ?, 'analysis', ?, ?, ?)")
-        .run(uid(), repoId, taskKey, analysisTitle(taskKey), Date.now());
-      return this.taskDocFind(repoId, taskKey);
+      this.q("INSERT OR IGNORE INTO documents (uid, repo_id, kind, scope, title, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(uid(), repoId, kind, scope, scopedTitle(scope, kind), Date.now());
+      return this.taskDocFind(repoId, scope, kind);
     });
   }
 
@@ -1679,7 +1788,7 @@ class Db {
    * source: the file the section was read from (a task's analysis). at: when the change was
    * made, for one replayed from the past (default now).
    * chapter: one of CHAPTERS[the document's kind], null to take it out of its chapter.
-   * @param {{title?: string, body?: string | null, position?: number, status?: string, records?: number[], addRecords?: number[], source?: string | null, chapter?: string | null}} fields
+   * @param {{title?: string, body?: string | null, position?: number, status?: string, records?: number[], addRecords?: number[], source?: string | null, chapter?: string | null, delta?: string | null}} fields
    * @param {Actor} actor @param {{at?: number}} [o]
    */
   upsertSection(docId, key, fields, actor, { at } = {}) {
@@ -1693,6 +1802,7 @@ class Db {
       throw new Error(`Imprimatur: section body is ${String(fields.body).length} chars; the limit is ${SECTION_BODY_MAX}. Split it into sections.`);
     }
     if (fields.source != null && (typeof fields.source !== "string" || fields.source.length > SOURCE_MAX)) throw new Error(`Imprimatur: section source must be a path of at most ${SOURCE_MAX} chars`);
+    if (fields.delta != null && !DELTAS.includes(fields.delta)) throw new Error(`Imprimatur: section delta must be one of ${DELTAS.join(", ")}`);
     if (at !== undefined && !Number.isSafeInteger(at)) throw new Error("Imprimatur: at must be a time in ms");
     return this.tx(() => {
       const doc = this.docById(docId);
@@ -1701,6 +1811,8 @@ class Db {
       if (fields.chapter != null && !Object.hasOwn(chapters ?? {}, fields.chapter)) {
         throw new Error(`Imprimatur: chapter "${fields.chapter}" is not one of the ${doc.kind} document's: ${chapters ? Object.keys(chapters).join(", ") : "it has none"}`);
       }
+      // A delta changes a capability: it lives in a spec, the change's document.
+      if (fields.delta != null && doc.kind !== "spec") throw new Error("Imprimatur: only a spec's section can be a delta");
       for (const id of [...(fields.records ?? []), ...(fields.addRecords ?? [])]) {
         const rec = this.q("SELECT t.repo_id FROM records r JOIN tasks t ON t.id = r.task_id WHERE r.id = ?").get(id);
         if (!rec) throw new Error(`Imprimatur: no record ${id}`);
@@ -1715,14 +1827,15 @@ class Db {
         if (chapters && key.startsWith(CHAPTER_ANCHOR)) throw new Error(`Imprimatur: section key "${key}" must not start with "${CHAPTER_ANCHOR}": the file uses it for chapters`);
         const position = fields.position
           ?? /** @type {any} */ (this.q("SELECT coalesce(max(position), 0) + 1 AS p FROM doc_sections WHERE doc_id = ?").get(docId)).p;
-        this.q(`INSERT INTO doc_sections (uid, doc_id, key, title, body, position, status, source, chapter, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-          .run(uid(), docId, key, fields.title.trim(), fields.body ?? null, position, fields.status ?? "current", fields.source ?? null, fields.chapter ?? null, now);
+        this.q(`INSERT INTO doc_sections (uid, doc_id, key, title, body, position, status, source, chapter, delta, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(uid(), docId, key, fields.title.trim(), fields.body ?? null, position, fields.status ?? "current", fields.source ?? null, fields.chapter ?? null, fields.delta ?? null, now);
         old = /** @type {any} */ (this.docSection(docId, key));
         Object.assign(after, { key, title: old.title, body: old.body, position: old.position, status: old.status });
         if (old.source != null) after.source = old.source;
         if (old.chapter != null) after.chapter = old.chapter;
+        if (old.delta != null) after.delta = old.delta;
       } else {
-        for (const f of /** @type {const} */ (["title", "body", "position", "status", "source", "chapter"])) {
+        for (const f of /** @type {const} */ (["title", "body", "position", "status", "source", "chapter", "delta"])) {
           if (fields[f] === undefined) continue;
           const v = f === "title" ? /** @type {string} */ (fields.title).trim() : fields[f] ?? null;
           if (old[f] === v) continue;
@@ -2163,5 +2276,5 @@ module.exports = {
   backupFile,
   WAL_LIMIT,
   openDb, dbPath, onWindowsDrive, normOrigin, refersTo, recordOf, analysisTitle, KINDS, ACTORS, VERSION, MIGRATIONS, FIELDS,
-  TRACKER_KEY, TASK_STATUSES, RECORD_STATUSES, EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, weakText, REVIEW_DAYS, REVIEW_RESULTS, DOC_KINDS, CHAPTERS, ANALYSIS_CHAPTERS, CHAPTER_ANCHOR, ANALYSIS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, SECTION_TITLE_MAX, SOURCE_MAX,
+  TRACKER_KEY, TASK_STATUSES, RECORD_STATUSES, EXERCISE_STATUSES, STEP_STATUSES, EXERCISE_STEP_KINDS, EXERCISE_TITLE_MAX, EXERCISE_TEXT_MAX, EXERCISE_STEPS_MAX, weakText, REVIEW_DAYS, REVIEW_RESULTS, DOC_KINDS, CHAPTERS, ANALYSIS_CHAPTERS, CHAPTER_ANCHOR, ANALYSIS, SCOPED_KINDS, scopedTitle, TICKET_TYPES, DELTAS, SECTION_STATUSES, SECTION_KEY, SECTION_BODY_MAX, SECTION_TITLE_MAX, SOURCE_MAX,
 };

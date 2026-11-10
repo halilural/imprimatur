@@ -212,3 +212,27 @@ test("taskKeys: a repo's task keys, most recently updated first (#64)", () => {
   assert.deepEqual(db.taskKeys(db.repoOf("/c").id), []);
   db.close();
 });
+
+test("#181 Pocock's model: scoped spec, map and capability; project and out-of-scope; deltas; ticket type and blockers", () => {
+  const db = openDb(tmpDb());
+  const repoId = db.repoOf(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-181-"))).id;
+  const spec = db.taskDocOf(repoId, "#7", "spec");
+  assert.equal(spec.title, "Spec · #7");
+  assert.equal(db.taskDocOf(repoId, "#7", "spec").id, spec.id, "one spec per task");
+  assert.notEqual(db.taskDocOf(repoId, "#7").id, spec.id, "the analysis of the same task is another document");
+  assert.equal(db.taskDocOf(repoId, "search", "capability").title, "Capability · search");
+  assert.throws(() => db.taskDocOf(repoId, "#7", "product"), /scoped document/);
+  const s = db.upsertSection(spec.id, "search-ranking", { title: "Results ranked by bm25", chapter: "implementation", delta: "added" }, agent);
+  assert.equal(s.delta, "added");
+  assert.equal(db.upsertSection(spec.id, "search-ranking", { delta: "modified" }, agent).delta, "modified");
+  assert.throws(() => db.upsertSection(spec.id, "x", { title: "X", delta: "changed" }, agent), /delta must be one of/);
+  assert.throws(() => db.upsertSection(db.docOf(repoId, "project").id, "x", { title: "X", delta: "added" }, agent), /only a spec's section/);
+  assert.equal(db.upsertSection(db.docOf(repoId, "project").id, "why", { title: "Why", chapter: "mission" }, agent).chapter, "mission");
+  assert.equal(db.docOf(repoId, "out-of-scope").title, "Out of Scope");
+  const t = db.upsertTask(repoId, "#8", { title: "Which ranking?", ticketType: "research", blockedBy: ["#9", "#7", "#9"] });
+  assert.deepEqual([t.ticket_type, JSON.parse(t.blocked_by)], ["research", ["#7", "#9"]]);
+  assert.equal(db.upsertTask(repoId, "#8", { blockedBy: [] }).blocked_by, null);
+  assert.equal(db.upsertTask(repoId, "#8", { title: "kept" }).ticket_type, "research", "untouched when not given");
+  assert.throws(() => db.upsertTask(repoId, "#8", { ticketType: "spike" }), /ticket type/);
+  assert.throws(() => db.upsertTask(repoId, "#8", { blockedBy: ["#8"] }), /other tasks/);
+});
