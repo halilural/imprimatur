@@ -94,3 +94,18 @@ test("doc rules (#205): IMP-DOC-007 lists hand-written Markdown at the root and 
   ].sort());
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("doc rules (#205): docs.keep leaves kept folders and files out, new files in them too", () => {
+  const db = require("../vscode/db.js").openDb();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "imp-keep-"));
+  require("node:child_process").execFileSync("git", ["init", "-q", root]);
+  for (const rel of ["docs/mails/a.md", "docs/mails/2026/b.md", "docs/jira.md", "docs/mailsx.md", "docs/clinic.md"]) {
+    fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), "x\n");
+  }
+  fs.mkdirSync(path.join(root, ".claude"));
+  fs.writeFileSync(path.join(root, ".claude/imprimatur.json"), JSON.stringify({ docs: { keep: ["docs/mails", "./docs/jira.md", 3] } }));
+  const got = docDiagnostics(db, root).filter((d) => d.rule === "IMP-DOC-007").map((d) => d.message.split(":")[0]).sort();
+  assert.deepEqual(got, ["docs/clinic.md", "docs/mailsx.md"]);
+  fs.rmSync(root, { recursive: true, force: true });
+});

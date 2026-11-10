@@ -144,7 +144,7 @@ function docDiagnostics(db, root, { docsDir } = {}) {
   // Hand-written documents (#205): the root's Markdown and everything under docs/.
   for (const f of handWrittenDocs(root, dir))
     add("IMP-DOC-007", f.file, `${f.rel}: hand-written, outside Imprimatur's model (${f.lines} lines)`,
-      "Run /adopt-docs: it sorts each such file into a capability, an ADR, the glossary or a task's spec, or deletes it. A file you keep as it is: dismiss this finding.", 1, "info");
+      "Run /adopt-docs: it sorts each such file into a capability, an ADR, the glossary or a task's spec, or deletes it. A file or folder you keep as it is: {\"docs\": {\"keep\": [\"docs/mails/\"]}} in .claude/imprimatur.json, or dismiss this finding.", 1, "info");
   return out;
 }
 
@@ -164,10 +164,14 @@ function handWrittenDocs(root, dir = path.join(root, "docs")) {
     return [];
   }
   const under = [path.join(root, "docs"), dir].map((d) => path.relative(root, d).split(path.sep).join("/") + "/");
-  const { generatedText } = require("./docs-export.js");
+  const { generatedText, docsSettings } = require("./docs-export.js");
+  // {"docs": {"keep": ["docs/mails/", "docs/jira.md"]}}: folders and files kept as they are on purpose.
+  const keep = (Array.isArray(docsSettings(root).keep) ? /** @type {unknown[]} */ (docsSettings(root).keep) : [])
+    .filter((k) => typeof k === "string" && k.trim()).map((k) => String(k).trim().replace(/^\.\//, ""));
+  const kept = (/** @type {string} */ rel) => keep.some((k) => rel === k || rel.startsWith(k.endsWith("/") ? k : `${k}/`));
   const out = [];
   for (const rel of listed.split("\n").filter(Boolean)) {
-    if (STANDARD.has(path.basename(rel).toLowerCase())) continue;
+    if (STANDARD.has(path.basename(rel).toLowerCase()) || kept(rel)) continue;
     if (rel.includes("/") && !under.some((u) => rel.startsWith(u))) continue;
     const file = path.join(root, rel);
     let text;
