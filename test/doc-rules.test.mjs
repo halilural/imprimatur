@@ -69,3 +69,28 @@ test("doc rules (#131): sequence diagrams: autonumber and one numbered item per 
   assert.deepEqual(sequenceProblems("```mermaid\nflowchart LR\n  A --> B\n```"), [], "only sequence diagrams");
   assert.deepEqual(sequenceProblems("intro\n```mermaid\nsequenceDiagram\n  A->>B: x\n```"), [{ line: 2, why: "no autonumber, 0 numbered items for 1 arrow" }]);
 });
+
+test("doc rules (#205): IMP-DOC-007 lists hand-written Markdown at the root and under docs/, nothing generated or standard", () => {
+  const db = require("../vscode/db.js").openDb();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "imp-handwritten-"));
+  require("node:child_process").execFileSync("git", ["init", "-q", root]);
+  const w = (/** @type {string} */ rel, /** @type {string} */ text) => {
+    fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), text);
+  };
+  w("NOTES.md", "a\nb\n");
+  w("docs/jira.md", "x\n");
+  w("docs/drafts/plan.md", "y\n");
+  w("README.md", "# r\n");
+  w("docs/PROJECT.md", `${require("../vscode/docs-export.js").HEADER}\n\n# P\n`);
+  w("src/notes.md", "outside docs\n");
+  w(".gitignore", "docs/ignored.md\n");
+  w("docs/ignored.md", "z\n");
+  const got = docDiagnostics(db, root).filter((d) => d.rule === "IMP-DOC-007").map((d) => d.message).sort();
+  assert.deepEqual(got, [
+    "NOTES.md: hand-written, outside Imprimatur's model (2 lines)",
+    "docs/drafts/plan.md: hand-written, outside Imprimatur's model (1 lines)",
+    "docs/jira.md: hand-written, outside Imprimatur's model (1 lines)",
+  ].sort());
+  fs.rmSync(root, { recursive: true, force: true });
+});

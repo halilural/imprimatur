@@ -53,6 +53,9 @@ notes, kept in sections and written to `docs/PROJECT.md`, `docs/capabilities/`,
 `docs/adr/`, `GLOSSARY.md` and `.out-of-scope/`. A task's spec is written with `/to-spec`
 and split with `/to-tickets`. The panel's **Docs** page reads them all in one layout, and
 **Search and Ask** (`ctrl/cmd+alt+k`) finds a record or section, or answers with citations.
+Documents written by hand before (notes, runbooks, old designs) show in Agent setup's
+Recommendations; `/adopt-docs` sorts each with you: kept and linked, rewritten from the code
+into a capability, its terms and decisions extracted, or deleted when the code shows it stale.
 
 ## /study
 

@@ -13,6 +13,7 @@ const RULES = {
   "IMP-DOC-002": "A decision lists at least two considered options: the one chosen and an alternative",
   "IMP-DOC-005": "A sequenceDiagram has autonumber and, under it, a numbered list with an item per arrow",
   "IMP-DOC-006": "AGENTS.md and CLAUDE.md stay under 200 lines",
+  "IMP-DOC-007": "A document lives in Imprimatur's model (project page, capability, ADR, glossary, a task's spec) or is kept on purpose",
 };
 const SOURCES = ["https://adr.github.io/madr/", "https://agents.md/"];
 /** The rules' explanation, in agnix explain's shape (agnix does not know them). @param {string} id */
@@ -140,7 +141,45 @@ function docDiagnostics(db, root, { docsDir } = {}) {
       add("IMP-DOC-006", path.join(root, name), `${name} has ${n} lines, over ${LIMIT_LINES}`,
         name === "CLAUDE.md" ? "Move the rules every agent follows into AGENTS.md and import it with @AGENTS.md (Agent Setup → Checklist → Fix it); keep only what is Claude Code's own." : "Shorten it: drop repeats, move long references into docs/ and link them.");
   }
+  // Hand-written documents (#205): the root's Markdown and everything under docs/.
+  for (const f of handWrittenDocs(root, dir))
+    add("IMP-DOC-007", f.file, `${f.rel}: hand-written, outside Imprimatur's model (${f.lines} lines)`,
+      "Run /adopt-docs: it sorts each such file into a capability, an ADR, the glossary or a task's spec, or deletes it. A file you keep as it is: dismiss this finding.", 1, "info");
   return out;
 }
 
-module.exports = { docDiagnostics, decisionGaps, sequenceProblems, RULES, ruleInfo, LIMIT_LINES };
+/** Files every repo has, not documents of its design. */
+const STANDARD = new Set(["readme.md", "changelog.md", "agents.md", "claude.md", "license.md", "contributing.md", "code_of_conduct.md", "security.md"]);
+
+/**
+ * The repo's hand-written Markdown (#205): at the root and under docs/ (and the docs dir), git's
+ * view (ignored files left out), without Imprimatur's generated files and the standard ones.
+ * @param {string} root @param {string} [dir] @returns {Array<{file: string, rel: string, lines: number}>}
+ */
+function handWrittenDocs(root, dir = path.join(root, "docs")) {
+  let listed;
+  try {
+    listed = require("node:child_process").execFileSync("git", ["-C", root, "ls-files", "-co", "--exclude-standard", "--", "*.md", "*.mdx"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  } catch {
+    return [];
+  }
+  const under = [path.join(root, "docs"), dir].map((d) => path.relative(root, d).split(path.sep).join("/") + "/");
+  const { generatedText } = require("./docs-export.js");
+  const out = [];
+  for (const rel of listed.split("\n").filter(Boolean)) {
+    if (STANDARD.has(path.basename(rel).toLowerCase())) continue;
+    if (rel.includes("/") && !under.some((u) => rel.startsWith(u))) continue;
+    const file = path.join(root, rel);
+    let text;
+    try {
+      text = fs.readFileSync(file, "utf8");
+    } catch {
+      continue; // listed but deleted
+    }
+    if (generatedText(text)) continue;
+    out.push({ file, rel, lines: text.split("\n").length - (text.endsWith("\n") ? 1 : 0) });
+  }
+  return out;
+}
+
+module.exports = { handWrittenDocs, docDiagnostics, decisionGaps, sequenceProblems, RULES, ruleInfo, LIMIT_LINES };
