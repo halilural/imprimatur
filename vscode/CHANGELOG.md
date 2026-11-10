@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.163.2] - 2026-11-10
+
+### Fixed
+- `npm run setup` updates an installed Imprimatur plugin that is on another version than the checkout (`claude plugin marketplace update` + `claude plugin update`); before, a machine on the plugin stayed on the version it first installed (#204).
+
 ## [0.163.1] - 2026-11-10
 
 ### Fixed

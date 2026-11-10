@@ -7,7 +7,7 @@ import { createRequire } from "node:module";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { pluginFiles } from "../scripts/plugin.mjs";
-import { wanted, mergeHooks, removeOurHooks, pluginEnabled, pluginMatcher, pluginHooks, PLUGIN_ID } from "../scripts/setup.mjs";
+import { wanted, mergeHooks, removeOurHooks, pluginEnabled, pluginStale, pluginMatcher, pluginHooks, PLUGIN_ID } from "../scripts/setup.mjs";
 
 const require = createRequire(import.meta.url);
 const { hookLang, hookExts, mergeConfig, readConfig, configPath, imprimaturTool } = require("../vscode/config.js");
@@ -120,4 +120,13 @@ test("config: Imprimatur's tools under both server names", () => {
   assert.equal(imprimaturTool("mcp__plugin_imprimatur_imprimatur__task_upsert"), "task_upsert");
   assert.equal(imprimaturTool("mcp__plugin_other_imprimatur__task_upsert"), undefined);
   assert.equal(imprimaturTool(undefined), undefined);
+});
+
+test("setup: pluginStale finds a user-scope Imprimatur plugin on another version (#204)", () => {
+  const p = (o) => ({ id: "imprimatur@imprimatur", version: "0.135.0", scope: "user", enabled: true, ...o });
+  assert.equal(pluginStale([p({})], "0.163.1")?.version, "0.135.0");
+  assert.equal(pluginStale([p({ version: "0.163.1" })], "0.163.1"), undefined);
+  assert.equal(pluginStale([p({ scope: "project" })], "0.163.1"), undefined);
+  assert.equal(pluginStale([{ id: "other@x", version: "1" }], "0.163.1"), undefined);
+  assert.equal(pluginStale(undefined, "0.163.1"), undefined);
 });
