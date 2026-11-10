@@ -307,6 +307,10 @@ function sideFiles(db, repo, root) {
   try {
     require("./adr-files.js").exportAdrs(db, repo, root, io(`${HEADER_START}; edit this file or the ADR's record in Imprimatur. -->`));
   } catch {}
+  // Pocock's local tracker: specs, maps and their tickets under .scratch/ (#192).
+  try {
+    require("./scratch-files.js").exportScratch(db, repo, root, io(`${HEADER_START}; edit this file or the task in Imprimatur. -->`));
+  } catch {}
   const was = path.join(dirOf(root), FILES.glossary);
   try {
     if (was !== fileOf(root, "glossary") && inside(root, was) && generatedText(fs.readFileSync(was, "utf8"))) fs.rmSync(was);

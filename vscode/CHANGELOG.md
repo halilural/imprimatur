@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.144.0] - 2026-11-10
+
+### Added
+- Matt Pocock's local tracker under `.scratch/` (#192): for a task with a spec or a map, `.scratch/<task>/spec.md`, `map.md` and one file per ticket in `issues/` with its Status, Type and Blocked by lines. Edit a file and the task follows. `.scratch/` stays out of git unless `.claude/imprimatur.json` says `{"scratch": {"commit": true}}`.
+
 ## [0.143.0] - 2026-11-10
 
 ### Added
