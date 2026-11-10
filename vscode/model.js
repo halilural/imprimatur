@@ -8,11 +8,11 @@ const os = require("node:os");
 
 const TIMEOUT_MS = 60_000;
 
-/** @param {string} prompt @param {string} [model] @returns {Promise<string>} the model's reply */
-function askModel(prompt, model = "haiku") {
+/** @param {string} prompt @param {string} [model] @param {number} [timeoutMs] a longer wait for a long answer @returns {Promise<string>} the model's reply */
+function askModel(prompt, model = "haiku", timeoutMs = TIMEOUT_MS) {
   const args = ["-p", "--model", model, "--setting-sources", "", "--strict-mcp-config", "--tools", "", "--no-session-persistence", "--disable-slash-commands", prompt];
   return new Promise((resolve, reject) =>
-    execFile("claude", args, { cwd: os.tmpdir(), timeout: TIMEOUT_MS, env: { ...process.env, IMPRIMATUR_CHILD: "1" } }, (err, stdout) =>
+    execFile("claude", args, { cwd: os.tmpdir(), timeout: timeoutMs, env: { ...process.env, IMPRIMATUR_CHILD: "1" } }, (err, stdout) =>
       err ? reject(err) : resolve(stdout),
     ),
   );

@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.149.0] - 2026-11-10
+
+### Added
+- A generated wiki of the repo (#188): `npm run wiki` writes `docs/wiki/`, one page per code folder (what it does, a diagram, its parts, the ADRs about it, its terms) and an index. It is made from the code's own comments, the ADRs and the glossary, and a page is written again only when those change; edit them, not the page.
+
 ## [0.148.0] - 2026-11-10
 
 ### Added
