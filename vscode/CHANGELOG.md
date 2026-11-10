@@ -4,6 +4,12 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.166.0] - 2026-11-10
+
+### Added
+- Search finds inside the repo's hand-written documents, kept or not yet adopted, where they are: Search and Ask shows them with a file icon and opens the file at the line; the MCP `search` tool returns them as `files` (path, line). Nothing is copied into the database (#206).
+- `docs.keep` entries take a `when` (`{"path": "docs/runbooks/", "when": "an incident"}`): `docs/agents/domain.md`, which Pocock's skills read before exploring, lists the kept documents with it, to be read only when needed (#206).
+
 ## [0.165.0] - 2026-11-10
 
 ### Added

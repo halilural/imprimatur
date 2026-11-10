@@ -58,9 +58,10 @@ Only the approved rows, in this order:
 1. Write into Imprimatur (capability sections, glossary terms, ADRs, spec notes, reference links).
    Capability text is written from the code; never paste the old file's paragraphs. A sequenceDiagram gets
    autonumber and the numbered list under it.
-2. A file kept as it is: `record_update` its finding to status `dropped`, the reason in the body
-   ("kept: reference, linked from …") and `links.audit.reason` = `"decided"`. A whole folder kept:
-   `docs.keep` (see Large repos), then its findings turn to applied at the next audit.
+2. A file or folder kept as it is (reference, archive): add it to `docs.keep` with when to read it,
+   `{"path": "docs/runbooks/deploy.md", "when": "deploying to an environment"}`. Imprimatur lists it for
+   agents in `docs/agents/domain.md` and its `search` finds inside it, so nothing is copied. Its findings
+   turn to applied at the next audit.
 3. A file to delete: `git rm` it, only with a yes for that file. Do not commit unless asked.
 4. Run `setup_audit` again: findings of deleted files turn to applied. Report what changed:
    files kept, sections written, terms and ADRs added, files deleted, and what is still open.
@@ -73,7 +74,8 @@ Tens of files, thousands of lines: most of it is usually archive, and archive is
    likely route. Read a few files per folder, not all.
 2. **Archive folders** (mail threads, review notes, analysis evidence, prompt templates, anything a repo
    rule keeps on purpose): one approval for the whole folder. Add it to `.claude/imprimatur.json`
-   `{"docs": {"keep": ["docs/mails/", ...]}}`: its files leave the list, new ones too. No per-file dismiss.
+   `{"docs": {"keep": [{"path": "docs/mails/", "when": "a mail thread's history is needed"}, ...]}}`: its
+   files leave the list, new ones too. Write `when` as the situation an agent should open it in. No per-file dismiss.
 3. **Per-task folders** (`walkthroughs/<KEY>/`, `drafts/<KEY>/`): kept too, and linked from their task:
    `record_add` kind `note` on that task, `links.files` = the folder's files, so the task shows them.
    Not copied into the spec.

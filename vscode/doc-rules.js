@@ -148,15 +148,31 @@ function docDiagnostics(db, root, { docsDir } = {}) {
   return out;
 }
 
+/**
+ * The repo's kept documents (#205, #206): {"docs": {"keep": ["docs/mails/", {"path": "docs/runbooks/", "when": "an incident"}]}},
+ * folders and files kept as they are on purpose; "when" tells an agent when to read them.
+ * @param {string} root @returns {Array<{path: string, when?: string}>}
+ */
+function keepOf(root) {
+  const raw = require("./docs-export.js").docsSettings(root).keep;
+  return (Array.isArray(raw) ? raw : []).flatMap((/** @type {any} */ k) => {
+    const p = typeof k === "string" ? k : typeof k?.path === "string" ? k.path : "";
+    const clean = p.trim().replace(/^\.\//, "");
+    if (!clean || clean.split("/").includes("..") || path.isAbsolute(clean)) return [];
+    return [{ path: clean, ...(typeof k?.when === "string" && k.when.trim() ? { when: k.when.trim() } : {}) }];
+  });
+}
+
 /** Files every repo has, not documents of its design. */
 const STANDARD = new Set(["readme.md", "changelog.md", "agents.md", "claude.md", "license.md", "contributing.md", "code_of_conduct.md", "security.md"]);
 
 /**
  * The repo's hand-written Markdown (#205): at the root and under docs/ (and the docs dir), git's
- * view (ignored files left out), without Imprimatur's generated files and the standard ones.
- * @param {string} root @param {string} [dir] @returns {Array<{file: string, rel: string, lines: number}>}
+ * view (ignored files left out), without Imprimatur's generated files and the standard ones; kept: true
+ * includes the files docs.keep keeps (the search indexes them, #206).
+ * @param {string} root @param {string} [dir] @param {{kept?: boolean}} [o] @returns {Array<{file: string, rel: string, lines: number}>}
  */
-function handWrittenDocs(root, dir = path.join(root, "docs")) {
+function handWrittenDocs(root, dir = path.join(root, "docs"), { kept = false } = {}) {
   let listed;
   try {
     listed = require("node:child_process").execFileSync("git", ["-C", root, "ls-files", "-co", "--exclude-standard", "--", "*.md", "*.mdx"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
@@ -164,14 +180,12 @@ function handWrittenDocs(root, dir = path.join(root, "docs")) {
     return [];
   }
   const under = [path.join(root, "docs"), dir].map((d) => path.relative(root, d).split(path.sep).join("/") + "/");
-  const { generatedText, docsSettings } = require("./docs-export.js");
-  // {"docs": {"keep": ["docs/mails/", "docs/jira.md"]}}: folders and files kept as they are on purpose.
-  const keep = (Array.isArray(docsSettings(root).keep) ? /** @type {unknown[]} */ (docsSettings(root).keep) : [])
-    .filter((k) => typeof k === "string" && k.trim()).map((k) => String(k).trim().replace(/^\.\//, ""));
-  const kept = (/** @type {string} */ rel) => keep.some((k) => rel === k || rel.startsWith(k.endsWith("/") ? k : `${k}/`));
+  const { generatedText } = require("./docs-export.js");
+  const keep = keepOf(root).map((k) => k.path);
+  const isKept = (/** @type {string} */ rel) => keep.some((k) => rel === k || rel.startsWith(k.endsWith("/") ? k : `${k}/`));
   const out = [];
   for (const rel of listed.split("\n").filter(Boolean)) {
-    if (STANDARD.has(path.basename(rel).toLowerCase()) || kept(rel)) continue;
+    if (STANDARD.has(path.basename(rel).toLowerCase()) || (!kept && isKept(rel))) continue;
     if (rel.includes("/") && !under.some((u) => rel.startsWith(u))) continue;
     const file = path.join(root, rel);
     let text;
@@ -186,4 +200,4 @@ function handWrittenDocs(root, dir = path.join(root, "docs")) {
   return out;
 }
 
-module.exports = { handWrittenDocs, docDiagnostics, decisionGaps, sequenceProblems, RULES, ruleInfo, LIMIT_LINES };
+module.exports = { handWrittenDocs, keepOf, docDiagnostics, decisionGaps, sequenceProblems, RULES, ruleInfo, LIMIT_LINES };
