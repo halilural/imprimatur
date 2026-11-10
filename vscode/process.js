@@ -47,6 +47,8 @@ const DEFAULTS = {
   branchFinish: "warn",
   docUpdate: "warn",
   docSync: "warn",
+  // #194: an epic's next ready child is started instead of ending the turn; max: continuations per session.
+  keepGoing: { mode: "block", max: 10 },
 };
 
 /** The git root at or above a directory, by its .git entry (no git process). @param {string} dir */
@@ -579,8 +581,80 @@ function check(event, input, deps = {}) {
       }
     }
   }
+  // #194: an epic in progress goes on to its next ready child instead of ending the turn; the session's
+  // own counter is the safety valve (stop_hook_active would allow one continuation only).
+  if (event === "Stop" && s.keepGoing?.mode && !block && !asksUser(input.last_assistant_message ?? "")) {
+    try {
+      const records = deps.records ?? require("./records.js");
+      const db = records.dbOf?.();
+      const id = db && records.repoId(root);
+      const ready = id === undefined || !db ? undefined : nextReady(db, id);
+      const seen = take(root, input.session_id, "keepGoing");
+      const max = Number(s.keepGoing.max) || DEFAULTS.keepGoing.max;
+      if (ready && seen.length < max) {
+        for (let i = 0; i <= seen.length; i++) remember(root, input.session_id, "keepGoing", String(i));
+        found(s.keepGoing, "keepGoing", `epic ${ready.epic.key} still has work ready: ${ready.next.key} ${ready.next.title}. Go on with it now, in this turn; end the turn only for a decision that is the user's, or when the epic is done (${seen.length + 1}/${max}).`, notice);
+      } else for (const v of seen) remember(root, input.session_id, "keepGoing", v);
+    } catch {}
+  }
   return { ...(block && { block }), ...(context.length && { context }), ...(notice.length && { notice }) };
 }
+
+/** A task's open blockers named in its summary ("blocked by #181, #182") or its blocked_by list. @param {any} t */
+const blockersOf = (t) => {
+  const listed = (() => {
+    try {
+      return t.blocked_by ? JSON.parse(t.blocked_by) : [];
+    } catch {
+      return [];
+    }
+  })();
+  const said = /blocked by ([#A-Z0-9, and-]+)/i.exec(t.summary ?? "")?.[1].match(/#\d+|[A-Z][A-Z0-9]+-\d+/g) ?? [];
+  return [...new Set([...listed, ...said])];
+};
+
+/**
+ * The epic this session is working through and its next ready child (#194): the epic of the child
+ * changed last (within six hours), then its open children, a child with open children of its own
+ * replaced by those, in key order; ready when every blocker it names is done or dropped.
+ * @param {any} db @param {number} repoId @param {number} [now]
+ * @returns {{epic: any, next: any} | undefined}
+ */
+function nextReady(db, repoId, now = Date.now()) {
+  const last = db.q(`SELECT c.epic_id FROM tasks c JOIN tasks e ON e.id = c.epic_id
+                     WHERE c.repo_id = ? AND e.status IN ('open', 'active') AND c.updated_at > ?
+                     ORDER BY c.updated_at DESC LIMIT 1`).get(repoId, now - 6 * 3600_000);
+  if (!last) return undefined;
+  const top = (/** @type {number} */ id) => db.q("SELECT * FROM tasks WHERE id = ?").get(id);
+  let epic = top(last.epic_id);
+  // A child epic (#182 under #179) hands over to its own epic, so the whole tree is walked.
+  while (epic?.epic_id && epic.epic_id !== epic.id) {
+    const up = top(epic.epic_id);
+    if (!up || !["open", "active"].includes(up.status)) break;
+    epic = up;
+  }
+  if (!epic) return undefined;
+  const open = (/** @type {number} */ id) => db.q("SELECT * FROM tasks WHERE epic_id = ? AND id <> ? AND status IN ('open', 'active')").all(id, id);
+  const num = (/** @type {any} */ t) => Number(/\d+/.exec(t.key)?.[0] ?? Infinity);
+  /** @type {any[]} */ const leaves = [];
+  const walk = (/** @type {number} */ id, depth = 0) => {
+    for (const c of open(id)) {
+      const kids = depth < 3 ? open(c.id) : [];
+      if (kids.length) walk(c.id, depth + 1);
+      else leaves.push(c);
+    }
+  };
+  walk(epic.id);
+  const closed = (/** @type {string} */ key) => {
+    const t = db.q("SELECT status FROM tasks WHERE repo_id = ? AND key = ?").get(repoId, key);
+    return !t || t.status === "done" || t.status === "dropped";
+  };
+  const next = leaves.sort((a, b) => num(a) - num(b)).find((t) => blockersOf(t).every(closed));
+  return next ? { epic, next } : undefined;
+}
+
+/** Whether a final message asks the user something: a 👉 line or a question mark ending a line. @param {string} msg */
+const asksUser = (msg) => /👉/.test(msg) || /\?\s*$/m.test(msg);
 
 /**
  * What Claude Code reads back from a hook: exit code, stdout (JSON) and stderr.
@@ -609,4 +683,4 @@ function starterSettings({ allow, branch } = {}) {
   };
 }
 
-module.exports = { check, reply, settingsOf, starterSettings, repoOf, issueOfBranch, bypasses, trust, isTrusted, scriptIn, DEFAULTS, CONFIG };
+module.exports = { check, reply, settingsOf, starterSettings, nextReady, asksUser, repoOf, issueOfBranch, bypasses, trust, isTrusted, scriptIn, DEFAULTS, CONFIG };
