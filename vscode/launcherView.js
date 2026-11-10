@@ -21,6 +21,7 @@ const PARTS = [
 ];
 
 const ROWS = [
+  { id: "app", label: "Imprimatur", icon: "rocket", command: "imprimatur.app.open", tooltip: "The new panel: Home, Tasks, Docs, Edits, Setup (#190)" },
   { id: "home", label: "Home", icon: "home", command: "imprimatur.openHome", tooltip: "Where we left off, what is waiting on you, tasks" },
   { id: "tasks", label: "Tasks", icon: "checklist", command: "imprimatur.openTasks", tooltip: "Tasks and their records" },
   { id: "meetings", label: "Meetings", icon: "comment-discussion", command: "imprimatur.openMeetings", tooltip: "Meetings: their decisions, to-dos and notes (#169)" },
