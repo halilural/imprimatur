@@ -190,6 +190,11 @@ function handWrittenDocs(root, dir = path.join(root, "docs"), { kept = false } =
     const file = path.join(root, rel);
     let text;
     try {
+      // A link could point anywhere on the machine (a key file): its text would reach the search and the model.
+      if (fs.lstatSync(file).isSymbolicLink()) continue;
+      const real = fs.realpathSync(file);
+      const top = fs.realpathSync(root);
+      if (real !== top && !real.startsWith(top + path.sep)) continue;
       text = fs.readFileSync(file, "utf8");
     } catch {
       continue; // listed but deleted
