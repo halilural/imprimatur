@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.153.1] - 2026-11-10
+
+### Security
+- A spec's gate opens only with your own approval (#197): an approval an agent recorded shows as *agent-recorded* with a **Confirm** button, and does not open the next gate.
+
 ## [0.153.0] - 2026-11-10
 
 ### Added

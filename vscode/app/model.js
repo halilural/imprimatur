@@ -110,8 +110,14 @@ function taskPage(db, repo, key, tab) {
   const task = db.taskByKey(repo.id, key);
   if (!task) return undefined;
   const recs = db.recordsOf(task.id);
-  const approved = new Set(recs.filter((/** @type {any} */ r) => r.kind === "decision" && r.links?.gate).map((/** @type {any} */ r) => r.links.gate));
-  const gates = GATES.map((g, i) => ({ ...g, done: approved.has(g.id), next: !approved.has(g.id) && GATES.slice(0, i).every((x) => approved.has(x.id)) }));
+  // A gate is approved only by the user's own record (who created it, from its first version): an
+  // approval an agent recorded shows as such until the user confirms it, so no agent can pass a gate.
+  const by = (/** @type {number} */ id) => db.q("SELECT actor_kind FROM record_versions WHERE record_id = ? AND op = 'create' ORDER BY id LIMIT 1").get(id)?.actor_kind;
+  const gated = recs.filter((/** @type {any} */ r) => r.kind === "decision" && r.status !== "dropped" && r.links?.gate);
+  const approved = new Set(gated.filter((/** @type {any} */ r) => by(r.id) === "user").map((/** @type {any} */ r) => r.links.gate));
+  const claimed = new Set(gated.filter((/** @type {any} */ r) => by(r.id) !== "user").map((/** @type {any} */ r) => r.links.gate));
+  const gates = GATES.map((g, i) => ({ ...g, done: approved.has(g.id), agent: !approved.has(g.id) && claimed.has(g.id),
+    next: !approved.has(g.id) && GATES.slice(0, i).every((x) => approved.has(x.id)) }));
   const spec = db.taskDocFind(repo.id, key, "spec");
   const chapters = require("../db.js").CHAPTERS.spec;
   const specReading = reading(`Spec · ${key}`, spec ? db.docSections(spec.id).filter((/** @type {any} */ s) => s.status === "current")
