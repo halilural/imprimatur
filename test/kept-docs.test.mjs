@@ -58,3 +58,13 @@ test("domain.md (#206): kept documents listed with when to read them, none witho
   assert.doesNotMatch(agentFiles("<!-- h -->")["domain.md"], /Kept documents/);
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("search (#206): a symlinked document is not read, whatever it points at", () => {
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "imp-secret-"));
+  fs.writeFileSync(path.join(outside, "key.md"), "topsecretvalue\n");
+  const { root, db, repo: r } = repo({ "docs/ok.md": "# Ok\ntopsecretvalue is not here\n" });
+  fs.symlinkSync(path.join(outside, "key.md"), path.join(root, "docs/link.md"));
+  assert.deepEqual(rankedSearch(db, "topsecretvalue", { repoId: r.id, type: "file" }).map((h) => h.rel), ["docs/ok.md"]);
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(outside, { recursive: true, force: true });
+});
