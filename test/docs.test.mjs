@@ -241,7 +241,7 @@ test("export: the golden file; written only when changed; superseded left out; n
 
 // ---- docUpdate process check ----
 
-test("docUpdate: an ADR added and not linked is told to the agent at its next tool call; linked, nothing", () => {
+test("docUpdate (#186): an ADR stands alone; one changed after the section it feeds is told at the next tool call", () => {
   const root = gitRepo();
   fs.mkdirSync(path.join(root, ".claude"), { recursive: true });
   fs.writeFileSync(path.join(root, ".claude", "imprimatur.json"), JSON.stringify({ process: { status: false, whereWeLeftOff: false, branchFinish: false, mainGuard: false, designFirst: false } }));
@@ -251,33 +251,25 @@ test("docUpdate: an ADR added and not linked is told to the agent at its next to
   const records = { dbOf: () => db, repoId: () => repo.id, recordsOf: () => [] };
   const adr = db.addRecord(task.id, { kind: "adr", title: "Docs live in the DB" }, agent);
   const run = (event, extra = {}, session = "S1") => check(event, { cwd: root, session_id: session, ...extra }, { records });
-  // The id from the tool's answer, the kind from the database.
-  run("PostToolUse", { tool_name: "mcp__plugin_imprimatur_imprimatur__record_add", tool_input: { task: "#72", kind: "adr", title: adr.title }, tool_response: [{ type: "text", text: `Added [${adr.id}] adr/open - Docs live in the DB` }] });
-  assert.deepEqual(run("Stop"), {}, "Stop says nothing to the user");
-  const told = run("PostToolUse", { tool_name: "Bash", tool_input: { command: "ls" } });
-  assert.deepEqual(told.context, [`Imprimatur (docUpdate): ADR #${adr.id} added, but the architecture document was not updated: write the relevant section and link the record with doc_section_upsert {kind: "architecture", key, title, body, records: [${adr.id}]}.`]);
-  assert.deepEqual(run("PostToolUse", { tool_name: "Bash", tool_input: { command: "ls" } }), {}, "told once");
-  // A PDR changed (title) without a link: next session start hears it; a status change alone is no design change.
-  const pdr = db.addRecord(task.id, { kind: "pdr", title: "Two tabs" }, agent);
-  run("PostToolUse", { tool_name: "mcp__imprimatur__record_update", tool_input: { id: pdr.id, status: "done" } });
+  const added = (r) => run("PostToolUse", { tool_name: "mcp__plugin_imprimatur_imprimatur__record_add", tool_input: { task: "#72", kind: r.kind, title: r.title }, tool_response: [{ type: "text", text: `Added [${r.id}] ${r.kind}/open - ${r.title}` }] });
+  // Not linked anywhere: Pocock's ADRs stand alone, nothing is said.
+  added(adr);
   assert.deepEqual(run("Stop"), {});
-  run("PostToolUse", { tool_name: "mcp__imprimatur__record_update", tool_input: { id: pdr.id, title: "Two tabs, Architecture and Product" } });
-  run("Stop");
-  assert.match(run("SessionStart", {}, "S2").context.join("\n"), new RegExp(`PDR #${pdr.id} updated, but the product document was not updated`));
-  // Linked to a section before Stop: nothing.
-  const adr2 = db.addRecord(task.id, { kind: "adr", title: "Second" }, agent);
-  run("PostToolUse", { tool_name: "mcp__imprimatur__record_add", tool_input: { task: "#72", kind: "adr", title: "Second" }, tool_response: { content: [] } });
-  db.upsertSection(db.docOf(repo.id, "architecture").id, "storage", { title: "Storage", addRecords: [adr2.id] }, agent);
-  run("Stop");
   assert.deepEqual(run("PostToolUse", { tool_name: "Bash", tool_input: { command: "ls" } }), {});
-  // block: the Stop is stopped (the agent goes on and links it).
-  fs.writeFileSync(path.join(root, ".claude", "imprimatur.json"), JSON.stringify({ process: { status: false, whereWeLeftOff: false, branchFinish: false, docUpdate: "block" } }));
-  const adr3 = db.addRecord(task.id, { kind: "adr", title: "Third" }, agent);
-  run("PostToolUse", { tool_name: "mcp__imprimatur__record_add", tool_input: { task: "#72", kind: "adr", title: "Third" }, tool_response: JSON.stringify({ structuredContent: { record: { id: adr3.id, kind: "adr" } } }) });
-  assert.match(run("Stop").block, new RegExp(`ADR #${adr3.id} added`));
-  // A note is not a design record.
+  // Linked to a capability's section, then changed after it: told once.
+  const cap = db.taskDocOf(repo.id, "storage", "capability");
+  db.upsertSection(cap.id, "where", { title: "Where it lives", addRecords: [adr.id] }, agent);
+  db.sqlite.prepare("UPDATE doc_sections SET updated_at = 1 WHERE doc_id = ?").run(cap.id);
+  db.updateRecord(adr.id, { body: "And the files follow." }, agent);
+  run("PostToolUse", { tool_name: "mcp__imprimatur__record_update", tool_input: { id: adr.id, body: "And the files follow." } });
+  run("Stop");
+  const told = run("PostToolUse", { tool_name: "Bash", tool_input: { command: "ls" } });
+  assert.match(told.context?.[0] ?? "", new RegExp(`ADR #${adr.id} updated, but the section it is linked to \\(capability/where\\) has not changed since`));
+  assert.deepEqual(run("PostToolUse", { tool_name: "Bash", tool_input: { command: "ls" } }), {}, "told once");
+  // A status change alone is no design change; a note is not a design record.
+  run("PostToolUse", { tool_name: "mcp__imprimatur__record_update", tool_input: { id: adr.id, status: "done" } });
   const note = db.addRecord(task.id, { kind: "note", title: "n" }, agent);
-  run("PostToolUse", { tool_name: "mcp__imprimatur__record_add", tool_input: { task: "#72", kind: "note", title: "n" }, tool_response: `Added [${note.id}] note/open` });
+  added(note);
   assert.deepEqual(run("Stop"), {});
 });
 

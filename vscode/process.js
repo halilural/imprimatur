@@ -8,7 +8,7 @@
 //   SessionStart        whereWeLeftOff  the repo's unfinished tasks and their 👉, from the database
 //   PreToolUse Bash     hookBypass      git --no-verify, commit -n, HUSKY=0
 //   PreToolUse edits    mainGuard       on main, only the allowed paths are edited
-//                       designFirst     on a <type>/<n>-… branch, code before the task has an ADR or PDR
+//                       designFirst     on a <type>/<n>-… branch, code before the task has a spec or an ADR
 //   PostToolUse edits   docsToc         docs/**/*.md changed: run the repo's TOC script
 //                       unopenedSources a docs/market-research file with sources marked "not opened" / "açılmadı"
 //   PostToolUse Bash    issueCreate     after gh issue create: epic, board, milestone, Imprimatur task
@@ -16,10 +16,10 @@
 //   PostToolUse MCP     sweep           a task set done: its GitHub issue still open (not while tracker sync, #70, runs)
 //   Stop                status          the answer has no "Neredeyiz" section
 //   SessionStart, Bash  branchFinish    (after git merge/switch/checkout/pull) merged branches left behind
-//   PostToolUse MCP,    docUpdate       an ADR/PDR/decision added or changed (record_add/record_update) that no design
+//   PostToolUse MCP,    docUpdate       an ADR or decision changed (record_add/record_update) after the section it feeds
 //   Stop, next event                    document section links, or whose sections did not change after it (#74; a
 //                                       decision only once linked): told to the agent at its next tool call or session start
-//   SessionStart        (always)        a repo never backfilled: its documents and glossary written once, in the
+//   SessionStart        (gone, #186)    the document and analysis backfills; was: a repo never backfilled: written once, in the
 //                                       background (docs-backfill.js), with or without .claude/imprimatur.json
 //   SessionStart,       docSync         the design documents and their Markdown files synced (docs-sync.js, #73):
 //   PostToolUse edits                   adoptions, edits taken in and conflicts told to the agent
@@ -299,9 +299,9 @@ function unlinked(records, notes) {
       if (!rec || rec.status === "dropped" || !DESIGN_KINDS.includes(rec.kind)) continue;
       const secs = db.sectionsOfRecord(rec.id).filter((/** @type {any} */ s) => s.status === "current");
       const base = { id: rec.id, kind: rec.kind, verb: verb || "added", note };
-      if (!secs.length) {
-        if (rec.kind !== "decision") out.push({ ...base, why: /** @type {const} */ ("unlinked"), sections: [] });
-      } else if (Math.max(...secs.map((/** @type {any} */ s) => s.updated_at)) < rec.updated_at) {
+      // #186: an ADR stands alone (Pocock's docs/adr/); only a section it feeds can fall behind it.
+      if (!secs.length) continue;
+      if (Math.max(...secs.map((/** @type {any} */ s) => s.updated_at)) < rec.updated_at) {
         out.push({ ...base, why: /** @type {const} */ ("stale"), sections: secs.map((/** @type {any} */ s) => `${s.doc_kind}/${s.key}`) });
       }
     }
@@ -311,15 +311,8 @@ function unlinked(records, notes) {
   }
 }
 
-/** @param {{id: number, kind: string, verb: string, why: string, sections: string[]}} l */
-const docLine = (l) => {
-  const label = l.kind === "adr" ? "ADR" : l.kind === "pdr" ? "PDR" : "Decision";
-  if (l.why === "stale") {
-    return `${label} #${l.id} ${l.verb}, but the section it is linked to (${l.sections.join(", ")}) has not changed since: update the section text from the record with doc_section_upsert.`;
-  }
-  const arch = l.kind === "adr";
-  return `${label} #${l.id} ${l.verb}, but the ${arch ? "architecture" : "product"} document was not updated: write the relevant section and link the record with doc_section_upsert {kind: "${arch ? "architecture" : "product"}", key, title, body, records: [${l.id}]}.`;
-};
+/** A design record changed after the section it feeds. @param {{id: number, kind: string, verb: string, sections: string[]}} l */
+const docLine = (l) => `${l.kind === "adr" ? "ADR" : l.kind === "pdr" ? "PDR" : "Decision"} #${l.id} ${l.verb}, but the section it is linked to (${l.sections.join(", ")}) has not changed since: update the section text from the record with doc_section_upsert.`;
 
 /**
  * Branches already in main, other than main and the one checked out, touched in the last 14
@@ -354,40 +347,8 @@ function check(event, input, deps = {}) {
   const ghRun = deps.gh ?? gh;
   const root = repoOf(input.cwd ?? process.cwd());
   if (!root) return {};
-  // The design documents written once for a repo that never had them (docs-backfill.js):
-  // every known repo, with or without .claude/imprimatur.json.
-  if (event === "SessionStart") {
-    try {
-      const records = deps.records ?? require("./records.js");
-      const id = records.repoId(root);
-      if (id !== undefined) require("./docs-backfill.js").maybeStart(records.dbOf(), id, root, deps.backfill);
-      // Past sessions' analyses, once per repo (analysis-backfill.js).
-      if (id !== undefined) require("./analysis-backfill.js").maybeStart(records.dbOf(), id, root, deps.analysisBackfill);
-      // What the edit hook missed since the last session: gone files, files written by Bash (#174).
-      if (id !== undefined) require("./analysis.js").rescan(records.dbOf(), id, root, deps.analysisRescan);
-    } catch {}
-  }
-  // A task's analysis (analysis.js): the Markdown file just written, or the plan the agent
-  // leaves plan mode with; every known repo, with or without .claude/imprimatur.json.
-  if (event === "PostToolUse" && (/^(Edit|Write|MultiEdit)$/.test(input.tool_name ?? "") || input.tool_name === "ExitPlanMode")) {
-    try {
-      const records = deps.records ?? require("./records.js");
-      const id = records.repoId(root);
-      const a = require("./analysis.js");
-      const ti = input.tool_input ?? {};
-      const plan = input.tool_name === "ExitPlanMode";
-      const file = plan ? undefined : ti.file_path && path.resolve(input.cwd ?? root, ti.file_path);
-      const rel = plan ? `plan:${String(input.session_id ?? "").slice(0, 8) || "x"}` : file && a.relPath(root, file);
-      // A file over 1 MB is left to the backfill: the hook stays quick.
-      const small = (/** @type {string} */ f) => fs.statSync(f).size <= 1_000_000;
-      const text = plan ? (typeof ti.plan === "string" ? ti.plan : undefined) : rel && /\.mdx?$/i.test(rel) && small(file) ? fs.readFileSync(file, "utf8") : undefined;
-      if (id !== undefined && rel && text !== undefined) {
-        const session = input.session_id || undefined;
-        const branch = (deps.git ?? git)(["symbolic-ref", "--short", "HEAD"], root);
-        a.onEdit(records.dbOf(), id, root, { rel, text, session, branch, at: Date.now(), actor: { kind: "hook", id: session } }, deps.analysis);
-      }
-    } catch {}
-  }
+  // #186: the design-document and analysis backfills and the analysis intake are gone with
+  // Pocock's model (#179): a spec is written with /to-spec, through the MCP document tools.
   // The repo's language (#80, .claude/imprimatur.json "lang"): what the agent writes here. Said
   // with or without process settings: "lang" alone does not turn the checks on.
   // The reply language (#176) is said in every repo, settings or not.
@@ -485,13 +446,16 @@ function check(event, input, deps = {}) {
         const records = deps.records ?? require("./records.js");
         // Only code (not Markdown), and only when the database knows the task: no answer is no warning.
         const known = !/\.(md|mdx|txt)$/i.test(rel) && records.repoId(root) !== undefined && records.task?.(root, `#${n}`) !== undefined;
-        // The task's own ADR/PDR, or one anywhere in the repo that names the issue (links.issue,
-        // or "#n" in its text): imported design records live under the ADR and PDR tasks.
+        // The task's spec (Pocock's, #186), its own ADR (or an old PDR), or one anywhere in the repo
+        // that names the issue (links.issue, or "#n" in its text).
         const names = (r) => Number(r.links?.issue) === Number(n) || new RegExp(`#${n}(?!\\d)`).test(`${r.title}\n${r.body ?? ""}`);
-        const designed = known && (records.recordsOf(root, `#${n}`).some((r) => r.kind === "adr" || r.kind === "pdr")
-          || (records.dbOf()?.recordsByKind(records.repoId(root), ["adr", "pdr"]) ?? []).some(names));
+        const db = known ? records.dbOf?.() : undefined;
+        const spec = db?.taskDocFind?.(records.repoId(root), `#${n}`, "spec");
+        const designed = known && ((spec && db.docSections(spec.id).some((/** @type {any} */ x) => x.status === "current"))
+          || records.recordsOf(root, `#${n}`).some((r) => r.kind === "adr" || r.kind === "pdr")
+          || (db?.recordsByKind(records.repoId(root), ["adr", "pdr"]) ?? []).some(names));
         if (known && !designed && once(root, input.session_id, `design #${n}`)) {
-          found(s.designFirst, "designFirst", `#${n} has no ADR or PDR record yet. A change in behaviour starts with its design: record_add kind "pdr" (what the user sees) or "adr" (how it is built), then the code. File: ${rel}`);
+          found(s.designFirst, "designFirst", `#${n} has no spec or ADR yet. A change in behaviour starts with its design: /to-spec writes the task's spec (problem, user stories, design), or record_add kind "adr" for a hard-to-reverse choice; then the code. File: ${rel}`);
         }
       }
     }

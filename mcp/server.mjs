@@ -38,16 +38,16 @@ export const INSTRUCTIONS = [
   "Imprimatur holds this repo's tasks and records: the source of truth for where work stands.",
   "Call where_we_left_off first in every session.",
   "Tasks are keyed \"#58\" (a GitHub issue) or a Jira key such as \"PROJ-12\"; record_add creates a missing task.",
-  "Record kinds: todo, question (to the user), answer (parent_id = the question's id), decision, note, fixme, adr (architecture), pdr (product), test, meeting (its decisions and to-dos: parent_id = its id).",
+  "Record kinds: todo, question (to the user), answer (parent_id = the question's id), decision, note, fixme, adr (hard to reverse, surprising, a real trade-off), test, meeting (its decisions and to-dos: parent_id = its id).",
   "owner: C = the agent does it, K = the user does it.",
   "👉 is the task's pointer, where work stopped: pointer_set moves it (open records only), or record_add with pointer:true.",
   "Keep the task_upsert summary a one-line \"where we are\".",
   "Work done: record_update that record with status \"done\", the result in body.",
   "search with repo \"*\" looks in every repo.",
-  "Each repo has living documents in sections: architecture (how it is built), product (what the user gets) and glossary (one section per term); doc_get reads them.",
-  "When you add or change an adr/pdr/decision, update its architecture/product section with doc_section_upsert and link the record; a new or changed term goes in the glossary.",
+  "Documents (Matt Pocock's; doc_get): project, capability (how a feature behaves now; task = its name), a task's spec (/to-spec) and map, glossary (a term per section), out-of-scope.",
+  "A product choice goes in the task's spec; an adr stands alone; a new term goes in the glossary.",
   // #103: a reader follows a flow arrow by arrow.
-  "Every Mermaid sequenceDiagram you write (section, analysis, record): autonumber, and right under it a numbered list, item n explaining arrow n.",
+  "Every Mermaid sequenceDiagram you write (section, spec, record): autonumber, and right under it a numbered list, item n explaining arrow n.",
   "Leave _session empty: Imprimatur's hook fills it.",
   // #163: an eval on the API key ran the owner's credit out; the subscription was there.
   "Model calls in scripts you run (spikes, evals, judges) use the user's Claude subscription: `claude -p` with ANTHROPIC_API_KEY unset, never an API key; code under test gets a client that calls claude -p.",
@@ -264,7 +264,7 @@ const TOOLS = [
   {
     name: "doc_get",
     title: "Read a design document",
-    description: "The repo's architecture or product design document, its glossary (terms, alphabetical), or a task's analysis (kind analysis, task: its key; each section's source is the file it came from): its table of contents (each section's key, title, status, last update and contributing record ids). section gives that section's body; full:true gives every body.",
+    description: "A document of the repo: its project page, a capability (task: its name), a task's spec or map (task: its key), the glossary (terms, alphabetical) or out-of-scope; older kinds (architecture, product, a task's analysis) still read: its table of contents (each section's key, title, status, last update and contributing record ids). section gives that section's body; full:true gives every body.",
     inputSchema: input({
       kind: DOC_KIND,
       task: DOC_TASK,
@@ -281,7 +281,7 @@ const TOOLS = [
   {
     name: "doc_section_upsert",
     title: "Write a design document section",
-    description: "Creates a section of the architecture or product document, a glossary term (title = the term, body = its meaning), or a section of a task's analysis (kind analysis, task: its key) (title needed) or changes its title, body (Markdown), position or status (superseded: replaced, kept at the end). records: ids of records of this repo (adr, pdr, decision, …) linked as contributors, besides those already linked. Every change is versioned.",
+    description: "Creates a section of the project page, a capability (task: its name), a task's spec or map (task: its key), a glossary term (title = the term, body = its meaning) or an out-of-scope concept (title needed) or changes its title, body (Markdown), position or status (superseded: replaced, kept at the end). records: ids of records of this repo (adr, decision, …) linked as contributors, besides those already linked. Every change is versioned.",
     inputSchema: input({
       kind: DOC_KIND,
       task: DOC_TASK,
@@ -293,7 +293,7 @@ const TOOLS = [
       chapter: {
         type: "string",
         enum: [...new Set([...Object.values(CHAPTERS), ANALYSIS_CHAPTERS].flatMap((c) => Object.keys(c)))],
-        description: `The fixed chapter the section sits in (every new architecture or product section needs one): ${Object.entries(CHAPTERS).map(([k, c]) => `${k}: ${Object.keys(c).join(", ")}`).join("; ")}; analysis, a mini design doc (a new task analysis: one section per chapter): ${Object.keys(ANALYSIS_CHAPTERS).join(", ")}`,
+        description: `The fixed chapter the section sits in (every new project, spec or map section needs one): ${Object.entries(CHAPTERS).map(([k, c]) => `${k}: ${Object.keys(c).join(", ")}`).join("; ")}; analysis, a mini design doc (a new task analysis: one section per chapter): ${Object.keys(ANALYSIS_CHAPTERS).join(", ")}`,
       },
       delta: { type: ["string", "null"], enum: [...DELTAS, null], description: "kind spec only: how this section changes a capability (OpenSpec): added, modified, removed, renamed; key it \"<capability>--<requirement>\"; it merges into the capability when the task is done" },
       records: { type: "array", items: int, description: "Record ids that contribute to the section (linked, never unlinked here)" },
@@ -312,7 +312,7 @@ const TOOLS = [
   {
     name: "study_material",
     title: "Material to study a task",
-    description: `Everything to learn one task end to end (the /study skill, #95): the task (an epic's tasks too), its decisions with full bodies, notes, todos, the architecture/product sections its records feed, its analysis, the glossary terms the material uses, the commits that name its key with the files they changed (most changed first), the study note kept in its analysis (section "${STUDY_NOTE}", stale when a commit or decision came after it) and the last study's mastery (weak questions first, what changed since). Read-only: write the note with doc_section_upsert {kind: "analysis", task, key: "${STUDY_NOTE}"} and the mastery as a note record with links.study {topic, questions: [{q, type, result: full|partial|miss, gap, refs}]}.`,
+    description: `Everything to learn one task end to end (the /study skill, #95): the task (an epic's tasks too), its decisions with full bodies, notes, todos, the document sections its records feed (its spec among them), its old analysis, the glossary terms the material uses, the commits that name its key with the files they changed (most changed first), the study note kept in its analysis (section "${STUDY_NOTE}", stale when a commit or decision came after it) and the last study's mastery (weak questions first, what changed since). Read-only: write the note with doc_section_upsert {kind: "analysis", task, key: "${STUDY_NOTE}"} and the mastery as a note record with links.study {topic, questions: [{q, type, result: full|partial|miss, gap, refs}]}.`,
     inputSchema: input({ key: { type: "string", description: "The task's key, e.g. \"#58\"; an epic gives its tasks too" }, repo: repoArg }, ["key"]),
     outputSchema: output({
       task: { type: "object" }, tasks: { type: "array" }, decisions: { type: "array" }, notes: { type: "array" }, todos: { type: "array" },

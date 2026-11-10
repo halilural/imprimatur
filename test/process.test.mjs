@@ -61,20 +61,24 @@ test("mainGuard: on main only the allowed paths; ignored files and other branche
   assert.deepEqual(edit("src/a.js"), {});
 });
 
-test("designFirst: code on a <type>/<n>-… branch before the task has an ADR or PDR is a warning", () => {
+test("designFirst: code on a <type>/<n>-… branch before the task has a spec or an ADR is a warning (#186)", () => {
   const root = repo({ process: {} });
   sh(root, "switch", "-q", "-c", "feat/56-process");
   const edit = (records) => check("PreToolUse", { cwd: root, tool_name: "Edit", tool_input: { file_path: path.join(root, "src/a.js") } }, { records });
   const known = { ...noRecords, repoId: () => 1, task: () => ({ key: "#56" }) };
   const none = edit({ ...known, recordsOf: () => [{ kind: "todo" }] });
   assert.equal(none.block, undefined);
-  assert.match(none.context[0], /#56 has no ADR or PDR/);
-  assert.deepEqual(edit({ ...known, recordsOf: () => [{ kind: "pdr" }] }), {});
+  assert.match(none.context[0], /#56 has no spec or ADR[\s\S]*\/to-spec/);
+  assert.deepEqual(edit({ ...known, recordsOf: () => [{ kind: "pdr" }] }), {}, "an old PDR still counts");
+  // The task's spec with a section counts (Pocock's, #186); an empty one does not.
+  const withSpec = (secs) => edit({ ...known, recordsOf: () => [], dbOf: () => ({ recordsByKind: () => [], taskDocFind: () => ({ id: 9 }), docSections: () => secs }) });
+  assert.deepEqual(withSpec([{ status: "current" }]), {});
+  assert.match(withSpec([]).context[0], /#56 has no spec/);
   // An ADR or PDR under another task (imported design records) that names the issue counts.
   const elsewhere = (r) => edit({ ...known, recordsOf: () => [], dbOf: () => ({ recordsByKind: () => [r] }) });
   assert.deepEqual(elsewhere({ kind: "pdr", title: "Tax page", links: { issue: 56 } }), {});
   assert.deepEqual(elsewhere({ kind: "adr", title: "Tax data (#56)" }), {});
-  assert.match(elsewhere({ kind: "adr", title: "other job (#567)" }).context[0], /#56 has no ADR/);
+  assert.match(elsewhere({ kind: "adr", title: "other job (#567)" }).context[0], /#56 has no spec or ADR/);
   assert.deepEqual(edit(noRecords), {}, "no database answer, no warning");
   const md = check("PreToolUse", { cwd: root, tool_name: "Edit", tool_input: { file_path: path.join(root, "notes.md") } }, { records: { ...known, recordsOf: () => [] } });
   assert.deepEqual(md, {}, "Markdown is not code");

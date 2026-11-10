@@ -27,55 +27,51 @@ Imprimatur is a VS Code extension and a Claude Code plugin (hooks and an MCP ser
 
 Added lines are green. A changed word sits next to the old one in a red box. A deleted
 block leaves a marker. **✓ Accept** a block, a file or a whole agent edit, and the view
-moves to the next change. The **Agent Change Graph** lists every agent edit in the repo,
-one lane per Claude session, each with a one-sentence description.
+moves to the next change. The panel's **Edits** page lists the agent's edits still under
+review, file by file, each with a one-sentence description, Accept, Diff and Go.
 
 ## Waiting on you
 
-![Waiting on you on the panel's Home: where you left off per task, the open questions, tests and to-dos, and the asks closed by the audit, replaced by a later one, or answered](assets/waiting-on-you.png)
-
 The agent's questions, permission requests and "test this" steps, across sessions, each
 written to make sense on its own and tied to its task. After each turn a small model
-ticks what you answered or what was done. **Scan history** finds asks from before you
-installed Imprimatur.
+ticks what you answered or what was done. The panel's **Home** shows them as **Needs you**,
+beside what is in progress and what finished this week.
 
 ## Where you left off: tasks and 👉
 
-![The Tasks tab: tasks by status, and a task's page with its Where we left off callout, unread changes, to-dos for you or the agent, decisions and ADRs](assets/tasks.png)
+Each task keeps its to-dos, questions, decisions, notes, ADRs and tests. The 👉 pointer
+marks where work stopped. The agent gets it at session start; you see it on **Home**, on
+the task's page and in Claude Code's status line. A task's page shows its spec with its
+gates (stories, design, analysis, tickets): only your own approval passes a gate.
 
-Each task keeps its to-dos, questions, decisions, notes, ADRs, PDRs and tests. The 👉
-pointer marks where work stopped. The agent gets it at session start; you see it on
-**Home**, in the **Tasks** tab and in Claude Code's status line.
+## Documents in Matt Pocock's model
 
-## Living design documents: Architecture, Product, Glossary
+Imprimatur carries 19 of [Matt Pocock's skills](https://github.com/mattpocock/skills) and is
+their local tracker. Every repo has a small project page (mission, constraints, tech stack,
+roadmap), its capabilities (how each feature behaves now), ADRs, a glossary and out-of-scope
+notes, kept in sections and written to `docs/PROJECT.md`, `docs/capabilities/`,
+`docs/adr/`, `GLOSSARY.md` and `.out-of-scope/`. A task's spec is written with `/to-spec`
+and split with `/to-tickets`. The panel's **Docs** page reads them all in one layout, and
+**Search and Ask** (`ctrl/cmd+alt+k`) finds a record or section, or answers with citations.
 
-![The Architecture document: its contents, a section with a diagram, the ADR and decision it is based on, its history and an Unread mark](assets/living-docs.png)
+## /study
 
-Every repo has three documents kept in sections: Architecture, Product and Glossary.
-The agent updates a section when it records a decision and links the two. They stay in
-step with `docs/ARCHITECTURE.md`, `docs/PRODUCT.md` and `docs/GLOSSARY.md`.
-
-## Analyses kept, and /study
-
-![A task's analysis with its plan and spike results, and /study in Claude Code asking a question and grading the answer](assets/analysis-study.png)
-
-Every analysis, plan or research note the agent writes for a task is kept on the task,
-one version per change. `/study #92` writes a study note on a topic, then quizzes you
-and keeps a mastery score, so the next study asks the weak questions first.
+`/study #92` writes a study note on a task, then quizzes you and keeps a mastery score, so
+the next study asks the weak questions first.
 
 ## /exercise: practise anything in small steps
 
 `/exercise <topic>` turns any topic (code, a concept, a spoken language, a sport) into an
 exercise: a few questions about why and your level, a "can do" goal, and 5 to 9 short steps
 that each say what they are for and when they count as done. You tick them in the
-**Exercises** tab, and the agent coaches without giving the answers away.
+panel's **Exercises** page, and the agent coaches without giving the answers away.
 
 ## /social-post: posts that follow each platform's current rules
 
 `/social-post` reads the platform's own rules before it writes (a subreddit's sidebar, X's
 character counting, the Show HN guidelines), fits the post to them and checks it. Turn on
 **social media tracking** for a repo (off by default) and the posts, the rules read and how
-each one did are kept on a **Social** page next to Architecture, Product and Glossary.
+each one did are kept on a **Social** page in the panel.
 
 ## Agent setup audit and recommendations
 
@@ -166,8 +162,9 @@ needs `exercise`.
 1. Install both parts, then reload VS Code.
 2. Ask Claude to edit a Markdown file in a repo.
 3. Open the file's preview: the changes are marked. Click **✓ Accept** on a block.
-4. Click **Agent Graph** in the status bar for every edit and what waits on you.
-5. Open the Imprimatur icon in the activity bar for **Home**, **Tasks** and **Analysis**.
+4. Click Imprimatur's button in the status bar for the edits under review.
+5. Open the Imprimatur icon in the activity bar, then **Home**: the panel has **Home**,
+   **Tasks**, **Docs**, **Edits** and **Setup** (`g` then a letter jumps between them).
 6. Markdown is marked in the preview only; set `imprimatur.showIn` to `both` for
    editor marks too.
 
@@ -192,10 +189,8 @@ Details: [Reference](docs/REFERENCE.md#how-it-works).
   (add it to `.gitignore`) and the database in your data folder.
 - Model calls run through your own `claude` CLI and count against your Claude plan.
   Most use Haiku, and only where a rule is not enough: an edit's one-sentence description,
-  closing answered asks, the end-of-turn audit, Scan history and placing an analysis.
-- Once per repo with at least 10 records and no design documents, a background Sonnet run
-  writes them (capped at $3). The best-practice review runs only when you ask, after a
-  confirmation.
+  closing answered asks and the end-of-turn audit. Search and Ask's answers use Sonnet.
+- The best-practice review runs only when you ask, after a confirmation.
 - Nothing else leaves your machine, except the issue tracker sync (GitHub with `gh`
   logged in, or Jira once you configure it), agnix fetched with `npx` for the audit, and
   the documentation the best-practice review fetches.
@@ -205,8 +200,8 @@ Details: [Reference](docs/REFERENCE.md#how-it-works).
 ## Links
 
 - [Reference](docs/REFERENCE.md): every feature, setup option, hook, MCP tool and setting.
-- Design documents: [Architecture](docs/ARCHITECTURE.md), [Product](docs/PRODUCT.md),
-  [Glossary](docs/GLOSSARY.md).
+- This repo's documents: [Project](docs/PROJECT.md), [Capabilities](docs/capabilities/),
+  [ADRs](docs/adr/), [Glossary](GLOSSARY.md).
 - [Changelog](vscode/CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md): report vulnerabilities privately.

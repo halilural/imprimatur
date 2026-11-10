@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.161.0] - 2026-11-10
+
+### Changed
+- Imprimatur speaks Matt Pocock's names everywhere (#186). Before code on an issue branch, the agent is asked for a spec (`/to-spec`) or an ADR, no longer an ADR or PDR. An ADR stands alone: the agent is told only when a section it feeds falls behind it, never to update an Architecture or Product document. The MCP server's instructions, the docs rule (`.claude/rules/docs.md`, and the one written to new repos), AGENTS.md and the README describe the project page, capabilities, specs, ADRs, glossary and out-of-scope.
+
+### Removed
+- The background runs that wrote a repo's design documents and past analyses with `claude -p` at session start, and the hook that took plan and note files into a task's analysis: specs are written with `/to-spec` now.
+
 ## [0.160.0] - 2026-11-10
 
 ### Changed
