@@ -58,7 +58,7 @@ function saveSection(msg) {
   const got = repoFor(at.root);
   if (!got) return;
   const { db, repo } = got;
-  const kinds = ["project", "glossary", "out-of-scope", "capability"];
+  const kinds = ["project", "glossary", "out-of-scope", "capability", "social"];
   if (!kinds.includes(msg.kind)) throw new Error(`${msg.kind} is not edited here`);
   const doc = msg.kind === "capability" ? db.taskDocOf(repo.id, String(msg.scope), "capability") : db.docOf(repo.id, msg.kind);
   const title = String(msg.title ?? "").trim();
@@ -96,6 +96,17 @@ function openApp(to = {}) {
       const got = repoFor(at.root);
       const rel = String(msg.file);
       if (got && !rel.split("/").includes("..")) vscode.window.showTextDocument(vscode.Uri.file(require("node:path").join(got.root, rel)));
+    } else if (msg?.type === "ex") {
+      // An exercise's step ticked, skipped, noted; an exercise dropped or resumed; a recall graded.
+      const x = require("../exerciseView.js");
+      const db = records.dbOf();
+      try {
+        if (!db || !x.EXERCISE_MESSAGES.includes(msg.act)) throw new Error(`unknown exercise action ${msg.act}`);
+        x.applyExerciseMessage(db, { type: msg.act, id: msg.id, status: msg.status, result: msg.result, text: msg.text });
+      } catch (e) {
+        vscode.window.showErrorMessage(`Imprimatur: ${/** @type {Error} */ (e).message}`);
+      }
+      render();
     } else if (msg?.type === "gate") {
       approveGate(String(msg.key), String(msg.gate));
       render();

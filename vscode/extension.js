@@ -287,7 +287,7 @@ async function toggleSocial(on) {
   } catch (e) {
     return void vscode.window.showErrorMessage(e instanceof Error ? e.message : String(e));
   }
-  if (on) showGraph({ root, tab: "social" });
+  if (on) vscode.commands.executeCommand("imprimatur.app.open", { root, area: "social" });
   vscode.window.showInformationMessage(on
     ? "Imprimatur: social media tracking is on for this repo: Analysis → Social, kept in docs/SOCIAL.md. Commit .claude/imprimatur.json to keep it on."
     : "Imprimatur: social media tracking is off for this repo. Its document is kept; turning it on again brings it back.");
@@ -663,9 +663,9 @@ function activate(ctx) {
     vscode.commands.registerCommand("imprimatur.openArchitecture", () => showGraph({ tab: "architecture" })),
     vscode.commands.registerCommand("imprimatur.openProduct", () => showGraph({ tab: "product" })),
     vscode.commands.registerCommand("imprimatur.openGlossary", () => showGraph({ tab: "glossary" })),
-    vscode.commands.registerCommand("imprimatur.openMeetings", () => showGraph({ tab: "meetings" })),
+    vscode.commands.registerCommand("imprimatur.openMeetings", () => vscode.commands.executeCommand("imprimatur.app.open", { area: "meetings" })),
     // Social media (#109): off by default, per repo, in .claude/imprimatur.json.
-    vscode.commands.registerCommand("imprimatur.openSocial", () => showGraph({ tab: "social" })),
+    vscode.commands.registerCommand("imprimatur.openSocial", () => vscode.commands.executeCommand("imprimatur.app.open", { area: "social" })),
     vscode.commands.registerCommand("imprimatur.social.on", () => toggleSocial(true)),
     vscode.commands.registerCommand("imprimatur.social.off", () => toggleSocial(false)),
     vscode.commands.registerCommand("imprimatur.docs.reveal", (/** @type {{root?: string, kind?: string, section?: string}} */ at) => {

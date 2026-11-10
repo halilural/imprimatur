@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.157.0] - 2026-11-10
+
+### Changed
+- Exercises, Meetings and Social open in the new panel, under More (#202): tick, skip and note an exercise's steps and grade today's recalls there; meetings by month with their decisions and to-dos; Social shows only where it is turned on. The old panel is still there for the full change graph.
+
+### Fixed
+- The agent no longer goes back on its own to a task that waits on you (its 👉 is your to-do, or a question to you is open).
+
 ## [0.156.0] - 2026-11-10
 
 ### Changed
