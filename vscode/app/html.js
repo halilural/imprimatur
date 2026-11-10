@@ -47,6 +47,16 @@ h1 { font-size: 24px; margin: 0 0 6px; }
 .rows .row:hover { background: var(--vscode-list-hoverBackground); }
 .rows .key { font-weight: 700; min-width: 56px; }
 .rows .ptr { color: var(--vscode-descriptionForeground); }
+.board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 26px; }
+.board .col { border: 1px solid var(--vscode-panel-border); border-radius: 8px; padding: 10px; min-height: 80px; }
+.board .label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--vscode-descriptionForeground); margin-bottom: 8px; }
+.board .card { padding: 8px 10px; border-radius: 6px; background: var(--vscode-editorWidget-background); margin-bottom: 6px; cursor: pointer; }
+.board .card:hover { background: var(--vscode-list-hoverBackground); }
+.board .ptr, .rows .ptr { font-size: 13px; color: var(--vscode-descriptionForeground); }
+.board .none { color: var(--vscode-descriptionForeground); font-size: 13px; }
+h2.sub { font-size: 16px; margin: 0 0 10px; }
+.tag { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--vscode-panel-border); color: var(--vscode-descriptionForeground); }
+@media (max-width: 900px) { .board { grid-template-columns: 1fr; } }
 .btn { padding: 6px 14px; border-radius: 6px; border: 0; background: var(--vscode-button-background); color: var(--vscode-button-foreground); font: inherit; font-weight: 600; cursor: pointer; }
 @media (max-width: 900px) { .reading { grid-template-columns: minmax(0, 1fr); } .reading .toc, .reading .onpage { display: none; } .shell { grid-template-columns: 1fr; } nav.areas { display: flex; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--vscode-panel-border); } nav.areas button { width: auto; } }
 `;
@@ -109,8 +119,13 @@ function mainHtml(m, render) {
     return pills + readingHtml(m.reading, render, scopes);
   }
   if (m.area === "home") {
-    const rows = m.tasks.map((/** @type {any} */ t) => `<div class="row" data-task="${esc(t.key)}"><span class="key">${esc(t.key)}</span><span><b>${esc(t.title)}</b>${t.pointer_title ? `<br><span class="ptr">👉 ${esc(t.pointer_title)}</span>` : ""}</span></div>`).join("");
-    return `<h1>Where we left off</h1><p class="summary">The tasks in progress, each with where its work stopped.</p><div class="rows">${rows || '<div class="empty">No task in progress.</div>'}</div>`;
+    const rows = m.tasks.map((/** @type {any} */ t) => `<div class="row" data-task="${esc(t.key)}"><span class="key">${esc(t.key)}</span><span><b>${esc(t.title)}</b>${t.docs?.length ? ` <span class="tag">${t.docs.map(esc).join(" · ")}</span>` : ""}${t.pointer_title ? `<br><span class="ptr">👉 ${esc(t.pointer_title)}</span>` : ""}</span></div>`).join("");
+    const card = (/** @type {any} */ t, /** @type {string} */ note) => `<div class="card" data-task="${esc(t.key)}"><b>${esc(t.key)}</b> ${esc(t.title)}${note ? `<div class="ptr">${esc(note)}</div>` : ""}</div>`;
+    const col = (/** @type {string} */ title, /** @type {any[]} */ list, /** @type {(t: any) => string} */ note) => `<div class="col"><div class="label">${esc(title)} · ${list.length}</div>${list.map((t) => card(t, note(t))).join("") || '<div class="none">Nothing</div>'}</div>`;
+    const b = m.board;
+    const board = `<div class="board">${col("Needs you", b.needs, (t) => t.asks.slice(0, 2).join(" · "))}${col("Active", b.active, (t) => t.summary ?? "")}${col("Done this week", b.done, (t) => t.summary ?? "")}</div>`;
+    return `<h1>Home</h1><p class="summary">What waits on you, what is in progress, what finished this week.</p>${board}
+    <h2 class="sub">Where we left off</h2><div class="rows">${rows || '<div class="empty">No task in progress.</div>'}</div>`;
   }
   const old = { tasks: "imprimatur.openTasks", edits: "imprimatur.openGraph", setup: "imprimatur.setup.focus" }[/** @type {"tasks"} */ (m.area)];
   const label = m.areas.find((/** @type {any} */ a) => a.id === m.area)?.label;
