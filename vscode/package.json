@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.155.0",
+  "version": "0.156.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -507,6 +507,70 @@
     ],
     "menus": {
       "commandPalette": [
+        {
+          "command": "imprimatur.showHistory",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.openHome",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.openTasks",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.openArchitecture",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.openProduct",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.openGlossary",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.social.off",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.setup.refresh",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.setup.markSeen",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.setup.compareVariant",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.setup.explainLastChange",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.analysisBackfill",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.records.refresh",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.records.allRepos",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.records.thisWindow",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.setup.rankSuggestions",
+          "when": "false"
+        },
         {
           "command": "imprimatur.setup.openOnDoubleClick",
           "when": "false"
