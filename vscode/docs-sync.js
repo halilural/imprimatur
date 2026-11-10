@@ -446,7 +446,8 @@ function describe(reports, root) {
       r.written && "file written",
       r.backup && `original kept in ${r.backup}`,
     ].filter(Boolean);
-    return `${file}: ${parts.length ? parts.join("; ") : "in sync"}`;
+    // #203: a document moved to Pocock's model has no file left; "in sync" for it would mislead.
+    return `${file}: ${parts.length ? parts.join("; ") : fs.existsSync(r.file) ? "in sync" : "no file (nothing current to write)"}`;
   });
 }
 

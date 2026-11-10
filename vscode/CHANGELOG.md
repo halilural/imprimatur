@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.163.1] - 2026-11-10
+
+### Fixed
+- `npm run docs -- sync` no longer calls a document "in sync" when it has no file: one moved to Pocock's model says "no file (nothing current to write)" (#203).
+
 ## [0.163.0] - 2026-11-10
 
 ### Changed
