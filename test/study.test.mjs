@@ -158,5 +158,5 @@ test("review fixes: real git with short keys, bounds on the left, an epic's task
 
 test("#103 the server tells every agent: a flow is a sequence diagram with autonumber and a numbered list under it", async () => {
   const { INSTRUCTIONS } = await import("../mcp/server.mjs");
-  assert.match(INSTRUCTIONS, /Every Mermaid sequenceDiagram you write \(section, analysis, record\): autonumber, and right under it a numbered list, item n explaining arrow n/);
+  assert.match(INSTRUCTIONS, /Every Mermaid sequenceDiagram you write \(section, spec, record\): autonumber, and right under it a numbered list, item n explaining arrow n/);
 });
