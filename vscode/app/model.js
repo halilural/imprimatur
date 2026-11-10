@@ -91,6 +91,25 @@ function docReading(db, repo, root, doc, scope) {
 }
 
 /**
+ * One board of the work (#196, after Conductor): what the agent is on (active), what waits on the
+ * user (an open question or to-do they own), what finished in the last seven days.
+ * @param {any} db @param {number} repoId @param {number} [now]
+ */
+function boardOf(db, repoId, now = Date.now()) {
+  const asks = db.openAsks({ repoId, limit: 200 });
+  /** @type {Map<string, any>} */ const needs = new Map();
+  for (const r of asks) {
+    const n = needs.get(r.task_key) ?? { key: r.task_key, title: db.taskByKey(repoId, r.task_key)?.title ?? "", asks: [] };
+    n.asks.push(r.title);
+    needs.set(r.task_key, n);
+  }
+  const active = db.q("SELECT key, title, summary FROM tasks WHERE repo_id = ? AND status = 'active' ORDER BY updated_at DESC LIMIT 20").all(repoId)
+    .filter((/** @type {any} */ t) => !needs.has(t.key));
+  const done = db.q("SELECT key, title, summary FROM tasks WHERE repo_id = ? AND status = 'done' AND done_at > ? ORDER BY done_at DESC LIMIT 20").all(repoId, now - 7 * 86_400_000);
+  return { active, needs: [...needs.values()], done };
+}
+
+/**
  * The panel's model for a place.
  * @param {any} db @param {any} repo @param {string} root
  * @param {{area?: string, doc?: string, scope?: string}} at
@@ -105,9 +124,12 @@ function appModel(db, repo, root, at = {}) {
   }
   if (area === "home") {
     const tasks = db.whereWeLeftOff(repo.id).slice(0, 12);
-    return { ...base, tasks };
+    // Which tasks have a spec or a map (Pocock's), so Home links them.
+    const scoped = db.q("SELECT kind, scope FROM documents WHERE repo_id = ? AND kind IN ('spec', 'map')").all(repo.id);
+    for (const t of tasks) t.docs = scoped.filter((/** @type {any} */ d) => d.scope === t.key).map((/** @type {any} */ d) => d.kind);
+    return { ...base, tasks, board: boardOf(db, repo.id) };
   }
   return base;
 }
 
-module.exports = { appModel, docReading, reading, summaryOf, AREAS, MORE, DOCS };
+module.exports = { appModel, boardOf, docReading, reading, summaryOf, AREAS, MORE, DOCS };

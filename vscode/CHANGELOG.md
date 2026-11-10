@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.151.0] - 2026-11-10
+
+### Added
+- The new panel's Home (#196): one board of what needs you (tasks with a question or to-do you own), what is active and what finished this week, then where each task in progress stopped, with its spec or map tagged.
+
 ## [0.150.0] - 2026-11-10
 
 ### Added

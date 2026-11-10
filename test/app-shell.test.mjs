@@ -40,3 +40,19 @@ test("app shell: five areas and More; Home lists the tasks in progress; a docume
   // The CSP lets in only the nonce's script.
   assert.match(html, /script-src 'nonce-n0'/);
 });
+
+test("Home board (#196): needs you (an open ask the user owns), active, done this week; a task's spec is tagged", () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-196-")));
+  const db = openDb({ path: path.join(root, "x.db") });
+  const repo = db.repoOf(root);
+  const a = db.upsertTask(repo.id, "#1", { title: "Search", status: "active" });
+  db.addRecord(a.id, { kind: "question", owner: "K", title: "Which index?" }, agent);
+  db.upsertTask(repo.id, "#2", { title: "Wiki", status: "active" });
+  db.upsertTask(repo.id, "#3", { title: "Model", status: "done" });
+  db.upsertSection(db.taskDocOf(repo.id, "#2", "spec").id, "p", { title: "P", chapter: "problem" }, agent);
+  const m = appModel(db, repo, root, {});
+  assert.deepEqual([m.board.needs.map((t) => t.key), m.board.active.map((t) => t.key), m.board.done.map((t) => t.key)], [["#1"], ["#2"], ["#3"]]);
+  const html = appHtml(m, o);
+  assert.match(html, /Needs you · 1[\s\S]*Which index\?/);
+  assert.match(html, /data-task="#2"><span class="key">#2<\/span><span><b>Wiki<\/b> <span class="tag">spec<\/span>/);
+});
