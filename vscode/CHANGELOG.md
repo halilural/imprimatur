@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.148.0] - 2026-11-10
+
+### Added
+- **Search and Ask** (#189, ctrl/cmd+alt+k): one box over every record and document section, ranked as you type, Turkish letters matching their plain forms (ı/i, ş/s, ç/c…), with the matching line under each result. The first row asks your question instead: the answer comes from the best matches and cites them, with the sources listed under it. The agent's `search` tool ranks the same way and also returns matching document sections.
+
 ## [0.147.0] - 2026-11-10
 
 ### Added
