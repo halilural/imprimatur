@@ -11,12 +11,10 @@ const path = require("node:path");
 const RULES = {
   "IMP-DOC-001": "Decisions are numbered once, each number used by one decision; a superseded one names its successor",
   "IMP-DOC-002": "A decision lists at least two considered options: the one chosen and an alternative",
-  "IMP-DOC-003": "A decision is linked to the section it shapes",
-  "IMP-DOC-004": "The architecture has a section in every chapter, a C4 context view and a C4 container view",
   "IMP-DOC-005": "A sequenceDiagram has autonumber and, under it, a numbered list with an item per arrow",
   "IMP-DOC-006": "AGENTS.md and CLAUDE.md stay under 200 lines",
 };
-const SOURCES = ["https://adr.github.io/madr/", "https://arc42.org/overview", "https://c4model.com/", "https://agents.md/"];
+const SOURCES = ["https://adr.github.io/madr/", "https://agents.md/"];
 /** The rules' explanation, in agnix explain's shape (agnix does not know them). @param {string} id */
 const ruleInfo = (id) => ({ name: /** @type {any} */ (RULES)[id], evidence: { source_type: "imprimatur", source_urls: SOURCES } });
 
@@ -34,7 +32,7 @@ const named = (recs) => {
 };
 
 /**
- * The current decisions IMP-DOC-002 and 003 name: few, with no alternative; loose, linked to no section.
+ * The current decisions IMP-DOC-002 names (few, with no alternative), and those linked to no section (loose).
  * @param {any} db @param {number} repoId @returns {{few: any[], loose: any[]}}
  */
 function decisionGaps(db, repoId) {
@@ -117,35 +115,17 @@ function docDiagnostics(db, root, { docsDir } = {}) {
           add("IMP-DOC-001", fileOf(`decisions/${n}`), `superseded by ${m[1]}, which has no file`, "Point it at the decision that replaced it.", 1);
       }
     } catch {}
-    const { few, loose } = decisionGaps(db, repo.id);
+    const { few } = decisionGaps(db, repo.id);
     if (few.length)
       add("IMP-DOC-002", fileOf("decisions/README.md"), `${few.length} of ${current.length} decisions name no alternative to the option chosen: ${named(few)}`,
         'Add the options weighed to each record\'s body, one line each ("Alternative: …", "Rejected: …"), with record_update; the MADR file lists them under Considered Options.', 1, "info");
-    if (loose.length)
-      add("IMP-DOC-003", fileOf("decisions/README.md"), `${loose.length} of ${current.length} decisions are linked to no section: ${named(loose)}`,
-        "Link each to the architecture or product section it shapes: doc_section_upsert with records: [id], updating the section's text.", 1, "info");
-
-    // The architecture's chapters and its C4 views (#129).
-    const arch = db.docFind(repo.id, "architecture");
-    if (arch) {
-      const secs = db.docSections(arch.id).filter((/** @type {any} */ s) => s.status === "current");
-      const chapters = Object.entries(require("./db.js").CHAPTERS.architecture);
-      const empty = chapters.filter(([k]) => !secs.some((/** @type {any} */ s) => s.chapter === k)).map(([, label]) => label);
-      if (empty.length) add("IMP-DOC-004", fileOf("ARCHITECTURE.md"), `chapters with no section: ${empty.join(", ")}`, "Write a section for each with doc_section_upsert and its chapter (arc42-lite).");
-      const text = secs.map((/** @type {any} */ s) => s.body ?? "").join("\n");
-      if (!/C4Context|\[Person\]|\[Software system\]/i.test(text)) add("IMP-DOC-004", fileOf("ARCHITECTURE.md"), "no C4 context view (level 1)", "Add a Mermaid diagram of the system, its users and the systems around it, labelled [Person] and [Software system], in the context chapter.");
-      if (!/C4Container|\[Container[:\]]/i.test(text)) add("IMP-DOC-004", fileOf("ARCHITECTURE.md"), "no C4 container view (level 2)", "Add a Mermaid diagram of the containers, labelled [Container: technology], in the building-blocks chapter.");
-    }
-    // Every sequenceDiagram in the documents and task analyses.
-    for (const kind of ["architecture", "product", "analysis"]) {
-      const docs = kind === "analysis" ? (db.taskDocs?.(repo.id) ?? []) : [db.docFind(repo.id, kind)].filter(Boolean);
-      for (const d of docs)
-        for (const s of db.docSections(d.id).filter((/** @type {any} */ x) => x.status === "current"))
-          for (const p of sequenceProblems(s.body ?? ""))
-            add("IMP-DOC-005", kind === "analysis" ? fileOf("ARCHITECTURE.md") : fileOf(kind === "architecture" ? "ARCHITECTURE.md" : "PRODUCT.md"),
-              `sequenceDiagram in ${kind === "analysis" ? `the ${d.scope} analysis, ` : ""}section "${s.title}": ${p.why}`,
-              "Put autonumber on the diagram's second line and, right under it, a numbered list with one item per arrow, in order; write the section with doc_section_upsert.");
-    }
+    // Every sequenceDiagram in Pocock's documents (#203; ADRs and the old Architecture/Product are left out).
+    for (const d of db.q("SELECT * FROM documents WHERE repo_id = ? AND kind IN ('project', 'capability', 'spec', 'map')").all(repo.id))
+      for (const s of db.docSections(d.id).filter((/** @type {any} */ x) => x.status === "current"))
+        for (const p of sequenceProblems(s.body ?? ""))
+          add("IMP-DOC-005", d.kind === "project" ? fileOf("PROJECT.md") : d.kind === "capability" ? fileOf(`capabilities/${d.scope}.md`) : path.join(root, ".scratch"),
+            `sequenceDiagram in ${d.kind === "project" ? "the project page" : `the ${d.kind} ${d.scope}`}, section "${s.title}": ${p.why}`,
+            "Put autonumber on the diagram's second line and, right under it, a numbered list with one item per arrow, in order; write the section with doc_section_upsert.");
   }
   // The agent files (#133).
   for (const name of ["AGENTS.md", "CLAUDE.md"]) {

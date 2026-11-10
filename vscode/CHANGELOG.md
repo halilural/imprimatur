@@ -4,6 +4,16 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.162.0] - 2026-11-10
+
+### Changed
+- `/study` keeps its study note in the task's spec (Further Notes, section `study`); a note in an old analysis still reads (#203).
+- The setup audit no longer asks to link every ADR to a section (IMP-DOC-003) or to fill Architecture chapters and C4 views (IMP-DOC-004): both fired on every repo after the move to Pocock's model. The sequence-diagram rule (IMP-DOC-005) checks the project page, capabilities, specs and maps.
+- Session start no longer says how many ADRs no section links.
+
+### Removed
+- Task analyses for good (#203): the "Take Task Analyses from Past Sessions" command, `npm run analysis`, and the code behind them. The MCP tools refuse to write an analysis and point to the spec; an old one still reads.
+
 ## [0.161.0] - 2026-11-10
 
 ### Changed

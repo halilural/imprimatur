@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.161.0",
+  "version": "0.162.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -244,11 +244,6 @@
       {
         "command": "imprimatur.importMarkdown",
         "title": "Import Markdown Records (TODO.md, design, product, tests)",
-        "category": "Imprimatur"
-      },
-      {
-        "command": "imprimatur.analysisBackfill",
-        "title": "Take Task Analyses from Past Sessions",
         "category": "Imprimatur"
       },
       {
@@ -523,10 +518,6 @@
         },
         {
           "command": "imprimatur.setup.explainLastChange",
-          "when": "false"
-        },
-        {
-          "command": "imprimatur.analysisBackfill",
           "when": "false"
         },
         {

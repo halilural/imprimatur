@@ -464,7 +464,7 @@ const isDocFinding = (r) => /^IMP-DOC-00[1-5]$/.test(r.links?.audit?.rule ?? "")
 
 /**
  * Fix it on documentation findings (#131): after the user confirms, a background `claude -p`
- * with Imprimatur's MCP server (docs-backfill's tools plus record_update and task_upsert) links
+ * with Imprimatur's MCP server (docs-fix.js: the document tools plus record_update) links
  * decisions to sections, adds the alternatives the records show and writes missing sections;
  * then the audit runs again, so what is left stays open.
  * @param {SetupView} provider @param {any[]} findings @param {string} repo
@@ -473,7 +473,7 @@ async function fixDocs(provider, findings, repo) {
   const db = require("./records.js").dbOf();
   const r0 = db?.repoByRoot(repo);
   if (!db || !r0) return void vscode.window.showInformationMessage("Imprimatur: this folder has no records.");
-  const bf = require("./docs-backfill.js");
+  const bf = require("./docs-fix.js");
   const bp = require("./best-practice.js");
   // A missing number needs no model: the export's own numbering gives it, and the audit runs again.
   if (findings.some((f) => /without a number/.test(f.title))) {
@@ -498,7 +498,7 @@ async function fixDocs(provider, findings, repo) {
   provider.fixing = true;
   const out = (fixOutput ??= vscode.window.createOutputChannel("Imprimatur Fix it"));
   out.appendLine(`\n=== ${new Date().toLocaleString()} · Fix it: documentation (in ${repo})\n${prompt}\n---`);
-  // Tool search off: deferred MCP tools are hidden behind ToolSearch, which --tools leaves out (docs-backfill.js).
+  // Tool search off: deferred MCP tools are hidden behind ToolSearch, which --tools leaves out (docs-fix.js).
   const env = { ...bp.childEnv(), ENABLE_TOOL_SEARCH: "false" };
   // shortcut: not cancellable (bp.run has no kill); the run stops at its turn, budget and time caps.
   const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur: Claude is fixing the documentation findings…" },

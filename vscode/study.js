@@ -1,16 +1,16 @@
 // @ts-check
 // Study mode (#95): everything to learn one topic end to end, in one read, for the /study
-// skill: the task (an epic's tasks too), its decisions and notes, the design-document sections
-// its records feed, its analysis, the glossary terms it uses, the files its commits changed,
-// and the last study's mastery with what changed since. Reads only; the skill writes the
-// study note (the task's analysis, section "study") and the mastery record (a note with
-// links.study) with the usual tools.
+// skill: the task (an epic's tasks too), its decisions and notes, the document sections its
+// records feed, its spec (and an old analysis), the glossary terms it uses, the files its commits
+// changed, and the last study's mastery with what changed since. Reads only; the skill writes the
+// study note (the task's spec, section "study" under Further Notes, #203) and the mastery record
+// (a note with links.study) with the usual tools.
 "use strict";
 const { execFileSync } = require("node:child_process");
 
 const DESIGN = ["decision", "adr", "pdr"];
 const NOTE_KINDS = ["note", "question", "answer"];
-/** The analysis section the study note is kept in. */
+/** The spec section the study note is kept in (an old one in the task's analysis still reads). */
 const NOTE_KEY = "study";
 const MAX_COMMITS = 40;
 const MAX_FILES = 60;
@@ -116,10 +116,11 @@ function studyMaterial(db, repo, task, o = {}) {
   const linked = ids.length
     ? db.sqlite.prepare(`SELECT DISTINCT s.id, s.key, s.title, s.body, s.updated_at, d.kind FROM doc_section_records x
         JOIN doc_sections s ON s.id = x.section_id JOIN documents d ON d.id = s.doc_id
-        WHERE x.record_id IN (${ids.map(() => "?").join(",")}) AND s.status = 'current' AND d.kind IN ('architecture', 'product') ORDER BY d.kind, s.position`).all(...ids)
+        WHERE x.record_id IN (${ids.map(() => "?").join(",")}) AND s.status = 'current' AND d.kind NOT IN ('analysis', 'glossary') ORDER BY d.kind, s.position`).all(...ids)
     : [];
-  const anaDoc = db.taskDocFind(repo.id, task.key);
-  const analysis = anaDoc ? db.docSections(anaDoc.id).filter((/** @type {any} */ s) => s.status === "current") : [];
+  const current = (/** @type {any} */ d) => (d ? db.docSections(d.id).filter((/** @type {any} */ s) => s.status === "current") : []);
+  // The task's spec first, then what its old analysis kept (#185 retired analyses; they still read).
+  const analysis = [...current(db.taskDocFind(repo.id, task.key, "spec")), ...current(db.taskDocFind(repo.id, task.key))];
   const note = analysis.find((/** @type {any} */ s) => s.key === NOTE_KEY);
   /** @type {Map<string, any>} */
   const byHash = new Map();

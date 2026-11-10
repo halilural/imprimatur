@@ -42,22 +42,21 @@ test("doc rules (#131): a broken sample triggers each rule with a clear finding"
   // 001: a number used twice; a decision with none.
   db.addRecord(t.id, { kind: "adr", title: "Second", body: "Alternative: none.", links: { madr: 1 } }, user);
   db.addRecord(t.id, { kind: "pdr", title: "Third", body: "Rejected: other." }, user);
-  // 002 and 003: a decision with no alternative, linked to no section.
+  // 002: a decision with no alternative.
   db.addRecord(t.id, { kind: "adr", title: "Fourth", body: "Just do it.", links: { madr: 4 } }, user);
-  // 004: the risks chapter emptied, the C4 views gone.
-  for (const s of db.docSections(doc.id)) {
-    if (s.chapter === "risks") db.upsertSection(doc.id, s.key, { status: "superseded" }, user);
-    if (s.chapter === "context" || s.chapter === "building-blocks") db.upsertSection(doc.id, s.key, { body: s.chapter === "building-blocks" ? "```mermaid\nsequenceDiagram\n  A->>B: ask\n  B-->>A: answer\n```\n\n1. A asks." : "No diagram." }, user);
-  }
+  // 005: a broken diagram in a capability counts; one in the old architecture no longer does (#203).
+  const bad = "```mermaid\nsequenceDiagram\n  A->>B: ask\n  B-->>A: answer\n```\n\n1. A asks.";
+  db.upsertSection(db.taskDocOf(repo.id, "search", "capability").id, "flow", { title: "Flow", body: bad }, user);
+  for (const s of db.docSections(doc.id)) if (s.chapter === "building-blocks") db.upsertSection(doc.id, s.key, { body: bad }, user);
   // 006: a CLAUDE.md over 200 lines.
   fs.writeFileSync(path.join(root, "CLAUDE.md"), "x\n".repeat(230));
   const got = docDiagnostics(db, root);
   const msg = (/** @type {string} */ rule) => got.filter((d) => d.rule === rule).map((d) => d.message);
   assert.match(msg("IMP-DOC-001")[0], /number used twice: 0001, 0001; 1 decision without a number/);
   assert.match(msg("IMP-DOC-002")[0], /1 of 4 decisions name no alternative to the option chosen: 0004/);
-  assert.match(msg("IMP-DOC-003")[0], /3 of 4 decisions are linked to no section/);
-  assert.deepEqual(msg("IMP-DOC-004"), ["chapters with no section: Risks and technical debt", "no C4 context view (level 1)", "no C4 container view (level 2)"]);
-  assert.deepEqual(msg("IMP-DOC-005"), ['sequenceDiagram in section "building-blocks": no autonumber, 1 numbered item for 2 arrows']);
+  assert.deepEqual(msg("IMP-DOC-003"), [], "an ADR stands alone (#203)");
+  assert.deepEqual(msg("IMP-DOC-004"), [], "no Architecture chapters to fill (#203)");
+  assert.deepEqual(msg("IMP-DOC-005"), ['sequenceDiagram in the capability search, section "Flow": no autonumber, 1 numbered item for 2 arrows']);
   assert.deepEqual(msg("IMP-DOC-006"), ["CLAUDE.md has 230 lines, over 200"]);
   for (const d of got) assert.ok(d.suggestion && d.file && d.level, `${d.rule} says what to do`);
   assert.ok(repo);
