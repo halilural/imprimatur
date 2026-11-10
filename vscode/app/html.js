@@ -90,10 +90,11 @@ const SCRIPT = `
 const vscode = acquireVsCodeApi();
 const send = (m) => vscode.postMessage(m);
 document.addEventListener("click", (e) => {
-  const el = e.target.closest("[data-ex],[data-gate],[data-tab],[data-file],[data-go],[data-cmd],[data-doc],[data-scope],[data-task]");
+  const el = e.target.closest("[data-edit],[data-ex],[data-gate],[data-tab],[data-file],[data-go],[data-cmd],[data-doc],[data-scope],[data-task]");
   if (!el) return;
   e.preventDefault();
-  if (el.dataset.ex) send({ type: "ex", act: el.dataset.ex, id: Number(el.dataset.id), status: el.dataset.status, result: el.dataset.result });
+  if (el.dataset.edit) send({ type: "edit", act: el.dataset.edit, file: el.dataset.file, n: Number(el.dataset.n) });
+  else if (el.dataset.ex) send({ type: "ex", act: el.dataset.ex, id: Number(el.dataset.id), status: el.dataset.status, result: el.dataset.result });
   else if (el.dataset.gate) send({ type: "gate", key: el.dataset.key, gate: el.dataset.gate });
   else if (el.dataset.file) send({ type: "file", file: el.dataset.file });
   else if (el.dataset.tab) send({ type: "go", area: "tasks", task: el.dataset.key, tab: el.dataset.tab });
@@ -180,8 +181,10 @@ function mainHtml(m, render) {
   }
   if (m.area === "edits") {
     const total = m.edits.reduce((/** @type {number} */ n, /** @type {any} */ f) => n + f.open, 0);
-    const rows = m.edits.map((/** @type {any} */ f) => `<div class="row" data-file="${esc(f.file)}"><span class="key">${f.open}</span><span><b>${esc(f.file)}</b><br><span class="ptr">${esc(String(f.last).slice(0, 16).replace("T", " "))} · ${esc(String(f.what).replace(/\s+/g, " ").slice(0, 160))}</span></span></div>`).join("");
-    return `<h1>Edits</h1><p class="summary">${total ? `${total} agent edit${total === 1 ? "" : "s"} in ${m.edits.length} file${m.edits.length === 1 ? "" : "s"} wait for your review. Open a file: its changes are marked in the editor, to accept or undo.` : "Every agent edit is reviewed."}</p>
+    const btn = (/** @type {string} */ act, /** @type {string} */ label, /** @type {any} */ f, /** @type {any} */ e) => `<button class="${act === "accept" ? "btn small" : "link"}" data-edit="${act}" data-file="${esc(f.file)}" data-n="${e.n}">${label}</button>`;
+    const rows = m.edits.map((/** @type {any} */ f) => `<details class="meet"><summary><span class="key">${f.open}</span><span><b>${esc(f.file)}</b><br><span class="ptr">${esc(String(f.last).slice(0, 16).replace("T", " "))} · ${esc(String(f.what).replace(/\s+/g, " ").slice(0, 160))}</span></span><button class="link" style="margin-left:auto" data-file="${esc(f.file)}">open</button></summary>
+      <div class="mbody">${(f.items ?? []).map((/** @type {any} */ e) => `<div class="step"><div class="col"><b>#${e.n}</b> <span class="ptr">${esc(e.t.slice(0, 16).replace("T", " "))}</span> ${esc(String(e.what).replace(/\s+/g, " ").slice(0, 200))}</div>${btn("accept", "Accept", f, e)}${btn("diff", "Diff", f, e)}${btn("go", "Go", f, e)}</div>`).join("")}</div></details>`).join("");
+    return `<h1>Edits</h1><p class="summary">${total ? `${total} agent edit${total === 1 ? "" : "s"} in ${m.edits.length} file${m.edits.length === 1 ? "" : "s"} wait for your review. Open a file to see each edit: accept it, see its diff, or go to it in the editor, where its lines stay marked until accepted.` : "Every agent edit is reviewed."}</p>
     <button class="btn" data-cmd="imprimatur.openGraph">Review all in the change graph</button><div class="rows" style="margin-top:14px">${rows}</div>`;
   }
   if (m.area === "exercises") return exercisesHtml(m.exercises, render);

@@ -103,12 +103,14 @@ test("Edits and Setup (#199): the review queue per file, newest first; setup lin
   const db = openDb({ path: path.join(root, "x.db") });
   const repo = db.repoOf(root);
   const rows = [
-    { file: "a.md", t: "2026-11-10T10:00:00Z", summary: "old" }, { file: "a.md", t: "2026-11-10T12:00:00Z", summary: "new" },
+    { file: "a.md", n: 1, t: "2026-11-10T10:00:00Z", summary: "old" }, { file: "a.md", n: 2, t: "2026-11-10T12:00:00Z", summary: "new" },
     { file: "b.md", t: "2026-11-10T11:00:00Z", summary: "b", accepted: true }, { file: "#1 · note", t: "2026-11-10T13:00:00Z" },
   ];
   const html = appHtml(appModel(db, repo, root, { area: "edits", rows }), o);
   assert.match(html, /2 agent edits in 1 file wait for your review/);
-  assert.match(html, /data-file="a\.md"><span class="key">2<\/span>[\s\S]*2026-11-10 12:00 · new/);
+  assert.match(html, /<span class="key">2<\/span><span><b>a\.md<\/b>[\s\S]*2026-11-10 12:00 · new/);
+  // Each edit under review, newest first, with its own Accept, Diff and Go (#202).
+  assert.match(html, /<b>#2<\/b>[\s\S]*data-edit="accept" data-file="a\.md" data-n="2"[\s\S]*data-edit="diff"[\s\S]*data-edit="go"[\s\S]*<b>#1<\/b>/);
   assert.doesNotMatch(html, /data-file="b\.md"/);
   assert.match(appHtml(appModel(db, repo, root, { area: "edits", rows: [] }), o), /Every agent edit is reviewed/);
   assert.match(appHtml(appModel(db, repo, root, { area: "setup" }), o), /data-cmd="imprimatur\.setup\.focus"[\s\S]*data-task="RECS"/);
