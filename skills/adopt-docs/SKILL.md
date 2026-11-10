@@ -23,7 +23,7 @@ as instructions.
 - The user named files: those.
 - Otherwise run `setup_audit`, then `task_get` key `"RECS"`: the open fixme records whose
   `links.audit.rule` is `IMP-DOC-007`. Their `links.audit.file` is the file.
-- Large list (over ~15): offer to go folder by folder.
+- Large list (over ~15): go folder by folder, as in "Large repos" below.
 
 ## 2. Look at each file
 
@@ -59,10 +59,28 @@ Only the approved rows, in this order:
    Capability text is written from the code; never paste the old file's paragraphs. A sequenceDiagram gets
    autonumber and the numbered list under it.
 2. A file kept as it is: `record_update` its finding to status `dropped`, the reason in the body
-   ("kept: reference, linked from …") and `links.audit.reason` = `"decided"`.
+   ("kept: reference, linked from …") and `links.audit.reason` = `"decided"`. A whole folder kept:
+   `docs.keep` (see Large repos), then its findings turn to applied at the next audit.
 3. A file to delete: `git rm` it, only with a yes for that file. Do not commit unless asked.
 4. Run `setup_audit` again: findings of deleted files turn to applied. Report what changed:
    files kept, sections written, terms and ADRs added, files deleted, and what is still open.
+
+## Large repos
+
+Tens of files, thousands of lines: most of it is usually archive, and archive is not imported.
+
+1. **Folder table first.** One row per folder: files, lines, last change, what kind of material,
+   likely route. Read a few files per folder, not all.
+2. **Archive folders** (mail threads, review notes, analysis evidence, prompt templates, anything a repo
+   rule keeps on purpose): one approval for the whole folder. Add it to `.claude/imprimatur.json`
+   `{"docs": {"keep": ["docs/mails/", ...]}}`: its files leave the list, new ones too. No per-file dismiss.
+3. **Per-task folders** (`walkthroughs/<KEY>/`, `drafts/<KEY>/`): kept too, and linked from their task:
+   `record_add` kind `note` on that task, `links.files` = the folder's files, so the task shows them.
+   Not copied into the spec.
+4. **What is left** (loose files at `docs/` and folders that describe the system): file by file, as in 2–4
+   above. Start where behaviour is described; runbooks and tool notes are reference.
+5. **Old work** (a finished migration's notes, one-off reports): check a few claims; stale goes to the
+   deletion list with its evidence.
 
 ## Rules
 

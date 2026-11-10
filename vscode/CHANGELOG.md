@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.165.0] - 2026-11-10
+
+### Added
+- `{"docs": {"keep": ["docs/mails/", "docs/jira.md"]}}` in `.claude/imprimatur.json` keeps folders and files out of the hand-written documents list, new files in them too. `/adopt-docs` handles large repos folder by folder: archives kept in one step, per-task folders linked from their task (#205).
+
 ## [0.164.0] - 2026-11-10
 
 ### Added
