@@ -665,6 +665,10 @@ function activate(ctx) {
     vscode.commands.registerCommand("imprimatur.openGlossary", () => showGraph({ tab: "glossary" })),
     vscode.commands.registerCommand("imprimatur.openMeetings", () => vscode.commands.executeCommand("imprimatur.app.open", { area: "meetings" })),
     // Social media (#109): off by default, per repo, in .claude/imprimatur.json.
+    // The new panel's Edits (#202): one agent edit accepted, its diff, or the file at it; not in the palette.
+    vscode.commands.registerCommand("imprimatur.edit.accept", (/** @type {string} */ file, /** @type {number} */ n) => acceptEditOf(file, n)),
+    vscode.commands.registerCommand("imprimatur.edit.diff", (/** @type {string} */ file, /** @type {number} */ n) => openEditDiff(file, n)),
+    vscode.commands.registerCommand("imprimatur.edit.go", (/** @type {string} */ file, /** @type {number} */ n) => goToEdit(file, n)),
     vscode.commands.registerCommand("imprimatur.openSocial", () => vscode.commands.executeCommand("imprimatur.app.open", { area: "social" })),
     vscode.commands.registerCommand("imprimatur.social.on", () => toggleSocial(true)),
     vscode.commands.registerCommand("imprimatur.social.off", () => toggleSocial(false)),

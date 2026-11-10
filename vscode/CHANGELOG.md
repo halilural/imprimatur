@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.158.0] - 2026-11-10
+
+### Changed
+- Edits in the new panel reviews one agent edit at a time (#202): open a file's row to see its edits under review, newest first, each with Accept, Diff and Go.
+
 ## [0.157.0] - 2026-11-10
 
 ### Changed

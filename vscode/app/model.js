@@ -147,14 +147,17 @@ function editsQueue(root, rows) {
       all = [];
     }
   }
-  /** @type {Map<string, {file: string, open: number, last: string, what: string}>} */ const by = new Map();
+  /** @type {Map<string, {file: string, open: number, last: string, what: string, items: Array<{n: number, t: string, what: string}>}>} */ const by = new Map();
   for (const r of /** @type {any[]} */ (all)) {
     if (r.accepted || r.gone || r.outside || String(r.file).includes(" · ")) continue;
-    const f = by.get(r.file) ?? { file: r.file, open: 0, last: "", what: "" };
+    const f = by.get(r.file) ?? { file: r.file, open: 0, last: "", what: "", items: [] };
     f.open++;
+    // Each edit under review, to accept, diff or go to one at a time (#202; the old change graph's rows).
+    if (Number.isInteger(r.n)) f.items.push({ n: r.n, t: String(r.t), what: r.summary || r.intent || r.prompt || r.tool || "edit" });
     if (String(r.t) > f.last) Object.assign(f, { last: String(r.t), what: r.summary || r.intent || r.prompt || "" });
     by.set(r.file, f);
   }
+  for (const f of by.values()) f.items.sort((a, b) => b.t.localeCompare(a.t));
   return [...by.values()].sort((a, b) => b.last.localeCompare(a.last));
 }
 

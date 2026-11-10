@@ -96,6 +96,12 @@ function openApp(to = {}) {
       const got = repoFor(at.root);
       const rel = String(msg.file);
       if (got && !rel.split("/").includes("..")) vscode.window.showTextDocument(vscode.Uri.file(require("node:path").join(got.root, rel)));
+    } else if (msg?.type === "edit" && ["accept", "diff", "go"].includes(msg.act) && Number.isInteger(msg.n)) {
+      // One agent edit (#202): the file is the repo's, never outside it.
+      const got = repoFor(at.root);
+      const rel = String(msg.file);
+      if (!got || rel.split("/").includes("..") || require("node:path").isAbsolute(rel)) return;
+      Promise.resolve(vscode.commands.executeCommand(`imprimatur.edit.${msg.act}`, require("node:path").join(got.root, rel), msg.n)).then(() => msg.act === "accept" && render());
     } else if (msg?.type === "ex") {
       // An exercise's step ticked, skipped, noted; an exercise dropped or resumed; a recall graded.
       const x = require("../exerciseView.js");
