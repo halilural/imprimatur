@@ -6,6 +6,13 @@ const vscode = require("vscode");
 const records = require("../records.js");
 
 /** @type {vscode.WebviewPanel | undefined} */ let panel;
+/** Told when the panel shows or hides (extension.js runs the database backstop poll meanwhile). */
+let onVisible = (/** @type {boolean} */ _v) => {};
+/** @param {(v: boolean) => void} fn */
+const setAppVisible = (fn) => void (onVisible = fn);
+let renders = 0;
+/** The panel for the integration tests: open, visible, where, how often drawn. */
+const appState = () => ({ open: !!panel, visible: !!panel?.visible, at: { ...at }, renders, html: panel?.webview.html ?? "" });
 /** @type {{root?: string, area?: string, doc?: string, scope?: string, task?: string, tab?: string}} */ let at = {};
 
 /** The repo to show: the one asked for, else the first folder of this window that Imprimatur knows. @param {string} [root] */
@@ -30,9 +37,10 @@ function render() {
   }
   const { appModel } = require("./model.js");
   const { appHtml } = require("./html.js");
-  const { renderMarkdown } = require("../docsView.js");
+  const { renderMarkdown } = require("../markdown.js");
   const m = appModel(got.db, got.repo, got.root, at);
   panel.title = `Imprimatur · ${m.repo.name}`;
+  renders++;
   panel.webview.html = appHtml(m, { nonce: crypto.randomBytes(16).toString("hex"), cspSource: panel.webview.cspSource, render: (md) => renderMarkdown(md) });
 }
 
@@ -76,7 +84,16 @@ function openApp(to = {}) {
     return render();
   }
   panel = vscode.window.createWebviewPanel("imprimatur.app", "Imprimatur", vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: false });
-  panel.onDidDispose(() => (panel = undefined));
+  panel.onDidDispose(() => {
+    panel = undefined;
+    onVisible(false);
+  });
+  panel.onDidChangeViewState((e) => {
+    onVisible(e.webviewPanel.visible);
+    // Hidden, it missed the changes: drawn fresh when it shows again.
+    if (e.webviewPanel.visible) render();
+  });
+  onVisible(true);
   panel.webview.onDidReceiveMessage((/** @type {any} */ msg) => {
     if (msg?.type === "go") {
       at = { ...at, area: msg.area, doc: msg.doc, scope: msg.scope, task: msg.task, tab: msg.tab };
@@ -104,7 +121,7 @@ function openApp(to = {}) {
       Promise.resolve(vscode.commands.executeCommand(`imprimatur.edit.${msg.act}`, require("node:path").join(got.root, rel), msg.n)).then(() => msg.act === "accept" && render());
     } else if (msg?.type === "ex") {
       // An exercise's step ticked, skipped, noted; an exercise dropped or resumed; a recall graded.
-      const x = require("../exerciseView.js");
+      const x = require("../exercises.js");
       const db = records.dbOf();
       try {
         if (!db || !x.EXERCISE_MESSAGES.includes(msg.act)) throw new Error(`unknown exercise action ${msg.act}`);
@@ -130,4 +147,9 @@ function registerApp(ctx) {
   );
 }
 
-module.exports = { registerApp, openApp, approveGate, saveSection };
+/** Draws the open panel again (the database or an agent edit changed); nothing when it is closed or hidden. */
+function refreshApp() {
+  if (panel?.visible) render();
+}
+
+module.exports = { registerApp, openApp, refreshApp, setAppVisible, appState, approveGate, saveSection };

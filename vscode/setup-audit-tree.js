@@ -5,7 +5,7 @@
 //     [dismissed: reason (third-party plugin, synced skill, false alarm, this machine, other)]
 //     → source (project, your setup, synced skills, plugins → plugin, worktrees → worktree)
 //     → agnix's category (claude-hooks, agent-skills, ...) → rule → finding, errors first.
-// Plain data and rows only (setupView.js and tasksView.js draw them): testable without VS Code.
+// Plain data and rows only (setupView.js draws them): testable without VS Code.
 "use strict";
 
 /**

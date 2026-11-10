@@ -207,8 +207,8 @@ function appModel(db, repo, root, at = {}) {
   }
   if (area === "edits") return { ...base, edits: editsQueue(root, at.rows) };
   // Exercises belong to no repo; meetings are this repo's meeting records; social is a document.
-  if (area === "exercises") return { ...base, exercises: require("../exerciseView.js").exerciseModel(db) };
-  if (area === "meetings") return { ...base, meetings: require("../tasksView.js").meetingsModel(db, root).meetings };
+  if (area === "exercises") return { ...base, exercises: require("../exercises.js").exerciseModel(db) };
+  if (area === "meetings") return { ...base, meetings: require("../meetings.js").meetingsModel(db, root).meetings };
   if (area === "social") {
     const d = db.docFind(repo.id, "social");
     const r = reading("Social", d ? db.docSections(d.id).filter((/** @type {any} */ s) => s.status === "current") : [], "Posts written for each platform after reading its rules (/social-post).");

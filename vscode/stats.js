@@ -221,7 +221,7 @@ function statsOf(root, { days = 7, now = Date.now(), db } = {}) {
   }
   const open = tasks.filter((t) => t.status === "open" || t.status === "active").length;
   // What waits on the user now (the Home badge's count) and the last session's hooks.
-  const waiting = require("./tasksView.js").inboxCount(db, root, require("./waiting.js").waitingSteps(root));
+  const waiting = require("./inbox.js").inboxCount(db, root, require("./waiting.js").waitingSteps(root));
   const { gitRootOf, projectSlug } = require("./agent-setup.js");
   const home = require("node:os").homedir();
   const hooks = require("./session-context.js").sessionItems(path.join(home, ".claude", "projects", projectSlug(gitRootOf(root))), home).filter((/** @type {any} */ r) => r.kind === "hook output");

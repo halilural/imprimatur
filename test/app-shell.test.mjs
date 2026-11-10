@@ -130,7 +130,7 @@ test("More (#202): Exercises, Meetings and Social open in this panel; a step's b
   const html = appHtml(ex, o);
   assert.match(html, new RegExp(`data-ex="exStep" data-id="${e.steps[0].id}" data-status="done"`));
   assert.match(html, /Bedrock[\s\S]*0 \/ 2 steps/);
-  const { applyExerciseMessage } = req("../vscode/exerciseView.js");
+  const { applyExerciseMessage } = req("../vscode/exercises.js");
   applyExerciseMessage(db, { type: "exStep", id: e.steps[0].id, status: "done" });
   assert.match(appHtml(appModel(db, repo, root, { area: "exercises" }), o), /1 \/ 2 steps/);
   const t = db.upsertTask(repo.id, "#5", { title: "Payments" });

@@ -38,122 +38,23 @@ suite("Imprimatur in the extension host", () => {
     assert.deepEqual(contributed.filter((c) => !have.has(c)), []);
   });
 
-  test("the launcher opens the panel's tabs; the seeded ask waits on Home", async () => {
-    const { launcher, panelState } = await api();
-    assert.ok(launcher, "activate hands out the launcher");
-    assert.deepEqual(launcher.getChildren().map((r) => r.command), ["imprimatur.openHome", "imprimatur.openTasks", "imprimatur.openMeetings", "imprimatur.openArchitecture", "imprimatur.openProduct", "imprimatur.openGlossary", "imprimatur.openGraph", "imprimatur.setup.focus"]);
-    // Home last: the seeded ask is looked for on it (what waits on the user is on Home).
-    for (const [command, tab] of [["imprimatur.openHome", "home"], ["imprimatur.openTasks", "tasks"], ["imprimatur.openArchitecture", "architecture"], ["imprimatur.openProduct", "product"], ["imprimatur.openGlossary", "glossary"], ["imprimatur.openHome", "home"]]) {
+  test("the old panel's commands open the new panel at their area; the seeded task is on Home (#202)", async () => {
+    const { appState } = await api();
+    for (const [command, area] of [["imprimatur.openGraph", "edits"], ["imprimatur.openTasks", "tasks"], ["imprimatur.openGlossary", "docs"], ["imprimatur.openMeetings", "meetings"], ["imprimatur.openHome", "home"]]) {
       await vscode.commands.executeCommand(command);
-      assert.equal(panelState().view.tab, tab, command);
+      assert.equal(appState().at.area, area, command);
     }
-    // Other suites add asks of their own: find the seeded one.
+    assert.ok(appState().open && appState().visible);
     const deadline = Date.now() + 5000;
-    while (!panelState().html.includes("Integration ask for the user") && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
-    assert.ok(panelState().html.includes("Integration ask for the user"), "the seeded ask on Home");
-    assert.equal(panelState().root, process.env.IMPRIMATUR_IT_ROOT);
+    while (!appState().html.includes("Integration task") && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
+    assert.ok(appState().html.includes("Integration task"), "the seeded task on Home");
   });
 
-  test("records.reveal opens the seeded task on Tasks", async () => {
-    const { panelState } = await api();
+  test("records.reveal opens the seeded task's page", async () => {
+    const { appState } = await api();
     await vscode.commands.executeCommand("imprimatur.records.reveal", { root: process.env.IMPRIMATUR_IT_ROOT, task: "IT-1" });
-    const s = panelState();
-    assert.equal(s.view.tab, "tasks");
-    assert.ok(s.view.sel, "a task selected");
-    assert.ok(s.html.includes("Integration task"), "its page drawn");
-  });
-
-  test("opens the Agent Change Graph", async () => {
-    await api();
-    await vscode.commands.executeCommand("imprimatur.openGraph");
-    const deadline = Date.now() + 10_000;
-    /** @returns {vscode.Tab | undefined} */
-    const graphTab = () =>
-      vscode.window.tabGroups.all.flatMap((g) => g.tabs).find((t) => t.input instanceof vscode.TabInputWebview && t.input.viewType.endsWith("imprimatur.graph"));
-    while (!graphTab() && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
-    assert.ok(graphTab(), "a graph webview tab");
-  });
-
-  test("#114: a burst of 20 tool calls builds the panel at most twice", async () => {
-    const { panelState, watchChanged } = await api();
-    await vscode.commands.executeCommand("imprimatur.openGraph");
-    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-    const deadline = Date.now() + 10_000;
-    while (!panelState().visible && Date.now() < deadline) await wait(100);
-    assert.ok(panelState().visible, "the panel shows");
-    const fs = require("node:fs");
-    const base = require(path.join(__dirname, "..", "..", "vscode", "data-dir.js")).dataDir(vscode.workspace.workspaceFolders[0].uri.fsPath); // #126: outside the repo
-    for (const d of ["activity", "history", "pending"]) fs.mkdirSync(path.join(base, d), { recursive: true });
-    await wait(3500); // earlier tests' redraws settle
-    const before = panelState().builds;
-    // What one tool call writes: an activity line, a pending file, process.json, open-edits.json;
-    // every fifth an edit, with its history. Each write goes through the watcher's handler.
-    const write = (rel, text) => {
-      fs.writeFileSync(path.join(base, rel), text);
-      watchChanged(path.join(base, rel));
-    };
-    for (let i = 0; i < 20; i++) {
-      write(path.join("activity", "it-burst.jsonl"), "");
-      write(path.join("pending", `it-${i}.json`), "{}");
-      write("process.json", JSON.stringify({ i }));
-      write("open-edits.json", JSON.stringify({ at: Date.now(), edits: 0 }));
-      if (i % 5 === 0) write(path.join("history", "it-burst.md.jsonl"), "");
-      await wait(50);
-    }
-    await wait(4000);
-    const builds = panelState().builds - before;
-    assert.ok(builds >= 1 && builds <= 2, `panel builds for the burst: ${builds}`);
-  });
-
-  test("#115: a refresh with nothing changed builds no page, in under 10 ms", async () => {
-    const { panelState, watchChanged } = await api();
-    await vscode.commands.executeCommand("imprimatur.openGraph");
-    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-    await wait(3500); // earlier redraws settle (and one full build sets the stamp)
-    const base = require(path.join(__dirname, "..", "..", "vscode", "data-dir.js")).dataDir(vscode.workspace.workspaceFolders[0].uri.fsPath); // #126: outside the repo
-    // A watcher event with no write behind it: the graph's path refreshes, the inputs are the same.
-    watchChanged(path.join(base, "activity", "it-burst.jsonl"));
-    await wait(1500);
-    const a = panelState();
-    watchChanged(path.join(base, "activity", "it-burst.jsonl"));
-    await wait(1500);
-    const b = panelState();
-    assert.equal(b.builds, a.builds, "no page built");
-    assert.ok(b.skips > a.skips, "the stamp skipped it");
-    assert.ok(b.refreshMs < 10, `the skipped refresh took ${b.refreshMs} ms`);
-  });
-
-  test("#115: Show more on Edits asks the host for more rows; the view keeps the count", async () => {
-    const { panelState, panelMessage } = await api();
-    await vscode.commands.executeCommand("imprimatur.openGraph");
-    await panelMessage({ type: "view", view: { tab: "edits", rows: 700 } });
-    assert.equal(panelState().view.rows, 700);
-    assert.equal(panelState().view.tab, "edits");
-    await panelMessage({ type: "view", view: { tab: "edits", rows: "all" } });
-    assert.equal(panelState().view.rows, 700, "a bad count is ignored");
-  });
-
-  test("#115: a new tool call reaches the open Edits tab as a small line diff, applied without a resync", async () => {
-    const { panelState, panelMessage, watchChanged } = await api();
-    await vscode.commands.executeCommand("imprimatur.openGraph");
-    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-    await panelMessage({ type: "view", view: { tab: "edits" } });
-    await wait(2000);
-    const root = vscode.workspace.workspaceFolders[0].uri.fsPath;
-    const call = (i) => {
-      require(path.join(__dirname, "..", "..", "vscode", "activity.js")).record(root, { tool_name: "Bash", session_id: "it-diff", hook_event_name: "PostToolUse", tool_input: { command: `echo ${i}` }, tool_response: { stdout: String(i) } });
-      watchChanged(path.join(require(path.join(__dirname, "..", "..", "vscode", "data-dir.js")).dataDir(root), "activity", "it-diff.jsonl"));
-    };
-    call(0); // the first update after a reload may go whole
-    await wait(2500);
-    const a = panelState();
-    call(1);
-    await wait(2500);
-    const b = panelState();
-    assert.ok(b.renders > a.renders, "the new call was drawn");
-    assert.ok(b.html.includes("echo 1"), "the host's page has the new row");
-    assert.ok(b.lastPost < 100_000 && b.lastPost < b.html.length / 4, `posted ${b.lastPost} of ${b.html.length} chars`);
-    await wait(500);
-    assert.equal(panelState().resyncs, b.resyncs, "the page had the version the diff was made against");
+    assert.equal(appState().at.area, "tasks");
+    assert.equal(appState().at.task, "IT-1");
+    assert.ok(appState().html.includes("Integration task"), "its page drawn");
   });
 });

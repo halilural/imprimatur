@@ -223,31 +223,8 @@ test("audit: the npx locate script runs from a private folder, removed after", (
   assert.equal(fs.existsSync(path.dirname(seen)), false);
 });
 
-test("audit: recommendations stay out of the task list, this repo's and the global one (#170)", () => {
-  const { tasksPage, tasksHtml } = require("../vscode/tasksView.js");
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "audit-tasks-"));
-  const db = openDb({ path: path.join(dir, "imprimatur.db") });
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "audit-tasks-repo-"));
-  const h = fs.mkdtempSync(path.join(os.tmpdir(), "audit-tasks-home-"));
-  try {
-    const spawn = /** @type {any} */ (() => ({ status: 0, stdout: "{}" }));
-    auditRoot(db, { root }, { bin: "agnix", spawn, report: { diagnostics: [d("A-1", "x.md", "a")] } });
-    auditRoot(db, { root: h, home: h, global: true }, { bin: "agnix", spawn, report: { diagnostics: [d("B-1", path.join(h, ".claude/CLAUDE.md"), "b")] } });
-    db.upsertTask(db.repoByRoot(h).id, "#9", { title: "Not shown", status: "active" });
-    const m = tasksPage(db, root, { filter: "active" }, { home: h });
-    assert.deepEqual(m.groups, []);
-    assert.doesNotMatch(tasksHtml(m), /Global \(~\)|RECS/);
-    // Every repo: the home's real work shows, its recommendations do not.
-    const all = tasksPage(db, root, { filter: "active", all: true }, { home: h });
-    assert.deepEqual(all.groups.flatMap((g) => g.tasks).map((t) => t.key), ["#9"]);
-  } finally {
-    db.close();
-  }
-});
-
-test("audit: synced skills are their own source; the AUDIT task page shows the findings grouped", () => {
+test("audit: synced skills are their own source; a finding keeps its rule's name", () => {
   assert.deepEqual(groupOf("/home/u/.claude/skills/synced/abc/docx/SKILL.md", { home }), { group: "synced" });
-  const { tasksPage, tasksHtml } = require("../vscode/tasksView.js");
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "audit-page-"));
   const db = openDb({ path: path.join(dir, "imprimatur.db") });
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "audit-page-repo-"));
@@ -256,12 +233,6 @@ test("audit: synced skills are their own source; the AUDIT task page shows the f
     auditRoot(db, { root }, { bin: "agnix", spawn, report: { diagnostics: [d("CC-HK-010", "hooks/hooks.json", "no timeout")] } });
     const task = db.taskByKey(db.repoByRoot(root).id, TASK);
     assert.equal(db.recordsOf(task.id)[0].links.audit.ruleName, "Timeout Policy");
-    const m = tasksPage(db, root, { sel: task.id, filter: "active" }, { home: dir });
-    assert.equal(m.cur.audit[0].label, "Open");
-    const html = tasksHtml(m);
-    assert.match(html, /Agent setup/);
-    assert.match(html, /CC-HK-010 Timeout Policy/);
-    assert.doesNotMatch(html, /data-k="todos"/, "no flat todo list for the audit");
   } finally {
     db.close();
   }

@@ -1,5 +1,5 @@
-// The panel's task tabs (#69): Home, Tasks, Waiting on you. Their models
-// and HTML are pure (vscode/tasksView.js), so they run here on a temp database.
+// What waits on the user (#69; vscode/inbox.js since the old panel went, #202): the model the
+// launcher's badge, the status bar and the new panel's ⏳ count from, on a temp database.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,7 +11,7 @@ const RECENT = new Date(Date.now() - 3600e3).toISOString();
 
 const req = createRequire(import.meta.url);
 const { openDb } = req("../vscode/db.js");
-const tv = req("../vscode/tasksView.js");
+const tv = req("../vscode/inbox.js");
 
 const AGENT = { kind: "agent", id: "claude-code:s1" };
 const USER = { kind: "user", id: "me" };
@@ -41,69 +41,6 @@ function seed() {
   return { db, file: path.join(dir, "imprimatur.db"), root, repo, epic, t1, t2, t3, done1, next, agentTodo, q, adr, dec, test1, other, o1, oq };
 }
 
-test("#69 quick-add: ? question (yours), ! decision, # note, @me (or @ben) your todo, else the agent's todo", () => {
-  assert.deepEqual(tv.parseQuickAdd("? Now or later"), { kind: "question", title: "Now or later", owner: "K" });
-  assert.deepEqual(tv.parseQuickAdd("!Ship it"), { kind: "decision", title: "Ship it" });
-  assert.deepEqual(tv.parseQuickAdd("# a note"), { kind: "note", title: "a note" });
-  assert.deepEqual(tv.parseQuickAdd("@ben test on the other machine"), { kind: "todo", title: "test on the other machine", owner: "K" });
-  assert.deepEqual(tv.parseQuickAdd("@me test on the other machine"), { kind: "todo", title: "test on the other machine", owner: "K" });
-  assert.deepEqual(tv.parseQuickAdd("  write the README  "), { kind: "todo", title: "write the README", owner: "C" });
-  assert.deepEqual(tv.parseQuickAdd("#67 follow-up"), { kind: "todo", title: "#67 follow-up", owner: "C" }, "a task key is not a note");
-  assert.equal(tv.parseQuickAdd(""), undefined);
-  assert.equal(tv.parseQuickAdd("?   "), undefined);
-  assert.equal(tv.parseQuickAdd("@ben"), undefined);
-  assert.equal(tv.parseQuickAdd("@me"), undefined);
-});
-
-test("#69 Tasks: the list by status with counts, the selected task's page", () => {
-  const s = seed();
-  const m = tv.tasksPage(s.db, s.root, {});
-  assert.deepEqual(m.counts, { active: 2, open: 1, done: 1 });
-  assert.equal(m.filter, "active");
-  assert.deepEqual(m.groups.flatMap((g) => g.tasks.map((t) => t.key)).sort(), ["#1", "#53"]);
-  const row = m.groups[0].tasks.find((t) => t.key === "#1");
-  assert.equal(row.asks, 3, "your todo, your question, the manual test");
-  assert.equal(row.openTodos, 2);
-  assert.equal(row.pointer, "Switch this machine");
-  assert.match(row.q, /MCP server in plugin\.json/, "the search also finds the task's records");
-
-  const page = tv.tasksPage(s.db, s.root, { sel: s.t1.id }).cur;
-  assert.equal(page.key, "#1");
-  assert.equal(page.epic.key, "#53");
-  assert.equal(page.pointer.title, "Switch this machine");
-  assert.deepEqual(page.asks.map((r) => r.title).sort(), ["MT-PL-001 validate passes", "Switch now or later?", "Switch this machine"]);
-  assert.deepEqual(page.todos.map((r) => r.title), ["Switch this machine", "README section"], "done todos hidden");
-  assert.equal(page.hiddenDone, 1);
-  assert.equal(page.openTodos, 2);
-  assert.deepEqual(page.decisions.map((d) => [d.kind, d.who]), [["adr", "agent"], ["decision", "you"]]);
-  assert.deepEqual(page.tests.map((t) => t.title), ["MT-PL-001 validate passes"]);
-  assert.ok(page.activity.length <= 5);
-  assert.ok(page.older > 0, "older events behind a button");
-  assert.match(page.activity[0].what, /added|moved/);
-
-  const all = tv.tasksPage(s.db, s.root, { sel: s.t1.id, showDone: [s.t1.id], old: [s.t1.id] }).cur;
-  assert.deepEqual(all.todos.map((r) => r.title), ["plugin.json", "Switch this machine", "README section"]);
-  assert.equal(all.older, 0);
-
-  const done = tv.tasksPage(s.db, s.root, { filter: "done" });
-  assert.deepEqual(done.groups.flatMap((g) => g.tasks.map((t) => t.key)), ["#3"]);
-  assert.equal(done.cur.key, "#3", "the first task of the filter is selected");
-
-  // A flashed done todo shows with the done ones.
-  const flash = tv.tasksPage(s.db, s.root, { sel: s.t1.id, flash: s.done1.id }).cur;
-  assert.equal(flash.flash, s.done1.id);
-  assert.ok(flash.todos.some((r) => r.id === s.done1.id));
-});
-
-test("#69 Tasks: this repo by default, every repo when asked", () => {
-  const s = seed();
-  const keys = (m) => m.groups.flatMap((g) => g.tasks.map((t) => t.key));
-  assert.ok(!keys(tv.tasksPage(s.db, s.root, {})).includes("OT-1"));
-  const m = tv.tasksPage(s.db, s.root, { all: true });
-  assert.ok(keys(m).includes("OT-1"));
-  assert.equal(m.groups[0].repo.name, "repo", "this window's repo first");
-});
-
 test("#69 Waiting on you: buckets, groups by task, turn-end asks counted, today's done", () => {
   const s = seed();
   const waiting = [
@@ -121,7 +58,7 @@ test("#69 Waiting on you: buckets, groups by task, turn-end asks counted, today'
   assert.equal(m.groups[0].items[0].kind, "question", "questions first");
   assert.equal(tv.inboxCount(s.db, s.root, waiting), 5);
 
-  tv.applyMessage(s.db, { type: "rec", id: s.next.id, op: "done" }, USER);
+  s.db.updateRecord(s.next.id, { status: "done" }, USER);
   m = tv.inboxModel(s.db, s.root, { waiting });
   assert.equal(m.buckets.find((b) => b.id === "done").n, 1, "done today by you");
   assert.ok(m.groups[0].items.some((r) => r.id === s.next.id && r.done));
@@ -131,7 +68,7 @@ test("#69 Waiting on you: buckets, groups by task, turn-end asks counted, today'
   assert.ok(all.groups.some((g) => g.task?.key === "OT-1"));
 });
 
-test("turn-end asks are cards under their task; the button ticks the step; ticked today shows done", () => {
+test("turn-end asks are cards under their task; ticked today shows done; audit's and replaced ones do not", () => {
   const s = seed();
   const now = Date.now();
   const w = (/** @type {any} */ o) => ({ kind: "command", session: "s9", item: "2026-01-01T10:00:00Z", t: RECENT, prompt: "deploy", ...o });
@@ -148,222 +85,27 @@ test("turn-end asks are cards under their task; the button ticks the step; ticke
   const turn = g1.items.filter((/** @type {any} */ r) => r.turn);
   assert.deepEqual(turn.map((/** @type {any} */ r) => [r.title, r.done]), [["Deploy it", false], ["Delete the log", true]], "open and yours today; not audit's or replaced");
   assert.equal(m.groups.find((g) => !g.task).items[0].kind, "test", "a verify ask is a test; no task: No task");
-  const html = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting, placeOf, now });
-  assert.match(html, /<button class="primary" data-act="turn" data-on="1" data-session="s9" data-item="2026-01-01T10:00:00Z" data-i="0">Done it<\/button>/);
-  assert.match(html, /data-act="turn" data-on="0" data-session="s9" data-item="2026-01-01T10:00:00Z" data-i="2">undo/);
-  assert.ok(html.includes("end of turn") && html.includes("waiting for prod") && html.includes("Full message"));
-  // With no Waiting on you tab: the open ones on their task's page, the ones with no task on Home.
-  const page = tv.paneHtml(s.db, s.root, { tab: "tasks", sel: g1.task.id }, { waiting, placeOf, now });
-  assert.match(page, /data-act="turn" data-on="1" data-session="s9" data-item="2026-01-01T10:00:00Z" data-i="0">Done it/);
-  assert.ok(!page.includes('data-i="2"'), "done ones stay off the task page");
-  const home = tv.paneHtml(s.db, s.root, { tab: "home" }, { waiting, placeOf, now });
-  assert.match(home, /Waiting on you, no task[\s\S]*?Check by eye/);
-  assert.ok(!home.includes("Deploy it"), "one with a task is on its page, not on Home");
-  assert.equal(tv.cleanView({ tab: "inbox" }).tab, "home", "a view saved on the old tab opens Home");
-  assert.ok(html.includes("<span>No task</span>"));
-  assert.ok(!html.includes("Audit closed it") && !html.includes("Old question"));
+  assert.equal(turn[0].why, "waiting for prod");
 });
 
-test("Waiting on you: one chip per task, cards found by the task's title", () => {
+test("Waiting on you: every card carries its task's title, so it is found by it", () => {
   const s = seed();
-  const one = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting: [] });
-  assert.ok(!one.includes('data-act="itask"'), "one task: no chips");
-  const all = tv.paneHtml(s.db, s.root, { tab: "inbox", all: true }, { waiting: [] });
   const m = tv.inboxModel(s.db, s.root, { all: true });
-  for (const g of m.groups) {
-    assert.ok(all.includes(`data-act="itask" data-id="${g.task.id}"`), g.task.key);
-    assert.ok(all.includes(`data-task="${g.task.id}"`), g.task.key);
-    assert.ok(g.items.every((r) => r.task_title === g.task.title));
-  }
-  for (const id of ["question", "todo", "test", "done"]) assert.ok(all.includes(`data-act="ibucket" data-b="${id}"`), id);
-  assert.match(all, /class="card ask[^"]*"[^>]*data-b="question"/, "a card says its bucket");
-  assert.ok(all.includes('id="ifnone"'));
+  assert.ok(m.groups.length > 1);
+  for (const g of m.groups) assert.ok(g.items.every((r) => r.task_title === g.task.title), g.task.key);
 });
 
-test("#69 Home: progress, where we left off, top asks, tasks by status", () => {
-  const s = seed();
-  const m = tv.homeModel(s.db, s.root);
-  assert.equal(m.repoName, "repo");
-  assert.equal(m.total, 4);
-  assert.equal(m.done, 1);
-  assert.deepEqual(m.pointers.map((p) => [p.key, p.next, p.mine]), [["#1", "Switch this machine", true]]);
-  assert.equal(m.askCount, 3);
-  assert.ok(m.asks.length <= 5);
-  assert.deepEqual(m.rows.map((r) => r.status), ["active", "active", "open", "done"]);
-});
-
-test("#69 writes from the panel go in as the user", () => {
-  const s = seed();
-  const last = (id) => s.db.versionsOf(id).at(-1);
-  tv.applyMessage(s.db, { type: "rec", id: s.agentTodo.id, op: "done" }, USER);
-  assert.equal(s.db.record(s.agentTodo.id).status, "done");
-  assert.equal(last(s.agentTodo.id).actor_kind, "user");
-  tv.applyMessage(s.db, { type: "rec", id: s.agentTodo.id, op: "open" }, USER);
-  tv.applyMessage(s.db, { type: "rec", id: s.agentTodo.id, op: "pointer" }, USER);
-  assert.equal(s.db.record(s.agentTodo.id).pointer, true);
-  assert.equal(s.db.record(s.next.id).pointer, false, "one 👉 per task");
-  tv.applyMessage(s.db, { type: "rec", id: s.agentTodo.id, op: "drop" }, USER);
-  assert.equal(s.db.record(s.agentTodo.id).status, "dropped");
-
-  const answer = tv.applyMessage(s.db, { type: "answer", id: s.q.id, text: "Later.\nWhen sessions close." }, USER);
-  assert.equal(answer.kind, "answer");
-  assert.equal(answer.parent_id, s.q.id);
-  assert.equal(answer.title, "Later.");
-  assert.equal(answer.body, "Later.\nWhen sessions close.");
-  assert.equal(s.db.record(s.q.id).status, "done", "the question is answered");
-  assert.equal(last(s.q.id).actor_kind, "user");
-  const page = tv.tasksPage(s.db, s.root, { sel: s.t1.id }).cur;
-  assert.ok(page.notes.find((r) => r.id === s.q.id).answers.some((a) => a.id === answer.id), "the answer under its question");
-
-  const added = tv.applyMessage(s.db, { type: "add", task: s.t2.id, text: "? Which name" }, USER);
-  assert.deepEqual([added.kind, added.owner, added.title], ["question", "K", "Which name"]);
-  assert.equal(s.db.versionsOf(added.id)[0].actor_kind, "user");
-
-  tv.applyMessage(s.db, { type: "taskStatus", task: s.t2.id, status: "active" }, USER);
-  assert.equal(s.db.taskById(s.t2.id).status, "active");
-
-  assert.throws(() => tv.applyMessage(s.db, { type: "rec", id: "x", op: "done" }, USER), /bad id/);
-  assert.throws(() => tv.applyMessage(s.db, { type: "rec", id: s.q.id, op: "nuke" }, USER), /unknown record action/);
-  assert.throws(() => tv.applyMessage(s.db, { type: "answer", id: s.q.id, text: "  " }, USER), /empty/);
-  assert.throws(() => tv.applyMessage(s.db, { type: "add", task: s.t2.id, text: "" }, USER), /nothing to add/);
-  assert.throws(() => tv.applyMessage(s.db, { type: "taskStatus", task: s.t2.id, status: "gone" }, USER), /bad task status/);
-  assert.throws(() => tv.applyMessage(s.db, { type: "drop table" }, USER), /unknown panel message/);
-});
-
-test("#69 the page's view is cleaned: only known tabs, filters and ids", () => {
-  assert.deepEqual(tv.cleanView({ tab: "tasks", sel: "7", filter: "done", all: true, showDone: [1, "2", -3, "x"], old: "no", evil: 1 }),
-    { tab: "tasks", sel: 7, filter: "done", all: true, showDone: [1, 2] });
-  assert.deepEqual(tv.cleanView({ tab: "<script>", sel: 0, filter: "x", all: "yes" }), {});
-  assert.deepEqual(tv.cleanView({ sel: null }), { sel: null });
-  assert.deepEqual(tv.cleanView(null), {});
-});
-
-test("#69 the tabs' HTML: Turkish labels, escaped text, keyed blocks, no emoji icons", () => {
-  const s = seed();
-  s.db.addRecord(s.t1.id, { kind: "note", title: "<script>alert(1)</script>" }, AGENT);
-  const tasks = tv.paneHtml(s.db, s.root, { tab: "tasks", sel: s.t1.id }, { linkOf: () => "https://github.com/o/r/issues/1" });
-  for (const text of ["Active · 2", "Where we left off", "Waiting on you", "To-dos", "Show done (1)", "Decisions and design", "Manual tests", "Activity", "Show in Agent changes", "Open on GitHub", "next", "Answer"])
-    assert.ok(tasks.includes(text), text);
-  assert.ok(!tasks.includes("<script>alert"), "titles are escaped");
-  assert.match(tasks, /data-draft="ans-\d+"/);
-  assert.match(tasks, /data-draft="add-\d+"/);
-  const inbox = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting: [] });
-  for (const text of ["Waiting on you", "Needs an answer", "Your to-do", "Manual test", "Done today", "This repo", "All repos", "Done it", "Passed"])
-    assert.ok(inbox.includes(text), text);
-  const home = tv.paneHtml(s.db, s.root, { tab: "home" });
-  for (const text of ["1 / 4 tasks done", "Where we left off", "Waiting on you", "Last change"]) assert.ok(home.includes(text), text);
-  // No Waiting on you tab to link to: the count only.
-  assert.match(home, /<span>Waiting on you<\/span><span class="dim">3<\/span>/);
-  assert.ok(!home.includes('data-tab="inbox"'));
-  assert.equal(tv.paneHtml(s.db, s.root, { tab: "edits" }), "");
-  for (const page of [tasks, inbox, home]) assert.doesNotMatch(page, /\p{Extended_Pictographic}/u, "SVG icons, no emoji");
-  assert.doesNotMatch(tv.TASKS_CSS, /#[0-9a-f]{3,8}\b/i, "theme colours only");
-  assert.match(tv.paneHtml(undefined, s.root, { tab: "tasks" }, { error: "no sqlite" }), /no sqlite/);
-});
-
-test("#69 the panel page: tabs, only the visible tab drawn, its script parses", async () => {
-  const Module = req("node:module");
-  const load = Module._load;
-  Module._load = function (r, ...a) {
-    return r === "vscode" ? { window: {}, workspace: {}, commands: {}, env: {}, Uri: {} } : load.call(this, r, ...a);
-  };
-  try {
-    const { html } = req("../vscode/graphView.js");
-    const s = seed();
-    const data = { rows: [{ file: "a.md", n: 1, t: Date.now(), added: 1, removed: 0, lane: 0, intent: "Edit a" }], lanes: [{ first: 0, last: 0 }], sessions: [] };
-    const pane = tv.paneHtml(s.db, s.root, { tab: "tasks" });
-    const page = html(data, s.root, "N", [], { view: { tab: "tasks", sel: s.t1.id }, pane, inbox: 4, repoName: "repo" });
-    for (const label of ["Home", "Tasks", "Analysis", "Agent changes"]) assert.ok(page.includes(`>${label}`), label);
-    // No Waiting on you tab: what waits is counted on Home.
-    assert.ok(!page.includes('data-tab="inbox"'));
-    assert.match(page, /data-tab="home">[\s\S]*?Home <span class="badge" title="4 waiting on you">4<\/span>/);
-    assert.match(page, /<section id="pane" data-tab="tasks">/);
-    assert.match(page, /<section id="edits" hidden>/);
-    assert.ok(!page.includes('data-file="a.md"'), "the edits table is not drawn on another tab");
-    const js = page.match(/<script nonce="N">([\s\S]*?)<\/script>/)[1];
-    assert.doesNotThrow(() => new Function(js));
-    assert.match(js, /"sel":\d+/, "the host's view goes to the page");
-    const edits = html(data, s.root, "N", [], { view: { tab: "edits" } });
-    assert.ok(edits.includes('data-file="a.md"'));
-  } finally {
-    Module._load = load;
-  }
-});
-
-test("record bodies are Markdown: bold, code blocks, links; raw HTML stays text", () => {
-  const s = seed();
-  s.db.addRecord(s.t1.id, { kind: "test", title: "Adhoc 03", body: "**Preparation:**\n```sql\nDELETE FROM T;\n```\n<script>alert(1)</script> [x](javascript:alert(1))" }, AGENT);
-  const inbox = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting: [] });
-  assert.ok(inbox.includes("<strong>Preparation:</strong>"));
-  assert.match(inbox, /<pre><code class="language-sql">DELETE FROM T;/);
-  assert.ok(!inbox.includes("<script>alert"), "raw HTML is text");
-  assert.ok(!inbox.includes('href="javascript:'), "no script links");
-});
-
-test("steps in a record body: checkboxes with their line, a tick rewrites that line and stays", () => {
+test("steps in a record body: checkboxes with their line, a tick rewrites that line", () => {
   const s = seed();
   const body = "**Steps:**\n\n- [ ] Find the pod\n- [x] Open the log\n\n```\n- [ ] not a step\n```\n1. [ ] numbered";
   const r = s.db.addRecord(s.t1.id, { kind: "test", title: "Adhoc 05", body }, AGENT);
-  const docs = req("../vscode/docsView.js");
+  const docs = req("../vscode/markdown.js");
   assert.deepEqual(docs.stepsOf(body), [{ line: 2, done: false }, { line: 3, done: true }, { line: 8, done: false }]);
-  let inbox = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting: [] });
-  assert.match(inbox, /<input type="checkbox" class="mdstep" data-line="2" aria-label="Step">Find/);
-  assert.match(inbox, /data-line="3" checked/);
-  assert.ok(inbox.includes("1/3 steps"));
+  assert.match(docs.renderMarkdown(body, { steps: true }), /data-line="2"/);
   assert.ok(!docs.renderMarkdown(body).includes('data-line="2" aria'), "documents: boxes only show");
-
-  tv.applyMessage(s.db, { type: "recStep", id: r.id, line: 2, done: true }, USER);
-  tv.applyMessage(s.db, { type: "recStep", id: r.id, line: 6, done: true }, USER);
-  assert.equal(s.db.record(r.id).body, body.replace("- [ ] Find", "- [x] Find"), "the step's line ticked; a fenced line is no step");
-  tv.applyMessage(s.db, { type: "recStep", id: r.id, line: 3, done: false }, USER);
-  assert.ok(s.db.record(r.id).body.includes("- [ ] Open the log"));
-  inbox = tv.paneHtml(s.db, s.root, { tab: "inbox" }, { waiting: [] });
-  assert.ok(inbox.includes("1/3 steps"));
-});
-
-test("#115 Edits paging: the newest 200 rows drawn, Show more adds 500, Show all; the view keeps the count", async () => {
-  const Module = req("node:module");
-  const load = Module._load;
-  Module._load = function (r, ...a) {
-    return r === "vscode" ? { window: {}, workspace: {}, commands: {}, env: {}, Uri: {} } : load.call(this, r, ...a);
-  };
-  try {
-    const { html } = req("../vscode/graphView.js");
-    const rows = Array.from({ length: 2000 }, (_, i) => ({ file: `f${i}.md`, n: 1, t: Date.now() - i * 1000, added: 1, removed: 0, lane: 0, intent: `Edit ${i}`, preview: "<p>x</p>" }));
-    const data = { rows, lanes: [{ first: 0, last: 1999 }], sessions: [] };
-    const count = (page) => (page.match(/<tr data-kind="edit"/g) ?? []).length;
-    const page = html(data, "/r", "N", [], { view: { tab: "edits" } });
-    assert.equal(count(page), 200);
-    assert.ok(page.includes('data-file="f0.md"') && page.includes('data-file="f199.md"') && !page.includes('data-file="f200.md"'), "the newest first");
-    assert.match(page, /The newest 200 of 2000 rows/);
-    assert.match(page, /data-more="700">Show 500 more<\/a> · <a href="#" data-more="2000">Show all/);
-    const json = JSON.parse(page.match(/<script type="application\/json" id="rows">([\s\S]*?)<\/script>/)[1]);
-    assert.equal(Object.keys(json).length, 200, "the hover previews match the rows drawn");
-    assert.ok("1999" in json && "1800" in json && !("1799" in json), "keyed by ids counted from the oldest row");
-    assert.match(page, /data-file="f0\.md"[^>]*data-i="1999"|data-i="1999"[^>]*data-file="f0\.md"/, "the newest row has the highest id");
-    assert.ok(page.length < 1_000_000, `page ${Math.round(page.length / 1024)} KB`);
-    const more = html(data, "/r", "N", [], { view: { tab: "edits", rows: 700 } });
-    assert.equal(count(more), 700);
-    const all = html(data, "/r", "N", [], { view: { tab: "edits", rows: 2000 } });
-    assert.equal(count(all), 2000);
-    assert.ok(!all.includes('class="more"'), "nothing left to show");
-    assert.deepEqual(tv.cleanView({ rows: 700 }), { rows: 700 });
-    assert.deepEqual(tv.cleanView({ rows: -1 }), {});
-    assert.deepEqual(tv.cleanView({ rows: "all" }), {});
-    const js = page.match(/<script nonce="N">([\s\S]*?)<\/script>/)[1];
-    assert.doesNotThrow(() => new Function(js));
-  } finally {
-    Module._load = load;
-  }
-});
-
-test("task page (#162): the issue's description shows under the head, as Markdown", () => {
-  const s = seed();
-  s.db.setIssueBody(s.t1.id, "**Summary:** the brief\n\n- [x] done criterion\n- [ ] open one");
-  const page = tv.paneHtml(s.db, s.root, { tab: "tasks", sel: s.t1.id });
-  assert.match(page, /data-k="desc-\d+"/);
-  assert.ok(page.includes("<strong>Summary:</strong> the brief"));
-  assert.ok(page.indexOf('data-k="desc-') < page.indexOf('role="tablist"') || !page.includes('role="tablist"'));
-  s.db.setIssueBody(s.t1.id, null);
-  assert.doesNotMatch(tv.paneHtml(s.db, s.root, { tab: "tasks", sel: s.t1.id }), /data-k="desc-/);
+  const ticked = docs.toggleStep(body, 2, true);
+  assert.equal(ticked, body.replace("- [ ] Find", "- [x] Find"), "the step's line ticked");
+  assert.equal(docs.toggleStep(body, 6, true), body, "a fenced line is no step");
+  assert.ok(docs.toggleStep(ticked, 3, false).includes("- [ ] Open the log"));
+  assert.ok(r.id);
 });

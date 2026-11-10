@@ -12,8 +12,7 @@ import { callTool, digest } from "../mcp/server.mjs";
 
 const req = createRequire(import.meta.url);
 const { openDb, VERSION, MIGRATIONS } = req("../vscode/db.js");
-const docs = req("../vscode/docsView.js");
-const tv = req("../vscode/tasksView.js");
+const docs = req("../vscode/markdown.js");
 const { docMarkdown, exportDocs, HEADER, generatedText } = req("../vscode/docs-export.js");
 const { check } = req("../vscode/process.js");
 const { DatabaseSync } = req("node:sqlite");
@@ -84,7 +83,7 @@ test("migration 5: a schema 4 database keeps its documents, sections, links and 
   db.close();
 });
 
-test("glossary: terms read alphabetically (Turkish), unnumbered in the panel and the file, written by MCP and the user", () => {
+test("glossary: terms read alphabetically (Turkish), in the file, written by MCP and the user", () => {
   const root = gitRepo();
   const db = openDb({ path: tmpDb() });
   const repo = db.repoOf(root);
@@ -95,12 +94,6 @@ test("glossary: terms read alphabetically (Turkish), unnumbered in the panel and
   db.upsertSection(g.id, "cizgi", { title: "Çizgi", body: "One line." }, agent);
   db.upsertSection(g.id, "adr", { title: "ADR", body: "Architecture decision." }, agent);
   assert.deepEqual(db.docSections(g.id).map((s) => s.title), ["ADR", "Çizgi", "Envelope", "Penalty"]);
-  const m = docs.docModel(db, root, "glossary");
-  assert.deepEqual([m.label, m.title, m.current.map((s) => s.n)], ["Glossary", "Project Glossary", [null, null, null, null]]);
-  const html = docs.docHtml(m);
-  assert.match(html, /Terms · 4/);
-  assert.match(html, /New term/);
-  assert.doesNotMatch(html, /class="num"/);
   const text = docMarkdown(db, g.id);
   // #191: Pocock's GLOSSARY-FORMAT, alphabetical, at the repo root.
   assert.match(text, /^## Language\n\n<a id="adr"><\/a>\n\n\*\*ADR\*\*:/m);
@@ -111,8 +104,8 @@ test("glossary: terms read alphabetically (Turkish), unnumbered in the panel and
   exportDocs(db, root);
   assert.ok(generatedText(fs.readFileSync(path.join(root, "GLOSSARY.md"), "utf8")));
   assert.ok(!fs.existsSync(path.join(root, "docs", "GLOSSARY.md")), "the old generated copy under docs/ goes");
-  // The user adds a term from the panel; MCP reads and writes them.
-  docs.applyDocMessage(db, { type: "docNew", kind: "glossary", title: "Pointer (👉)", body: "Where work stopped." }, user, root);
+  // The user adds a term; MCP reads and writes them.
+  db.upsertSection(g.id, "pointer", { title: "Pointer (👉)", body: "Where work stopped." }, user);
   assert.ok(db.docSection(g.id, "pointer"));
   const call = (name, a) => callTool(db, name, { repo: root, ...a }, { client: "test" });
   assert.deepEqual(call("doc_get", { kind: "glossary" }).sections.map((s) => s.key), ["adr", "cizgi", "envelope", "penalty", "pointer"]);
@@ -204,66 +197,6 @@ test("MCP doc_get / doc_section_upsert: TOC, bodies, records of this repo only, 
 });
 
 // ---- panel: Architecture / Product ----
-
-test("panel model and HTML: numbered TOC, Markdown without raw HTML, contributors, superseded last, empty state", () => {
-  const root = "/a/proj";
-  const { db, repo, adr } = seeded(root);
-  const emptyHtml = docs.docHtml(docs.docModel(db, root, "architecture"));
-  assert.match(emptyHtml, /This document is empty\. When the agent adds an ADR or a decision/);
-  assert.match(emptyHtml, /New section/);
-  const doc = db.docOf(repo.id, "architecture");
-  db.upsertSection(doc.id, "storage", { title: "Storage", body: "**SQLite** <script>alert(1)</script> [x](javascript:alert(1)) [ok](https://example.com)", addRecords: [adr.id] }, agent);
-  db.upsertSection(doc.id, "old-sync", { title: "Old sync", body: "gone", status: "superseded" }, agent);
-  db.upsertSection(doc.id, "sync", { title: "Sync" }, user);
-  const m = docs.docModel(db, root, "architecture", { docFlash: "sync" });
-  assert.deepEqual(m.current.map((s) => [s.n, s.key]), [[1, "storage"], [2, "sync"]]);
-  assert.deepEqual(m.superseded.map((s) => s.key), ["old-sync"]);
-  assert.equal(m.last.who, "You");
-  assert.equal(m.current[1].flash, true);
-  const html = docs.docHtml(m);
-  assert.match(html, /<strong>SQLite<\/strong>/);
-  assert.ok(!html.includes("<script>alert"), "raw HTML stays text");
-  assert.ok(!/href="javascript:/i.test(html), "no javascript: link");
-  assert.match(html, /href="https:\/\/example.com"/);
-  assert.match(html, /<details class="contrib"><summary>Based on records · 1<\/summary><div class="rchips"><a href="#" class="rchip" data-act="showRecord" data-id="\d+"/);
-  assert.match(html, /<span class="num">1<\/span><span>Storage<\/span>/);
-  assert.ok(html.indexOf("<summary>Superseded sections · 1</summary>") > html.indexOf('id="sec-sync"'), "superseded sections at the end");
-  assert.match(html, /class="dsec flash" id="sec-sync"/);
-  assert.match(html, /Last updated · .* · You/);
-  // Every pane block has a key (the page swaps only the changed ones).
-  // Under the Analiz tab: its sub-pages over the document (TASK-ANALYSIS).
-  assert.match(tv.paneHtml(db, root, { tab: "product" }), /^<nav class="hubnav"[\s\S]*?data-tab="product" aria-current="page"[\s\S]*?<\/nav><div class="doc" data-k="doc-product">/);
-  assert.match(tv.paneHtml(db, root, { tab: "product" }), /a PDR or a decision/);
-});
-
-test("panel editing: the editor with draft keys, save and new section as the user, status; cleanView keeps edit", () => {
-  const root = "/a/proj";
-  const { db, repo } = seeded(root);
-  const doc = db.docOf(repo.id, "product");
-  const s = db.upsertSection(doc.id, "tabs", { title: "Tabs", body: "Two." }, agent);
-  const html = docs.docHtml(docs.docModel(db, root, "product", { edit: `product:${s.id}` }));
-  assert.match(html, new RegExp(`<textarea data-draft="doc-product-${s.id}"[^>]*>Two\\.</textarea>`));
-  assert.match(html, new RegExp(`data-draft="doct-product-${s.id}" value="Tabs"`));
-  assert.match(html, /data-act="docSave" data-kind="product"/);
-  assert.ok(!docs.docHtml(docs.docModel(db, root, "architecture", { edit: `product:${s.id}` })).includes("<textarea"), "the edit is per kind");
-  assert.deepEqual(tv.cleanView({ tab: "product", edit: "product:new" }), { tab: "product", edit: "product:new" });
-  assert.deepEqual(tv.cleanView({ edit: "product:<x>" }), {});
-  tv.applyMessage(db, { type: "docSave", kind: "product", id: s.id, title: "Tabs ", body: "Two tabs: Architecture, Product.\r\n" }, user, root);
-  const saved = db.sectionById(s.id);
-  assert.deepEqual([saved.title, saved.body], ["Tabs", "Two tabs: Architecture, Product.\n"]);
-  assert.equal(db.sectionVersions(s.id)[0].actor_kind, "user");
-  const n1 = tv.applyMessage(db, { type: "docNew", kind: "product", title: "Working style", body: "x" }, user, root);
-  const n2 = tv.applyMessage(db, { type: "docNew", kind: "product", title: "Working Style!", body: "" }, user, root);
-  assert.deepEqual([n1.key, n2.key, n2.body], ["working-style", "working-style-2", null]);
-  assert.throws(() => tv.applyMessage(db, { type: "docNew", kind: "product", title: "  " }, user, root), /needs a title/);
-  tv.applyMessage(db, { type: "docStatus", id: n2.id, status: "superseded" }, user, root);
-  assert.equal(db.sectionById(n2.id).status, "superseded");
-  assert.throws(() => tv.applyMessage(db, { type: "docStatus", id: n2.id, status: "gone" }, user, root), /bad section status/);
-  // A new document in a repo the database did not know yet.
-  const fresh = openDb({ path: tmpDb() });
-  const made = tv.applyMessage(fresh, { type: "docNew", kind: "architecture", title: "First" }, user, "/c/new");
-  assert.equal(fresh.sectionById(made.id).key, "first");
-});
 
 test("slugify folds Turkish letters and punctuation", () => {
   assert.equal(docs.slugify("Data Model & Syncing (sync)"), "data-model-syncing-sync");

@@ -1,8 +1,6 @@
-// Records in a real extension host: the steps of the manual tests MT-AR-060…064
-// that need no eyes, since #69 on the Imprimatur panel's task tabs (its models
-// from tasksView.js, its messages through the panel's own handler). Each test seeds its own task through a second
-// database connection (as the MCP server or another window would), so the tests
-// do not depend on each other's data. Colours, icons' look and layout stay manual.
+// Records in a real extension host (#71, #202): the new panel follows the database, a write from
+// another process (as the MCP server or a hook) shows within 500 ms, and the backstop poll runs
+// only while the panel is visible. Each test seeds its own task through a second connection.
 "use strict";
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -54,232 +52,29 @@ async function until(fn, what, ms = 5000) {
   }
 }
 
-const record = (id) => withDb((db) => db.record(id));
-const lastVersion = (id) => withDb((db) => db.versionsOf(id).at(-1));
-const tv = require(path.join(EXT, "tasksView.js"));
-const { waitingSteps } = require(path.join(EXT, "waiting.js"));
-const panelOpen = () => vscode.window.tabGroups.all.flatMap((g) => g.tabs).some((t) => t.input instanceof vscode.TabInputWebview && t.input.viewType.endsWith("imprimatur.graph"));
-
-suite("Records on the Imprimatur panel (#60, #69, MT-AR-060…064)", () => {
-  suiteSetup(async () => {
-    await api();
-    await vscode.commands.executeCommand("imprimatur.records.thisWindow");
-  });
-
-  test("MT-AR-060 Waiting on you (Home): this window's repo, count and badge, all repos, the record page", async () => {
-    const { launcher } = await api();
-    const other = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-it-other-")), "other");
-    const otherTitle = `Ask in another repo ${Date.now()}`;
-    withDb((db) => {
-      const repo = db.repoOf(other, { name: "it-other" });
-      const t = db.upsertTask(repo.id, "OT-1", { title: "Other task", status: "active" });
-      db.addRecord(t.id, { kind: "question", owner: "K", title: otherTitle }, AGENT);
-    });
-    const { records: [todo] } = seedTask("IT-60", { title: "Waiting on me", status: "active" }, [
-      { kind: "todo", owner: "K", title: "A todo for the user", body: "Body of the todo." },
-      { kind: "todo", owner: "C", title: "A todo for the agent" },
-      { kind: "note", owner: "K", title: "A note, not an ask" },
-    ]);
-
-    const model = (all) => withDb((db) => tv.inboxModel(db, ROOT, { all }));
-    const items = (m) => m.groups.flatMap((g) => g.items.filter((r) => !r.done));
-    const expected = withDb((db) => {
-      const repoId = db.repoByRoot(ROOT).id;
-      return [...db.openAsks({ repoId, limit: 500 }), ...db.openTests({ repoId, limit: 500 })];
-    });
-    const mine = items(model(false));
-    assert.deepEqual(mine.map((r) => r.id).sort(), expected.map((r) => r.id).sort(), "open owner-K todos and questions (and manual tests) of this repo");
-    assert.ok(!mine.some((r) => r.title === otherTitle));
-    assert.ok(mine.some((r) => r.id === todo.id));
-    assert.ok(!mine.some((r) => r.title === "A todo for the agent" || r.title === "A note, not an ask"));
-    assert.equal(model(false).groups.find((g) => g.task.key === "IT-60").repo.root, ROOT);
-
-    launcher.refresh();
-    const count = withDb((db) => tv.inboxCount(db, ROOT, waitingSteps(ROOT)));
-    assert.equal(launcher.view.badge?.value, count, "the launcher's badge = what waits on you");
-    assert.match(launcher.view.description, /^v\d+\.\d+\.\d+/, "the running version next to the title");
-    const home = launcher.getChildren().find((r) => r.id === "home");
-    assert.equal(launcher.getTreeItem(home).label, `Home (${count})`);
-    // Under Home, item by item: the kinds add up to the count; a record opens its page.
-    const parts = launcher.getChildren(home);
-    const sum = parts.filter((p) => p.key !== "doneTasks").reduce((n, p) => n + launcher.getChildren(p).length, 0);
-    assert.equal(sum, count, "the parts under Home add up to its count");
-    const todos = launcher.getChildren(parts.find((p) => p.key === "todo"));
-    const mineItem = todos.find((i) => i.rec === todo.id);
-    assert.ok(mineItem, "the user's todo listed under To-dos");
-    assert.equal(launcher.getTreeItem(mineItem).command.command, "imprimatur.records.show");
-
-    const g = model(true).groups.find((x) => x.items.some((r) => r.title === otherTitle));
-    assert.ok(g, "another repo's ask with every repo");
-    assert.equal(g.repo.root, other);
-    assert.equal(g.task.key, "OT-1");
-
-    // The panel's switch is kept like the record views' was.
-    await vscode.commands.executeCommand("imprimatur.openHome");
-    await until(panelOpen, "the panel open", 10_000);
-    const { panelState } = await api();
-    try {
-      await vscode.commands.executeCommand("imprimatur.records.allRepos");
-      assert.equal(panelState().view.all, true);
-      // Home draws this repo only (the all-repos Waiting on you page is gone, #69), so the other repo's ask is checked on the model above, not on the page.
-      assert.equal(panelState().view.tab, "home");
-      // The badges stay on this repo with every repo shown: 629 across repos said nothing about this one.
-      launcher.refresh();
-      assert.equal(launcher.view.badge?.value, count, "every repo shown: the badge still counts this repo only");
-    } finally {
-      await vscode.commands.executeCommand("imprimatur.records.thisWindow");
-    }
-    assert.equal(panelState().view.all, false);
-
-    await vscode.commands.executeCommand("imprimatur.records.show", { record: record(todo.id) });
-    const doc = await until(
-      () => vscode.workspace.textDocuments.find((d) => d.uri.scheme === "imprimatur-record" && d.uri.path === `/record-${todo.id}.md`),
-      "the record page opened",
-    );
-    const text = doc.getText();
-    assert.match(text, /^# A todo for the user$/m);
-    assert.match(text, /Body of the todo\./);
-    assert.match(text, /^## History$/m);
-    assert.match(text, /agent claude-code:it-session · create/);
-    await assert.rejects(Promise.resolve(vscode.workspace.fs.writeFile(doc.uri, Buffer.from("x"))), "the page is read-only");
-  });
-
-  test("MT-AR-061 Tasks: the list by status, the task page with its 👉 callout, Show done (n), the summary", async () => {
-    await api();
-    const { task, records: [, , last] } = seedTask("IT-61", { title: "Tasks view", status: "active", summary: "Status: halfway\nmore lines" }, [
-      { kind: "todo", owner: "C", title: "First record" },
-      { kind: "question", owner: "K", title: "Second record" },
-      { kind: "todo", title: "Where we left off", pointer: true },
-      { kind: "todo", owner: "C", title: "Old work", status: "done" },
-    ]);
-    seedTask("IT-61-DONE", { title: "Finished", status: "done" }, [{ kind: "todo", title: "Old work", status: "done" }]);
-
-    const m = withDb((db) => tv.tasksPage(db, ROOT, { sel: task.id }));
-    const keys = m.groups.flatMap((g) => g.tasks.map((t) => t.key));
-    assert.ok(keys.includes("IT-61"), "a live task under Active");
-    assert.ok(!keys.includes("IT-61-DONE"), "done tasks only under Done");
-    const doneCount = withDb((db) => db.tasksOf(db.repoByRoot(ROOT).id, { limit: 1000 }).filter((t) => t.status === "done" || t.status === "dropped").length);
-    assert.equal(m.counts.done, doneCount);
-    assert.ok(withDb((db) => tv.tasksPage(db, ROOT, { filter: "done" })).groups.some((g) => g.tasks.some((t) => t.key === "IT-61-DONE")));
-
-    const c = m.cur;
-    assert.equal(c.key, "IT-61");
-    assert.equal(c.summary, "Status: halfway\nmore lines");
-    assert.equal(c.pointer.id, last.id, "Where we left off: the 👉 record");
-    assert.deepEqual(c.todos.map((r) => r.title), ["First record", "Where we left off"]);
-    assert.equal(c.hiddenDone, 1);
-    assert.deepEqual(c.asks.map((r) => r.title), ["Second record"]);
-    const html = withDb((db) => tv.tasksHtml(tv.tasksPage(db, ROOT, { sel: task.id })));
-    assert.ok(html.includes("Show done (1)"));
-    assert.ok(html.includes("Where we left off"));
-  });
-
-  test("MT-AR-062 the panel writes as the user: done, reopen, pointer, answer, quick-add, task status; the commands too", async () => {
-    const { panelMessage, recordUi } = await api();
-    const { task, records: [rec, q] } = seedTask("IT-62", { title: "Commands", status: "active" }, [
-      { kind: "todo", owner: "K", title: "Change me" },
-      { kind: "question", owner: "K", title: "Which one?" },
-    ]);
-    await vscode.commands.executeCommand("imprimatur.records.reveal", { root: ROOT, task: "IT-62" });
-    const byUser = (id, what) => {
-      const v = lastVersion(id);
-      assert.equal(v.actor_kind, "user", `${what}: a version row by the user`);
-      return v;
-    };
-
-    panelMessage({ type: "rec", id: rec.id, op: "done" });
-    assert.equal(record(rec.id).status, "done");
-    assert.deepEqual(byUser(rec.id, "done").after, { status: "done" });
-    panelMessage({ type: "rec", id: rec.id, op: "open" });
-    assert.equal(record(rec.id).status, "open");
-    panelMessage({ type: "rec", id: rec.id, op: "pointer" });
-    assert.equal(record(rec.id).pointer, true);
-    assert.deepEqual(byUser(rec.id, "pointer").after, { pointer: true });
-
-    panelMessage({ type: "answer", id: q.id, text: "The first one." });
-    assert.equal(record(q.id).status, "done");
-    const answer = withDb((db) => db.recordsOf(task.id).find((r) => r.kind === "answer" && r.parent_id === q.id));
-    assert.equal(answer?.title, "The first one.");
-    assert.equal(byUser(answer.id, "answer").op, "create");
-
-    panelMessage({ type: "add", task: task.id, text: "@ben Added from the panel" });
-    const added = withDb((db) => db.recordsOf(task.id).find((r) => r.title === "Added from the panel"));
-    assert.deepEqual([added?.kind, added?.owner], ["todo", "K"]);
-    assert.equal(byUser(added.id, "add").op, "create");
-
-    panelMessage({ type: "taskStatus", task: task.id, status: "done" });
-    assert.equal(withDb((db) => db.taskById(task.id).status), "done");
-    panelMessage({ type: "taskStatus", task: task.id, status: "active" });
-
-    // The record commands stay for the palette and other callers.
-    const saved = { ...recordUi };
-    try {
-      recordUi.showInputBox = async (o) => {
-        assert.equal(o.value, "Change me", "the box starts with the title");
-        return "  Changed title  ";
-      };
-      await vscode.commands.executeCommand("imprimatur.records.editTitle", { record: record(rec.id) });
-      assert.equal(record(rec.id).title, "Changed title");
-      assert.deepEqual(byUser(rec.id, "editTitle").after, { title: "Changed title" });
-    } finally {
-      Object.assign(recordUi, saved);
-    }
-    await vscode.commands.executeCommand("imprimatur.records.drop", { record: record(rec.id) });
-    assert.equal(record(rec.id).status, "dropped");
-    assert.equal(record(rec.id).pointer, false, "a dropped record loses the 👉");
-
-    const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(`imprimatur-record:/record-${rec.id}.md`));
-    const history = doc.getText().split("## History")[1];
-    assert.ok((history.match(/· user /g)?.length ?? 0) >= 5, "done, reopen, pointer, title, drop by the user");
-    assert.deepEqual(withDb((db) => db.versionsOf(rec.id)).slice(1).filter((v) => v.actor_kind !== "user"), [], "every change after the create by the user");
-  });
-
-  test("MT-AR-063 an outside write redraws the open task page, and shows as a record row in the graph", async () => {
-    const { panelState } = await api();
-    const { task } = seedTask("IT-63", { title: "Outside writes", status: "active" }, [{ kind: "todo", owner: "C", title: "Existing" }]);
-    await vscode.commands.executeCommand("imprimatur.records.reveal", { root: ROOT, task: "IT-63" });
-    await until(() => panelState().view.tab === "tasks" && panelState().view.sel === task.id, "the panel on IT-63");
-    await until(() => panelState().html.includes("Outside writes"), "IT-63's page drawn");
-
-    const title = `Note from the MCP server ${Date.now()}`;
-    const t0 = Date.now();
-    withDb((db) => db.addRecord(task.id, { kind: "note", title }, AGENT));
-    await until(() => panelState().html.includes(title), "the page redrawn with the note (the database watcher)", 2500);
-    assert.ok(Date.now() - t0 < 2500, `within ~2 s, took ${Date.now() - t0} ms`);
-
-    // The graph: a record row "note added: …" in the task's lane, nothing to accept.
-    const { graphRows } = require(path.join(EXT, "graph.js"));
-    const { rows, lanes } = graphRows(ROOT);
-    const row = rows.find((r) => r.record && r.intent === `note added: ${title}`);
-    assert.ok(row, `a record row, got ${JSON.stringify(rows.filter((r) => r.record).map((r) => r.intent))}`);
-    assert.equal(row.task, "IT-63");
-    assert.equal(row.accepted, true, "nothing to accept");
-    assert.equal(lanes[row.lane].task, "IT-63");
-    assert.equal(lanes[row.lane].title, "Outside writes");
-  });
-
+suite("The new panel follows the database (#71, #202)", () => {
   test("#71 the 500 ms backstop runs only while the panel is visible", async () => {
-    const { panelState, backstop } = await api();
+    const { appState, backstop } = await api();
     await vscode.commands.executeCommand("imprimatur.records.reveal", { root: ROOT, task: "IT-1" });
-    await until(() => panelState().visible, "the panel visible");
+    await until(() => appState().visible, "the panel visible");
     await until(() => backstop.running, "the backstop running");
     // Another editor in the panel's column hides it.
     const doc = await vscode.workspace.openTextDocument({ content: "hide the panel" });
     await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Active, preview: false });
-    await until(() => !panelState().visible, "the panel hidden");
+    await until(() => !appState().visible, "the panel hidden");
     await until(() => !backstop.running, "the backstop stopped");
     await vscode.commands.executeCommand("workbench.action.revertAndCloseActiveEditor");
     await vscode.commands.executeCommand("imprimatur.records.reveal", { root: ROOT, task: "IT-1" });
-    await until(() => panelState().visible && backstop.running, "running again once visible");
+    await until(() => appState().visible && backstop.running, "running again once visible");
   });
 
   test("#71 a record written by another process is on the panel within 500 ms (measured)", async () => {
-    const { panelState } = await api();
+    const { appState } = await api();
     const { spawn } = require("node:child_process");
     const { task } = seedTask("IT-71", { title: "Live panel", status: "active" }, [{ kind: "todo", owner: "C", title: "Existing" }]);
-    await vscode.commands.executeCommand("imprimatur.records.reveal", { root: ROOT, task: "IT-71" });
-    await until(() => panelState().view.tab === "tasks" && panelState().view.sel === task.id, "the panel on IT-71");
-    await until(() => panelState().html.includes("Live panel"), "IT-71's page drawn");
+    await vscode.commands.executeCommand("imprimatur.app.open", { root: ROOT, area: "tasks", task: "IT-71", tab: "records" });
+    await until(() => appState().at.task === "IT-71", "the panel on IT-71");
+    await until(() => appState().html.includes("Live panel"), "IT-71's page drawn");
     // Another process (as the MCP server or a hook): it prints the time right after its commit.
     const child = `const {openDb}=require(${JSON.stringify(path.join(EXT, "db.js"))});const db=openDb({path:process.env.IMPRIMATUR_DB});` +
       `db.addRecord(${task.id},{kind:"note",title:process.argv[1]},{kind:"agent",id:"it-71"});process.stdout.write(String(Date.now()));db.close();`;
@@ -297,67 +92,15 @@ suite("Records on the Imprimatur panel (#60, #69, MT-AR-060…064)", () => {
       const title = `Live note ${i} ${Date.now()}`;
       const committed = writeElsewhere(title);
       const deadline = Date.now() + 5000;
-      while (!panelState().html.includes(title)) {
+      while (!appState().html.includes(title)) {
         if (Date.now() > deadline) assert.fail(`note ${i} not drawn within 5 s`);
         await new Promise((r) => setTimeout(r, 2));
       }
-      const posted = panelState().renderedAt;
-      took.push(posted - (await committed));
+      took.push(Date.now() - (await committed));
       await new Promise((r) => setTimeout(r, 120));
     }
     const sorted = [...took].sort((a, b) => a - b);
     console.log(`      #71 local latency, commit in another process → panel page posted: ${took.join(", ")} ms (median ${sorted[2]} ms)`);
     for (const ms of took) assert.ok(ms < 500, `under 500 ms, took ${ms} ms`);
   });
-
-  test("MT-AR-064 an outside owner-K todo shows on Home, and its mirror for the hooks ticks when done", async () => {
-    const { panelState } = await api();
-    await vscode.commands.executeCommand("imprimatur.openHome");
-    await until(panelOpen, "the panel open", 10_000);
-    const { task } = seedTask("IT-64", { title: "Waiting on you", status: "active" });
-    const title = `Owner-K todo from the MCP server ${Date.now()}`;
-    const rec = withDb((db) => db.addRecord(task.id, { kind: "todo", owner: "K", title }, AGENT));
-
-    await until(() => panelState().html.includes(title), "the todo on Home");
-    const step = () => waitingSteps(ROOT).find((s) => s.text === title);
-    const open = await until(() => step()?.state === "open" && step(), "the todo mirrored in the waiting log");
-    assert.equal(open.task, "IT-64");
-    assert.match(open.title, /^IT-64 · Waiting on you$/);
-
-    await vscode.commands.executeCommand("imprimatur.records.done", { record: record(rec.id) });
-    const done = await until(() => step()?.state === "done" && step(), "the step ticked on the next sync");
-    assert.match(done.note, /no longer open in Imprimatur \(IT-64\)/);
-  });
-
-  test("a write the database refuses gives the typed text back to the page (review 1, 2)", async () => {
-    const { panelMessage, panelState, launcher } = await api();
-    const { records: [todo] } = seedTask("IT-66", { title: "Refused", status: "active" }, [{ kind: "todo", owner: "K", title: "Not a question" }]);
-    await vscode.commands.executeCommand("imprimatur.records.reveal", { root: ROOT, task: "IT-66" });
-    panelMessage({ type: "answer", id: todo.id, text: "keep me" });
-    const failed = panelState().failed;
-    assert.equal(failed?.type, "failed");
-    assert.equal(failed.what, "answer");
-    assert.equal(failed.text, "keep me", "the text goes back to the answer box");
-    assert.match(failed.error, /not a question/);
-    assert.equal(withDb((db) => db.recordsOf(db.record(todo.id).task_id).filter((r) => r.kind === "answer").length), 0);
-    // One count: the launcher's badge is the panel's tab badge.
-    launcher.refresh();
-    await until(() => panelState().html.includes(`Home <span class="badge" title="${launcher.now.inbox} waiting on you">${launcher.now.inbox}</span>`), "the same count on the tab badge");
-  });
-
-  test("deep links: reveal by record opens Tasks on its task and lights the record", async () => {
-    const { panelState } = await api();
-    const { task, records: [, rec] } = seedTask("IT-65", { title: "Deep link", status: "open" }, [
-      { kind: "todo", owner: "C", title: "One" },
-      { kind: "decision", title: "Linked decision" },
-    ]);
-    await vscode.commands.executeCommand("imprimatur.records.reveal", { root: ROOT, record: rec.id });
-    await until(() => panelState().view.sel === task.id, "the task selected");
-    const s = panelState();
-    assert.equal(s.view.tab, "tasks");
-    assert.equal(s.view.filter, "open", "the list's filter follows the task's status");
-    assert.equal(s.view.flash, rec.id);
-    await until(() => panelState().html.includes(`id="rec-${rec.id}"`) && panelState().html.includes('class="card dec flash"'), "the record lit");
-  });
 });
-

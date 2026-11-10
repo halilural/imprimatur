@@ -1,5 +1,5 @@
 // The meeting record kind (#167): a meeting's note, its decisions and to-dos as child records,
-// the migration that lets an existing database hold it, and the task page's Meetings tab.
+// the migration that lets an existing database hold it, and the Meetings page's model.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 
 const req = createRequire(import.meta.url);
 const { openDb, MIGRATIONS, VERSION, KINDS } = req("../vscode/db.js");
-const tv = req("../vscode/tasksView.js");
+const tv = req("../vscode/meetings.js");
 
 const AGENT = { kind: "agent", id: "claude-code:s1" };
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-167-"));
@@ -28,18 +28,12 @@ test("a meeting holds its note; its decisions and to-dos hang under it", () => {
   assert.ok(KINDS.includes("meeting"));
   assert.equal(d.parent_id, m.id);
 
-  // #169: meetings have a tab of their own, not one on the task page.
-  assert.ok(tv.TABS.includes("meetings"));
+  // #169: meetings have a page of their own (the new panel's More, #202).
   const model = tv.meetingsModel(db, root, {});
   assert.equal(model.meetings.length, 1);
   assert.equal(model.meetings[0].task.key, "LATD-1");
   assert.deepEqual(model.meetings[0].decisions.map((/** @type {any} */ k) => k.title), ["Payments move to Kafka"]);
   assert.deepEqual(model.meetings[0].todos.map((/** @type {any} */ k) => k.title), ["Write the retry policy"]);
-  const html = tv.paneHtml(db, root, { tab: "meetings" }, { waiting: [] });
-  assert.match(html, /<h1>Meetings<\/h1>/);
-  assert.match(html, /Payments weekly/);
-  assert.match(html, /data-act="open" data-id="\d+"[^>]*>LATD-1<\/a>/);
-  assert.match(html, /Write the retry policy <span class="owner me">You<\/span>/);
   // A generic title gives way to the note's bold first line; the gist is the summary's first sentence.
   const g = db.addRecord(t.id, { kind: "meeting", title: "Toplantı", body: "**Kafka cutover**\n\n## Özet\nWe agreed on **Kafka**. Then lunch.\n\n## Kararlar\n- x", uid: "meeting:m2" }, AGENT);
   const gm = tv.meetingsModel(db, root, {}).meetings.find((/** @type {any} */ x) => x.id === g.id);
@@ -51,8 +45,6 @@ test("a meeting holds its note; its decisions and to-dos hang under it", () => {
   db.addRecord(ot.id, { kind: "meeting", title: "Elsewhere sync", uid: "meeting:m3" }, AGENT);
   assert.equal(tv.meetingsModel(db, root, { all: true }).meetings.length, 2);
   db.updateRecord(g.id, { status: "dropped" }, AGENT);
-  const task = tv.paneHtml(db, root, { tab: "tasks", sel: t.id }, { waiting: [] });
-  assert.doesNotMatch(task, /label="Meetings"|>Meetings</);
   // A dropped meeting leaves the list.
   db.updateRecord(m.id, { status: "dropped" }, AGENT);
   assert.equal(tv.meetingsModel(db, root, {}).meetings.length, 0);

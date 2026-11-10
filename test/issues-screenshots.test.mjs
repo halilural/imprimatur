@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { allowed, altOf, shotMarkdown, shotPath, shotRecordLine } from "../skills/issues/screenshots.mjs";
 
-const { renderMarkdown, SHOT_IMG } = createRequire(import.meta.url)("../vscode/docsView.js");
+const { renderMarkdown, SHOT_IMG } = createRequire(import.meta.url)("../vscode/markdown.js");
 
 test("issues screenshots (#159): a record's shot: image points into the data folder; nothing outside it", () => {
   assert.equal(shotRecordLine("817", "2026-11-06", "/t/1-meetings.png", "1 meetings"), "![1 meetings](shot:817/2026-11-06/1-meetings.png)");

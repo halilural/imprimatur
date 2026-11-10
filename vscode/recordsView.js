@@ -2,7 +2,7 @@
 // Record commands (#60): mark done, reopen, drop, move the 👉, edit the title,
 // add a record, search, and a record as a read-only Markdown page with its
 // history. The records themselves show in the Imprimatur panel's task tabs
-// (tasksView.js, #69), which replaced the sidebar's record views; reveal opens
+// (the new panel since #202), which replaced the sidebar's record views; reveal opens
 // the panel on a task. Follows the database file, so any writer (an agent
 // through MCP, a hook, another window) shows up at once (#71: within ~50 ms);
 // while the panel is visible a 500 ms look at the change stamp backs that up.

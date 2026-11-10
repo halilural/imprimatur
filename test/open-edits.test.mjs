@@ -11,7 +11,6 @@ const { dataPath } = __cr(import.meta.url)("../vscode/data-dir.js");
 
 const req = createRequire(import.meta.url);
 const { openDb, MIGRATIONS } = req("../vscode/db.js");
-const tv = req("../vscode/tasksView.js");
 const { DatabaseSync } = req("node:sqlite");
 
 const agent = { kind: "agent", id: "claude-code:S1" };
@@ -35,29 +34,6 @@ test("an old database with section_reads opens, migrates, and a section change d
   assert.equal(db.sqlite.prepare("SELECT count(*) AS n FROM section_reads").get().n, 1, "left as it was");
   assert.equal(typeof db.unreadSections, "undefined");
   assert.equal(typeof db.markSectionsRead, "undefined");
-  db.close();
-});
-
-test("the panel: edits not accepted by task on the list, the task page and Home; no unread strip", () => {
-  const db = openDb({ path: tmpDb() });
-  const repo = db.repoOf("/a/proj");
-  const task = db.upsertTask(repo.id, "#92", { title: "Edits" }, agent);
-  db.upsertTask(repo.id, "#7", { title: "Other" }, agent);
-  const doc = db.docOf(repo.id, "architecture");
-  db.upsertSection(doc.id, "edits", { title: "Edits", body: "one" }, agent);
-  const openEdits = new Map([["#92", 2], ["", 1]]);
-  const page = tv.tasksPage(db, "/a/proj", { sel: task.id, filter: "open" }, { openEdits });
-  assert.equal(page.groups[0].tasks.find((t) => t.key === "#92").openEdits, 2);
-  assert.equal(page.groups[0].tasks.find((t) => t.key === "#7")?.openEdits ?? 0, 0);
-  assert.equal(page.cur.openEdits, 2);
-  const html = tv.tasksHtml(page);
-  assert.match(html, /2 to accept/);
-  assert.match(html, /2 edits not accepted/);
-  assert.doesNotMatch(html, /[Uu]nread|Mark as read/);
-  const home = tv.homeModel(db, "/a/proj", { openEdits });
-  assert.equal(home.openEdits, 3);
-  assert.match(tv.homeHtml(home), /3 edits not accepted/);
-  assert.equal(tv.editsHtml(0), "");
   db.close();
 });
 

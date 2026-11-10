@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.159.0] - 2026-11-10
+
+### Removed
+- The old panel is gone (#202): the new one is the only Imprimatur panel. Every command that opened the old one (Agent Change Graph, Home, Tasks, Architecture, Product, Glossary, Meetings, Social) opens the new panel at the matching place. Gone with it: answering and ticking records in the panel, the 30-day agent stats, New task, the full call timeline with turn ticks, and the automatic history scan on first open.
+
+### Changed
+- The new panel redraws by itself when the database changes (an agent's record, another window), in a few milliseconds.
+
 ## [0.158.0] - 2026-11-10
 
 ### Changed
