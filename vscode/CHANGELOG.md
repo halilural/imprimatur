@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.156.0] - 2026-11-10
+
+### Changed
+- The new panel is the default (#201): the side bar's **Home** opens it, with what is waiting on you still under it. The side bar keeps Home, Agent changes and Setup checklist; Tasks, Architecture, Product, Glossary and Meetings live in the new panel. The command palette shows 21 Imprimatur commands instead of 37; the rest stay in their views' menus or moved into the new panel. The old panel's code goes once Exercises, Meetings, Social and the change graph move over (#202).
+
 ## [0.155.0] - 2026-11-10
 
 ### Added
