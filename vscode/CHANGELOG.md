@@ -4,6 +4,12 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.164.0] - 2026-11-10
+
+### Added
+- Agent setup's audit lists the repo's hand-written documents (Markdown at the root and under `docs/` that Imprimatur did not generate; README, CHANGELOG, AGENTS and CLAUDE left out) as IMP-DOC-007 findings; dismiss one to keep the file (#205).
+- `/adopt-docs` sorts them with you, one file at a time: a reference kept and linked, a capability written from the code with the file as a source, terms and decisions extracted into the glossary and ADRs, or deleted when the code shows it stale (#205).
+
 ## [0.163.2] - 2026-11-10
 
 ### Fixed
