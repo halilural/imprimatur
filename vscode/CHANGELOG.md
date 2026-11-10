@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.163.0] - 2026-11-10
+
+### Changed
+- Once a repo's Architecture and Product moved to Pocock's model, the generated MADR files under `docs/decisions/` go: the ADRs are in `docs/adr/` (#203). A hand-written file there stays.
+
 ## [0.162.0] - 2026-11-10
 
 ### Changed

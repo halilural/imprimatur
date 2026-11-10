@@ -239,6 +239,25 @@ function inside(root, file) {
  * @param {any} db @param {string} root a repo root on this machine
  * @returns {Array<{kind: string, file: string, written: boolean, skipped?: "manual" | "outside"}>}
  */
+/** Removes the .md files Imprimatur generated in a folder, and the folder once empty; a hand-written one stays. @param {string} dir @param {string} root */
+function dropGenerated(dir, root) {
+  let names = [];
+  try {
+    names = fs.readdirSync(dir).filter((n) => n.endsWith(".md"));
+  } catch {
+    return;
+  }
+  for (const n of names) {
+    const f = path.join(dir, n);
+    try {
+      if (inside(root, f) && generatedText(fs.readFileSync(f, "utf8"))) fs.rmSync(f);
+    } catch {}
+  }
+  try {
+    if (!fs.readdirSync(dir).length) fs.rmdirSync(dir);
+  } catch {}
+}
+
 /**
  * A document whose every section was superseded (#185 moved Architecture and Product into the
  * project page, capabilities and ADRs): its generated file goes. Only one Imprimatur wrote, and only
@@ -325,7 +344,12 @@ function exportDocs(db, root) {
  */
 function sideFiles(db, repo, root) {
   const io = (/** @type {string} */ header) => ({ header, generatedText, inside: (/** @type {string} */ f) => inside(root, f) });
-  if (kindsOf(root).some((k) => k === "architecture" || k === "product"))
+  // The MADR files follow Architecture and Product; once both were moved to Pocock's model (#185)
+  // their generated files go and docs/adr/ holds the ADRs (#203). A database not synced yet keeps them.
+  const docs = ["architecture", "product"].map((k) => db.docFind(repo.id, k)).filter(Boolean).map((/** @type {any} */ d) => db.docSections(d.id));
+  const moved = docs.length > 0 && docs.every((/** @type {any[]} */ s) => s.length > 0 && !s.some((x) => x.status === "current"));
+  if (moved) dropGenerated(path.join(dirOf(root), "decisions"), root);
+  else if (kindsOf(root).some((k) => k === "architecture" || k === "product"))
     try {
       require("./decisions.js").exportDecisions(db, repo, dirOf(root), io(`${HEADER_START}; edit the decision's record in Imprimatur (its task, Tasks tab). -->`));
     } catch {}

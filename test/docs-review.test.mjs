@@ -79,3 +79,24 @@ test("#185: a document with every section superseded loses its generated file; a
   exportDocs(db, root);
   assert.ok(fs.existsSync(pf), "no product document in the database: kept");
 });
+
+test("#203: once Architecture and Product are all superseded, the generated MADR files go; a hand-written one stays", () => {
+  const root = tmpDir();
+  const { db, repo } = seeded(root);
+  const task = db.upsertTask(repo.id, "#1");
+  db.addRecord(task.id, { kind: "adr", title: "Use SQLite", body: "Alternative: Postgres." }, agent);
+  const arch = db.docOf(repo.id, "architecture");
+  const prod = db.docOf(repo.id, "product");
+  db.upsertSection(arch.id, "storage", { title: "Storage", body: "x" }, agent);
+  db.upsertSection(prod.id, "tabs", { title: "Tabs", body: "y" }, agent);
+  exportDocs(db, root);
+  const dir = path.join(root, "docs", "decisions");
+  assert.ok(fs.readdirSync(dir).some((n) => n.startsWith("0001-")), "MADR files while the documents live");
+  db.upsertSection(arch.id, "storage", { status: "superseded" }, agent);
+  exportDocs(db, root);
+  assert.ok(fs.existsSync(dir), "product still has a section: kept");
+  fs.writeFileSync(path.join(dir, "notes.md"), "# Ours\n");
+  db.upsertSection(prod.id, "tabs", { status: "superseded" }, agent);
+  exportDocs(db, root);
+  assert.deepEqual(fs.readdirSync(dir), ["notes.md"], "generated ones gone, the hand-written one kept");
+});
