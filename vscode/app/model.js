@@ -134,6 +134,31 @@ function taskPage(db, repo, key, tab) {
 }
 
 /**
+ * The agent's edits still under review (#199), one row per file, newest first: how many are open,
+ * the latest one's summary and when. Cursor's lesson: the review stays in plain sight.
+ * @param {string} root @param {any[]} [rows] graph.js graphRows(root).rows (passed in tests)
+ */
+function editsQueue(root, rows) {
+  let all = rows;
+  if (!all) {
+    try {
+      all = require("../graph.js").graphRows(root).rows;
+    } catch {
+      all = [];
+    }
+  }
+  /** @type {Map<string, {file: string, open: number, last: string, what: string}>} */ const by = new Map();
+  for (const r of /** @type {any[]} */ (all)) {
+    if (r.accepted || r.gone || r.outside || String(r.file).includes(" · ")) continue;
+    const f = by.get(r.file) ?? { file: r.file, open: 0, last: "", what: "" };
+    f.open++;
+    if (String(r.t) > f.last) Object.assign(f, { last: String(r.t), what: r.summary || r.intent || r.prompt || "" });
+    by.set(r.file, f);
+  }
+  return [...by.values()].sort((a, b) => b.last.localeCompare(a.last));
+}
+
+/**
  * One board of the work (#196, after Conductor): what the agent is on (active), what waits on the
  * user (an open question or to-do they own), what finished in the last seven days.
  * @param {any} db @param {number} repoId @param {number} [now]
@@ -155,7 +180,7 @@ function boardOf(db, repoId, now = Date.now()) {
 /**
  * The panel's model for a place.
  * @param {any} db @param {any} repo @param {string} root
- * @param {{area?: string, doc?: string, scope?: string, task?: string, tab?: string}} at
+ * @param {{area?: string, doc?: string, scope?: string, task?: string, tab?: string, rows?: any[]}} at
  */
 function appModel(db, repo, root, at = {}) {
   const area = AREAS.some((a) => a.id === at.area) ? /** @type {string} */ (at.area) : "home";
@@ -171,6 +196,11 @@ function appModel(db, repo, root, at = {}) {
     const list = (/** @type {string} */ status, /** @type {number} */ n) => db.q(`SELECT key, title, summary, status FROM tasks WHERE repo_id = ? AND status = ? ORDER BY updated_at DESC LIMIT ${n}`).all(repo.id, status);
     return { ...base, lists: [{ id: "active", label: "Active", tasks: list("active", 50) }, { id: "open", label: "Open", tasks: list("open", 80) }, { id: "done", label: "Done", tasks: list("done", 20) }] };
   }
+  if (area === "edits") return { ...base, edits: editsQueue(root, at.rows) };
+  if (area === "setup") {
+    const recs = db.q(`SELECT count(*) AS n FROM records r JOIN tasks t ON t.id = r.task_id WHERE t.repo_id = ? AND t.key = 'RECS' AND r.status = 'open'`).get(repo.id)?.n ?? 0;
+    return { ...base, setup: { recommendations: recs } };
+  }
   if (area === "home") {
     const tasks = db.whereWeLeftOff(repo.id).slice(0, 12);
     // Which tasks have a spec or a map (Pocock's), so Home links them.
@@ -181,4 +211,4 @@ function appModel(db, repo, root, at = {}) {
   return base;
 }
 
-module.exports = { appModel, taskPage, GATES, boardOf, docReading, reading, summaryOf, AREAS, MORE, DOCS };
+module.exports = { appModel, editsQueue, taskPage, GATES, boardOf, docReading, reading, summaryOf, AREAS, MORE, DOCS };

@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.155.0] - 2026-11-10
+
+### Added
+- Edits and Setup in the new panel (#199): Edits lists the files with agent edits still waiting for your review, newest first; open one and its changes are marked in the editor, or review them all in the change graph. Setup leads to the agent setup checklist and the open recommendations.
+
 ## [0.154.0] - 2026-11-10
 
 ### Added
