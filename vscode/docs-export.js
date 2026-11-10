@@ -69,6 +69,7 @@ function rawMarkdown(db, docId) {
   if (!sections.length) return undefined;
   const chapters = /** @type {Record<string, Record<string, string>>} */ (CHAPTERS)[doc.kind];
   if (chapters) return chaptered(doc, sections, chapters);
+  if (doc.kind === "glossary") return glossaryMarkdown(db, doc, sections);
   // Blocks, a blank line between each. The glossary's terms are not numbered: they read alphabetically.
   const terms = doc.kind === "glossary";
   const out = [frontMatter(doc.kind), HEADER, `# ${inline(doc.title)}`, terms ? "## Terms" : "## Contents",
@@ -80,6 +81,24 @@ function rawMarkdown(db, docId) {
     const decided = require("./decisions.js").linksLine(s.contributors ?? []);
     if (decided) out.push(decided);
   });
+  return out.join("\n\n") + "\n";
+}
+
+/**
+ * The glossary in Matt Pocock's GLOSSARY-FORMAT (#191): the context's name, one line on what it is,
+ * "## Language", then "**Term**:" and its definition (an "_Avoid_:" line in the body lists the words
+ * not to use). Each term keeps its anchor, so docs-sync reads edits back.
+ * @param {any} db @param {any} doc @param {any[]} sections
+ */
+function glossaryMarkdown(db, doc, sections) {
+  const name = db.q("SELECT name FROM repos WHERE id = ?").get(doc.repo_id)?.name || inline(doc.title);
+  const out = [frontMatter(doc.kind), HEADER, `# ${inline(name)}`,
+    "The words this project uses, one entry each; the words under _Avoid_ mean the same and are not used.", "## Language"];
+  for (const s of sections) {
+    out.push(`<a id="${s.key}"></a>`, `**${inline(s.title)}**:`);
+    const body = String(s.body ?? "").replace(/\r\n/g, "\n").trim();
+    if (body) out.push(body);
+  }
   return out.join("\n\n") + "\n";
 }
 
@@ -172,8 +191,8 @@ function setSocial(root, on) {
 /** The document kinds the repo keeps in files: social only when it is on. @param {string} root */
 const kindsOf = (root) => Object.keys(FILES).filter((k) => k !== "social" || socialOn(root));
 
-/** The repo's file for a kind: <root>/<docs dir>/ARCHITECTURE.md, PRODUCT.md or GLOSSARY.md. @param {string} root @param {string} kind */
-const fileOf = (root, kind) => path.join(dirOf(root), /** @type {any} */ (FILES)[kind]);
+/** The repo's file for a kind: <root>/<docs dir>/ARCHITECTURE.md or PRODUCT.md; the glossary at the root (#191, Pocock). @param {string} root @param {string} kind */
+const fileOf = (root, kind) => (kind === "glossary" ? path.join(root, FILES.glossary) : path.join(dirOf(root), /** @type {any} */ (FILES)[kind]));
 
 /** Whether the file is there and was not written by Imprimatur (no HEADER, after any front matter). @param {string} file */
 function handWritten(file) {
@@ -236,11 +255,10 @@ function exportDocs(db, root) {
       require("./decisions.js").numbered(db, repo.id);
     } catch {}
   for (const kind of kindsOf(root)) {
-    const name = /** @type {any} */ (FILES)[kind];
     const doc = db.docFind(repo.id, kind);
     const text = doc && docMarkdown(db, doc.id);
     if (!text) continue;
-    const file = path.join(dirOf(root), name);
+    const file = fileOf(root, kind);
     if (!inside(root, file)) {
       out.push({ kind, file, written: false, skipped: /** @type {const} */ ("outside") });
       continue;
@@ -268,13 +286,31 @@ function exportDocs(db, root) {
     }
     out.push({ kind, file, written });
   }
-  // The decisions as MADR 4 files beside the documents (#130), when the repo keeps architecture or product in files.
-  // Side files: written, not listed (the list is the documents').
-  if (decides)
-    try {
-      require("./decisions.js").exportDecisions(db, repo, dirOf(root), { header: `${HEADER_START}; edit the decision's record in Imprimatur (its task, Tasks tab). -->`, generatedText, inside: (f) => inside(root, f) });
-    } catch {}
+  sideFiles(db, repo, root);
   return out;
+}
+
+/**
+ * The files beside the documents, written and not listed (the list is the documents'); exportDocs
+ * and docs-sync both end with it. The decisions as MADR 4 files (#130) when the repo keeps
+ * architecture or product in files; the ADRs in Pocock's form under docs/adr/, an edit of a file read
+ * back into its record (#191); and the glossary Imprimatur once wrote under docs/, gone now that it
+ * lives at the root (#191).
+ * @param {any} db @param {any} repo @param {string} root
+ */
+function sideFiles(db, repo, root) {
+  const io = (/** @type {string} */ header) => ({ header, generatedText, inside: (/** @type {string} */ f) => inside(root, f) });
+  if (kindsOf(root).some((k) => k === "architecture" || k === "product"))
+    try {
+      require("./decisions.js").exportDecisions(db, repo, dirOf(root), io(`${HEADER_START}; edit the decision's record in Imprimatur (its task, Tasks tab). -->`));
+    } catch {}
+  try {
+    require("./adr-files.js").exportAdrs(db, repo, root, io(`${HEADER_START}; edit this file or the ADR's record in Imprimatur. -->`));
+  } catch {}
+  const was = path.join(dirOf(root), FILES.glossary);
+  try {
+    if (was !== fileOf(root, "glossary") && inside(root, was) && generatedText(fs.readFileSync(was, "utf8"))) fs.rmSync(was);
+  } catch {}
 }
 
 /**
@@ -292,4 +328,4 @@ function debounce(fn, ms = 2000) {
   return call;
 }
 
-module.exports = { docMarkdown, exportDocs, debounce, fileState, fileOf, dirOf, docsSettings, syncOn, repoSettings, socialOn, setSocial, kindsOf, handWritten, inside, FILES, HEADER, isHeader, generatedText, TYPES };
+module.exports = { docMarkdown, exportDocs, sideFiles, debounce, fileState, fileOf, dirOf, docsSettings, syncOn, repoSettings, socialOn, setSocial, kindsOf, handWritten, inside, FILES, HEADER, isHeader, generatedText, TYPES };

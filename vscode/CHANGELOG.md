@@ -4,6 +4,15 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.142.0] - 2026-11-10
+
+### Added
+- `GLOSSARY.md` at the repo root in Matt Pocock's format: `## Language`, then each **term** with its definition and the words to avoid (#191). The copy Imprimatur wrote under `docs/` is removed.
+- Each ADR as its own file, `docs/adr/NNNN-slug.md`, in Pocock's short form (#191). Edit the file and the ADR's record follows; if the record changed too, the record wins and your text is kept as a note on its task.
+
+### Fixed
+- The decision files under `docs/decisions/` are written again on every docs sync (they had stopped updating).
+
 ## [0.141.0] - 2026-11-10
 
 ### Added

@@ -109,7 +109,7 @@ test("start: no file, sections in the database → the file is written in docs.d
   assert.deepEqual(first.map((x) => [x.kind, x.written]), [["architecture", false], ["product", true], ["glossary", false]]);
   assert.ok(generatedText(read(root, "docs/design/PRODUCT.md")));
   assert.ok(!fs.existsSync(path.join(root, "docs/design/ARCHITECTURE.md")), "an empty document writes no file");
-  assert.deepEqual(describe(syncDocs(db, root), root), ["docs/design/ARCHITECTURE.md: in sync", "docs/design/PRODUCT.md: in sync", "docs/design/GLOSSARY.md: in sync"]);
+  assert.deepEqual(describe(syncDocs(db, root), root), ["docs/design/ARCHITECTURE.md: in sync", "docs/design/PRODUCT.md: in sync", "GLOSSARY.md: in sync"]);
 });
 
 test("middle: hand-written files are adopted with their imported records linked; the file is rewritten in Imprimatur's form", () => {

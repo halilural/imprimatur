@@ -40,3 +40,4 @@ Not listed apart; see the decision outcome.
 ## Sections
 
 - [Product: The baseline every repo gets](../PRODUCT.md#baseline)
+- [Product: Skills Imprimatur carries](../PRODUCT.md#bundled-skills)

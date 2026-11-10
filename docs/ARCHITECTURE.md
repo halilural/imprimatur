@@ -415,6 +415,8 @@ Device sync lives in the private plugin (imprimatur-private, config.json "plugin
 
 Limit: a machine needs this code once by hand. After that it updates itself.
 
+<!-- imprimatur:decisions --> Decisions: [ADR 0117](decisions/0117-sync-heals-itself-bad-rows-set-aside-a-pull-again-after-upgr.md)
+
 <a id="chapter-decisions"></a>
 
 ## Decisions
@@ -1142,7 +1144,7 @@ flowchart LR
 - 7077: a task's analysis is its own document kind. `documents.scope` is the task key, not a foreign key, so a placeholder repo merge never breaks the reference. Sections carry a `source` file, and `doc_sources` hashes mean a file's text is not ingested again while it is unchanged.
 - 10556: one model, the five-chapter design doc, written with the `analysis` skill. File sections land in the chapter their heading names, and `--` keys are reserved for file sections.
 
-<!-- imprimatur:decisions --> Decisions: [ADR 0078](decisions/0078-gorev-analizi-dorduncu-belge-turu-documents-scope-gorev-anah.md)
+<!-- imprimatur:decisions --> Decisions: [ADR 0078](decisions/0078-gorev-analizi-dorduncu-belge-turu-documents-scope-gorev-anah.md), [ADR 0118](decisions/0118-a-task-analysis-is-a-five-chapter-design-doc-written-with-th.md)
 
 <a id="agent-setup-audit"></a>
 
