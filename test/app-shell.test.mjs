@@ -97,3 +97,19 @@ test("docs editing (#198): database documents get Edit and New section; ADRs and
   assert.doesNotMatch(appHtml(appModel(db, repo, root, { area: "docs", doc: "wiki" }), o), /<form class="editor"/);
   assert.match(appHtml(appModel(db, repo, root, { area: "docs", doc: "glossary" }), o), /New section/);
 });
+
+test("Edits and Setup (#199): the review queue per file, newest first; setup links the checklist and recommendations", () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-199-")));
+  const db = openDb({ path: path.join(root, "x.db") });
+  const repo = db.repoOf(root);
+  const rows = [
+    { file: "a.md", t: "2026-11-10T10:00:00Z", summary: "old" }, { file: "a.md", t: "2026-11-10T12:00:00Z", summary: "new" },
+    { file: "b.md", t: "2026-11-10T11:00:00Z", summary: "b", accepted: true }, { file: "#1 · note", t: "2026-11-10T13:00:00Z" },
+  ];
+  const html = appHtml(appModel(db, repo, root, { area: "edits", rows }), o);
+  assert.match(html, /2 agent edits in 1 file wait for your review/);
+  assert.match(html, /data-file="a\.md"><span class="key">2<\/span>[\s\S]*2026-11-10 12:00 · new/);
+  assert.doesNotMatch(html, /data-file="b\.md"/);
+  assert.match(appHtml(appModel(db, repo, root, { area: "edits", rows: [] }), o), /Every agent edit is reviewed/);
+  assert.match(appHtml(appModel(db, repo, root, { area: "setup" }), o), /data-cmd="imprimatur\.setup\.focus"[\s\S]*data-task="RECS"/);
+});

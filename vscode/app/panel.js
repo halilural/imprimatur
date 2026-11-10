@@ -91,6 +91,11 @@ function openApp(to = {}) {
         vscode.window.showErrorMessage(`Imprimatur: ${/** @type {Error} */ (e).message}`);
       }
       render();
+    } else if (msg?.type === "file") {
+      // An agent's edited file: opened in the editor, where its changes are marked to accept or undo.
+      const got = repoFor(at.root);
+      const rel = String(msg.file);
+      if (got && !rel.split("/").includes("..")) vscode.window.showTextDocument(vscode.Uri.file(require("node:path").join(got.root, rel)));
     } else if (msg?.type === "gate") {
       approveGate(String(msg.key), String(msg.gate));
       render();

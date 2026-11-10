@@ -78,10 +78,11 @@ const SCRIPT = `
 const vscode = acquireVsCodeApi();
 const send = (m) => vscode.postMessage(m);
 document.addEventListener("click", (e) => {
-  const el = e.target.closest("[data-gate],[data-tab],[data-go],[data-cmd],[data-doc],[data-scope],[data-task]");
+  const el = e.target.closest("[data-gate],[data-tab],[data-file],[data-go],[data-cmd],[data-doc],[data-scope],[data-task]");
   if (!el) return;
   e.preventDefault();
   if (el.dataset.gate) send({ type: "gate", key: el.dataset.key, gate: el.dataset.gate });
+  else if (el.dataset.file) send({ type: "file", file: el.dataset.file });
   else if (el.dataset.tab) send({ type: "go", area: "tasks", task: el.dataset.key, tab: el.dataset.tab });
   else if (el.dataset.go) send({ type: "go", area: el.dataset.go });
   else if (el.dataset.doc) send({ type: "go", area: "docs", doc: el.dataset.doc });
@@ -162,9 +163,18 @@ function mainHtml(m, render) {
     return `<h1>Home</h1><p class="summary">What waits on you, what is in progress, what finished this week.</p>${board}
     <h2 class="sub">Where we left off</h2><div class="rows">${rows || '<div class="empty">No task in progress.</div>'}</div>`;
   }
-  const old = { tasks: "imprimatur.openTasks", edits: "imprimatur.openGraph", setup: "imprimatur.setup.focus" }[/** @type {"tasks"} */ (m.area)];
-  const label = m.areas.find((/** @type {any} */ a) => a.id === m.area)?.label;
-  return `<h1>${esc(label)}</h1><p class="summary">This area moves into the new panel next (#190).</p><button class="btn" data-cmd="${esc(old)}">Open it in the old panel</button>`;
+  if (m.area === "edits") {
+    const total = m.edits.reduce((/** @type {number} */ n, /** @type {any} */ f) => n + f.open, 0);
+    const rows = m.edits.map((/** @type {any} */ f) => `<div class="row" data-file="${esc(f.file)}"><span class="key">${f.open}</span><span><b>${esc(f.file)}</b><br><span class="ptr">${esc(String(f.last).slice(0, 16).replace("T", " "))} · ${esc(String(f.what).replace(/\s+/g, " ").slice(0, 160))}</span></span></div>`).join("");
+    return `<h1>Edits</h1><p class="summary">${total ? `${total} agent edit${total === 1 ? "" : "s"} in ${m.edits.length} file${m.edits.length === 1 ? "" : "s"} wait for your review. Open a file: its changes are marked in the editor, to accept or undo.` : "Every agent edit is reviewed."}</p>
+    <button class="btn" data-cmd="imprimatur.openGraph">Review all in the change graph</button><div class="rows" style="margin-top:14px">${rows}</div>`;
+  }
+  if (m.area === "setup") {
+    return `<h1>Setup</h1><p class="summary">How the agent is set up here: its files, skills, hooks and MCP servers, and what to improve.</p>
+    <div class="rows"><div class="row" data-cmd="imprimatur.setup.focus"><span class="key">⚙</span><span><b>Agent setup</b><br><span class="ptr">The checklist of what is missing or out of date, in the side bar</span></span></div>
+    <div class="row" data-task="RECS"><span class="key">${m.setup.recommendations}</span><span><b>Recommendations</b><br><span class="ptr">Open recommendations for the agent setup and the project</span></span></div></div>`;
+  }
+  return "";
 }
 
 const STATUS = { open: "open", active: "claimed", done: "resolved", dropped: "dropped" };
