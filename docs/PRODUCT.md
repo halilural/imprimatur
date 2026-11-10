@@ -143,6 +143,8 @@ It is used daily by a developer who works with an AI agent across several reposi
 
 Decided 2026-11-10, not started. Imprimatur takes Matt Pocock's skills system (mattpocock/skills) as is: specs, wayfinder maps with decision tickets, tracer-bullet tickets, `GLOSSARY.md`, `docs/adr/`, `.out-of-scope/`. Imprimatur becomes the backend of his local tracker, so the agent can read and write these where Jira or GitHub is out of its reach; it does not become a task manager. Task analyses, this Product document, the Architecture document and PDRs go away; their lasting knowledge moves to ADRs, the glossary and out-of-scope notes (#185).
 
+<!-- imprimatur:decisions --> Decisions: [PDR 0120](decisions/0120-imprimatur-follows-matt-pocock-s-skills-system-his-names-and.md)
+
 <a id="chapter-non-goals"></a>
 
 ## Non-goals
@@ -387,7 +389,7 @@ Imprimatur brings its skills to every repo with no manual step: setup links each
 
 A skill taken from elsewhere is read in full before it ships, keeps its LICENSE, and records its source commit and every change in `SOURCE.txt`. The documentation skills above are changed so they never write Imprimatur's generated documents by hand, and run no bundled code; i-have-adhd ships unchanged (output rules only). A skill that would keep a second task, decision or memory store next to Imprimatur's is not carried; its useful ideas go into Imprimatur's own features instead.
 
-<!-- imprimatur:decisions --> Decisions: [PDR 0099](decisions/0099-imprimatur-carries-the-adopted-skills-itself-and-installs-th.md)
+<!-- imprimatur:decisions --> Decisions: [PDR 0099](decisions/0099-imprimatur-carries-the-adopted-skills-itself-and-installs-th.md), [ADR 0114](decisions/0114-doc-skills-vetted-documentation-writer-docs-sync-audit-and-w.md)
 
 <a id="meeting-records"></a>
 
@@ -404,6 +406,8 @@ A meeting app writes its notes into Imprimatur, so what was agreed reaches the t
 
 First user: a desktop meeting app writing work meeting notes to its work repo, then its past notes once.
 
+<!-- imprimatur:decisions --> Decisions: [PDR 0115](decisions/0115-pdr-a-meeting-s-note-lives-where-its-work-is-target-state.md)
+
 <a id="languages"></a>
 
 ### 17. Languages: the chat, the records, the hooks (#80, #176)
@@ -413,6 +417,8 @@ Three languages, each set in one place:
 - **Reply language** (#176): the language of everything addressed to the user. That means the agent's chat replies, with their headings (for Turkish the turn-end status section is "Neredeyiz"), and the **Waiting on you** list (turn-end audit, Settle, Scan history). It is the same in every repo on the machine and comes from `IMPRIMATUR_REPLY_LANG`, the plugin's **Reply language** option, or config.json `replyLang` (`npm run setup -- --reply-lang Turkish`). Without any of these it is English. Imprimatur says it at every session start.
 - **Repo language** (#80): a repo's `.claude/imprimatur.json` `"lang"` sets the language of its records, design documents, code comments, commits and edit descriptions. A public repo can keep English records while the chat stays in the user's language.
 - **Hook language**: config.json `lang` (or `imprimatur.language`) sets the language of edit descriptions in repos without their own `lang`.
+
+<!-- imprimatur:decisions --> Decisions: [PDR 0119](decisions/0119-the-agent-s-reply-language-is-one-per-machine-setting-said-a.md)
 
 <a id="chapter-metrics"></a>
 

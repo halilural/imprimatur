@@ -66,7 +66,8 @@ function parseManaged(text) {
     let j = i + 1;
     while (a && j < lines.length && !lines[j].trim()) j++;
     // "##" in a flat document, "###" under a chapter (#129).
-    const h = a && /^#{2,3}\s+(?:\d+\.\s+)?(.*?)\s*$/.exec(lines[j] ?? "");
+    // "**Term**:" in the glossary (#191, Pocock's GLOSSARY-FORMAT).
+    const h = a && (/^#{2,3}\s+(?:\d+\.\s+)?(.*?)\s*$/.exec(lines[j] ?? "") ?? /^\*\*(.+?)\*\*:\s*$/.exec(lines[j] ?? ""));
     if (a && h && a[1].startsWith(CHAPTER_ANCHOR)) {
       // A chapter heading and its "not written yet" line belong to no section.
       // shortcut: a section moved under another chapter in the file is not read back (the DB keeps its chapter); read the chapter here if hand moves matter.
@@ -391,7 +392,14 @@ function syncDocs(db, root, { dryRun = false, take, rev, adopt } = {}) {
   const repo = repoFor(db, root, dryRun);
   const out = [];
   // Social (#109) only in a repo that turned it on: off, its file is neither written nor read.
+  // Decisions get their numbers first (#130), so the documents' links name them on this sync.
+  if (!dryRun && repo && kindsOf(root).some((k) => k === "architecture" || k === "product"))
+    try {
+      require("./decisions.js").numbered(db, repo.id);
+    } catch {}
   for (const kind of kindsOf(root)) out.push(syncKind(db, repo, root, kind, { dryRun, take, adoptFiles: adopt ?? optedIn(root), asked: adopt === true }));
+  // The files beside the documents: decisions, ADRs (#191).
+  if (!dryRun && repo) require("./docs-export.js").sideFiles(db, repo, root);
   if (!rev || out.some((r) => r.conflicts.length || r.unreadable)) return out;
   if (!dryRun) importRepo(db, root, { rev, only: ["design", "product"] });
   return kindsOf(root).map((kind) => {

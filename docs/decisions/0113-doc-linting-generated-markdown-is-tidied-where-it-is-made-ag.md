@@ -16,6 +16,8 @@ Task #132: chore(docs): markdownlint-cli2, lychee --offline, cspell and Vale (wa
 ## Considered Options
 
 Alternative: run markdownlint-cli2 --fix on the files after export, rejected because the file would then differ from the text docs-sync compares, and it needs the tool at export time.
+Alternative: rewrite every stored section body once (a migration), rejected: it touches every repo's real database at once; tidying at export changes no stored text.
+Alternative: cspell failing the run, rejected for mixed-language repos as above.
 Alternative: one combined script that runs all four tools, rejected because lychee and Vale are binaries most machines lack; npx covers the two npm tools.
 Alternative: a pre-commit hook entry, rejected for now: most repos here have no pre-commit framework, and an npm script runs anywhere.
 
@@ -23,11 +25,15 @@ Alternative: a pre-commit hook entry, rejected for now: most repos here have no 
 
 Doc linting: generated Markdown is tidied where it is made; Agent Setup writes four lint configs and npm scripts into a repo, never overwriting
 
-Generated documents pass markdownlint because the text is tidied where it is made (vscode/md-tidy.js, called by docs-export.js docMarkdown and decisions.js madrText/indexText): blank lines around headings, fences and a list's start (MD022/MD031/MD032), a bare opening fence gets `text` (MD040). The file and what docs-sync compares it with stay the same text, so sync never mistakes the tidy-up for a hand edit.
+Generated documents pass markdownlint because the text is tidied where it is made (vscode/md-tidy.js, called by docs-export.js docMarkdown and decisions.js madrText): blank lines around headings, fences and a list's start (MD022/MD031/MD032), a bare opening fence gets `text` (MD040), a bare URL goes in `<>` (MD034), a line starting `#139` is escaped (MD018). `nest` shifts a section body's headings so the highest sits one level under the section heading (#### in arc42 documents, ### where sections are ##), so subheadings like "Data" no longer collide between sections (MD024, MD001). A decision's H1 drops closing punctuation (MD026). docs-sync's section hash runs the same nest + tidy on both sides, so a tidied file and its untidied stored body hash the same: checked with a dry-run sync on imprimatur, dirtywork and groundwork, all "in sync".
 
-The shared config set: `.markdownlint-cli2.jsonc` (line length and inline HTML off: prose lines and the generator's `<a id>` anchors; duplicate headings allowed between siblings only), `cspell.json` (project words), `lychee.toml` (offline, local links only), `.vale.ini` (Google style, warnings). Agent Setup's checklist shows "Doc lint: write …" for a repo missing any of them; the click writes the missing files with O_EXCL (a file that exists is kept, so local edits survive) and adds `lint:docs` (markdownlint-cli2 + cspell through npx), `lint:links` (lychee) and `lint:prose` (vale) to package.json scripts when a package.json exists and the script names are free.
+The shared config set: `.markdownlint-cli2.jsonc` (off: MD013 line length, MD033 inline HTML for the generator's `<a id>` anchors, MD049/MD050 emphasis style, MD029 list numbering after a code block, MD060 table pipe style; MD024 siblings only), `cspell.json` (en, en-GB and the repo's words), `lychee.toml` (offline, fragments), `.vale.ini` (Google style, warnings). Agent Setup's checklist shows "Doc lint: write …" while any config or script is missing; the click writes the missing files with O_EXCL (an existing file is kept, so local edits survive) and adds the free script names to package.json, its indentation kept: `lint:docs` (markdownlint-cli2@0.18.1, then cspell@9.2.1 with --no-exit-code), `lint:links` (lychee), `lint:prose` (vale sync && vale). Tool versions are pinned: a new markdownlint release added MD060 and failed every table.
+
+cspell only warns, and runs only where the repo's prose is English: another language's dictionary must be installed in the repo (npx cannot load it; tried @cspell/dict-tr-tr), and this repo's older Turkish records would fail every run.
 
 Alternative: run markdownlint-cli2 --fix on the files after export, rejected because the file would then differ from the text docs-sync compares, and it needs the tool at export time.
+Alternative: rewrite every stored section body once (a migration), rejected: it touches every repo's real database at once; tidying at export changes no stored text.
+Alternative: cspell failing the run, rejected for mixed-language repos as above.
 Alternative: one combined script that runs all four tools, rejected because lychee and Vale are binaries most machines lack; npx covers the two npm tools.
 Alternative: a pre-commit hook entry, rejected for now: most repos here have no pre-commit framework, and an npm script runs anywhere.
 
@@ -37,4 +43,4 @@ Not listed apart; see the decision outcome.
 
 ## Sections
 
-- No section links this decision yet.
+- [Architecture: Documentation linters (#132)](../ARCHITECTURE.md#doc-linting)
