@@ -22,38 +22,39 @@ type: explanation
   - [8. Social document: a per-repo opt-in document kind (#109)](#social)
   - [9. One-time backfill of design documents and glossary](#docs-backfill-live)
   - [10. /imprimatur-stats: scoreboard skill (#146)](#imprimatur-stats)
+  - [11. Pocock's model and files (#179)](#pocock-layout)
 - [Deployment](#chapter-deployment)
 - [Crosscutting concepts](#chapter-crosscutting)
-  - [11. Process checks](#process-checks)
-  - [12. Test strategy](#testing)
-  - [13. Documentation linters (#132)](#doc-linting)
-  - [14. Device sync heals itself (#169)](#sync-self-heal)
+  - [12. Process checks](#process-checks)
+  - [13. Test strategy](#testing)
+  - [14. Documentation linters (#132)](#doc-linting)
+  - [15. Device sync heals itself (#169)](#sync-self-heal)
 - [Decisions](#chapter-decisions)
 - [Risks and technical debt](#chapter-risks)
-  - [15. Known limits](#limits)
+  - [16. Known limits](#limits)
 - [Unsorted](#chapter-unsorted)
-  - [16. Components and their boundaries](#components)
-  - [17. Security](#security)
-  - [18. Installation and distribution](#deployment)
-  - [19. System context](#context)
-  - [20. Local database and data model](#database)
-  - [21. Model calls and cost](#model-calls)
-  - [22. File-based review data](#review-data)
-  - [23. MCP server](#mcp)
-  - [24. Panel design layer: theme variables, icons, mascot](#ui-design)
-  - [25. Panel and views](#panel)
-  - [26. Live updates](#live)
-  - [27. Issue tracker sync](#tracker)
-  - [28. Design documents ↔ Markdown files (docs sync)](#docs-sync)
-  - [29. History scan and TODO.md task tracking](#history-scan-todo)
-  - [30. Task analyses](#task-analysis)
-  - [31. Agent setup audit (agnix)](#agent-setup-audit)
-  - [32. Recommendations: project best-practice review (#86, #87)](#best-practice-review)
-  - [33. Agent setup inventory: plugins, synced skills and the session's context (#139)](#agent-inventory)
-  - [34. Context budget: what a session loads, in estimated tokens](#context-budget)
-  - [35. Decision records: ADR and PDR as MADR 4 files](#decision-records)
-  - [36. Agent files: AGENTS.md, CLAUDE.md and the docs rule (#133)](#agent-files)
-  - [37. Documentation rules in the audit (IMP-DOC, #131)](#doc-rules)
+  - [17. Components and their boundaries](#components)
+  - [18. Security](#security)
+  - [19. Installation and distribution](#deployment)
+  - [20. System context](#context)
+  - [21. Local database and data model](#database)
+  - [22. Model calls and cost](#model-calls)
+  - [23. File-based review data](#review-data)
+  - [24. MCP server](#mcp)
+  - [25. Panel design layer: theme variables, icons, mascot](#ui-design)
+  - [26. Panel and views](#panel)
+  - [27. Live updates](#live)
+  - [28. Issue tracker sync](#tracker)
+  - [29. Design documents ↔ Markdown files (docs sync)](#docs-sync)
+  - [30. History scan and TODO.md task tracking](#history-scan-todo)
+  - [31. Task analyses](#task-analysis)
+  - [32. Agent setup audit (agnix)](#agent-setup-audit)
+  - [33. Recommendations: project best-practice review (#86, #87)](#best-practice-review)
+  - [34. Agent setup inventory: plugins, synced skills and the session's context (#139)](#agent-inventory)
+  - [35. Context budget: what a session loads, in estimated tokens](#context-budget)
+  - [36. Decision records: ADR and PDR as MADR 4 files](#decision-records)
+  - [37. Agent files: AGENTS.md, CLAUDE.md and the docs rule (#133)](#agent-files)
+  - [38. Documentation rules in the audit (IMP-DOC, #131)](#doc-rules)
 
 <a id="chapter-goals"></a>
 
@@ -323,6 +324,14 @@ SessionStart checks, for every known repo (whether or not it has a `.claude/impr
 
 <!-- imprimatur:decisions --> Decisions: [ADR 0105](decisions/0105-imprimatur-stats-is-a-skill-whose-script-prints-an-ascii-sco.md)
 
+<a id="pocock-layout"></a>
+
+### 11. Pocock's model and files (#179)
+
+Matt Pocock's artifacts live in the existing tables (ADR 10569): spec, map and capability as scoped documents, project and out-of-scope as repo documents, a delta on spec sections, ticket type and blockers on tasks. Files are written beside the documents on every docs sync (sideFiles): GLOSSARY.md and docs/adr/ (10572), .scratch/ (10574), .out-of-scope/, docs/PROJECT.md, docs/capabilities/, docs/agents/ (10575); each reads a hand edit back by file hash, the database winning a clash with the file's text kept. Nineteen of his skills ship verbatim with Imprimatur as their tracker (10576), and the MCP document tools take his kinds (10578). The keepGoing Stop hook walks an epic to its end (10573).
+
+<!-- imprimatur:decisions --> Decisions: [ADR 0121](decisions/0121-pocock-s-artifacts-live-in-the-existing-tables-spec-map-and.md)
+
 <a id="chapter-deployment"></a>
 
 ## Deployment
@@ -335,7 +344,7 @@ _Not written yet._
 
 <a id="process-checks"></a>
 
-### 11. Process checks
+### 12. Process checks
 
 The development process rules (formerly `.claude/hooks/*.sh` copied into every repo) run in one place, Imprimatur's global hook (`hooks/process.mjs` → `vscode/process.js`).
 
@@ -365,7 +374,7 @@ Repo-specific rules (an em dash ban, deploy, migrations, etc.) are out of scope 
 
 <a id="testing"></a>
 
-### 12. Test strategy
+### 13. Test strategy
 
 #### Unit tests (`npm test`)
 
@@ -385,7 +394,7 @@ Manual tests of visual behavior such as the editor marks and the preview are kep
 
 <a id="doc-linting"></a>
 
-### 13. Documentation linters (#132)
+### 14. Documentation linters (#132)
 
 Every repo can carry four documentation linters: markdownlint-cli2 (structure), cspell (spelling, warnings only), lychee `--offline` (links between the repo's files) and Vale with Google's style (warnings). Agent Setup's checklist shows "Doc lint: write …" while a repo lacks one of their configs (`.markdownlint-cli2.jsonc`, `cspell.json`, `lychee.toml`, `.vale.ini`) or the npm scripts that run them. `vscode/doc-lint.js` writes only what is missing, with O_EXCL, so a repo's own edits stay; the scripts go into package.json under names that are free.
 
@@ -403,7 +412,7 @@ The exported documents are tidied where their text is made (`vscode/md-tidy.js`,
 
 <a id="sync-self-heal"></a>
 
-### 14. Device sync heals itself (#169)
+### 15. Device sync heals itself (#169)
 
 Device sync lives in the private plugin (imprimatur-private, config.json "plugins"). It keeps itself working with no commands on any machine:
 
@@ -429,7 +438,7 @@ _Not written yet._
 
 <a id="limits"></a>
 
-### 15. Known limits
+### 16. Known limits
 
 #### Review
 
@@ -458,7 +467,7 @@ _Not written yet._
 
 <a id="components"></a>
 
-### 16. Components and their boundaries
+### 17. Components and their boundaries
 
 C4 level 2 (containers), drawn as a flowchart with C4 labels: Mermaid's C4Container layout stacks the external systems on top and its labels overlap. Everything inside the boundary runs on the developer's machine. The boundaries follow who writes what.
 
@@ -511,7 +520,7 @@ The shared modules (`vscode/diff.js`, `waiting.js`, `audit.js`, `tasks.js`, `rec
 
 <a id="security"></a>
 
-### 17. Security
+### 18. Security
 
 #### VS Code extension
 
@@ -544,7 +553,7 @@ The shared modules (`vscode/diff.js`, `waiting.js`, `audit.js`, `tasks.js`, `rec
 
 <a id="deployment"></a>
 
-### 18. Installation and distribution
+### 19. Installation and distribution
 
 #### Installing on a machine: `npm run setup`
 
@@ -602,7 +611,7 @@ One version number (`vscode/package.json`) is shared by the extension and the pl
 
 <a id="context"></a>
 
-### 19. System context
+### 20. System context
 
 Imprimatur runs on the user's machine, next to the coding agents. It reaches outside it only for what the user turns on or asks for: an issue tracker, GitHub for skill sources, the plugin marketplaces' catalog, and Claude runs the user confirms. C4 level 1, drawn as a flowchart with C4 labels (Mermaid's C4Context layout draws its text too small to read):
 
@@ -637,7 +646,7 @@ flowchart LR
 
 <a id="database"></a>
 
-### 20. Local database and data model
+### 21. Local database and data model
 
 #### Engine and location
 
@@ -709,7 +718,7 @@ Panel queries are indexed and `LIMIT`ed: < 1 ms at 10,000 records; opening (prag
 
 <a id="model-calls"></a>
 
-### 21. Model calls and cost
+### 22. Model calls and cost
 
 Imprimatur turns to a small model (Haiku) only where verbal judgment is needed; where a rule is enough, no model is called.
 
@@ -746,7 +755,7 @@ Imprimatur turns to a small model (Haiku) only where verbal judgment is needed; 
 
 <a id="review-data"></a>
 
-### 22. File-based review data
+### 23. File-based review data
 
 The review of an agent edit is kept not in the database but as files, one folder per repo: hooks must write very fast before an edit, the data must be split by repo and by file, and old data must be archivable on its own.
 
@@ -811,7 +820,7 @@ The old folder keeps `.gitignore` and `MOVED.md`. What an older release still wr
 
 <a id="mcp"></a>
 
-### 23. MCP server
+### 24. MCP server
 
 `mcp/server.mjs` is the **only** read/write path agents have to tasks and records. Claude Code (user scope or plugin), Cursor (`~/.cursor/mcp.json`) and Codex (`~/.codex/config.toml`) see the same server and tools.
 
@@ -863,7 +872,7 @@ A result is a short text summary plus `structuredContent` (and `outputSchema` in
 
 <a id="ui-design"></a>
 
-### 24. Panel design layer: theme variables, icons, mascot
+### 25. Panel design layer: theme variables, icons, mascot
 
 The panel's look comes from three small modules. All are plain CommonJS; they need no build step and do not trip the CSP.
 
@@ -897,7 +906,7 @@ On dark and light themes, `theme.js` defines board tokens (`--b-bg`, `--b-panel`
 
 <a id="panel"></a>
 
-### 25. Panel and views
+### 26. Panel and views
 
 #### Editor and Markdown preview
 
@@ -963,7 +972,7 @@ The Imprimatur icon in the activity bar: rows that open the panel in a tab (the 
 
 <a id="live"></a>
 
-### 26. Live updates
+### 27. Live updates
 
 Goal: a change shows up in the panel the moment it is written. This is all local to the machine.
 
@@ -1000,7 +1009,7 @@ Only the visible tab is drawn. A write by a plugin goes through the same change 
 
 <a id="tracker"></a>
 
-### 27. Issue tracker sync
+### 28. Issue tracker sync
 
 A task's status is synced both ways with GitHub Issues or Jira; epic rows close together with their tasks.
 
@@ -1039,7 +1048,7 @@ At startup, every 5 minutes, a few seconds after a status change; the Sync with 
 
 <a id="docs-sync"></a>
 
-### 28. Design documents ↔ Markdown files (docs sync)
+### 29. Design documents ↔ Markdown files (docs sync)
 
 `vscode/docs-sync.js` (#73) brings the architecture/product document in the database to the same text as `<docs dir>/ARCHITECTURE.md` and `PRODUCT.md`; whenever Imprimatur comes to a repo (no file, a hand-written file, a file deleted after a move) the result is the same.
 
@@ -1068,7 +1077,7 @@ Architecture and product sections each sit in a fixed chapter (`doc_sections.cha
 
 <a id="history-scan-todo"></a>
 
-### 29. History scan and TODO.md task tracking
+### 30. History scan and TODO.md task tracking
 
 The panel's "Scan history" button (and, once, automatically the first time the panel is opened in a project) runs `scanHistory(root)` from `vscode/history.js`.
 
@@ -1115,7 +1124,7 @@ The panel's "Scan history" button (and, once, automatically the first time the p
 
 <a id="task-analysis"></a>
 
-### 30. Task analyses
+### 31. Task analyses
 
 Every task has an analysis document: `kind = 'analysis'` in `documents`, with `scope` = the task key (`''` for repo documents). A section's `source` field is the file it came from. `doc_sources` holds the hash of the last read text of each file, so the same text is not written twice. Migration 6 rebuilds the tables like the glossary migration.
 
@@ -1148,7 +1157,7 @@ flowchart LR
 
 <a id="agent-setup-audit"></a>
 
-### 31. Agent setup audit (agnix)
+### 32. Agent setup audit (agnix)
 
 `vscode/setup-audit.js` audits the agent setup with [agnix](https://github.com/agent-sh/agnix) and keeps the findings as records; no rule or file is cut off. `setup-audit-tree.js` groups the records (`auditGroups`); the **Recommendations** tree in Agent Setup and the AUDIT page in the Tasks tab use the same grouping.
 
@@ -1183,7 +1192,7 @@ One grouping: **status** (Open / Applied / Dismissed) → [for dismissed, **reas
 
 <a id="best-practice-review"></a>
 
-### 32. Recommendations: project best-practice review (#86, #87)
+### 33. Recommendations: project best-practice review (#86, #87)
 
 **Recommendations** is a single place: one `RECS` task per repo (a record container) holds the records of two producers. The agent setup audit (`setup-audit.js`, `links.audit`) and the project best-practice review (`best-practice.js`, `links.best`). The old `AUDIT` (#77) and `BEST` (#86) records are moved to RECS with `db.moveRecord` the first time `recs.recsTask` is called (a version row is written); the old tasks become `dropped`, with the summary "Moved to RECS (#87)".
 
@@ -1222,7 +1231,7 @@ The Agent Setup light bulb opens a menu: audit the agent setup (agnix), review t
 
 <a id="agent-inventory"></a>
 
-### 33. Agent setup inventory: plugins, synced skills and the session's context (#139)
+### 34. Agent setup inventory: plugins, synced skills and the session's context (#139)
 
 Agent setup (`agent-setup.js` `scanSetup`) lists the agent's files, and three more sources besides them. All of it is read only; nothing is written.
 
@@ -1244,7 +1253,7 @@ Rows with no file (MCP, tools, listings) have an empty `abs` and open nothing.
 
 <a id="context-budget"></a>
 
-### 34. Context budget: what a session loads, in estimated tokens
+### 35. Context budget: what a session loads, in estimated tokens
 
 Agent Setup's **Context budget** group (#29) lists what the repo's last Claude Code session loaded into the model's context. Items are sorted biggest first.
 
@@ -1271,7 +1280,7 @@ The tools the agent called are counted per server from `tool_use` blocks.
 
 <a id="decision-records"></a>
 
-### 35. Decision records: ADR and PDR as MADR 4 files
+### 36. Decision records: ADR and PDR as MADR 4 files
 
 The decisions are the repo's adr and pdr records. Each one is also written as a MADR 4 file, `docs/decisions/NNNN-slug.md`, listed in `docs/decisions/README.md`. That index is the list this chapter would otherwise repeat.
 
@@ -1288,7 +1297,7 @@ The decisions are the repo's adr and pdr records. Each one is also written as a 
 
 <a id="agent-files"></a>
 
-### 36. Agent files: AGENTS.md, CLAUDE.md and the docs rule (#133)
+### 37. Agent files: AGENTS.md, CLAUDE.md and the docs rule (#133)
 
 AGENTS.md holds the rules every coding agent follows in a repo, at most 200 lines. CLAUDE.md starts with `@AGENTS.md` and keeps only what is Claude Code's own. `.claude/rules/docs.md`, scoped to `docs/**` by its `paths:` front matter, holds the documentation standard (decision 9331). `vscode/agent-files.js` reads how a repo stands and puts rows in Agent Setup's checklist:
 
@@ -1309,7 +1318,7 @@ A second run writes nothing: the templates are skipped once their files exist, a
 
 <a id="doc-rules"></a>
 
-### 37. Documentation rules in the audit (IMP-DOC, #131)
+### 38. Documentation rules in the audit (IMP-DOC, #131)
 
 `setup_audit` checks the documentation standard next to agnix's agent-setup rules. `vscode/doc-rules.js` reads the repo's documents (the database) and its agent files and returns findings in agnix's diagnostic shape. `auditRoot` adds them for a repo, not for the global scope, so they become Recommendations records with Fix it and dismiss like agnix's.
 
