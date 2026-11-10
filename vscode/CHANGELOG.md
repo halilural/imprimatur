@@ -4,6 +4,12 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.166.2] - 2026-11-11
+
+### Fixed
+- The design-first check reads Jira-keyed branches (`dev/LATD-14087-…`) as well as `feat/123-…`: code on such a branch before the task has a spec or an ADR gets the warning (#207).
+- An agent that starts a task itself (a pasted Jira screenshot, "start this") is told how to write the spec: `/to-spec` is user-invoked, so the warning, the MCP instructions and the docs rule say to follow its gates with `doc_section_upsert` (kind `spec`) and give the skill's path (#207).
+
 ## [0.166.1] - 2026-11-10
 
 ### Security

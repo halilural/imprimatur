@@ -88,6 +88,28 @@ test("designFirst: code on a <type>/<n>-… branch before the task has a spec or
   assert.deepEqual(s1({ ...known, recordsOf: () => [] }), {});
 });
 
+test("designFirst (#207): a Jira-keyed branch is checked too, and the warning tells the agent how to write the spec itself", () => {
+  const { taskOfBranch } = req("../vscode/process.js");
+  assert.equal(taskOfBranch("feat/56-process"), "#56");
+  assert.equal(taskOfBranch("dev/LATD-14087-transaction-id"), "LATD-14087");
+  assert.equal(taskOfBranch("fix/proj-12"), "PROJ-12");
+  assert.equal(taskOfBranch("main"), undefined);
+  const root = repo({ process: {} });
+  sh(root, "switch", "-q", "-c", "dev/LATD-14087-transaction-id");
+  let asked;
+  const records = { ...noRecords, repoId: () => 1, task: (_r, key) => ((asked = key), { key }), recordsOf: () => [] };
+  const out = check("PreToolUse", { cwd: root, tool_name: "Edit", tool_input: { file_path: path.join(root, "src/a.java") } }, { records });
+  assert.equal(asked, "LATD-14087");
+  assert.match(out.context[0], /LATD-14087 has no spec or ADR/);
+  assert.match(out.context[0], /doc_section_upsert kind "spec", task "LATD-14087"/);
+  assert.match(out.context[0], /skills[\\/]to-spec[\\/]SKILL\.md/);
+  // An ADR elsewhere that names the key counts; a longer key does not.
+  const named = (title) => check("PreToolUse", { cwd: root, session_id: title, tool_name: "Edit", tool_input: { file_path: path.join(root, "src/b.java") } },
+    { records: { ...records, dbOf: () => ({ recordsByKind: () => [{ kind: "adr", title }] }) } });
+  assert.deepEqual(named("Transaction ids (LATD-14087)"), {});
+  assert.match(named("Other (LATD-140871)").context[0], /LATD-14087 has no spec/);
+});
+
 test("docsToc: only a trusted repo's script, inside the repo; never a flag or a path outside", () => {
   const root = repo({ process: { docsToc: { script: "scripts/toc.mjs" } } });
   process.env.IMPRIMATUR_DB = path.join(root, "db", "i.db");
