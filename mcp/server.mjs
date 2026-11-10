@@ -728,14 +728,23 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
     case "search": {
       // #120: an index by default (claude-mem's pattern); full:true or task_get for the bodies.
       const limit = a.limit ?? 8;
-      const rows = db.search(a.text, { repoId: a.repo === "*" ? undefined : repoOf(db, a.repo).id, kind: a.kind, limit: limit + 1 });
+      const repoId = a.repo === "*" ? undefined : repoOf(db, a.repo).id;
+      // #189: ranked by BM25, every word matching, Turkish letters folded; a phrase the ranking
+      // cannot split (only punctuation) falls back to the plain text match, newest first.
+      const { rankedSearch } = require("../vscode/search-index.js");
+      const ranked = rankedSearch(db, a.text, { repoId, limit: 200, type: "record" }).filter((r) => !a.kind || r.kind === a.kind);
+      const rows = ranked.length
+        ? ranked.slice(0, limit + 1).map((h) => ({ ...db.record(h.id), task_key: h.task_key, snippet: h.snippet }))
+        : db.search(a.text, { repoId, kind: a.kind, limit: limit + 1 });
       const hits = rows.slice(0, limit);
+      const sections = a.kind ? [] : rankedSearch(db, a.text, { repoId, limit: 5, type: "section" })
+        .map((h) => ({ kind: h.doc_kind, ...(h.scope && { scope: h.scope }), key: h.key, title: h.title, snippet: h.snippet }));
       const records = a.full
         ? hits
         : hits.map((r) => ({ id: r.id, task_key: r.task_key, kind: r.kind, status: r.status, ...(r.owner && { owner: r.owner }), ...(r.pointer && { pointer: true }),
             // Older imports have titles of 1,000+ chars: the index cuts them like a body's first line.
-            title: r.title.length > LINE_CUT ? r.title.slice(0, LINE_CUT - 1) + "…" : r.title }));
-      return { records, ...(rows.length > limit && { more: true }), ...(!a.full && hits.length && { hint: "bodies left out: full:true, or task_get for a task's records" }) };
+            title: r.title.length > LINE_CUT ? r.title.slice(0, LINE_CUT - 1) + "…" : r.title, ...(r.snippet && !r.snippet.startsWith(r.title.slice(0, 40)) && { snippet: r.snippet.slice(0, 120) }) }));
+      return { records, ...(sections.length && { sections }), ...(rows.length > limit && { more: true }), ...(!a.full && hits.length && { hint: "bodies left out: full:true, or task_get for a task's records" }) };
     }
     default:
       throw Object.assign(new Error(`unknown tool ${name}`), { code: -32602 });

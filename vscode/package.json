@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.147.0",
+  "version": "0.148.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -294,7 +294,7 @@
       },
       {
         "command": "imprimatur.records.search",
-        "title": "Search Records",
+        "title": "Search and Ask",
         "category": "Imprimatur",
         "icon": "$(search)"
       },
@@ -990,6 +990,11 @@
       }
     ],
     "keybindings": [
+      {
+        "command": "imprimatur.records.search",
+        "key": "ctrl+alt+k",
+        "mac": "cmd+alt+k"
+      },
       {
         "command": "imprimatur.records.goToTask",
         "key": "ctrl+alt+t",

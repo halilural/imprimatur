@@ -143,22 +143,62 @@ function registerRecordCommands(ctx, log, onChange, reveal, setAllRepos) {
     }),
     vscode.commands.registerCommand("imprimatur.records.taskDone", (node) => write(() => records.dbOf().upsertTask(node.task.repo_id, node.task.key, { status: "done" }, USER))),
     vscode.commands.registerCommand("imprimatur.records.taskReopen", (node) => write(() => records.dbOf().upsertTask(node.task.repo_id, node.task.key, { status: "active" }, USER))),
+    // Search (#189): one box, ranked as you type (BM25, Turkish letters folded) over records and
+    // document sections, this window's repos first; the first row asks the question instead and
+    // answers from the best hits, each claim citing its source.
     vscode.commands.registerCommand("imprimatur.records.search", async () => {
       if (!records.dbOf()) return;
-      const text = await ui.showInputBox({ prompt: "Search records (title and body, every repo)" });
-      // Read again after each wait: Refresh may have reopened the connection.
-      const db = records.dbOf();
-      if (!text?.trim() || !db) return;
-      const repos = new Map(db.repos().map((r) => [r.id, r]));
-      const found = db.search(text.trim(), { limit: 100 });
-      const pick = await ui.showQuickPick(
-        found.map((r) => {
-          const task = db.taskById(r.task_id);
-          return { label: r.title, description: `${repos.get(task?.repo_id)?.name ?? ""} · ${r.task_key} · ${r.kind} · ${r.status}`, record: r, root: repos.get(task?.repo_id)?.root };
-        }),
-        { title: `${found.length} record${found.length === 1 ? "" : "s"}`, matchOnDescription: true },
-      );
-      if (pick) vscode.commands.executeCommand("imprimatur.records.reveal", { root: pick.root, record: pick.record.id });
+      const { rankedSearch, askPrompt } = require("./search-index.js");
+      const here = new Set((vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath));
+      const qp = vscode.window.createQuickPick();
+      qp.placeholder = "Search records and documents, or ask a question";
+      qp.matchOnDescription = true;
+      qp.matchOnDetail = true;
+      /** @type {NodeJS.Timeout | undefined} */ let timer;
+      const fill = () => {
+        const db = records.dbOf();
+        const text = qp.value.trim();
+        if (!db || !text) return void (qp.items = []);
+        const repos = new Map(db.repos().map((/** @type {any} */ r) => [r.id, r]));
+        const hits = rankedSearch(db, text, { limit: 60 }).sort((/** @type {any} */ a, /** @type {any} */ b) => Number(here.has(repos.get(b.repo_id)?.root)) - Number(here.has(repos.get(a.repo_id)?.root)));
+        const ask = { label: `$(sparkle) Ask: ${text}`, description: "an answer from the best matches, with sources", alwaysShow: true, ask: true };
+        qp.items = [ask, ...hits.map((/** @type {any} */ h) => {
+          const repo = repos.get(h.repo_id);
+          return {
+            label: `${h.type === "record" ? "$(note)" : "$(book)"} ${h.title.slice(0, 120)}`,
+            description: `${repo?.name ?? ""} · ${h.type === "record" ? `${h.task_key} · ${h.kind}` : `${h.doc_kind}${h.scope ? ` ${h.scope}` : ""}`}`,
+            detail: h.snippet, alwaysShow: true, hit: h, root: repo?.root,
+          };
+        })];
+      };
+      qp.onDidChangeValue(() => {
+        clearTimeout(timer);
+        timer = setTimeout(fill, 120);
+      });
+      qp.onDidAccept(async () => {
+        const pick = /** @type {any} */ (qp.selectedItems[0]);
+        const text = qp.value.trim();
+        qp.hide();
+        if (!pick) return;
+        if (pick.ask) return askWithSources(text);
+        const h = pick.hit;
+        if (h.type === "record") vscode.commands.executeCommand("imprimatur.records.reveal", { root: pick.root, record: h.id });
+        else vscode.commands.executeCommand("imprimatur.docs.reveal", { root: pick.root, kind: h.doc_kind, section: h.key });
+      });
+      qp.onDidHide(() => qp.dispose());
+      qp.show();
+      /** The question answered from the best hits by the model (the user's Claude), sources listed under it. @param {string} text */
+      async function askWithSources(text) {
+        const db = records.dbOf();
+        if (!db || !text) return;
+        const hits = rankedSearch(db, text, { limit: 8 });
+        if (!hits.length) return void vscode.window.showInformationMessage(`Nothing in Imprimatur matches "${text}".`);
+        const answer = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Imprimatur: asking…" },
+          () => require("./model.js").askModel(askPrompt(text, hits), "sonnet").catch((/** @type {any} */ e) => `The model could not answer: ${e.message}`));
+        const sources = hits.map((/** @type {any} */ h, /** @type {number} */ i) => `${i + 1}. ${h.type === "record" ? `${h.task_key} ${h.kind}` : `${h.doc_kind}${h.scope ? ` ${h.scope}` : ""}`}: ${h.title.replace(/\s+/g, " ").slice(0, 140)}`).join("\n");
+        const doc = await vscode.workspace.openTextDocument({ language: "markdown", content: `# ${text}\n\n${String(answer).trim()}\n\n## Sources\n\n${sources}\n` });
+        await vscode.commands.executeCommand("markdown.showPreview", doc.uri);
+      }
     }),
     // Go to Task (#160): "#817" + Enter opens the task on the Tasks tab; the button, its issue.
     vscode.commands.registerCommand("imprimatur.records.goToTask", async () => {
