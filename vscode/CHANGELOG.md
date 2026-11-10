@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.150.0] - 2026-11-10
+
+### Added
+- **The new Imprimatur panel** (#195, first part of the rebuild #190): open it from the side bar's first row, **Imprimatur**, or the command *Imprimatur: Open*. Five areas, Home, Tasks, Docs, Edits and Setup, with More for Exercises, Meetings and Social; `g h`, `g t`, `g d`, `g e`, `g s` jump between them and `/` searches. Docs shows the project page, capabilities, ADRs, glossary, out-of-scope notes and the wiki in one reading layout: sections on the left, the page with its summary first, "on this page" on the right. Tasks, Edits and Setup still open the old panel until they move over.
+
 ## [0.149.0] - 2026-11-10
 
 ### Added

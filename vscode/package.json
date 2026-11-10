@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.149.0",
+  "version": "0.150.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -89,6 +89,12 @@
         "title": "Open Agent Change Graph",
         "category": "Imprimatur",
         "icon": "$(git-merge)"
+      },
+      {
+        "command": "imprimatur.app.open",
+        "title": "Open",
+        "category": "Imprimatur",
+        "icon": "$(rocket)"
       },
       {
         "command": "imprimatur.openHome",

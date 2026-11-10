@@ -1003,6 +1003,8 @@ function activate(ctx) {
     log.error(`records: ${e instanceof Error ? e.message : e}`);
   }
   // The side bar's launcher (#69): the panel's tabs, what waits on the user as its badge.
+  // The new panel (#195): Home, Tasks, Docs, Edits, Setup; the old one stays until #201.
+  require("./app/panel.js").registerApp(ctx);
   launcher = registerLauncher(ctx, () => {
     const root = graphRoot();
     if (!root) return { edits: 0, inbox: 0 };
