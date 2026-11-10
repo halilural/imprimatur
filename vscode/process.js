@@ -332,7 +332,18 @@ function leftBranches(root, main, run) {
 }
 
 /** The issue a branch is for: feat/56-process → 56. @param {string | undefined} branch */
+/** The to-spec skill this checkout (or the plugin) ships: the agent cannot invoke it, it reads it (#207). */
+const TO_SPEC = path.join(__dirname, "..", "skills", "to-spec", "SKILL.md");
 const issueOfBranch = (branch) => /^[a-z]+\/(\d+)-/.exec(branch ?? "")?.[1];
+/**
+ * The task a branch is for: "#123" from feat/123-…, "LATD-14087" from dev/LATD-14087-… (a Jira key, #207).
+ * @param {string | undefined} branch @returns {string | undefined}
+ */
+const taskOfBranch = (branch) => {
+  const n = issueOfBranch(branch);
+  if (n) return `#${n}`;
+  return /^[a-z]+\/([A-Za-z][A-Za-z0-9]*-\d+)(?:-|$)/.exec(branch ?? "")?.[1]?.toUpperCase();
+};
 
 /**
  * Runs the checks for one hook event.
@@ -348,7 +359,7 @@ function check(event, input, deps = {}) {
   const root = repoOf(input.cwd ?? process.cwd());
   if (!root) return {};
   // #186: the design-document and analysis backfills and the analysis intake are gone with
-  // Pocock's model (#179): a spec is written with /to-spec, through the MCP document tools.
+  // Pocock's model (#179): a spec is written through the MCP document tools (/to-spec, or the agent following its gates).
   // The repo's language (#80, .claude/imprimatur.json "lang"): what the agent writes here. Said
   // with or without process settings: "lang" alone does not turn the checks on.
   // The reply language (#176) is said in every repo, settings or not.
@@ -441,21 +452,23 @@ function check(event, input, deps = {}) {
       if (s.mainGuard.mode && b === s.mainGuard.branch && !allowed && !ignored()) {
         found(s.mainGuard, "mainGuard", `on ${b}, only ${(s.mainGuard.allow ?? []).join(", ") || "nothing"} is edited. Create a branch first: git switch -c <type>/<issue>-<short-name>. File: ${rel}`);
       }
-      const n = issueOfBranch(b);
-      if (s.designFirst.mode && n && !allowed) {
+      const key = taskOfBranch(b);
+      if (s.designFirst.mode && key && !allowed) {
         const records = deps.records ?? require("./records.js");
         // Only code (not Markdown), and only when the database knows the task: no answer is no warning.
-        const known = !/\.(md|mdx|txt)$/i.test(rel) && records.repoId(root) !== undefined && records.task?.(root, `#${n}`) !== undefined;
+        const known = !/\.(md|mdx|txt)$/i.test(rel) && records.repoId(root) !== undefined && records.task?.(root, key) !== undefined;
         // The task's spec (Pocock's, #186), its own ADR (or an old PDR), or one anywhere in the repo
-        // that names the issue (links.issue, or "#n" in its text).
-        const names = (r) => Number(r.links?.issue) === Number(n) || new RegExp(`#${n}(?!\\d)`).test(`${r.title}\n${r.body ?? ""}`);
+        // that names the task (links.issue, or its key in the text).
+        const num = key.startsWith("#") ? Number(key.slice(1)) : undefined;
+        const esc = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const names = (/** @type {any} */ r) => (num !== undefined && Number(r.links?.issue) === num) || new RegExp(`${esc}(?!\\d)`, "i").test(`${r.title}\n${r.body ?? ""}`);
         const db = known ? records.dbOf?.() : undefined;
-        const spec = db?.taskDocFind?.(records.repoId(root), `#${n}`, "spec");
+        const spec = db?.taskDocFind?.(records.repoId(root), key, "spec");
         const designed = known && ((spec && db.docSections(spec.id).some((/** @type {any} */ x) => x.status === "current"))
-          || records.recordsOf(root, `#${n}`).some((r) => r.kind === "adr" || r.kind === "pdr")
+          || records.recordsOf(root, key).some((/** @type {any} */ r) => r.kind === "adr" || r.kind === "pdr")
           || (db?.recordsByKind(records.repoId(root), ["adr", "pdr"]) ?? []).some(names));
-        if (known && !designed && once(root, input.session_id, `design #${n}`)) {
-          found(s.designFirst, "designFirst", `#${n} has no spec or ADR yet. A change in behaviour starts with its design: /to-spec writes the task's spec (problem, user stories, design), or record_add kind "adr" for a hard-to-reverse choice; then the code. File: ${rel}`);
+        if (known && !designed && once(root, input.session_id, `design ${key}`)) {
+          found(s.designFirst, "designFirst", `${key} has no spec or ADR yet. A change in behaviour starts with its design: write the task's spec first (problem, user stories, design) with doc_section_upsert kind "spec", task "${key}", following the gates of the to-spec skill (user-invoked, so read ${TO_SPEC} and follow it, or ask the user to run /to-spec), or record_add kind "adr" for a hard-to-reverse choice; then the code. File: ${rel}`);
         }
       }
     }
@@ -650,4 +663,4 @@ function starterSettings({ allow, branch } = {}) {
   };
 }
 
-module.exports = { check, reply, settingsOf, starterSettings, nextReady, asksUser, repoOf, issueOfBranch, bypasses, trust, isTrusted, scriptIn, DEFAULTS, CONFIG };
+module.exports = { check, reply, settingsOf, starterSettings, nextReady, asksUser, repoOf, issueOfBranch, taskOfBranch, bypasses, trust, isTrusted, scriptIn, DEFAULTS, CONFIG };
