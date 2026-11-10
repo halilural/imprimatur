@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.143.0] - 2026-11-10
+
+### Added
+- **Keep going** (#194): while an epic you started still has work whose blockers are done, the agent goes on to it instead of ending its turn after each issue. It still stops to ask you something (a 👉 line or a question), when nothing is ready, or after 10 continuations in a session. Turn it off with `{"process": {"keepGoing": false}}` in `.claude/imprimatur.json`.
+
 ## [0.142.0] - 2026-11-10
 
 ### Added

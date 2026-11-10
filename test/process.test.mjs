@@ -252,3 +252,26 @@ test("repo language (#80): with process settings, the line comes first; none wit
   assert.ok(!(plain.context ?? []).some((l) => /repoLang/.test(l)));
   assert.ok((plain.context ?? []).some((l) => /replyLang.*reply to the user in \w+/.test(l)), "the reply language is said in every repo (#176)");
 });
+
+test("keepGoing (#194): the epic's next ready child blocks the stop; a question, nothing ready or the limit lets it end", () => {
+  const { openDb } = req("../vscode/db.js");
+  const db = openDb({ path: path.join(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-194-")), "x.db") });
+  const root = repo({ process: { status: false, keepGoing: { mode: "block", max: 2 } } });
+  const rid = db.repoOf(root).id;
+  const epic = db.upsertTask(rid, "#10", { title: "Epic", status: "active" });
+  const part = db.upsertTask(rid, "#11", { title: "Part", status: "active", epicId: epic.id });
+  db.upsertTask(rid, "#12", { title: "Done one", status: "done", epicId: part.id });
+  db.upsertTask(rid, "#14", { title: "Waits", epicId: part.id, summary: "Not started; blocked by #13" });
+  db.upsertTask(rid, "#13", { title: "Ready one", epicId: part.id });
+  const records = { repoId: () => rid, recordsOf: () => [], dbOf: () => db };
+  const stop = (msg, session = "s1") => check("Stop", { cwd: root, session_id: session, last_assistant_message: msg }, { records });
+  assert.match(stop("Shipped #12.").block ?? "", /keepGoing.*epic #10 still has work ready: #13 Ready one.*\(1\/2\)/);
+  assert.deepEqual(stop("Shipped. 👉 Which one first?"), {}, "a question to the user ends the turn");
+  assert.match(stop("Shipped #13.").block ?? "", /\(2\/2\)/);
+  assert.deepEqual(stop("Shipped again."), {}, "the limit ends it");
+  db.upsertTask(rid, "#13", { status: "done" });
+  db.upsertTask(rid, "#14", { status: "done" });
+  assert.match(stop("Parts done.", "s2").block ?? "", /#11 Part/, "a part whose children are done is next: close it");
+  db.upsertTask(rid, "#11", { status: "done" });
+  assert.deepEqual(stop("All done.", "s3"), {}, "nothing ready");
+});
