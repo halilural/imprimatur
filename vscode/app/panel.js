@@ -49,6 +49,25 @@ function approveGate(key, gate) {
   got.db.addRecord(task.id, { kind: "decision", status: "done", title: `Approved: ${g.label}`, links: { gate } }, { kind: "user", id: "panel" });
 }
 
+/**
+ * Writes a section from the panel (#198) the way the agent's doc_section_upsert does: db.upsertSection,
+ * here as the user. A new section gets a key from its title.
+ * @param {any} msg {kind, scope?, key?, isNew, title, body, chapter?}
+ */
+function saveSection(msg) {
+  const got = repoFor(at.root);
+  if (!got) return;
+  const { db, repo } = got;
+  const kinds = ["project", "glossary", "out-of-scope", "capability"];
+  if (!kinds.includes(msg.kind)) throw new Error(`${msg.kind} is not edited here`);
+  const doc = msg.kind === "capability" ? db.taskDocOf(repo.id, String(msg.scope), "capability") : db.docOf(repo.id, msg.kind);
+  const title = String(msg.title ?? "").trim();
+  if (!title) throw new Error("a section needs a title");
+  const key = msg.isNew ? require("../decisions.js").slug(title).slice(0, 64) : String(msg.key);
+  if (msg.isNew && db.docSection(doc.id, key)) throw new Error(`there is already a section "${key}"`);
+  db.upsertSection(doc.id, key, { title, body: String(msg.body ?? "") || null, ...(msg.isNew && msg.chapter && { chapter: String(msg.chapter) }) }, { kind: "user", id: "panel" });
+}
+
 /** Opens the panel (or brings it forward) at a place. @param {{root?: string, area?: string, doc?: string, scope?: string}} [to] */
 function openApp(to = {}) {
   at = { ...at, ...to };
@@ -64,6 +83,13 @@ function openApp(to = {}) {
       render();
     } else if (msg?.type === "task") {
       at = { ...at, area: "tasks", task: String(msg.key), tab: undefined };
+      render();
+    } else if (msg?.type === "save") {
+      try {
+        saveSection(msg);
+      } catch (e) {
+        vscode.window.showErrorMessage(`Imprimatur: ${/** @type {Error} */ (e).message}`);
+      }
       render();
     } else if (msg?.type === "gate") {
       approveGate(String(msg.key), String(msg.gate));
@@ -82,4 +108,4 @@ function registerApp(ctx) {
   );
 }
 
-module.exports = { registerApp, openApp, approveGate };
+module.exports = { registerApp, openApp, approveGate, saveSection };

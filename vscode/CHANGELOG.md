@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.153.0] - 2026-11-10
+
+### Added
+- Edit documents in the new panel (#198): the project page, capabilities, glossary and out-of-scope notes get **Edit** under each section and **New section** on top (with its chapter on the project page). The change goes through the same write as the agent's, so the files follow. ADRs are edited as records, and the wiki is generated.
+
 ## [0.152.0] - 2026-11-10
 
 ### Added

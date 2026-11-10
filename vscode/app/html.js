@@ -65,6 +65,11 @@ h2.sub { font-size: 16px; margin: 0 0 10px; }
 .btn.small { padding: 2px 10px; font-size: 12px; }
 .crumb { font-size: 13px; color: var(--vscode-descriptionForeground); margin-bottom: 6px; }
 .rows .rec { cursor: default; }
+.editor { display: grid; gap: 8px; margin-top: 8px; }
+.editor input, .editor textarea, .editor select { font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); border-radius: 4px; padding: 6px 8px; }
+.editor textarea { font-family: var(--vscode-editor-font-family); }
+details.edit > summary, details.newsec > summary { font-size: 12px; color: var(--vscode-descriptionForeground); }
+details.newsec { margin-bottom: 14px; }
 .btn { padding: 6px 14px; border-radius: 6px; border: 0; background: var(--vscode-button-background); color: var(--vscode-button-foreground); font: inherit; font-weight: 600; cursor: pointer; }
 @media (max-width: 900px) { .reading { grid-template-columns: minmax(0, 1fr); } .reading .toc, .reading .onpage { display: none; } .shell { grid-template-columns: 1fr; } nav.areas { display: flex; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--vscode-panel-border); } nav.areas button { width: auto; } }
 `;
@@ -83,6 +88,13 @@ document.addEventListener("click", (e) => {
   else if (el.dataset.scope) send({ type: "go", area: "docs", doc: "capabilities", scope: el.dataset.scope });
   else if (el.dataset.task) send({ type: "task", key: el.dataset.task });
   else if (el.dataset.cmd) send({ type: "cmd", command: el.dataset.cmd });
+});
+document.addEventListener("submit", (e) => {
+  const f = e.target.closest("form[data-save]");
+  if (!f) return;
+  e.preventDefault();
+  const v = (n) => f.elements[n]?.value;
+  send({ type: "save", kind: f.dataset.kind, scope: f.dataset.dscope || undefined, key: f.dataset.key, isNew: !!f.dataset.new, title: v("title"), body: v("body"), chapter: v("chapter") });
 });
 // g then a letter jumps to an area; / or ctrl/cmd+k opens Search and Ask.
 let g = 0;
@@ -106,8 +118,14 @@ document.addEventListener("keydown", (e) => {
  * @param {string} [extra] HTML above the page (a capability's picker)
  */
 function readingHtml(r, render, extra = "") {
+  const ed = /** @type {any} */ (r).edit;
+  const edAttrs = ed ? `data-kind="${esc(ed.kind)}" data-dscope="${esc(ed.scope ?? "")}"` : "";
+  // A new section: its title, its chapter where the document has chapters, its text.
+  const add = ed ? `<details class="newsec"><summary>New section</summary><form class="editor" data-save ${edAttrs} data-new="1">
+    <input name="title" placeholder="Title" required>${ed.chapters ? `<select name="chapter">${Object.entries(ed.chapters).map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join("")}</select>` : ""}
+    <textarea name="body" rows="6" placeholder="Text (Markdown)"></textarea><button class="btn small" type="submit">Save</button></form></details>` : "";
   if (!r.sections.length) {
-    return `<h1>${esc(r.title)}</h1>${r.summary ? `<p class="summary">${esc(r.summary)}</p>` : ""}${extra}<div class="empty">Nothing written here yet.</div>`;
+    return `<h1>${esc(r.title)}</h1>${r.summary ? `<p class="summary">${esc(r.summary)}</p>` : ""}${extra}<div class="empty">Nothing written here yet.</div>${add}`;
   }
   const links = r.sections.map((s) => `<a href="#${esc(s.key)}">${esc(s.title)}</a>`).join("");
   const page = r.sections.map((s) => {
@@ -115,9 +133,11 @@ function readingHtml(r, render, extra = "") {
     // The first paragraph reads first; the rest of a long section is one click away.
     const head = parts.slice(0, 2).join("\n\n");
     const rest = parts.slice(2).join("\n\n");
-    return `<section id="${esc(s.key)}"><h2>${esc(s.title)}</h2><div class="lead">${render(head)}</div>${rest ? `<details><summary>More</summary>${render(rest)}</details>` : ""}</section>`;
+    const editor = ed ? `<details class="edit"><summary>Edit</summary><form class="editor" data-save ${edAttrs} data-key="${esc(s.key)}">
+      <input name="title" value="${esc(s.title)}" required><textarea name="body" rows="10">${esc(s.body)}</textarea><button class="btn small" type="submit">Save</button></form></details>` : "";
+    return `<section id="${esc(s.key)}"><h2>${esc(s.title)}</h2><div class="lead">${render(head)}</div>${rest ? `<details><summary>More</summary>${render(rest)}</details>` : ""}${editor}</section>`;
   }).join("");
-  return `<h1>${esc(r.title)}</h1>${r.summary ? `<p class="summary">${esc(r.summary)}</p>` : ""}${extra}
+  return `<h1>${esc(r.title)}</h1>${r.summary ? `<p class="summary">${esc(r.summary)}</p>` : ""}${extra}${add}
   <div class="reading"><div class="toc"><div class="label">Sections</div>${links}</div><div class="page">${page}</div><div class="onpage"><div class="label">On this page</div>${links}</div></div>`;
 }
 
