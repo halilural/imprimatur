@@ -361,7 +361,13 @@ function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = 
     try {
       docs = require("./doc-rules.js").docDiagnostics(db, scope.root);
     } catch {}
-  const rep = { ...agnix, diagnostics: [...(agnix.diagnostics ?? []), ...(own ? [own] : []), ...docs] };
+  // Bare skill names from two places (#208): the repo's, the user's, Imprimatur's links, claude.ai's.
+  let clashes = [];
+  if (!scope.global)
+    try {
+      clashes = require("./skill-clash.js").clashDiagnostics(scope.root, home);
+    } catch {}
+  const rep = { ...agnix, diagnostics: [...(agnix.diagnostics ?? []), ...(own ? [own] : []), ...docs, ...clashes] };
   const findings = findingsOf(rep, { root: scope.root, home, global: scope.global, plugins: scope.plugins }).filter((f) => !NOT_YOURS.has(f.group));
   const repo = db.repoOf(scope.root, scope.global ? { name: "~" } : {});
   // Read only: RECS and the containers it replaces (a dry run moves nothing).
@@ -378,7 +384,7 @@ function auditRoot(db, scope, { bin, dryRun = false, rules = new Map(), spawn = 
   if (dryRun) return summaryOf(first);
   const ruleOf = (/** @type {string} */ id) => {
     if (id === mcpAllow.RULE) return mcpAllow.RULE_INFO;
-    if (id.startsWith("IMP-DOC-")) return require("./doc-rules.js").ruleInfo(id);
+    if (id.startsWith("IMP-DOC-") || id.startsWith("IMP-SETUP-")) return require("./doc-rules.js").ruleInfo(id);
     if (!rules.has(id)) rules.set(id, explainRule(bin, id, { spawn }));
     return rules.get(id);
   };

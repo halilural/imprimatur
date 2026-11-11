@@ -49,6 +49,8 @@ const DEFAULTS = {
   docSync: "warn",
   // #194: an epic's next ready child is started instead of ending the turn; max: continuations per session.
   keepGoing: { mode: "block", max: 10 },
+  // #208: Imprimatur's rules in .claude/rules/imprimatur.md, rewritten at each session start.
+  ownRules: "warn",
 };
 
 /** The git root at or above a directory, by its .git entry (no git process). @param {string} dir */
@@ -383,6 +385,13 @@ function check(event, input, deps = {}) {
   const ti = input.tool_input ?? {};
   const branch = () => run(["symbolic-ref", "--short", "HEAD"], root);
 
+
+  if (event === "SessionStart" && s.ownRules.mode) {
+    try {
+      if (require("./own-rules.js").writeOwnRules(root) === "hand")
+        found(s.ownRules, "ownRules", ".claude/rules/imprimatur.md has no Imprimatur header, so it is yours and not updated; delete it to get Imprimatur's current rules back.");
+    } catch {}
+  }
 
   if (event === "SessionStart" && s.whereWeLeftOff.mode) {
     const records = deps.records ?? require("./records.js");
