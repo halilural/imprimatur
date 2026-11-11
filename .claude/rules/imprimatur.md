@@ -18,6 +18,11 @@ Imprimatur's rules for this repo, loaded in every session. The repo's own rules 
 - Diagrams are Mermaid. Draw the C4 levels as flowcharts with `[Person]`, `[Software system]` and `[Container: technology]` labels. Every `sequenceDiagram` gets `autonumber` and, right under it, a numbered list explaining each arrow.
 - Hand-written documents the repo keeps (`docs.keep` in `.claude/imprimatur.json`) stay files: `search` finds inside them; read one only when you need it.
 
+## Asking the user
+
+- When the user approves (a list, "do all", "go on", "yes", "hepsini yap", "devam"), do every item it covers in that turn, the commits, pushes and deletions it names included; do not list them again as questions.
+- Ask only for a decision that is new and the user's: a real choice you cannot settle from the code, the records or their earlier answers. Put such questions in one line, once. Something only the user can do is said once, not in every reply.
+
 ## Evidence before claims
 
 - Never state that something passes, works, is fixed, done or true without evidence from this turn: name the command that proves it, run it, read its whole output and exit code, then state the result with that evidence. A previous run, "should work", a linter for a build, or tests for a requirement are not evidence.
