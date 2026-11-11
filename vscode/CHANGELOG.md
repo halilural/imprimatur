@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.169.1] - 2026-11-11
+
+### Fixed
+- The re-ask check counts only lines that start with 👉 as asks: a reply that mentions the sign in a sentence is not sent back (#210).
+
 ## [0.169.0] - 2026-11-11
 
 ### Added
