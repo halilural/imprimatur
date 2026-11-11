@@ -46,7 +46,7 @@ gates (stories, design, analysis, tickets): only your own approval passes a gate
 
 ## Documents in Matt Pocock's model
 
-Imprimatur carries 19 of [Matt Pocock's skills](https://github.com/mattpocock/skills) and is
+Imprimatur carries 20 of [Matt Pocock's skills](https://github.com/mattpocock/skills) and is
 their local tracker. Every repo has a small project page (mission, constraints, tech stack,
 roadmap), its capabilities (how each feature behaves now), ADRs, a glossary and out-of-scope
 notes, kept in sections and written to `docs/PROJECT.md`, `docs/capabilities/`,
@@ -57,6 +57,7 @@ Documents written by hand before (notes, runbooks, old designs) show in Agent se
 Recommendations; `/adopt-docs` sorts each with you: kept and linked, rewritten from the code
 into a capability, its terms and decisions extracted, or deleted when the code shows it stale.
 What you keep as it is (`docs.keep`) stays a file: search finds inside it and agents are told when to read it.
+An agent's claim (tests pass, fixed, verified) needs evidence from the same turn: Imprimatur's rules say so, it carries `verification-before-completion` and `diagnosing-bugs`, and a turn-end claim with no command behind it is pointed out to you.
 
 ## /study
 

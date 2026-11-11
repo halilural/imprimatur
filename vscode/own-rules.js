@@ -30,6 +30,12 @@ Imprimatur's rules for this repo, loaded in every session. The repo's own rules 
 - A new term, or a term that changes meaning, goes in the glossary, one section per term.
 - Diagrams are Mermaid. Draw the C4 levels as flowcharts with \`[Person]\`, \`[Software system]\` and \`[Container: technology]\` labels. Every \`sequenceDiagram\` gets \`autonumber\` and, right under it, a numbered list explaining each arrow.
 - Hand-written documents the repo keeps (\`docs.keep\` in \`.claude/imprimatur.json\`) stay files: \`search\` finds inside them; read one only when you need it.
+
+## Evidence before claims
+
+- Never state that something passes, works, is fixed, done or true without evidence from this turn: name the command that proves it, run it, read its whole output and exit code, then state the result with that evidence. A previous run, "should work", a linter for a build, or tests for a requirement are not evidence.
+- An agent's or another session's "success" is a claim too: check the diff or the output yourself before repeating it.
+- What you did not measure, say so ("not verified"); do not guess. For a bug, build a loop that goes red on it before theorising (the \`diagnosing-bugs\` skill); before saying work is done, follow \`verification-before-completion\`.
 `;
 
 /** Whether a text is Imprimatur's generated rules file. @param {string | undefined} text */
