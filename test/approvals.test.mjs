@@ -33,6 +33,8 @@ test("lastUserText: the user's own last message, not a tool result", () => {
 test("reaskFinding and the Stop hook: an approval answered with 👉 asks sends the agent back once", () => {
   assert.match(reaskFinding("Done some.\n\n👉 Silinsin mi?", transcript("hepsini yap")), /user approved \("hepsini yap"\).*1 👉 line/);
   assert.equal(reaskFinding("Hepsi yapıldı.", transcript("hepsini yap")), undefined, "no ask, no finding");
+  assert.equal(reaskFinding("- **Kural:** bir yanıt yine 👉 ile soru soruyorsa geri gönderilir.\nBu yanıtta 👉 sorusu yok.", transcript("hepsini yap")), undefined, "mentioning the sign is not asking");
+  assert.match(reaskFinding("- 👉 **Commit:** atayım mı?\n1. 👉 Silinsin mi?", transcript("hepsini yap")), /2 👉 lines/);
   assert.equal(reaskFinding("👉 Hangisi?", transcript("bu ne işe yarıyor")), undefined, "not an approval");
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "imp-ap-repo-"));
   execFileSync("git", ["init", "-q", root]);

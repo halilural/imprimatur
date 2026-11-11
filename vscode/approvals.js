@@ -45,8 +45,12 @@ const LEADING = /^\s*(?:(?:okey|ok|okay|tamam|evet)[\s,.!]*)?(?:hepsini(?: de)? 
 /** Whether a message approves: a short approval alone, or one that starts with a strong approval. @param {string | undefined} text */
 const isApproval = (text) => !!text && ((text.trim().length <= 40 && APPROVAL.test(text.trim())) || LEADING.test(text));
 
-/** The 👉 asks a reply ends its turn with. @param {string} reply */
-const asksIn = (reply) => String(reply ?? "").split("\n").filter((l) => l.includes("👉"));
+/**
+ * The 👉 asks a reply ends its turn with: lines that start with 👉 (after a list marker or bold), outside
+ * code. A line that only mentions the sign ("a reply with 👉 asks") is not an ask.
+ * @param {string} reply
+ */
+const asksIn = (reply) => String(reply ?? "").replace(/```[\s\S]*?```/g, "").split("\n").filter((l) => /^\s*(?:[-*>]\s+|\d+\.\s+)?(?:\*\*)?👉/.test(l));
 
 /**
  * The finding for a reply, or undefined: the user approved and the reply asks again.
