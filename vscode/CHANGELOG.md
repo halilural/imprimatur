@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.168.0] - 2026-11-11
+
+### Added
+- Evidence before claims (#209): Imprimatur's rules file says an agent states that something passes, works or is fixed only with a command's output from the same turn, and that another agent's "success" is a claim to check. It carries obra/superpowers' `verification-before-completion` and Matt Pocock's `diagnosing-bugs`. A turn-end reply that claims tests pass, a fix or a verification in a turn that ran no command is pointed out to you (never blocks; `{"process": {"evidence": false}}` turns it off).
+
 ## [0.167.0] - 2026-11-11
 
 ### Changed

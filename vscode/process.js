@@ -51,6 +51,8 @@ const DEFAULTS = {
   keepGoing: { mode: "block", max: 10 },
   // #208: Imprimatur's rules in .claude/rules/imprimatur.md, rewritten at each session start.
   ownRules: "warn",
+  // #209: a turn-end claim (tests pass, fixed, verified) in a turn that ran no command.
+  evidence: "warn",
 };
 
 /** The git root at or above a directory, by its .git entry (no git process). @param {string} dir */
@@ -557,6 +559,12 @@ function check(event, input, deps = {}) {
     const has = (/** @type {unknown} */ w) => !!w && msg.toLocaleLowerCase("tr").includes(String(w).toLocaleLowerCase("tr"));
     if (s.status.mode && msg && !has(s.status.word) && !has(local)) {
       found(s.status, "status", `the answer has no "${local ?? s.status.word}" section: add what finished, open work and the next step.`, notice);
+    }
+    if (s.evidence.mode && msg) {
+      try {
+        const f = require("./evidence.js").evidenceFinding(msg, input.transcript_path);
+        if (f) found(s.evidence, "evidence", f, notice);
+      } catch {}
     }
     if (s.issueFields.mode) {
       for (const n of take(root, input.session_id, "created")) {
