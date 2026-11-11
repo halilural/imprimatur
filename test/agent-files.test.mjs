@@ -8,13 +8,13 @@ import path from "node:path";
 const require = createRequire(import.meta.url);
 const { agentFiles, importsAgents, writeMissing, agentRows } = require("../vscode/agent-files.js");
 
-test("agent files (#133): a repo with neither file gets AGENTS.md, a CLAUDE.md importing it and the docs rule; a second run writes nothing", () => {
+test("agent files (#133, #208): a repo with neither file gets AGENTS.md and a CLAUDE.md importing it, without Imprimatur's rules; a second run writes nothing", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "imp-agents-"));
-  assert.deepEqual(agentRows(agentFiles(root)).map((r) => r.label), ["Agent files: write AGENTS.md and CLAUDE.md, .claude/rules/docs.md"]);
+  assert.deepEqual(agentRows(agentFiles(root)).map((r) => r.label), ["Agent files: write AGENTS.md and CLAUDE.md"]);
   const w = writeMissing(root).map((f) => path.relative(root, f)).sort();
-  assert.deepEqual(w, [".claude/rules/docs.md", "AGENTS.md", "CLAUDE.md"]);
+  assert.deepEqual(w, ["AGENTS.md", "CLAUDE.md"]);
   assert.equal(fs.readFileSync(path.join(root, "CLAUDE.md"), "utf8"), "@AGENTS.md\n");
-  assert.match(fs.readFileSync(path.join(root, ".claude", "rules", "docs.md"), "utf8"), /^---\npaths:\n  - "docs\/\*\*"\n---/);
+  assert.deepEqual(require("../vscode/own-rules.js").copiedLines(fs.readFileSync(path.join(root, "AGENTS.md"), "utf8")), [], "no Imprimatur rule copied into the repo's file");
   assert.ok(fs.readFileSync(path.join(root, "AGENTS.md"), "utf8").split("\n").length <= 200);
   assert.deepEqual(writeMissing(root), [], "re-running changes nothing");
   assert.deepEqual(agentRows(agentFiles(root)), [], "nothing left to do");
@@ -25,8 +25,8 @@ test("agent files (#133): a CLAUDE.md that does not import AGENTS.md gets a Fix 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "imp-agents-"));
   fs.writeFileSync(path.join(root, "CLAUDE.md"), "# Rules\n- use pnpm\n");
   const rows = agentRows(agentFiles(root));
-  assert.deepEqual(rows.map((r) => r.label), ["Agent files: write .claude/rules/docs.md", "Agent files: CLAUDE.md does not import AGENTS.md"]);
-  assert.deepEqual(rows[1].fix, { kind: "agents" });
+  assert.deepEqual(rows.map((r) => r.label), ["Agent files: CLAUDE.md does not import AGENTS.md"]);
+  assert.deepEqual(rows[0].fix, { kind: "agents" });
   writeMissing(root);
   assert.equal(fs.readFileSync(path.join(root, "CLAUDE.md"), "utf8"), "# Rules\n- use pnpm\n");
   assert.ok(!fs.existsSync(path.join(root, "AGENTS.md")), "the split is Claude's, through Fix it");

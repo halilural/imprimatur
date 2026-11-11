@@ -495,6 +495,24 @@ export function linkSkills(root, { dry, remove = false, home = os.homedir() }) {
       out.push(`${name}: skipped (${/** @type {Error} */ (e).message}); link ${want} into ${dir} by hand`);
     }
   }
+  // #208: our link to a skill this checkout no longer has (retired, renamed) goes.
+  let here = [];
+  try {
+    here = fs.readdirSync(dir);
+  } catch {}
+  for (const name of here) {
+    const at = path.join(dir, name);
+    let have;
+    try {
+      have = fs.readlinkSync(at);
+    } catch {
+      continue;
+    }
+    if (path.dirname(path.resolve(dir, have)) === src && !fs.existsSync(path.resolve(dir, have))) {
+      if (!dry) fs.unlinkSync(at);
+      out.push(`${name}: removed (no longer in Imprimatur)`);
+    }
+  }
   return out;
 }
 

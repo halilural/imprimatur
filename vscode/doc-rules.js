@@ -13,6 +13,8 @@ const RULES = {
   "IMP-DOC-002": "A decision lists at least two considered options: the one chosen and an alternative",
   "IMP-DOC-005": "A sequenceDiagram has autonumber and, under it, a numbered list with an item per arrow",
   "IMP-DOC-006": "AGENTS.md and CLAUDE.md stay under 200 lines",
+  "IMP-DOC-008": "Imprimatur's rules stay in .claude/rules/imprimatur.md, not copied into the repo's own agent files",
+  "IMP-SETUP-001": "A skill name comes from one place: project, user, an Imprimatur link or claude.ai",
   "IMP-DOC-007": "A document lives in Imprimatur's model (project page, capability, ADR, glossary, a task's spec) or is kept on purpose",
 };
 const SOURCES = ["https://adr.github.io/madr/", "https://agents.md/"];
@@ -140,6 +142,20 @@ function docDiagnostics(db, root, { docsDir } = {}) {
     if (n > LIMIT_LINES)
       add("IMP-DOC-006", path.join(root, name), `${name} has ${n} lines, over ${LIMIT_LINES}`,
         name === "CLAUDE.md" ? "Move the rules every agent follows into AGENTS.md and import it with @AGENTS.md (Agent Setup → Checklist → Fix it); keep only what is Claude Code's own." : "Shorten it: drop repeats, move long references into docs/ and link them.");
+  }
+  // Imprimatur's rules copied into the repo's own files by older releases (#208).
+  const { copiedLines } = require("./own-rules.js");
+  for (const rel of ["AGENTS.md", "CLAUDE.md", path.join(".claude", "rules", "docs.md")]) {
+    let text;
+    try {
+      text = fs.readFileSync(path.join(root, rel), "utf8");
+    } catch {
+      continue;
+    }
+    const lines = copiedLines(text);
+    if (lines.length)
+      add("IMP-DOC-008", path.join(root, rel), `${rel} carries ${lines.length} of Imprimatur's rule line${lines.length === 1 ? "" : "s"} an older release copied in`,
+        "Imprimatur's rules are in .claude/rules/imprimatur.md now and kept current there. Remove these lines from this file (a .claude/rules/docs.md that holds nothing else can go); keep only the repo's own rules here.", 1, "info");
   }
   // Hand-written documents (#205): the root's Markdown and everything under docs/.
   for (const f of handWrittenDocs(root, dir))

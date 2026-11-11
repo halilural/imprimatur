@@ -4,6 +4,16 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.167.0] - 2026-11-11
+
+### Changed
+- Imprimatur's rules live in their own file, `.claude/rules/imprimatur.md`, generated and rewritten at each session start in a repo with process settings: a rule change in a release reaches every repo, and the repo's own `AGENTS.md` and rules files are no longer written. Remove the header to take the file over; it is then left alone (#208).
+- New repos get `AGENTS.md` and `CLAUDE.md` without Imprimatur's rules in them, and no `.claude/rules/docs.md` (#208).
+
+### Added
+- Agent setup finds Imprimatur's rule lines an older release copied into `AGENTS.md`, `CLAUDE.md` or `.claude/rules/docs.md` (IMP-DOC-008), and a skill name that comes from two places, the repo's, the user's, an Imprimatur link or claude.ai's (IMP-SETUP-001). Plugin skills are namespaced and do not clash (#208).
+- `npm run setup` removes its links to skills Imprimatur no longer ships (#208).
+
 ## [0.166.2] - 2026-11-11
 
 ### Fixed
