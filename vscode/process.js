@@ -53,6 +53,8 @@ const DEFAULTS = {
   ownRules: "warn",
   // #209: a turn-end claim (tests pass, fixed, verified) in a turn that ran no command.
   evidence: "warn",
+  // #210: the user approved and the reply asks again instead of doing it; the agent goes back once.
+  reask: "block",
 };
 
 /** The git root at or above a directory, by its .git entry (no git process). @param {string} dir */
@@ -559,6 +561,12 @@ function check(event, input, deps = {}) {
     const has = (/** @type {unknown} */ w) => !!w && msg.toLocaleLowerCase("tr").includes(String(w).toLocaleLowerCase("tr"));
     if (s.status.mode && msg && !has(s.status.word) && !has(local)) {
       found(s.status, "status", `the answer has no "${local ?? s.status.word}" section: add what finished, open work and the next step.`, notice);
+    }
+    if (s.reask.mode && msg) {
+      try {
+        const f = require("./approvals.js").reaskFinding(msg, input.transcript_path);
+        if (f) found(s.reask, "reask", f);
+      } catch {}
     }
     if (s.evidence.mode && msg) {
       try {

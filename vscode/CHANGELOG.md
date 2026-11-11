@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.169.0] - 2026-11-11
+
+### Added
+- An approved list is done, not asked about again (#210): Imprimatur's rules file says that after "do all", "go on", "yes", "hepsini yap" or "devam" the agent does every item it covers, commits, pushes and deletions included, and asks only a new decision of the user's, once. When the user's last message approves and the reply still ends with 👉 asks, the turn-end check sends the agent back once to do the work (`{"process": {"reask": false}}` turns it off).
+
 ## [0.168.0] - 2026-11-11
 
 ### Added
