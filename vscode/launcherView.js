@@ -163,6 +163,28 @@ class LauncherView {
 /** How a row is named to Claude: "Imprimatur #157, record 9535: <title>". @param {any} row */
 const refOf = (row) => `Imprimatur ${[row.task ?? row.key, row.rec ? `record ${row.rec}` : ""].filter(Boolean).join(", ")}: ${row.title}`.replace(/^Imprimatur : /, "Imprimatur: ");
 
+/**
+ * The row as a small Markdown file to @-mention: its reference, then the record's text from the
+ * database. In the temp folder (a path without "#", which an @-mention cannot carry).
+ * @param {any} row @returns {string}
+ */
+function refFile(row) {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const lines = [`# ${refOf(row)}`, ""];
+  try {
+    const rec = row.rec ? require("./records.js").dbOf()?.record(row.rec) : undefined;
+    if (rec?.body) lines.push(rec.body, "");
+  } catch {}
+  if (row.tip) lines.push(row.tip, "");
+  const dir = path.join(require("node:os").tmpdir(), "imprimatur-refs");
+  fs.mkdirSync(dir, { recursive: true });
+  const name = [row.task ?? row.key, row.rec].filter(Boolean).join("-").replace(/[^\w-]+/g, "") || `ask-${Date.now()}`;
+  const file = path.join(dir, `${name}.md`);
+  fs.writeFileSync(file, lines.join("\n"));
+  return file;
+}
+
 /** The prompt that asks Claude Code to handle a row. @param {any} row */
 const askOf = (row) => `Handle this: ${refOf(row)}.${row.task ?? row.key ? " Read it first with the imprimatur MCP tools (task_get), then do it." : ""}`;
 
@@ -186,9 +208,18 @@ function registerLauncher(ctx, counts, inbox) {
     vscode.commands.registerCommand("imprimatur.launcher.copyRef", async (/** @type {any} */ row) => {
       if (!row?.title) return;
       await vscode.env.clipboard.writeText(refOf(row));
-      // Into the open chat's input, where the user pastes it.
-      vscode.commands.executeCommand("claude-vscode.focus").then(undefined, () => {});
-      vscode.window.setStatusBarMessage("Imprimatur: reference copied; paste it into Claude Code", 4000);
+      // Claude Code has no command that types text into the open chat; it does @-mention the
+      // active file (insertAtMention). So the row goes into a small file, opened for a moment
+      // and mentioned: the chat gets "@…/157-9535.md" with the row's text attached.
+      try {
+        const file = refFile(row);
+        const doc = await vscode.workspace.openTextDocument(file);
+        await vscode.window.showTextDocument(doc, { preview: true });
+        await vscode.commands.executeCommand("claude-vscode.insertAtMention");
+        await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
+      } catch {
+        vscode.window.showInformationMessage("Imprimatur: reference copied; paste it into Claude Code (it could not be added to the chat).");
+      }
     }),
   );
   const provider = new LauncherView(counts, { inbox });
