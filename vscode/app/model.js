@@ -144,7 +144,13 @@ function taskPage(db, repo, key, tab, root = repo.root ?? "") {
   const tickets = db.q("SELECT * FROM tasks WHERE epic_id = ? AND id <> ? ORDER BY id").all(task.id, task.id);
   const activity = db.taskVersions(task.id, { limit: 40 }).list;
   const tabs = bucket ? TABS.filter((x) => x !== "spec") : TABS;
-  return { task, tab: tabs.includes(/** @type {string} */ (tab)) ? tab : bucket ? "records" : "spec", tabs, gates: bucket ? [] : gates, spec: specReading, tickets, records: recs.filter((/** @type {any} */ r) => r.status !== "dropped"), activity };
+  // What the ticket cost in tokens, from the repo's transcripts (#214); never fails a page.
+  let tokens;
+  try {
+    const tt = require("../ticket-tokens.js");
+    tokens = bucket || !root ? undefined : tt.ticketTokens(tt.projectDirOf(root)).get(key);
+  } catch {}
+  return { task, tab: tabs.includes(/** @type {string} */ (tab)) ? tab : bucket ? "records" : "spec", tabs, gates: bucket ? [] : gates, spec: specReading, tickets, records: recs.filter((/** @type {any} */ r) => r.status !== "dropped"), activity, tokens };
 }
 
 /**
