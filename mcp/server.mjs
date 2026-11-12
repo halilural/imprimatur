@@ -204,6 +204,14 @@ const TOOLS = [
     readOnly: true,
   },
   {
+    name: "record_get",
+    title: "Get one record",
+    description: "One record by its id, whole: its body and links, its task's key, and whether its files changed since (#211). For the body of a record that search or task_get cut short, without loading the rest of its task.",
+    inputSchema: input({ id: { type: "integer", description: "The record's id, from search or task_get" } }, ["id"]),
+    outputSchema: output({ record: RECORD, task: { type: "string", description: "The record's task key" } }, ["record", "task"]),
+    readOnly: true,
+  },
+  {
     name: "task_upsert",
     title: "Create or update a task",
     description: "Creates the task or updates its title, status, summary (the one-line \"where we are\") or epic.",
@@ -539,7 +547,7 @@ function taskRecords(db, task, a, repo) {
     out.next_offset = offset + records.length;
     hints.push(`${matching.length - out.next_offset} more: call again with offset ${out.next_offset}`);
   }
-  if (cut) hints.push(`${cut} bod${cut === 1 ? "y" : "ies"} cut to the first line: full:true gives the whole text`);
+  if (cut) hints.push(`${cut} bod${cut === 1 ? "y" : "ies"} cut to the first line: record_get {id} gives one whole, full:true all`);
   const hidden = status === "open" && !a.kind ? all.filter((r) => r.status !== "open" && !r.pointer).length : 0;
   if (hidden) hints.push(`${hidden} done/dropped record${hidden === 1 ? "" : "s"} not shown: status "all" shows them`);
   if (hints.length) out.hint = hints.join("; ");
@@ -669,6 +677,12 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
       const repo = repoOf(db, a.repo);
       return taskRecords(db, taskOf(db, repo, a.key), a, repo);
     }
+    case "record_get": {
+      const rec = recordOf(db, a.id);
+      const task = db.q("SELECT t.key, t.repo_id, rp.root FROM tasks t JOIN repos rp ON rp.id = t.repo_id WHERE t.id = ?").get(rec.task_id);
+      const stale = task?.root ? staleByUid(db, { id: task.repo_id, root: task.root }).get(rec.uid) : undefined;
+      return { record: stale ? { ...rec, stale } : rec, task: task?.key ?? "" };
+    }
     case "task_upsert": {
       const rid = repoOf(db, a.repo).id;
       const fields = pick(a, ["title", "status", "summary"]);
@@ -769,7 +783,7 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
         : hits.map((r) => ({ id: r.id, task_key: r.task_key, kind: r.kind, status: r.status, ...(r.owner && { owner: r.owner }), ...(r.pointer && { pointer: true }),
             // Older imports have titles of 1,000+ chars: the index cuts them like a body's first line.
             title: r.title.length > LINE_CUT ? r.title.slice(0, LINE_CUT - 1) + "…" : r.title, ...(r.snippet && !r.snippet.startsWith(r.title.slice(0, 40)) && { snippet: r.snippet.slice(0, 120) }) }));
-      return { records, ...(sections.length && { sections }), ...(files.length && { files }), ...(rows.length > limit && { more: true }), ...(!a.full && hits.length && { hint: "bodies left out: full:true, or task_get for a task's records" }) };
+      return { records, ...(sections.length && { sections }), ...(files.length && { files }), ...(rows.length > limit && { more: true }), ...(!a.full && hits.length && { hint: "bodies left out: record_get {id} gives one, full:true all" }) };
     }
     default:
       throw Object.assign(new Error(`unknown tool ${name}`), { code: -32602 });
@@ -812,6 +826,10 @@ export function digest(name, out, a = {}) {
       const status = a.status ?? (a.dropped ? "all" : "open");
       lines.push(`${out.returned} of ${out.total} records (status ${status}${a.kind ? `, kind ${a.kind}` : ""}).${out.hint ? ` ${out.hint}.` : ""}`);
       return lines.join("\n");
+    }
+    case "record_get": {
+      const r = out.record;
+      return [`${out.task} · ${recordLine(r)}`, ...(r.body ? [r.body.replace(/^/gm, "    ")] : []), ...(r.links ? [`    links: ${JSON.stringify(r.links)}`] : []), ...(r.stale ? [staleLine(r.stale)] : [])].join("\n");
     }
     case "task_upsert":
       return `Saved task ${taskLine(out.task)}`;
@@ -933,7 +951,7 @@ function studyDigest(out) {
  * structuredContent does reach the model, hence lean results, #120).
  */
 export const TOOL_GROUPS = {
-  core: ["where_we_left_off", "task_get", "task_upsert", "record_add", "record_update", "search", "pointer_set"],
+  core: ["where_we_left_off", "task_get", "record_get", "task_upsert", "record_add", "record_update", "search", "pointer_set"],
   list: ["task_list"],
   docs: ["doc_get", "doc_section_upsert"],
   study: ["study_material"],
