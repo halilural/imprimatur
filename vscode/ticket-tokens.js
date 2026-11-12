@@ -10,7 +10,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 /** @typedef {{written: number, cached: number, output: number, sessions: Set<string>}} Sum */
-/** @typedef {{size: number, offset: number, current?: string, seen: Set<string>, sums: Map<string, Sum>}} FileState */
+/** @typedef {{size: number, offset: number, current?: string, seen: Set<string>, sums: Map<string, Sum>, days: Map<string, {turns: number, output: number}>}} FileState */
 /** @type {Map<string, FileState>} */
 const cache = new Map();
 
@@ -42,18 +42,27 @@ function readNew(file, st) {
   const fd = fs.openSync(file, "r");
   try {
     const size = fs.fstatSync(fd).size;
-    if (size < st.offset) Object.assign(st, { offset: 0, current: undefined, seen: new Set(), sums: new Map() }); // rewritten
+    if (size < st.offset) Object.assign(st, { offset: 0, current: undefined, seen: new Set(), sums: new Map(), days: new Map() }); // rewritten
     const buf = Buffer.alloc(size - st.offset);
     fs.readSync(fd, buf, 0, buf.length, st.offset);
     const text = buf.toString("utf8");
     // Only whole lines: a line still being written is read next time.
     const end = text.lastIndexOf("\n") + 1;
     for (const line of text.slice(0, end).split("\n")) {
-      if (!line.includes('"assistant"')) continue;
+      if (!line.includes('"assistant"') && !line.includes('"user"')) continue;
       let o;
       try {
         o = JSON.parse(line);
       } catch {
+        continue;
+      }
+      const day = String(o.timestamp ?? "").slice(0, 10);
+      const dayOf = () => st.days.get(day) ?? (st.days.set(day, { turns: 0, output: 0 }), /** @type {any} */ (st.days.get(day)));
+      // A turn (#217): the user's own prompt, not a tool result, a meta line or a compact summary.
+      if (o.type === "user") {
+        const c = o.message?.content;
+        const own = typeof c === "string" || (Array.isArray(c) && c.length > 0 && c.every((x) => x?.type === "text" || x?.type === "image"));
+        if (own && !o.isMeta && !o.isCompactSummary && day) dayOf().turns++;
         continue;
       }
       if (o.type !== "assistant") continue;
@@ -62,6 +71,7 @@ function readNew(file, st) {
       const id = o.message?.id;
       if (!u || !id || st.seen.has(id)) continue;
       st.seen.add(id);
+      if (day) dayOf().output += u.output_tokens ?? 0;
       const key = ticketOfBranch(o.gitBranch) ?? st.current;
       if (!key) continue;
       const s = st.sums.get(key) ?? { written: 0, cached: 0, output: 0, sessions: new Set() };
@@ -84,12 +94,41 @@ function readNew(file, st) {
  * @returns {Map<string, {written: number, cached: number, output: number, sessions: number}>}
  */
 function ticketTokens(projectDir) {
+  /** @type {Map<string, Sum>} */
+  const all = new Map();
+  for (const st of statesOf(projectDir))
+    for (const [k, s] of st.sums) {
+      const a = all.get(k) ?? { written: 0, cached: 0, output: 0, sessions: new Set() };
+      a.written += s.written;
+      a.cached += s.cached;
+      a.output += s.output;
+      for (const x of s.sessions) a.sessions.add(x);
+      all.set(k, a);
+    }
+  return new Map([...all].map(([k, s]) => [k, { written: s.written, cached: s.cached, output: s.output, sessions: s.sessions.size }]));
+}
+
+/** Turns (user prompts) and output tokens per UTC day over a repo's transcripts (#217). @param {string} projectDir @returns {Map<string, {turns: number, output: number}>} */
+function dailyUsage(projectDir) {
+  /** @type {Map<string, {turns: number, output: number}>} */
+  const all = new Map();
+  for (const st of statesOf(projectDir))
+    for (const [d, v] of st.days) {
+      const a = all.get(d) ?? { turns: 0, output: 0 };
+      a.turns += v.turns;
+      a.output += v.output;
+      all.set(d, a);
+    }
+  return all;
+}
+
+/** Every transcript's state, brought up to date (an unchanged file is not read). @param {string} projectDir @returns {FileState[]} */
+function statesOf(projectDir) {
   let names = [];
   try {
     names = fs.readdirSync(projectDir).filter((n) => n.endsWith(".jsonl"));
   } catch {}
-  /** @type {Map<string, Sum>} */
-  const all = new Map();
+  const out = [];
   for (const n of names) {
     const file = path.join(projectDir, n);
     let st = cache.get(file);
@@ -99,25 +138,18 @@ function ticketTokens(projectDir) {
     } catch {
       continue;
     }
-    if (!st) cache.set(file, (st = { size: -1, offset: 0, seen: new Set(), sums: new Map() }));
+    if (!st) cache.set(file, (st = { size: -1, offset: 0, seen: new Set(), sums: new Map(), days: new Map() }));
     if (st.size !== size) {
       try {
         readNew(file, st);
       } catch {}
     }
-    for (const [k, s] of st.sums) {
-      const a = all.get(k) ?? { written: 0, cached: 0, output: 0, sessions: new Set() };
-      a.written += s.written;
-      a.cached += s.cached;
-      a.output += s.output;
-      for (const x of s.sessions) a.sessions.add(x);
-      all.set(k, a);
-    }
+    out.push(st);
   }
-  return new Map([...all].map(([k, s]) => [k, { written: s.written, cached: s.cached, output: s.output, sessions: s.sessions.size }]));
+  return out;
 }
 
 /** The repo's transcript folder, named the way Claude Code names it (agent-setup.js projectSlug). @param {string} root */
 const projectDirOf = (root) => path.join(require("node:os").homedir(), ".claude", "projects", require("./agent-setup.js").projectSlug(root));
 
-module.exports = { ticketTokens, ticketOfBranch, namedIn, projectDirOf };
+module.exports = { ticketTokens, dailyUsage, ticketOfBranch, namedIn, projectDirOf };
