@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.176.0] - 2026-11-12
+
+### Changed
+- The search button of the Imprimatur side bar now finds in the list itself: it opens Home's and Tasks' groups and VS Code's find box inside the view, so typing filters the to-dos, questions and tasks right there. Search and Ask (records and documents, at the top of the window) moved to the view's "…" menu.
+
 ## [0.175.3] - 2026-11-12
 
 ### Changed
