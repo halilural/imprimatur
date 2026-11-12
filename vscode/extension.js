@@ -961,6 +961,25 @@ function activate(ctx) {
   appPanel.registerApp(ctx);
   // What the agent did and decided about the open file (#200).
   require("./currentFile.js").registerCurrentFile(ctx);
+  // Where did this line come from (#215): the recorded agent edit, its prompt and its ticket.
+  ctx.subscriptions.push(
+    vscode.commands.registerTextEditorCommand("imprimatur.lineOrigin", async (editor) => {
+      const file = editor.document.uri.fsPath;
+      const root = rootOf(file);
+      if (!root) return void vscode.window.showInformationMessage("Imprimatur: this file is not in a repo Imprimatur knows.");
+      const rel = path.relative(root, file).split(path.sep).join("/");
+      const exts = require("./config.js").hookExts();
+      if (!exts.includes(path.extname(file).slice(1).toLowerCase()))
+        return void vscode.window.showInformationMessage(`Imprimatur records the agent's edits of ${exts.map((e) => `.${e}`).join(", ")} files only (the "exts" setting of Imprimatur's config adds others): this file's lines have no recorded origin.`);
+      const line = editor.selection.active.line;
+      const o = require("./provenance.js").lineOrigin(root, rel, editor.document.getText(), line);
+      if (!o) return void vscode.window.showInformationMessage(`Imprimatur: no recorded agent edit wrote line ${line + 1} as it reads now (written by hand, by git, or before Imprimatur recorded).`);
+      const when = new Date(o.t).toLocaleString();
+      const asked = o.prompt ? ` Asked: "${String(o.prompt).replace(/\s+/g, " ").slice(0, 200)}"` : "";
+      const pick = await vscode.window.showInformationMessage(`Line ${line + 1}: written by the agent (${o.tool ?? "edit"}) on ${when}, session ${String(o.session ?? "?").slice(0, 8)}${o.ticket ? `, ticket ${o.ticket}` : ""}.${asked}`, ...(o.ticket ? [`Open ${o.ticket}`] : []));
+      if (pick && o.ticket) vscode.commands.executeCommand("imprimatur.app.open", { root, area: "tasks", task: o.ticket });
+    }),
+  );
   launcher = registerLauncher(ctx, () => {
     const root = graphRoot();
     if (!root) return { edits: 0, inbox: 0 };

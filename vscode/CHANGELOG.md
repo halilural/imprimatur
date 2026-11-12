@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.182.0] - 2026-11-12
+
+### Added
+- Where did this line come from? (#215): right click a line in the editor. Imprimatur names the recorded agent edit that wrote it as it reads now (the newest whose lines still read there), with its time, tool, session, prompt and ticket, and opens the ticket. Works for the files the review records (Markdown by default; the `exts` setting adds others); for others it says so.
+
 ## [0.181.0] - 2026-11-12
 
 ### Added
