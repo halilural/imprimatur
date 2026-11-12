@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.179.0] - 2026-11-12
+
+### Added
+- Wasted edits in Agent Setup (#212): over the last 7 days, the edits the agent replaced itself in the same session (their lines are gone) and the rewrite loops (a file changed three or more times in a row in one session, appends not counted), with an estimated token cost (10 per written line) and the files that cost the most. No model call.
+
 ## [0.178.0] - 2026-11-12
 
 ### Added
