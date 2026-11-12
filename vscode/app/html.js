@@ -96,12 +96,11 @@ const SCRIPT = `
 const vscode = acquireVsCodeApi();
 const send = (m) => vscode.postMessage(m);
 document.addEventListener("click", (e) => {
-  const el = e.target.closest("[data-edit],[data-ex],[data-gate],[data-tab],[data-file],[data-go],[data-cmd],[data-doc],[data-scope],[data-task]");
+  const el = e.target.closest("[data-edit],[data-ex],[data-tab],[data-file],[data-go],[data-cmd],[data-doc],[data-scope],[data-task]");
   if (!el) return;
   e.preventDefault();
   if (el.dataset.edit) send({ type: "edit", act: el.dataset.edit, file: el.dataset.file, n: Number(el.dataset.n) });
   else if (el.dataset.ex) send({ type: "ex", act: el.dataset.ex, id: Number(el.dataset.id), status: el.dataset.status, result: el.dataset.result });
-  else if (el.dataset.gate) send({ type: "gate", key: el.dataset.key, gate: el.dataset.gate });
   else if (el.dataset.file) send({ type: "file", file: el.dataset.file });
   else if (el.dataset.tab) send({ type: "go", area: "tasks", task: el.dataset.key, tab: el.dataset.tab });
   else if (el.dataset.go) send({ type: "go", area: el.dataset.go });
@@ -276,7 +275,7 @@ const STATUS = { open: "open", active: "claimed", done: "resolved", dropped: "dr
 function taskPageHtml(p, render) {
   const t = p.task;
   const gates = `<div class="gates">${p.gates.map((/** @type {any} */ g, /** @type {number} */ i) =>
-    `<div class="gate ${g.done ? "done" : g.next ? "next" : ""}"><span>${g.done ? "✓" : i + 1}</span> ${esc(g.label)}${g.agent ? ' <span class="tag" title="An agent recorded this approval; only yours counts">agent-recorded</span>' : ""}${g.next ? ` <button class="btn small" data-gate="${esc(g.id)}" data-key="${esc(t.key)}">${g.agent ? "Confirm" : "Approve"}</button>` : ""}</div>`).join("")}</div>`;
+    `<div class="gate ${g.done ? "done" : g.next ? "next" : ""}"><span>${g.done ? "✓" : i + 1}</span> ${esc(g.label)}</div>`).join("")}</div>`;
   const tabs = `<div class="pills">${p.tabs.map((/** @type {string} */ x) => `<button data-tab="${esc(x)}" data-key="${esc(t.key)}" class="${x === p.tab ? "on" : ""}">${esc(x[0].toUpperCase() + x.slice(1))}${x === "tickets" ? ` · ${p.tickets.length}` : x === "records" ? ` · ${p.records.length}` : ""}</button>`).join("")}</div>`;
   let body = "";
   if (p.tab === "spec") body = readingHtml(p.spec, render);

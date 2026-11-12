@@ -110,24 +110,15 @@ function taskPage(db, repo, key, tab) {
   const task = db.taskByKey(repo.id, key);
   if (!task) return undefined;
   const recs = db.recordsOf(task.id);
-  // A gate is approved only by the user's own record (who created it, from its first version): an
-  // approval an agent recorded shows as such until the user confirms it, so no agent can pass a gate.
-  // Every version of it the user's: an agent that edits a user's record into an approval does not count either.
-  const usersOnly = (/** @type {number} */ id) => db.q("SELECT count(*) AS n, sum(actor_kind <> 'user') AS other FROM record_versions WHERE record_id = ?").get(id);
-  const gated = recs.filter((/** @type {any} */ r) => r.kind === "decision" && r.status === "done" && r.links?.gate);
-  const mine = (/** @type {any} */ r) => {
-    const v = usersOnly(r.id);
-    return v.n > 0 && !v.other;
-  };
-  const approved = new Set(gated.filter(mine).map((/** @type {any} */ r) => r.links.gate));
-  const claimed = new Set(gated.filter((/** @type {any} */ r) => !mine(r)).map((/** @type {any} */ r) => r.links.gate));
-  const gates = GATES.map((g, i) => ({ ...g, done: approved.has(g.id), agent: !approved.has(g.id) && claimed.has(g.id),
-    next: !approved.has(g.id) && GATES.slice(0, i).every((x) => approved.has(x.id)) }));
+  // The agent writes the spec and records each gate itself (the user's choice, 2026-11-12, replacing
+  // #197's user-only approval): a gate is passed by its decision record, whoever wrote it.
+  const approved = new Set(recs.filter((/** @type {any} */ r) => r.kind === "decision" && r.status === "done" && r.links?.gate).map((/** @type {any} */ r) => r.links.gate));
+  const gates = GATES.map((g, i) => ({ ...g, done: approved.has(g.id), next: !approved.has(g.id) && GATES.slice(0, i).every((x) => approved.has(x.id)) }));
   const spec = db.taskDocFind(repo.id, key, "spec");
   const chapters = require("../db.js").CHAPTERS.spec;
   const specReading = reading(`Spec · ${key}`, spec ? db.docSections(spec.id).filter((/** @type {any} */ s) => s.status === "current")
     .map((/** @type {any} */ s) => ({ key: s.key, title: `${chapters[s.chapter] ? `${chapters[s.chapter]} · ` : ""}${s.title}${s.delta ? ` (${s.delta})` : ""}`, body: s.body })) : [],
-    spec ? undefined : "No spec yet: /to-spec writes it, then the gates below take it to tickets.");
+    spec ? undefined : "No spec yet: the agent writes it when it starts this task and passes the gates below on its way to tickets.");
   const tickets = db.q("SELECT * FROM tasks WHERE epic_id = ? AND id <> ? ORDER BY id").all(task.id, task.id);
   const activity = db.taskVersions(task.id, { limit: 40 }).list;
   return { task, tab: TABS.includes(/** @type {string} */ (tab)) ? tab : "spec", tabs: TABS, gates, spec: specReading, tickets, records: recs.filter((/** @type {any} */ r) => r.status !== "dropped"), activity };

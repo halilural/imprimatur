@@ -64,19 +64,6 @@ function render() {
 }
 
 /**
- * Approves a spec's gate (#197): a decision record on the task with links.gate, by the user.
- * @param {string} key @param {string} gate
- */
-function approveGate(key, gate) {
-  const got = repoFor(at.root);
-  const { GATES } = require("./model.js");
-  const g = GATES.find((/** @type {any} */ x) => x.id === gate);
-  const task = got && g && got.db.taskByKey(got.repo.id, key);
-  if (!task) return;
-  got.db.addRecord(task.id, { kind: "decision", status: "done", title: `Approved: ${g.label}`, links: { gate } }, { kind: "user", id: "panel" });
-}
-
-/**
  * Writes a section from the panel (#198) the way the agent's doc_section_upsert does: db.upsertSection,
  * here as the user. A new section gets a key from its title.
  * @param {any} msg {kind, scope?, key?, isNew, title, body, chapter?}
@@ -150,9 +137,6 @@ function openApp(to = {}) {
         vscode.window.showErrorMessage(`Imprimatur: ${/** @type {Error} */ (e).message}`);
       }
       render();
-    } else if (msg?.type === "gate") {
-      approveGate(String(msg.key), String(msg.gate));
-      render();
     } else if (msg?.type === "cmd" && typeof msg.command === "string" && msg.command.startsWith("imprimatur.")) {
       vscode.commands.executeCommand(msg.command);
     }
@@ -173,4 +157,4 @@ function refreshApp() {
   if (panel?.visible) render();
 }
 
-module.exports = { registerApp, openApp, refreshApp, setAppVisible, appState, approveGate, saveSection };
+module.exports = { registerApp, openApp, refreshApp, setAppVisible, appState, saveSection };
