@@ -134,9 +134,7 @@ function taskPage(db, repo, key, tab, root = repo.root ?? "") {
   // #197's user-only approval): a gate is passed by its decision record, whoever wrote it.
   const approved = new Set(recs.filter((/** @type {any} */ r) => r.kind === "decision" && r.status === "done" && r.links?.gate).map((/** @type {any} */ r) => r.links.gate));
   const gates = GATES.map((g, i) => ({ ...g, done: approved.has(g.id), next: !approved.has(g.id) && GATES.slice(0, i).every((x) => approved.has(x.id)) }));
-  // A bucket of records (RECS, ADR, PDR: a key that is neither "#58" nor a Jira "PROJ-12") is no
-  // piece of work: it has no spec and no gates, and opens on its records.
-  const bucket = !/^#\d+$|^[A-Z][A-Z0-9_]*-\d+$/.test(key);
+  const bucket = isBucket(key);
   const spec = db.taskDocFind(repo.id, key, "spec");
   const chapters = require("../db.js").CHAPTERS.spec;
   const flag = spec ? staleFlags(db, repo, root) : (/** @type {string} */ _k, /** @type {string} */ b) => b;
@@ -190,11 +188,18 @@ function boardOf(db, repoId, now = Date.now()) {
     n.asks.push(r.title);
     needs.set(r.task_key, n);
   }
-  const active = db.q("SELECT key, title, summary FROM tasks WHERE repo_id = ? AND status = 'active' ORDER BY updated_at DESC LIMIT 20").all(repoId)
-    .filter((/** @type {any} */ t) => !needs.has(t.key));
+  const active = db.q("SELECT key, title, summary FROM tasks WHERE repo_id = ? AND status = 'active' ORDER BY updated_at DESC").all(repoId)
+    .filter((/** @type {any} */ t) => !needs.has(t.key) && !isBucket(t.key)).slice(0, 20);
   const done = db.q("SELECT key, title, summary FROM tasks WHERE repo_id = ? AND status = 'done' AND done_at > ? ORDER BY done_at DESC LIMIT 20").all(repoId, now - 7 * 86_400_000);
   return { active, needs: [...needs.values()], done };
 }
+
+/**
+ * A bucket of records (RECS, ADR, PDR: a key that is neither "#58" nor a Jira "PROJ-12") is no piece
+ * of work: it is left out of the task lists, and its page has no spec and no gates.
+ * @param {string} key
+ */
+const isBucket = (key) => !/^#\d+$|^[A-Z][A-Z0-9_]*-\d+$/.test(key);
 
 /**
  * The tasks by status, active first, then open, then the last done: the panel's Tasks page and
@@ -202,7 +207,8 @@ function boardOf(db, repoId, now = Date.now()) {
  * @param {any} db @param {number} repoId
  */
 function taskLists(db, repoId) {
-  const list = (/** @type {string} */ status, /** @type {number} */ n) => db.q(`SELECT key, title, summary, status FROM tasks WHERE repo_id = ? AND status = ? ORDER BY updated_at DESC LIMIT ${n}`).all(repoId, status);
+  const list = (/** @type {string} */ status, /** @type {number} */ n) => db.q(`SELECT key, title, summary, status FROM tasks WHERE repo_id = ? AND status = ? ORDER BY updated_at DESC`).all(repoId, status)
+    .filter((/** @type {any} */ t) => !isBucket(t.key)).slice(0, n);
   return [{ id: "active", label: "Active", tasks: list("active", 50) }, { id: "open", label: "Open", tasks: list("open", 80) }, { id: "done", label: "Done", tasks: list("done", 20) }];
 }
 
@@ -253,4 +259,4 @@ function appModel(db, repo, root, at = {}) {
   return base;
 }
 
-module.exports = { appModel, taskLists, editsQueue, taskPage, GATES, boardOf, docReading, reading, summaryOf, AREAS, MORE, DOCS };
+module.exports = { appModel, taskLists, isBucket, editsQueue, taskPage, GATES, boardOf, docReading, reading, summaryOf, AREAS, MORE, DOCS };

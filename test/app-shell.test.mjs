@@ -147,4 +147,8 @@ test("task page: a bucket of records (RECS) has no spec tab and no gates; it ope
   assert.doesNotMatch(appHtml(m, o), /class="gates"|data-tab="spec"/);
   db.upsertTask(repo.id, "PROJ-12", { title: "Jira", status: "open" });
   assert.equal(appModel(db, repo, root, { area: "tasks", task: "PROJ-12" }).page.gates.length, 4);
+  // Not work: left out of the task lists and Home's board; still opens by its key.
+  const lists = appModel(db, repo, root, { area: "tasks" }).lists;
+  assert.deepEqual(lists.map((l) => l.tasks.map((t) => t.key)), [[], ["PROJ-12"], []]);
+  assert.ok(!appModel(db, repo, root, { area: "home" }).board.active.some((t) => t.key === "RECS"));
 });
