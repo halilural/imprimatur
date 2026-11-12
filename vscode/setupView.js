@@ -325,6 +325,8 @@ class SetupView {
     let agentRows = [];
     try {
       if (repoRoot) agentRows = require("./agent-files.js").agentRows(require("./agent-files.js").agentFiles(repoRoot));
+      // Rules repeated or contradicting across the agent files (#213).
+      if (repoRoot) agentRows = [...agentRows, ...require("./rule-drift.js").driftRows(repoRoot, require("./rule-drift.js").ruleDrift(repoRoot))];
     } catch {}
     try {
       // The documentation linters (#132): cspell only where the repo's prose is English.

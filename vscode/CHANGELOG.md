@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.180.0] - 2026-11-12
+
+### Added
+- Agent rule files that repeat or contradict each other (#213): CLAUDE.md, AGENTS.md, GEMINI.md, `.cursor/rules`, Copilot's instructions, `.claude/rules` and `docs/agents` are read together. Agent Setup's checklist shows the rules repeated in several files and the pairs that share most words but differ in a negation or a number, both lines named. Rules under a "Don't" heading or a "Never:" label count as nots; headings, imports, tables and Imprimatur's generated rules are left out. No model call.
+
 ## [0.179.0] - 2026-11-12
 
 ### Added
