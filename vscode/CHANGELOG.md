@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.174.1] - 2026-11-12
+
+### Fixed
+- The right-click entry is now **Add to Claude chat as reference** and does what it says: the row (its reference and the record's text) is added to the open Claude Code chat as an @-mention. It is still copied too.
+
 ## [0.174.0] - 2026-11-12
 
 ### Added
