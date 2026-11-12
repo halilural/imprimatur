@@ -39,7 +39,10 @@ function render() {
   const { appHtml } = require("./html.js");
   const { renderMarkdown } = require("../markdown.js");
   const m = appModel(got.db, got.repo, got.root, at);
-  panel.title = `Imprimatur · ${m.repo.name}`;
+  const { AREAS, MORE, DOCS } = require("./model.js");
+  const where = [...AREAS, ...MORE].find((a) => a.id === m.area)?.label ?? "Home";
+  const doc = m.area === "docs" ? DOCS.find((/** @type {any} */ d) => d.id === m.doc)?.label : m.page?.task?.key;
+  panel.title = `${where}${doc ? ` · ${doc}` : ""} · ${m.repo.name}`;
   renders++;
   panel.webview.html = appHtml(m, { nonce: crypto.randomBytes(16).toString("hex"), cspSource: panel.webview.cspSource, render: (md) => renderMarkdown(md) });
 }
@@ -78,7 +81,8 @@ function saveSection(msg) {
 
 /** Opens the panel (or brings it forward) at a place. @param {{root?: string, area?: string, doc?: string, scope?: string}} [to] */
 function openApp(to = {}) {
-  at = { ...at, ...to };
+  // A new area from the side bar starts at its top, not at the task or document open before.
+  at = to.area ? { root: at.root, ...to } : { ...at, ...to };
   if (panel) {
     panel.reveal();
     return render();

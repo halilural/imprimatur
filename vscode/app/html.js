@@ -1,6 +1,7 @@
 // @ts-check
 // The new Imprimatur panel's HTML (#195). Calm and keyboard first (Linear), VS Code's own theme
-// colors only, so it reads in light and dark; one reading layout for every document (Starlight,
+// colors only, so it reads in light and dark; no navigation of its own: the side bar's Imprimatur
+// view (launcherView.js) picks the area and the document. One reading layout for every document (Starlight,
 // Docusaurus): the whole page in a readable column, "on this page" on the right.
 "use strict";
 
@@ -12,29 +13,16 @@ const CSS = `
 body { margin: 0; font-family: var(--vscode-font-family); font-size: 14px; line-height: 1.6; color: var(--vscode-editor-foreground, var(--vscode-foreground)); background: var(--vscode-editor-background); }
 a { color: var(--vscode-textLink-foreground); text-decoration: none; }
 a:hover { text-decoration: underline; }
-.top { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-bottom: 1px solid var(--vscode-panel-border); position: sticky; top: 0; background: var(--vscode-editor-background); z-index: 2; }
-.top .repo { font-weight: 700; font-size: 15px; }
-.top .search { flex: 1; max-width: 520px; text-align: left; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); background: var(--vscode-input-background); color: var(--vscode-input-placeholderForeground); cursor: pointer; font: inherit; }
-.top .search kbd { float: right; }
-.top .wait { font-weight: 700; padding: 3px 10px; border-radius: 12px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); cursor: pointer; border: 0; font: inherit; }
-kbd { font-family: var(--vscode-editor-font-family); font-size: 11px; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--vscode-panel-border); color: var(--vscode-descriptionForeground); }
-.shell { display: grid; grid-template-columns: 180px 1fr; min-height: calc(100vh - 52px); }
-nav.areas { padding: 14px 8px; border-right: 1px solid var(--vscode-panel-border); }
-nav.areas button { display: flex; width: 100%; align-items: center; justify-content: space-between; padding: 7px 10px; margin: 1px 0; border: 0; border-radius: 6px; background: transparent; color: var(--vscode-foreground); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
-nav.areas button:hover { background: var(--vscode-list-hoverBackground); }
-nav.areas button.on { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
-nav.areas .more { margin-top: 18px; padding: 0 10px; font-size: 12px; font-weight: 700; color: var(--vscode-descriptionForeground); text-transform: uppercase; letter-spacing: .04em; }
-nav.areas .more + button, nav.areas .sub { font-weight: 500; }
-main { padding: 24px 32px 48px; min-width: 0; max-width: 1120px; }
+main { padding: 24px 32px 48px; min-width: 0; max-width: 1120px; margin: 0 auto; }
 h1 { font-size: 24px; margin: 0 0 6px; }
 .summary { font-size: 15px; color: var(--vscode-descriptionForeground); margin: 0 0 20px; max-width: 72ch; }
 .reading { display: grid; grid-template-columns: minmax(0, 72ch) 200px; gap: 40px; }
-.reading .onpage { position: sticky; top: 70px; align-self: start; font-size: 13px; max-height: calc(100vh - 90px); overflow: auto; }
+.reading .onpage { position: sticky; top: 16px; align-self: start; font-size: 13px; max-height: calc(100vh - 32px); overflow: auto; }
 .reading .onpage { border-left: 1px solid var(--vscode-panel-border); padding-left: 14px; }
 .reading .onpage a { display: block; padding: 3px 0; color: var(--vscode-descriptionForeground); }
 .reading .onpage a:hover { color: var(--vscode-foreground); text-decoration: none; }
 .reading .onpage .label { font-size: 12px; font-weight: 700; color: var(--vscode-descriptionForeground); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
-.page section { position: relative; margin-bottom: 32px; scroll-margin-top: 64px; }
+.page section { position: relative; margin-bottom: 32px; scroll-margin-top: 12px; }
 .page h2 { font-size: 19px; margin: 0 0 10px; padding: 4px 60px 6px 0; border-bottom: 1px solid var(--vscode-panel-border); }
 .page p, .page li { margin: 0 0 10px; }
 .page details summary { cursor: pointer; color: var(--vscode-textLink-foreground); font-size: 13px; }
@@ -99,7 +87,7 @@ details.newsec { margin-bottom: 14px; }
 .meet { border: 1px solid var(--vscode-panel-border); border-radius: 8px; margin-bottom: 8px; } .meet > summary { cursor: pointer; padding: 10px 14px; display: flex; gap: 14px; align-items: flex-start; }
 .count { margin-left: auto; flex: none; font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 10px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
 .meet .mbody { padding: 0 12px 12px; } .meet .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; } .meet ul { margin: 4px 0; padding-left: 18px; }
-@media (max-width: 900px) { .reading { grid-template-columns: minmax(0, 1fr); } .reading .onpage { display: none; } .shell { grid-template-columns: 1fr; } nav.areas { display: flex; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--vscode-panel-border); } nav.areas button { width: auto; } }
+@media (max-width: 900px) { .reading { grid-template-columns: minmax(0, 1fr); } .reading .onpage { display: none; } }
 `;
 
 const SCRIPT = `
@@ -129,17 +117,10 @@ document.addEventListener("submit", (e) => {
   const v = (n) => f.elements[n]?.value;
   send({ type: "save", kind: f.dataset.kind, scope: f.dataset.dscope || undefined, key: f.dataset.key, isNew: !!f.dataset.new, title: v("title"), body: v("body"), chapter: v("chapter") });
 });
-// g then a letter jumps to an area; / or ctrl/cmd+k opens Search and Ask.
-let g = 0;
+// / or ctrl/cmd+k opens Search and Ask; the areas are picked in the side bar's Imprimatur view.
 document.addEventListener("keydown", (e) => {
   if (e.target.closest("input,textarea")) return;
-  if (e.key === "/" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k")) { e.preventDefault(); return send({ type: "cmd", command: "imprimatur.records.search" }); }
-  if (e.key === "g") { g = Date.now(); return; }
-  if (Date.now() - g < 1200) {
-    const area = { h: "home", t: "tasks", d: "docs", e: "edits", s: "setup" }[e.key];
-    if (area) send({ type: "go", area });
-    g = 0;
-  }
+  if (e.key === "/" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k")) { e.preventDefault(); send({ type: "cmd", command: "imprimatur.records.search" }); }
 });
 `;
 
@@ -173,9 +154,8 @@ function readingHtml(r, render, extra = "") {
 /** The area's main content. @param {any} m @param {(md: string) => string} render */
 function mainHtml(m, render) {
   if (m.area === "docs") {
-    const pills = `<div class="pills">${m.docs.map((/** @type {any} */ d) => `<button data-doc="${esc(d.id)}" class="${d.id === m.doc ? "on" : ""}">${esc(d.label)}</button>`).join("")}</div>`;
     const scopes = m.reading.scopes?.length > 1 ? `<div class="pills">${m.reading.scopes.map((/** @type {string} */ s) => `<button data-scope="${esc(s)}" class="${s === m.reading.scope ? "on" : ""}">${esc(s)}</button>`).join("")}</div>` : "";
-    return pills + readingHtml(m.reading, render, scopes);
+    return readingHtml(m.reading, render, scopes);
   }
   if (m.area === "tasks" && m.page) return taskPageHtml(m.page, render);
   if (m.area === "tasks") {
@@ -280,13 +260,10 @@ function taskPageHtml(p, render) {
  * @param {any} m appModel's result @param {{nonce: string, cspSource: string, render: (md: string) => string}} o
  */
 function appHtml(m, o) {
-  const nav = m.areas.map((/** @type {any} */ a) => `<button data-go="${esc(a.id)}" class="${a.id === m.area ? "on" : ""}" title="g ${esc(a.key)}">${esc(a.label)}</button>`).join("")
-    + `<div class="more">More</div>` + m.more.map((/** @type {any} */ x) => `<button class="sub${x.id === m.area ? " on" : ""}" data-go="${esc(x.id)}">${esc(x.label)}</button>`).join("");
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${o.cspSource} https: data:; style-src 'unsafe-inline'; script-src 'nonce-${o.nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Imprimatur</title><style>${CSS}</style></head><body>
-<div class="top"><span class="repo">${esc(m.repo.name)}</span><button class="search" data-cmd="imprimatur.records.search">Search or ask… <kbd>/</kbd></button>${m.waiting ? `<button class="wait" data-go="home" title="Waiting on you">⏳ ${m.waiting}</button>` : ""}</div>
-<div class="shell"><nav class="areas">${nav}</nav><main>${mainHtml(m, o.render)}</main></div>
+<main>${mainHtml(m, o.render)}</main>
 <script nonce="${o.nonce}">${SCRIPT}</script></body></html>`;
 }
 

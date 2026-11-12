@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.171.0] - 2026-11-12
+
+### Changed
+- The Imprimatur panel no longer has a navigation of its own. The side bar's Imprimatur view now holds it in VS Code's own tree: Home (with what waits on you), Tasks, Docs and its documents (Project, Capabilities, ADRs, Glossary, Out of scope, Wiki), Agent changes, Setup checklist, Exercises, Meetings and Social (where it is on). The panel's top bar, side menu and document pills are gone. Search and Ask is the view's search button, or `/` in the panel. The panel's tab title names where it is, for example "Docs · Glossary · imprimatur". Picking an area in the tree opens it at its top.
+
 ## [0.170.0] - 2026-11-12
 
 ### Changed

@@ -22,8 +22,7 @@ test("app shell: five areas and More; Home lists the tasks in progress; a docume
   db.addRecord(t.id, { kind: "todo", title: "Rank the results", pointer: true }, agent);
   assert.deepEqual(AREAS.map((a) => a.id), ["home", "tasks", "docs", "edits", "setup"]);
   const home = appHtml(appModel(db, repo, root, {}), o);
-  assert.match(home, /data-go="docs"/);
-  assert.match(home, /More<\/div>.*Exercises.*Meetings/s);
+  assert.doesNotMatch(home, /<nav|class="top"|data-doc=/, "navigation is the side bar's Imprimatur view, not the panel's");
   assert.match(home, /data-task="#1"[\s\S]*👉 Rank the results/);
   // A document: its sections left, the page with the summary first, "On this page" right.
   const g = db.docOf(repo.id, "glossary");
@@ -121,10 +120,9 @@ test("More (#202): Exercises, Meetings and Social open in this panel; a step's b
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-202-")));
   const db = openDb({ path: path.join(root, "x.db") });
   const repo = db.repoOf(root);
-  const nav = appHtml(appModel(db, repo, root, {}), o);
-  assert.match(nav, /data-go="exercises">Exercises/);
-  assert.doesNotMatch(nav, /data-go="social"/, "social is off by default");
-  assert.doesNotMatch(nav, /imprimatur\.open(Exercises|Meetings|Social)/, "no hop to the old panel");
+  const nav = appModel(db, repo, root, {});
+  assert.deepEqual(nav.more.map((x) => x.id), ["exercises", "meetings"], "social is off by default");
+  assert.doesNotMatch(appHtml(nav, o), /imprimatur\.open(Exercises|Meetings|Social)/, "no hop to the old panel");
   const e = db.saveExercise({ topic: "Bedrock", goal: "Call it", steps: [{ title: "Read the docs", kind: "learn" }, { title: "Call it" }] });
   const ex = appModel(db, repo, root, { area: "exercises" });
   assert.equal(ex.area, "exercises");

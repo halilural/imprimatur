@@ -1,8 +1,8 @@
 // @ts-check
-// The Imprimatur side bar's launcher (#69): rows that open the Imprimatur panel
-// on a tab: Home, Tasks, Waiting on you (with what waits on the user),
-// Architecture and Product (the design documents, #72) and Agent changes (edits under review). Its badge counts what waits on
-// the user, as the old "Waiting on me" view's did.
+// The Imprimatur side bar's launcher (#69): the Imprimatur panel's navigation, in VS Code's own tree
+// (the panel has none of its own): Home (with what waits on the user), Tasks, Docs and its documents,
+// Agent changes (edits under review), the setup checklist, then Exercises, Meetings and Social. Its
+// badge counts what waits on the user, as the old "Waiting on me" view's did.
 "use strict";
 const vscode = require("vscode");
 
@@ -20,11 +20,28 @@ const PARTS = [
   { key: "doneTasks", label: "On done tasks", icon: "archive", tooltip: "Of the above: asks still open on tasks already done; close or drop them" },
 ];
 
+const APP = "imprimatur.app.open";
 const ROWS = [
-  { id: "home", label: "Home", icon: "home", command: "imprimatur.app.open", tooltip: "The Imprimatur panel: Home, Tasks, Docs, Edits, Setup; what is waiting on you below" },
-  { id: "edits", label: "Agent changes", icon: "git-merge", command: "imprimatur.openGraph", tooltip: "Agent Change Graph: the agent's edits" },
+  { id: "home", label: "Home", icon: "home", command: APP, args: { area: "home" }, tooltip: "What waits on you, what is in progress, what finished this week" },
+  { id: "tasks", label: "Tasks", icon: "tasklist", command: APP, args: { area: "tasks" }, tooltip: "Active first, then open, then the last done" },
+  { id: "docs", label: "Docs", icon: "book", command: APP, args: { area: "docs" }, tooltip: "Project, capabilities, ADRs, glossary, out of scope, wiki" },
+  { id: "edits", label: "Agent changes", icon: "git-merge", command: APP, args: { area: "edits" }, tooltip: "The agent's edits waiting for your review" },
   { id: "checklist", label: "Setup checklist", icon: "checklist", command: "imprimatur.setup.focus", tooltip: "What needs doing in the agent setup: updates, upstream changes, problems, recommendations (#142)" },
+  { id: "exercises", label: "Exercises", icon: "mortar-board", command: APP, args: { area: "exercises" }, tooltip: "Topics in small steps you tick (/exercise)" },
+  { id: "meetings", label: "Meetings", icon: "organization", command: APP, args: { area: "meetings" }, tooltip: "What was decided and what you took on" },
+  { id: "social", label: "Social", icon: "megaphone", command: APP, args: { area: "social" }, tooltip: "Posts written for each platform (/social-post)", social: true },
 ];
+const DOC_ICONS = { project: "project", capabilities: "symbol-module", adrs: "law", glossary: "symbol-key", "out-of-scope": "circle-slash", wiki: "notebook" };
+
+/** Social shows only where it is on (#109), like the panel's page. */
+function socialOn() {
+  const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  try {
+    return !!root && require("./docs-export.js").socialOn(root);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * While the view is hidden (#114), a refresh counts only the badge; the full counts (the
@@ -93,7 +110,8 @@ class LauncherView {
   getChildren(row) {
     // Drawn (or read) after hidden refreshes: the rows match the badge.
     if (!row && this.stale) this.catchUp();
-    if (!row) return ROWS;
+    if (!row) return ROWS.filter((r) => !r.social || socialOn());
+    if (row.id === "docs") return require("./app/model.js").DOCS.map((/** @type {any} */ d) => ({ id: `docs.${d.id}`, label: d.label, icon: /** @type {any} */ (DOC_ICONS)[d.id] ?? "file", command: APP, args: { area: "docs", doc: d.id }, leaf: true }));
     const parts = this.now.parts;
     if (!parts) return [];
     if (row.id === "home") return PARTS.filter((p) => parts[/** @type {keyof Parts} */ (p.key)].length).map((p) => ({ ...p, id: `home.${p.key}`, items: parts[/** @type {keyof Parts} */ (p.key)] }));
@@ -124,13 +142,13 @@ class LauncherView {
     }
     const label = row.id === "home" && this.now.inbox ? `${row.label} (${this.now.inbox})` : row.label;
     const open = row.id === "home" && this.now.inbox > 0;
-    const it = new vscode.TreeItem(label, open ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None);
+    const it = new vscode.TreeItem(label, open ? vscode.TreeItemCollapsibleState.Expanded : row.id === "docs" ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
     it.id = row.id;
     it.iconPath = new vscode.ThemeIcon(row.icon, row.id === "home" && this.now.inbox ? new vscode.ThemeColor("charts.orange") : undefined);
     it.tooltip = row.tooltip;
     if (row.id === "edits" && this.now.edits) it.description = `${this.now.edits} under review`;
     if (row.id === "checklist") it.description = this.checklist ? `${this.checklist} to do` : "nothing to do";
-    it.command = { command: row.command, title: row.label };
+    it.command = { command: row.command, title: row.label, ...(row.args && { arguments: [row.args] }) };
     return it;
   }
 }
