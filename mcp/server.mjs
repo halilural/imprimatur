@@ -44,7 +44,7 @@ export const INSTRUCTIONS = [
   "Keep the task_upsert summary a one-line \"where we are\".",
   "Work done: record_update that record with status \"done\", the result in body.",
   "search with repo \"*\" looks in every repo.",
-  "Documents (Matt Pocock's; doc_get): project, capability (how a feature behaves now; task = its name), a task's spec (before its code; /to-spec is user-invoked: else follow its gates via doc_section_upsert) and map, glossary (a term per section), out-of-scope.",
+  "Documents (Matt Pocock's; doc_get): project, capability (how a feature behaves now; task = its name), a task's spec (before its code; written unasked when a task without one starts, gates recorded by the agent) and map, glossary (a term per section), out-of-scope.",
   "A product choice goes in the task's spec; an adr stands alone; a new term goes in the glossary.",
   // #103: a reader follows a flow arrow by arrow.
   "Every Mermaid sequenceDiagram you write (section, spec, record): autonumber, and right under it a numbered list, item n explaining arrow n.",

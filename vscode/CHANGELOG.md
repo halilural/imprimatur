@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.173.0] - 2026-11-12
+
+### Changed
+- The agent writes a task's spec by itself when it starts a task that has none, and passes the gates (stories, design, analysis, tickets) itself. The task page shows the gates as status only: the Approve and Confirm buttons and the "agent-recorded" tag are gone. The rules file, the to-spec skill and the MCP instructions say the same.
+
 ## [0.172.1] - 2026-11-12
 
 ### Fixed

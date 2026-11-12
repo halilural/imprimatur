@@ -76,11 +76,11 @@ Any further notes about the feature.
 
 ## Gates (Imprimatur)
 
-In Imprimatur, write the spec in this order and wait for the user's approval at each gate (Kiro's gates, decided for #179). The user approves with **Approve** on the task's page in the Imprimatur panel; when they say yes in the chat instead, record it with `record_add` kind `decision`, links `{"gate": "<name>"}`, and tell them the panel shows it as agent-recorded until they confirm it there. Only the user's own approval opens the next gate:
+In Imprimatur, write the spec in this order and pass each gate yourself (Kiro's gates, decided for #179; the user chose on 2026-11-12 not to approve them): when a gate's part is written and checked, record it with `record_add` kind `decision`, links `{"gate": "<name>"}`, and go on to the next. The task's page in the Imprimatur panel shows the gates passed:
 
 1. **stories**: Problem Statement, Solution and User Stories.
 2. **design**: Implementation Decisions and Testing Decisions.
-3. **analyze**: before any ticket, read the spec back for contradictions, ambiguities and gaps (Spec Kit's analyze, Kiro's Analyze Requirements) and ask the user about each one found.
+3. **analyze**: before any ticket, read the spec back for contradictions, ambiguities and gaps (Spec Kit's analyze, Kiro's Analyze Requirements) and settle each one found from the code and the records; ask the user only for a product choice you cannot settle.
 4. **tickets**: then `/to-tickets`.
 
 A change to a capability (how the system behaves now) is a section with a delta (added, modified, removed, renamed) keyed `<capability>--<requirement>`; it merges into `docs/capabilities/` when the task is done.
