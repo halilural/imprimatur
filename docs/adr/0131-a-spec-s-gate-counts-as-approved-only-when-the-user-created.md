@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: deprecated
 record: 1cac3526-5cd2-4bb6-8330-2add2ddf2ebe
 ---
 
