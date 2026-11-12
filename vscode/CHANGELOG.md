@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.175.3] - 2026-11-12
+
+### Changed
+- **Ask Claude to handle this** (and the stale-documents list's "Ask Claude to check it") types the request into the Claude Code chat you have open, for you to send, instead of opening a new chat tab. A new tab opens only when no chat can be focused.
+
 ## [0.175.2] - 2026-11-12
 
 ### Changed

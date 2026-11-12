@@ -166,15 +166,25 @@ const refOf = (row) => `Imprimatur ${[row.task ?? row.key, row.rec ? `record ${r
 const askOf = (row) => `Handle this: ${refOf(row)}.${row.task ?? row.key ? " Read it first with the imprimatur MCP tools (task_get), then do it." : ""}`;
 
 /**
- * Opens a new Claude Code chat with the prompt typed in; without the Claude Code extension, the
- * prompt goes to the clipboard. @param {string} prompt
+ * Puts text into the open Claude Code chat's input: Claude Code has no command that types into it,
+ * so the text goes through the clipboard, the input is focused and VS Code's paste is handed to it.
+ * Without an open chat, a new one opens with the text typed in. The text stays on the clipboard.
+ * @param {string} text @returns {Promise<boolean>} whether it went into a chat
  */
-async function toClaude(prompt) {
+async function intoChat(text) {
+  await vscode.env.clipboard.writeText(text);
   try {
-    await vscode.commands.executeCommand("claude-vscode.editor.open", undefined, prompt);
+    await vscode.commands.executeCommand("claude-vscode.focus");
+    await new Promise((r) => setTimeout(r, 150));
+    await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
+    return true;
+  } catch {}
+  try {
+    await vscode.commands.executeCommand("claude-vscode.editor.open", undefined, text);
+    return true;
   } catch {
-    await vscode.env.clipboard.writeText(prompt);
     vscode.window.showInformationMessage("Imprimatur: copied; paste it into Claude Code (the Claude Code extension did not open).");
+    return false;
   }
 }
 
@@ -207,28 +217,17 @@ async function pickStale() {
   const act = await vscode.window.showQuickPick([{ label: "$(sparkle) Ask Claude to check it against the code", ask: true }, { label: "$(check) Mark reviewed" }], { title: p.title });
   if (!act) return;
   if (!(/** @type {any} */ (act)).ask) return void stale.markReviewed(db, uidOf(p));
-  await toClaude(`Check whether ${what} still holds: ${p.files.join(", ")} changed in ${p.commits.length} commit(s) since it was written (newest: ${p.commits[0].hash} ${p.commits[0].subject}). Read it with the imprimatur MCP tools, read the change (git log/diff on those files), and update it with ${p.kind === "section" ? "doc_section_upsert" : "record_update"}: correct it if it no longer holds, or add one line \"Checked against <commit>: still holds.\" if it does (any edit clears the flag).`);
+  await intoChat(`Check whether ${what} still holds: ${p.files.join(", ")} changed in ${p.commits.length} commit(s) since it was written (newest: ${p.commits[0].hash} ${p.commits[0].subject}). Read it with the imprimatur MCP tools, read the change (git log/diff on those files), and update it with ${p.kind === "section" ? "doc_section_upsert" : "record_update"}: correct it if it no longer holds, or add one line \"Checked against <commit>: still holds.\" if it does (any edit clears the flag).`);
 }
 
 /** @param {vscode.ExtensionContext} ctx @param {() => Counts} counts @param {() => number} [inbox] the badge's count alone */
 function registerLauncher(ctx, counts, inbox) {
   ctx.subscriptions.push(
-    vscode.commands.registerCommand("imprimatur.launcher.askClaude", (/** @type {any} */ row) => row?.title && toClaude(askOf(row))),
+    vscode.commands.registerCommand("imprimatur.launcher.askClaude", (/** @type {any} */ row) => row?.title && intoChat(askOf(row))),
     vscode.commands.registerCommand("imprimatur.staleDocs", () => pickStale()),
     vscode.commands.registerCommand("imprimatur.launcher.copyRef", async (/** @type {any} */ row) => {
       if (!row?.title) return;
-      await vscode.env.clipboard.writeText(refOf(row));
-      // Claude Code has no command that types text into its input: focus the open chat's input and
-      // paste the reference there (VS Code hands paste to the focused webview). If the paste does
-      // not land, the reference is on the clipboard and the status bar says so.
-      try {
-        await vscode.commands.executeCommand("claude-vscode.focus");
-        await new Promise((r) => setTimeout(r, 150));
-        await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
-        vscode.window.setStatusBarMessage("Imprimatur: reference added to the Claude Code chat (also on the clipboard)", 4000);
-      } catch {
-        vscode.window.showInformationMessage("Imprimatur: reference copied; paste it into Claude Code.");
-      }
+      if (await intoChat(refOf(row))) vscode.window.setStatusBarMessage("Imprimatur: reference added to the Claude Code chat (also on the clipboard)", 4000);
     }),
   );
   const provider = new LauncherView(counts, { inbox });
