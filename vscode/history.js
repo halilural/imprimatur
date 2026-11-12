@@ -107,7 +107,7 @@ function readScanned(root) {
  * @param {string} log
  */
 const scanOnly = (log) =>
-  readLog(log).every((r) => r.kind === "verify" || r.kind === "answer" || (r.kind === "check" && (r.by === "audit" || r.by === "file")));
+  readLog(log).every((r) => r.kind === "verify" || r.kind === "question" || r.kind === "answer" || (r.kind === "check" && (r.by === "audit" || r.by === "file")));
 
 /** True once the project was scanned (the extension scans a project once on its own). @param {string} root */
 const scannedBefore = (root) => fs.existsSync(dataPath(root, SCANNED));

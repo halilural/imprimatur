@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.174.0] - 2026-11-12
+
+### Added
+- Right click a row under Home or Tasks in the Imprimatur side bar: **Ask Claude to handle this** opens a new Claude Code chat with the request typed in; **Copy reference for Claude** copies "Imprimatur #157, record 9535: …" and focuses Claude Code's input, to paste into the chat you are in.
+
+### Fixed
+- Turn-end asks keep only what you have to do: a question the agent asked ("…?") now closes when you answer it in the chat; before, every ask was saved as something to check and stayed open.
+
 ## [0.173.1] - 2026-11-12
 
 ### Fixed
