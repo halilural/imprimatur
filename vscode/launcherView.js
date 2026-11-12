@@ -1,13 +1,14 @@
 // @ts-check
 // The Imprimatur side bar's launcher (#69): the Imprimatur panel's navigation, in VS Code's own tree
-// (the panel has none of its own): Home (with what waits on the user), Tasks, Docs and its documents,
+// (the panel has none of its own): Home (with what waits on the user), Tasks (by status), Docs and its documents,
 // Agent changes (edits under review), the setup checklist, then Exercises, Meetings and Social. Its
 // badge counts what waits on the user, as the old "Waiting on me" view's did.
 "use strict";
 const vscode = require("vscode");
 
 /** @typedef {Record<"question" | "todo" | "test" | "turn" | "doneTasks", Array<{id?: number, title: string, task?: string}>>} Parts */
-/** @typedef {{edits: number, inbox: number, parts?: Parts}} Counts */
+/** @typedef {Array<{id: string, label: string, tasks: Array<{key: string, title: string, summary?: string}>}>} TaskLists */
+/** @typedef {{edits: number, inbox: number, parts?: Parts, tasks?: TaskLists}} Counts */
 
 // Under Home: what its count is made of, item by item, so the number reads without
 // opening the panel. The first four add up to it; "on done tasks" is part of them,
@@ -31,6 +32,7 @@ const ROWS = [
   { id: "meetings", label: "Meetings", icon: "organization", command: APP, args: { area: "meetings" }, tooltip: "What was decided and what you took on" },
   { id: "social", label: "Social", icon: "megaphone", command: APP, args: { area: "social" }, tooltip: "Posts written for each platform (/social-post)", social: true },
 ];
+const TASK_ICONS = { active: "play-circle", open: "circle-large-outline", done: "pass" };
 const DOC_ICONS = { project: "project", capabilities: "symbol-module", adrs: "law", glossary: "symbol-key", "out-of-scope": "circle-slash", wiki: "notebook" };
 
 /** Social shows only where it is on (#109), like the panel's page. */
@@ -112,10 +114,11 @@ class LauncherView {
     if (!row && this.stale) this.catchUp();
     if (!row) return ROWS.filter((r) => !r.social || socialOn());
     if (row.id === "docs") return require("./app/model.js").DOCS.map((/** @type {any} */ d) => ({ id: `docs.${d.id}`, label: d.label, icon: /** @type {any} */ (DOC_ICONS)[d.id] ?? "file", command: APP, args: { area: "docs", doc: d.id }, leaf: true }));
+    if (row.id === "tasks") return (this.now.tasks ?? []).filter((l) => l.tasks.length).map((l) => ({ id: `tasks.${l.id}`, label: l.label, icon: TASK_ICONS[/** @type {keyof typeof TASK_ICONS} */ (l.id)], open: l.id === "active", items: l.tasks.map((t) => ({ id: t.key, title: t.title, task: t.key, key: t.key, tip: t.summary })) }));
     const parts = this.now.parts;
+    if (row.items) return row.items.map((/** @type {any} */ i, /** @type {number} */ k) => ({ title: i.title, task: i.task, rec: i.key ? undefined : i.id, key: i.key, tip: i.tip, item: true, id: `${row.id}.${i.id ?? `t${k}`}` }));
     if (!parts) return [];
     if (row.id === "home") return PARTS.filter((p) => parts[/** @type {keyof Parts} */ (p.key)].length).map((p) => ({ ...p, id: `home.${p.key}`, items: parts[/** @type {keyof Parts} */ (p.key)] }));
-    if (row.items) return row.items.map((/** @type {any} */ i, /** @type {number} */ k) => ({ title: i.title, task: i.task, rec: i.id, item: true, id: `${row.id}.${i.id ?? `t${k}`}` }));
     return [];
   }
 
@@ -125,15 +128,17 @@ class LauncherView {
       const one = new vscode.TreeItem(row.title, vscode.TreeItemCollapsibleState.None);
       one.id = row.id;
       one.description = row.task;
-      one.tooltip = row.task ? `${row.task}: ${row.title}` : row.title;
-      // A record opens its page; a turn-end ask has none, Home shows it.
-      one.command = row.rec
+      one.tooltip = (row.task ? `${row.task}: ${row.title}` : row.title) + (row.tip ? `\n${row.tip}` : "");
+      // A task opens its page, a record its page; a turn-end ask has none, Home shows it.
+      one.command = row.key
+        ? { command: APP, title: "Open", arguments: [{ area: "tasks", task: row.key }] }
+        : row.rec
         ? { command: "imprimatur.records.show", title: "Open", arguments: [{ record: { id: row.rec } }] }
         : { command: "imprimatur.openHome", title: "Home" };
       return one;
     }
     if (row.items) {
-      const part = new vscode.TreeItem(row.label, vscode.TreeItemCollapsibleState.Collapsed);
+      const part = new vscode.TreeItem(row.label, row.open ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
       part.id = row.id;
       part.description = String(row.items.length);
       part.iconPath = new vscode.ThemeIcon(row.icon);
@@ -142,7 +147,7 @@ class LauncherView {
     }
     const label = row.id === "home" && this.now.inbox ? `${row.label} (${this.now.inbox})` : row.label;
     const open = row.id === "home" && this.now.inbox > 0;
-    const it = new vscode.TreeItem(label, open ? vscode.TreeItemCollapsibleState.Expanded : row.id === "docs" ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
+    const it = new vscode.TreeItem(label, open ? vscode.TreeItemCollapsibleState.Expanded : row.id === "docs" || row.id === "tasks" ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
     it.id = row.id;
     it.iconPath = new vscode.ThemeIcon(row.icon, row.id === "home" && this.now.inbox ? new vscode.ThemeColor("charts.orange") : undefined);
     it.tooltip = row.tooltip;

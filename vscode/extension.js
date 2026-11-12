@@ -967,7 +967,9 @@ function activate(ctx) {
     const edits = graphRows(root, currentText).rows.filter((r) => !r.accepted && !r.gone).length;
     // The status line shows them (#92); it draws no graph.
     require("./review-state.js").writeOpenEdits(root, edits);
-    return { edits, inbox: inboxNow(), parts: inboxParts(root) };
+    const id = records.repoId(root);
+    const tasks = id === undefined ? undefined : require("./app/model.js").taskLists(records.dbOf(), id);
+    return { edits, inbox: inboxNow(), parts: inboxParts(root), tasks };
   }, inboxNow);
   // #123: the Claude Code plugin (hooks, MCP server) should be this extension's version: a
   // migration shipped in one makes the other read-only.

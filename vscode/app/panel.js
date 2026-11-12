@@ -28,6 +28,9 @@ function repoFor(root) {
   return first ? { db, repo: first, root: first.root } : undefined;
 }
 
+/** The extension's folder (registerApp sets it): the page loads mermaid from its dist/. @type {vscode.Uri | undefined} */
+let extensionUri;
+
 function render() {
   if (!panel) return;
   const got = repoFor(at.root);
@@ -44,7 +47,8 @@ function render() {
   const doc = m.area === "docs" ? DOCS.find((/** @type {any} */ d) => d.id === m.doc)?.label : m.page?.task?.key;
   panel.title = `${where}${doc ? ` · ${doc}` : ""} · ${m.repo.name}`;
   renders++;
-  panel.webview.html = appHtml(m, { nonce: crypto.randomBytes(16).toString("hex"), cspSource: panel.webview.cspSource, render: (md) => renderMarkdown(md) });
+  panel.webview.html = appHtml(m, { nonce: crypto.randomBytes(16).toString("hex"), cspSource: panel.webview.cspSource, render: (md) => renderMarkdown(md),
+    mermaid: extensionUri && panel.webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, "dist", "mermaid.min.js")).toString() });
 }
 
 /**
@@ -146,6 +150,7 @@ function openApp(to = {}) {
 
 /** @param {vscode.ExtensionContext} ctx */
 function registerApp(ctx) {
+  extensionUri = ctx.extensionUri;
   ctx.subscriptions.push(
     vscode.commands.registerCommand("imprimatur.app.open", (/** @type {any} */ to) => openApp(to && typeof to === "object" ? to : {})),
   );

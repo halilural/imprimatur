@@ -4,6 +4,15 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.172.0] - 2026-11-12
+
+### Added
+- The side bar's Tasks row opens into Active, Open and Done, each listing its tasks (as the panel's Tasks page does); a task opens its page in the panel, its summary in the tooltip.
+
+### Fixed
+- Mermaid blocks in the panel are drawn as diagrams again (since 0.159.0 they showed as source); one that fails shows the error over its source.
+- Generated ADR files and wiki pages pass markdownlint: blank lines around headings and lists, headings under the file's title start at h2, no trailing spaces.
+
 ## [0.171.0] - 2026-11-12
 
 ### Changed

@@ -17,6 +17,7 @@ flowchart LR
 ```
 
 ## Parts
+
 - `skills/triage/SKILL.md`: Triage skill for sorting and scoping incoming work.
 - `skills/issues/SKILL.md`: Issues skill for working with GitHub issues.
 - `skills/issues/screenshots.mjs`: Publishes an issue's screenshots to an orphan branch via the GitHub API and prints the Markdown for the issue's "See" steps.
@@ -34,10 +35,12 @@ flowchart LR
 - `skills/ask-matt/SKILL.md`: Ask Matt skill, accompanied by its own phase-boundaries doc.
 
 ## Decisions
+
 - ADR 83: Skill for `/study` backed by a `study_material` MCP tool.
 - ADR 105: `/imprimatur-stats` prints an ASCII scoreboard from DB, review, and transcript data.
 - ADR 118: Task analysis is a five-chapter design doc written with the analysis skill.
 - ADR (unnumbered): 19 of Pocock's skills carried in verbatim with per-skill NOTICE files.
 
 ## Terms
+
 ADR, Audit, Exercise, Hook, Imprimatur, Section, Task

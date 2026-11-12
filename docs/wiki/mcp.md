@@ -14,9 +14,11 @@ flowchart LR
 ```
 
 ## Parts
+
 - `mcp/server.mjs`: Implements the MCP server — exposes task/record tools over stdio JSON-RPC, backed by `vscode/db.js` as the source of truth, supporting both protocol handshake styles.
 
 ## Decisions
+
 - ADR 83: `/study` tool reads skill + salt as study_material, no migration; "study" section in task analysis
 - ADR 92: MCP tool profiles via `IMPRIMATUR_TOOLS`/`mcp.tools` config — core, standard, all, or groups
 - ADR 93: Answer search via index (no bodies, 160-char titles, 8 hits); `task_get` shows first line and acted-on fields
@@ -26,4 +28,5 @@ flowchart LR
 - Search ranks with BM25 in JavaScript (no FTS5 in node:sqlite): in-memory index per connection, rebuilt on change, every word must match, Turkish letters folded
 
 ## Terms
+
 ADR, Imprimatur, PDR, Record, Section, Task
