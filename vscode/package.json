@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.174.3",
+  "version": "0.175.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -72,6 +72,12 @@
         "title": "Ask Claude to handle this",
         "category": "Imprimatur",
         "icon": "$(sparkle)"
+      },
+      {
+        "command": "imprimatur.staleDocs",
+        "title": "Possibly stale documents",
+        "category": "Imprimatur",
+        "icon": "$(history)"
       },
       {
         "command": "imprimatur.launcher.copyRef",

@@ -317,7 +317,9 @@ class SetupView {
     try {
       const db = require("./records.js").dbOf();
       const repo = repoRoot && db?.repoByRoot(repoRoot);
-      if (repo) docs = { noChapter: db.sectionsPerChapter(repo.id).filter((/** @type {any} */ c) => (c.kind === "architecture" || c.kind === "product") && !c.chapter).reduce((/** @type {number} */ a, /** @type {any} */ c) => a + c.n, 0) };
+      if (repo) docs = { noChapter: db.sectionsPerChapter(repo.id).filter((/** @type {any} */ c) => (c.kind === "architecture" || c.kind === "product") && !c.chapter).reduce((/** @type {number} */ a, /** @type {any} */ c) => a + c.n, 0),
+        // Documents whose code changed since they were written (#211).
+        stale: require("./stale-docs.js").staleParts(db, repo, repoRoot).length };
     } catch {}
     let agentRows = [];
     try {

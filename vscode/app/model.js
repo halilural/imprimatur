@@ -51,7 +51,8 @@ function reading(title, sections, summary) {
  * @param {any} db @param {any} repo @param {string} root @param {string} doc one of DOCS' ids @param {string} [scope] a capability's name
  */
 function docReading(db, repo, root, doc, scope) {
-  const current = (/** @type {any} */ d) => (d ? db.docSections(d.id).filter((/** @type {any} */ s) => s.status === "current") : []);
+  const flag = staleFlags(db, repo, root);
+  const current = (/** @type {any} */ d) => (d ? db.docSections(d.id).filter((/** @type {any} */ s) => s.status === "current").map((/** @type {any} */ s) => ({ ...s, body: flag(`section:${s.id}`, s.body) })) : []);
   if (doc === "adrs") {
     const adrs = db.q(`SELECT r.* FROM records r JOIN tasks t ON t.id = r.task_id WHERE t.repo_id = ? AND r.kind = 'adr' AND r.status <> 'dropped' ORDER BY r.created_at`).all(repo.id);
     return reading("ADRs", adrs.map((/** @type {any} */ r) => {
@@ -59,7 +60,7 @@ function docReading(db, repo, root, doc, scope) {
       try {
         n = JSON.parse(r.links ?? "{}").madr;
       } catch {}
-      return { key: `adr-${n ?? r.id}`, title: `${n ? `${String(n).padStart(4, "0")} · ` : ""}${String(r.title).replace(/\s+/g, " ").slice(0, 140)}`, body: [String(r.title), r.body ?? ""].join("\n\n") };
+      return { key: `adr-${n ?? r.id}`, title: `${n ? `${String(n).padStart(4, "0")} · ` : ""}${String(r.title).replace(/\s+/g, " ").slice(0, 140)}`, body: flag(`record:${r.id}`, [String(r.title), r.body ?? ""].join("\n\n")) };
     }), "Decisions that are hard to reverse, surprising without their context, and the result of a real trade-off.");
   }
   if (doc === "capabilities") {
@@ -92,6 +93,25 @@ function docReading(db, repo, root, doc, scope) {
   return { ...r, edit: { kind, chapters: kind === "project" ? require("../db.js").CHAPTERS.project : undefined } };
 }
 
+/**
+ * Possibly stale parts (#211) as a function that puts a warning over a part's text. Never fails a
+ * page: without git, nothing is flagged.
+ * @param {any} db @param {any} repo @param {string} root @returns {(key: string, body: string) => string}
+ */
+function staleFlags(db, repo, root) {
+  /** @type {Map<string, any>} */
+  let by = new Map();
+  try {
+    by = new Map(require("../stale-docs.js").staleParts(db, repo, root).map((p) => [`${p.kind === "section" ? "section" : "record"}:${p.id}`, p]));
+  } catch {}
+  return (key, body) => {
+    const p = by.get(key);
+    if (!p) return body;
+    const c = p.commits[0];
+    return `> ⚠ **Possibly stale:** ${p.files.map((/** @type {string} */ f) => `\`${f}\``).join(", ")} changed in ${p.commits.length} commit${p.commits.length === 1 ? "" : "s"} since this was written (newest \`${c.hash}\` ${c.subject}). Agent Setup → Documents lists them.\n\n${body ?? ""}`;
+  };
+}
+
 /** The spec's gates in order (Kiro's, decided for #179): each approval is a decision record with links.gate. */
 const GATES = [
   { id: "stories", label: "Problem and user stories" },
@@ -104,9 +124,9 @@ const TABS = ["spec", "tickets", "records", "activity"];
 /**
  * A task's page (#197): its spec in the reading layout, its tickets, its records, its activity, and
  * the spec's gates with which are approved.
- * @param {any} db @param {any} repo @param {string} key @param {string} [tab]
+ * @param {any} db @param {any} repo @param {string} key @param {string} [tab] @param {string} [root] the repo's folder, for the stale check (#211)
  */
-function taskPage(db, repo, key, tab) {
+function taskPage(db, repo, key, tab, root = repo.root ?? "") {
   const task = db.taskByKey(repo.id, key);
   if (!task) return undefined;
   const recs = db.recordsOf(task.id);
@@ -119,8 +139,9 @@ function taskPage(db, repo, key, tab) {
   const bucket = !/^#\d+$|^[A-Z][A-Z0-9_]*-\d+$/.test(key);
   const spec = db.taskDocFind(repo.id, key, "spec");
   const chapters = require("../db.js").CHAPTERS.spec;
+  const flag = spec ? staleFlags(db, repo, root) : (/** @type {string} */ _k, /** @type {string} */ b) => b;
   const specReading = reading(`Spec · ${key}`, spec ? db.docSections(spec.id).filter((/** @type {any} */ s) => s.status === "current")
-    .map((/** @type {any} */ s) => ({ key: s.key, title: `${chapters[s.chapter] ? `${chapters[s.chapter]} · ` : ""}${s.title}${s.delta ? ` (${s.delta})` : ""}`, body: s.body })) : [],
+    .map((/** @type {any} */ s) => ({ key: s.key, title: `${chapters[s.chapter] ? `${chapters[s.chapter]} · ` : ""}${s.title}${s.delta ? ` (${s.delta})` : ""}`, body: flag(`section:${s.id}`, s.body) })) : [],
     spec ? undefined : "No spec yet: the agent writes it when it starts this task and passes the gates below on its way to tickets.");
   const tickets = db.q("SELECT * FROM tasks WHERE epic_id = ? AND id <> ? ORDER BY id").all(task.id, task.id);
   const activity = db.taskVersions(task.id, { limit: 40 }).list;
@@ -205,7 +226,7 @@ function appModel(db, repo, root, at = {}) {
     return { ...base, docs: DOCS, doc, reading: docReading(db, repo, root, doc, at.scope) };
   }
   if (area === "tasks") {
-    const page = at.task ? taskPage(db, repo, at.task, at.tab) : undefined;
+    const page = at.task ? taskPage(db, repo, at.task, at.tab, root) : undefined;
     if (page) return { ...base, page };
     return { ...base, lists: taskLists(db, repo.id) };
   }
