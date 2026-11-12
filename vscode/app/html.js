@@ -67,6 +67,7 @@ h2.sub { font-size: 16px; margin: 24px 0 10px; }
 .gate.done { color: var(--vscode-foreground); border-color: var(--vscode-testing-iconPassed, var(--vscode-panel-border)); }
 .gate.next { color: var(--vscode-foreground); border-color: var(--vscode-focusBorder); }
 .btn.small { padding: 2px 10px; font-size: 12px; }
+.tokens { font-size: 13px; color: var(--vscode-descriptionForeground); margin: -12px 0 14px; }
 .crumb { font-size: 13px; color: var(--vscode-descriptionForeground); margin-bottom: 6px; }
 .rows .rec { cursor: default; }
 .editor { display: grid; gap: 8px; margin-top: 8px; }
@@ -271,6 +272,15 @@ function meetingsHtml(list, render) {
 
 const STATUS = { open: "open", active: "claimed", done: "resolved", dropped: "dropped" };
 
+/** Big numbers short: 1234 → 1.2k, 2345678 → 2.3M. @param {number} n */
+const short = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
+
+/** What the ticket cost (#214), an estimate. @param {{written: number, cached: number, output: number, sessions: number} | undefined} k */
+function tokensLine(k) {
+  if (!k) return "";
+  return `<p class="tokens" title="From Claude Code's transcripts of this repo: each message given to the ticket its git branch names, else the one the session last named. An estimate.">Tokens: ${short(k.written)} written · ${short(k.cached)} read from cache · ${short(k.output)} output · ${k.sessions} session${k.sessions === 1 ? "" : "s"} (estimate)</p>`;
+}
+
 /** A task's page: header, the spec's gates, then Spec | Tickets | Records | Activity. @param {any} p @param {(md: string) => string} render */
 function taskPageHtml(p, render) {
   const t = p.task;
@@ -286,7 +296,7 @@ function taskPageHtml(p, render) {
   } else {
     body = `<div class="rows">${p.activity.map((/** @type {any} */ v) => `<div class="row rec"><span class="key">${esc(new Date(v.at).toISOString().slice(0, 16).replace("T", " "))}</span><span>${esc(v.op)} · ${esc(v.kind)} · ${esc(v.title)} <span class="ptr">${esc(v.actor_kind)}</span></span></div>`).join("") || '<div class="none">Nothing</div>'}</div>`;
   }
-  return `<div class="crumb"><a href="#" data-go="tasks">Tasks</a> / ${esc(t.key)}</div><h1>${esc(t.title)}</h1>${t.summary ? `<p class="summary">${esc(t.summary)}</p>` : ""}${gates}${tabs}${body}`;
+  return `<div class="crumb"><a href="#" data-go="tasks">Tasks</a> / ${esc(t.key)}</div><h1>${esc(t.title)}</h1>${t.summary ? `<p class="summary">${esc(t.summary)}</p>` : ""}${tokensLine(p.tokens)}${gates}${tabs}${body}`;
 }
 
 /**

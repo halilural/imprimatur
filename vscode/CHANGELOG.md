@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.181.0] - 2026-11-12
+
+### Added
+- Tokens per ticket on the task page (#214): from Claude Code's transcripts of the repo, each assistant message's usage counted once and given to the ticket its git branch names, else the ticket the session last named (an Imprimatur tool call or a `git switch` to a ticket branch). Shown as tokens written, read from cache and output, and the sessions, marked as an estimate. Transcripts are read incrementally (about 1.4 s the first time on a 255 MB folder, milliseconds after). No price: on a subscription tokens have none.
+
 ## [0.180.0] - 2026-11-12
 
 ### Added
