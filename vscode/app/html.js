@@ -33,6 +33,8 @@ pre { background: var(--vscode-textCodeBlock-background); padding: 10px 12px; bo
 code { font-family: var(--vscode-editor-font-family); font-size: .92em; color: inherit; }
 :not(pre) > code { background: var(--vscode-textCodeBlock-background); padding: 1px 5px; border-radius: 4px; }
 pre code { background: none; padding: 0; }
+.mermaid-src.drawn { margin: 12px 0; text-align: center; } .mermaid-src.drawn svg { max-width: 100%; height: auto; }
+.mermaid-err { margin: 0 0 6px; font-weight: 600; color: var(--vscode-errorForeground); }
 .page table { display: block; overflow-x: auto; border-collapse: collapse; margin: 0 0 14px; font-size: 13px; }
 .page th, .page td { border: 1px solid var(--vscode-panel-border); padding: 6px 10px; text-align: left; vertical-align: top; min-width: 120px; }
 .page th { background: var(--vscode-editorWidget-background); font-weight: 700; }
@@ -122,6 +124,39 @@ document.addEventListener("keydown", (e) => {
   if (e.target.closest("input,textarea")) return;
   if (e.key === "/" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k")) { e.preventDefault(); send({ type: "cmd", command: "imprimatur.records.search" }); }
 });
+// A mermaid block (markdown.js leaves its source in .mermaid-src) is drawn with the
+// extension's mermaid, loaded only when the page has one; one that fails keeps its source
+// under the error.
+const MERMAID_SRC = document.querySelector('meta[name="imprimatur-mermaid"]')?.content;
+const blocks = [...document.querySelectorAll(".mermaid-src")];
+if (MERMAID_SRC && blocks.length) {
+  const s = document.createElement("script");
+  s.nonce = document.currentScript?.nonce;
+  s.src = MERMAID_SRC;
+  s.onload = async () => {
+    const cl = document.body.classList;
+    const dark = cl.contains("vscode-dark") || cl.contains("vscode-high-contrast") && !cl.contains("vscode-high-contrast-light");
+    window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: dark ? "dark" : "default", fontFamily: getComputedStyle(document.body).getPropertyValue("--vscode-font-family").trim() || "sans-serif" });
+    let n = 0;
+    for (const div of blocks) {
+      const id = "imprimatur-mmd-" + ++n;
+      try {
+        // The SVG mermaid made in strict mode (sanitised), parsed by a template.
+        const t = document.createElement("template");
+        t.innerHTML = (await window.mermaid.render(id, div.textContent)).svg;
+        div.replaceChildren(t.content);
+        div.classList.add("drawn");
+      } catch (e) {
+        document.getElementById("d" + id)?.remove();
+        const err = document.createElement("p");
+        err.className = "mermaid-err";
+        err.textContent = "Could not draw the diagram: " + String((e && e.message) || e).replace(/\\s+/g, " ").trim().slice(0, 200);
+        div.prepend(err);
+      }
+    }
+  };
+  document.head.appendChild(s);
+}
 `;
 
 /**
@@ -257,11 +292,11 @@ function taskPageHtml(p, render) {
 
 /**
  * The whole page.
- * @param {any} m appModel's result @param {{nonce: string, cspSource: string, render: (md: string) => string}} o
+ * @param {any} m appModel's result @param {{nonce: string, cspSource: string, render: (md: string) => string, mermaid?: string}} o mermaid: dist/mermaid.min.js as a webview URI
  */
 function appHtml(m, o) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${o.cspSource} https: data:; style-src 'unsafe-inline'; script-src 'nonce-${o.nonce}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${o.cspSource} https: data:; style-src 'unsafe-inline'; script-src 'nonce-${o.nonce}'${o.mermaid ? ` ${o.cspSource}` : ""};">${o.mermaid ? `\n<meta name="imprimatur-mermaid" content="${esc(o.mermaid)}">` : ""}
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Imprimatur</title><style>${CSS}</style></head><body>
 <main>${mainHtml(m, o.render)}</main>
 <script nonce="${o.nonce}">${SCRIPT}</script></body></html>`;

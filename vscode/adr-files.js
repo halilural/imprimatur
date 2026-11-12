@@ -9,11 +9,14 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { numbered, shortTitle, fileName } = require("./decisions.js");
+const { tidy, nest } = require("./md-tidy.js");
 
 const DIR = path.join("docs", "adr");
 const hash = (/** @type {string} */ s) => crypto.createHash("sha1").update(s).digest("hex").slice(0, 16);
 const metaKey = (/** @type {number} */ repoId, /** @type {string} */ uid) => `adrfile:${repoId}:${uid}`;
-const clean = (/** @type {unknown} */ s) => String(s ?? "").replace(/\r\n/g, "\n").trim();
+// Lint-clean, headings from h2 (the file's "# title" is h1): the record's text and the file's read
+// back go through the same, so tidying alone is never taken as a hand edit.
+const clean = (/** @type {unknown} */ s) => tidy(nest(String(s ?? "").replace(/\r\n/g, "\n").trim(), 2)).trim();
 
 /** The text under the heading: the full title when the heading had to shorten it, then the record's body. @param {any} r */
 function bodyOf(r) {

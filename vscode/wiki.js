@@ -133,7 +133,8 @@ async function buildWiki(db, repo, root, io) {
       if (old !== undefined) pages.push({ name: m.name, first: firstLine(old) });
       continue;
     }
-    const text = [io.header, `# ${m.name}/`, body].join("\n\n") + "\n";
+    // The model's page made lint-clean (#132's tidy), its headings from h2 under the page's "#".
+    const text = require("./md-tidy.js").tidy([io.header, `# ${m.name}/`, require("./md-tidy.js").nest(body, 2)].join("\n\n")) + "\n";
     if (!io.inside(f)) continue;
     fs.writeFileSync(f, text);
     db.setMeta(key, sig);
@@ -141,7 +142,7 @@ async function buildWiki(db, repo, root, io) {
     pages.push({ name: m.name, first: firstLine(text) });
   }
   const index = path.join(dir, "README.md");
-  const want = indexText(repo.name ?? path.basename(root), pages, io.header);
+  const want = (indexText(repo.name ?? path.basename(root), pages, io.header));
   let cur;
   try {
     cur = fs.readFileSync(index, "utf8");
@@ -156,7 +157,7 @@ async function buildWiki(db, repo, root, io) {
 /** A page's first paragraph as one line of at most 160 characters. @param {string} text */
 function firstLine(text) {
   const para = String(text).split(/\n\s*\n/).find((p) => p.trim() && !/^(<!--|#|---|```)/.test(p.trim())) ?? "";
-  return para.replace(/\s+/g, " ").trim().slice(0, 160);
+  return para.replace(/\s+/g, " ").trim().slice(0, 160).trimEnd();
 }
 
 module.exports = { buildWiki, modulesOf, pagePrompt, indexText, headerOf, firstLine, DIR };

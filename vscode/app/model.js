@@ -181,6 +181,16 @@ function boardOf(db, repoId, now = Date.now()) {
 }
 
 /**
+ * The tasks by status, active first, then open, then the last done: the panel's Tasks page and
+ * the side bar's Tasks row.
+ * @param {any} db @param {number} repoId
+ */
+function taskLists(db, repoId) {
+  const list = (/** @type {string} */ status, /** @type {number} */ n) => db.q(`SELECT key, title, summary, status FROM tasks WHERE repo_id = ? AND status = ? ORDER BY updated_at DESC LIMIT ${n}`).all(repoId, status);
+  return [{ id: "active", label: "Active", tasks: list("active", 50) }, { id: "open", label: "Open", tasks: list("open", 80) }, { id: "done", label: "Done", tasks: list("done", 20) }];
+}
+
+/**
  * The panel's model for a place.
  * @param {any} db @param {any} repo @param {string} root
  * @param {{area?: string, doc?: string, scope?: string, task?: string, tab?: string, rows?: any[]}} at
@@ -202,8 +212,7 @@ function appModel(db, repo, root, at = {}) {
   if (area === "tasks") {
     const page = at.task ? taskPage(db, repo, at.task, at.tab) : undefined;
     if (page) return { ...base, page };
-    const list = (/** @type {string} */ status, /** @type {number} */ n) => db.q(`SELECT key, title, summary, status FROM tasks WHERE repo_id = ? AND status = ? ORDER BY updated_at DESC LIMIT ${n}`).all(repo.id, status);
-    return { ...base, lists: [{ id: "active", label: "Active", tasks: list("active", 50) }, { id: "open", label: "Open", tasks: list("open", 80) }, { id: "done", label: "Done", tasks: list("done", 20) }] };
+    return { ...base, lists: taskLists(db, repo.id) };
   }
   if (area === "edits") return { ...base, edits: editsQueue(root, at.rows) };
   // Exercises belong to no repo; meetings are this repo's meeting records; social is a document.
@@ -228,4 +237,4 @@ function appModel(db, repo, root, at = {}) {
   return base;
 }
 
-module.exports = { appModel, editsQueue, taskPage, GATES, boardOf, docReading, reading, summaryOf, AREAS, MORE, DOCS };
+module.exports = { appModel, taskLists, editsQueue, taskPage, GATES, boardOf, docReading, reading, summaryOf, AREAS, MORE, DOCS };

@@ -20,6 +20,7 @@ flowchart LR
 ```
 
 ## Parts
+
 - `hooks/run.mjs`: PostToolUse/PreToolUse/Stop/etc. dispatcher that runs all of a call's hook steps in one process, in the order `vscode/hook-plan.js` gives, merging their results into one answer.
 - `hooks/activity.mjs`: logs PostToolUse/PostToolUseFailure for tools `run.mjs` doesn't handle, writing a row to the session's activity log asynchronously.
 - `hooks/waiting.mjs`: records questions, permission requests, and other input the agent is waiting on the user for, into the session's waiting log, and triggers `audit.mjs`/`resolve.mjs`.
@@ -35,6 +36,7 @@ flowchart LR
 - `hooks/statusline.mjs`: builds the Claude Code status line (waiting count, unaccepted edits, current task) from the repo's records and waiting logs.
 
 ## Decisions
+
 - ADR 76: Design docs & glossary backfilled once per repo by a background agent
 - ADR 81: Read markers (`section_reads`) are device-specific; unread means changed since last read version
 - ADR 90: One dispatcher process per hook event (`run.mjs`) runs all steps in-process; `activity.mjs` covers the rest
@@ -42,4 +44,5 @@ flowchart LR
 - ADR 96: Per-repo data moved out of the repo to `<database folder>/repos/<name>-<hash>/`
 
 ## Terms
+
 Accept, Audit, Hook, Imprimatur, Process checks, Record, Section, Session, Task, Waiting on you
