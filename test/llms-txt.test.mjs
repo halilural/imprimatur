@@ -33,3 +33,17 @@ test("llms.txt: lists the documents present with a title and a description; foll
   assert.equal(writeLlms(root, "demo", io(root)), false);
   assert.equal(fs.readFileSync(path.join(root, "llms.txt"), "utf8"), "# mine\n");
 });
+
+test("llms.txt: a symbolic link among the documents is not followed, so no outside file's text is copied", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-216l-"));
+  const secret = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "outside-")), "secret.md");
+  fs.writeFileSync(secret, "# Secret\n\nTOKEN=abc123\n");
+  fs.mkdirSync(path.join(root, "docs/adr"), { recursive: true });
+  fs.writeFileSync(path.join(root, "docs/adr/0001-one.md"), "# One\n\nWe chose one.\n");
+  fs.symlinkSync(secret, path.join(root, "docs/adr/0002-link.md"));
+  fs.symlinkSync(secret, path.join(root, "GLOSSARY.md"));
+  writeLlms(root, "demo", io(root));
+  const text = fs.readFileSync(path.join(root, "llms.txt"), "utf8");
+  assert.match(text, /0001-one/);
+  assert.doesNotMatch(text, /TOKEN|Secret|0002-link|GLOSSARY/);
+});

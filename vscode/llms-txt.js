@@ -28,12 +28,31 @@ function titleOf(text) {
   return { title, desc: desc.length > 160 ? `${desc.slice(0, 157).trimEnd()}…` : desc };
 }
 
-/** @param {string} root @param {string} rel a folder or a file @returns {string[]} the Markdown files, repo-relative */
+/**
+ * A repo file's text, or undefined: never through a symbolic link, never outside the repo (a link
+ * planted in docs/ must not copy another file's first lines into llms.txt). @param {string} root @param {string} rel
+ */
+function readInside(root, rel) {
+  try {
+    const abs = path.join(root, rel);
+    if (fs.lstatSync(abs).isSymbolicLink()) return undefined;
+    const real = fs.realpathSync(abs);
+    const back = path.relative(fs.realpathSync(root), real);
+    if (back.startsWith("..") || path.isAbsolute(back)) return undefined;
+    return fs.readFileSync(real, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+/** @param {string} root @param {string} rel a folder or a file @returns {string[]} the Markdown files, repo-relative; no links */
 function filesAt(root, rel) {
   const abs = path.join(root, rel);
   try {
-    if (fs.statSync(abs).isFile()) return [rel];
-    return fs.readdirSync(abs).filter((n) => n.endsWith(".md") && n !== "README.md").sort().map((n) => `${rel}/${n}`);
+    const st = fs.lstatSync(abs);
+    if (st.isSymbolicLink()) return [];
+    if (st.isFile()) return [rel];
+    return fs.readdirSync(abs, { withFileTypes: true }).filter((d) => d.isFile() && d.name.endsWith(".md") && d.name !== "README.md").map((d) => `${rel}/${d.name}`).sort();
   } catch {
     return [];
   }
@@ -46,17 +65,17 @@ function filesAt(root, rel) {
 function llmsText(root, name, header) {
   const sections = [];
   for (const [label, rel] of PARTS) {
-    const lines = filesAt(root, rel).map((f) => {
-      const t = titleOf(fs.readFileSync(path.join(root, f), "utf8"));
-      return `- [${t.title ?? path.basename(f, ".md")}](${f})${t.desc ? `: ${t.desc}` : ""}`;
+    const lines = filesAt(root, rel).flatMap((f) => {
+      const text = readInside(root, f);
+      if (text === undefined) return [];
+      const t = titleOf(text);
+      return [`- [${t.title ?? path.basename(f, ".md")}](${f})${t.desc ? `: ${t.desc}` : ""}`];
     });
     if (lines.length) sections.push(`## ${label}\n\n${lines.join("\n")}`);
   }
   if (!sections.length) return undefined;
-  let summary = "";
-  try {
-    summary = titleOf(fs.readFileSync(path.join(root, "docs/PROJECT.md"), "utf8")).desc;
-  } catch {}
+  const project = readInside(root, "docs/PROJECT.md");
+  const summary = project === undefined ? "" : titleOf(project).desc;
   return `${header}\n\n# ${name}\n\n> ${summary || "The project's decisions, terms and how it behaves, kept by Imprimatur."}\n\nThese documents are kept by Imprimatur from its database; read them before changing what they describe.\n\n${sections.join("\n\n")}\n`;
 }
 
