@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.181.0",
+  "version": "0.182.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -78,6 +78,11 @@
         "title": "Find in this list",
         "category": "Imprimatur",
         "icon": "$(search)"
+      },
+      {
+        "command": "imprimatur.lineOrigin",
+        "title": "Where did this line come from?",
+        "category": "Imprimatur"
       },
       {
         "command": "imprimatur.staleDocs",
@@ -720,6 +725,12 @@
           "command": "imprimatur.records.refresh",
           "when": "view == imprimatur.launcher",
           "group": "navigation@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "imprimatur.lineOrigin",
+          "group": "imprimatur@1"
         }
       ],
       "view/item/context": [
