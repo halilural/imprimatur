@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.175.2] - 2026-11-12
+
+### Changed
+- **Add to Claude chat as reference** pastes the short reference ("Imprimatur #157, record 9535: …") into the open Claude Code chat's input, instead of a temporary file's path; no file is written and no preview tab opens. The reference also stays on the clipboard.
+
 ## [0.175.1] - 2026-11-12
 
 ### Fixed
