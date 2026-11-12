@@ -307,6 +307,7 @@ class SetupView {
     // The checklist (#142): what needs doing, from the scan, the health check and the audit.
     this.installs = installChecksNow();
     this.budget = budgetRow(this.scopes.find((s) => !s.global)?.root);
+    this.wasted = wastedRow(this.scopes.find((s) => !s.global)?.root);
     this.suggestions = this.suggestionsRow(this.scopes.find((s) => !s.global)?.root);
     const repoRoot = this.scopes.find((s) => !s.global)?.root;
     let baseline;
@@ -357,7 +358,7 @@ class SetupView {
   getChildren(node) {
     if (!node) {
       const forFile = forFileNode(this.scopes, this.activeFile);
-      return [/** @type {Node} */ (this.checklist.node), ...(this.budget ? [/** @type {Node} */ (this.budget)] : []), ...(this.suggestions ? [/** @type {Node} */ (this.suggestions)] : []), ...healthRoot(this.scopes), ...(this.audit ? [/** @type {Node} */ (this.audit)] : []), ...(forFile ? [/** @type {Node} */ (forFile)] : []), ...this.scopes.map((scope) => /** @type {Node} */ ({ type: "scope", scope }))];
+      return [/** @type {Node} */ (this.checklist.node), ...(this.budget ? [/** @type {Node} */ (this.budget)] : []), ...(this.wasted ? [/** @type {Node} */ (this.wasted)] : []), ...(this.suggestions ? [/** @type {Node} */ (this.suggestions)] : []), ...healthRoot(this.scopes), ...(this.audit ? [/** @type {Node} */ (this.audit)] : []), ...(forFile ? [/** @type {Node} */ (forFile)] : []), ...this.scopes.map((scope) => /** @type {Node} */ ({ type: "scope", scope }))];
     }
     if (node.type === "group") return node.children;
     if (node.type === "health") return healthChildren(this.scopes);
@@ -753,6 +754,32 @@ function budgetRow(root) {
   for (const u of b.uncounted) rows.push({ type: "leaf", label: `Not counted: ${u}`, icon: "question", tooltip: "Not in the transcript, so not guessed. Claude Code's /context shows the exact numbers." });
   return { type: "group", label: "Context budget", description: `${n(b.total)} a session (estimate)`, icon: "dashboard", children: rows,
     tooltip: "What the last session in this repo loaded into the model's context, item by item. Tokens are estimated as characters ÷ 4; /context in Claude Code has the exact count." };
+}
+
+/**
+ * Wasted edits (#212): what the agent wrote and replaced itself in the last days, from the Agent
+ * Change Graph. Nothing wasted: no row.
+ * @param {string | undefined} root
+ */
+function wastedRow(root) {
+  if (!root) return undefined;
+  let w;
+  try {
+    w = require("./wasted.js").wastedEdits(require("./graph.js").graphRows(root).rows);
+  } catch {
+    return undefined;
+  }
+  if (!w.edits && !w.rewrites.length) return undefined;
+  const { DAYS, TOKENS_PER_LINE } = require("./wasted.js");
+  const short = (/** @type {string} */ s) => s.slice(0, 8);
+  const children = [
+    ...w.files.slice(0, 10).map((f) => ({ type: "leaf", label: f.file, description: `${f.edits} edit${f.edits === 1 ? "" : "s"} · ${f.lines} lines · ~${f.tokens.toLocaleString("en-US")} tokens`, icon: "trash", abs: path.join(root, f.file),
+      tooltip: `${f.file}: ${f.edits} edit${f.edits === 1 ? "" : "s"} the agent replaced itself in the same session (${f.lines} lines written for nothing).` })),
+    ...w.rewrites.slice(0, 10).map((r) => ({ type: "leaf", label: `Rewrite loop: ${r.file}`, description: `${r.count} edits in a row · session ${short(r.session)}`, icon: "sync", abs: path.join(root, r.file),
+      tooltip: `${r.file} was changed ${r.count} times in a row in session ${r.session}, with no other file changed in between: the agent went round in circles. A clearer instruction or test for this file may stop it.` })),
+  ];
+  return { type: "group", label: "Wasted edits", description: `${w.edits} edit${w.edits === 1 ? "" : "s"} · ~${w.tokens.toLocaleString("en-US")} tokens · last ${DAYS} days${w.rewrites.length ? ` · ${w.rewrites.length} rewrite loop${w.rewrites.length === 1 ? "" : "s"}` : ""}`, icon: "trash", children,
+    tooltip: `Work the agent threw away itself in the last ${DAYS} days: edits whose lines are gone because the same session replaced them, and files changed again and again in a row. Tokens are an estimate (${TOKENS_PER_LINE} per written line).` };
 }
 
 /**
