@@ -10,6 +10,7 @@ record: b9603ed8-f79e-42a8-be4a-37695789b43c
 Panel görünümü: kendi tasarım katmanımız (tema başına turuncu vurgu) + Lucide ikonları; vscode-elements kullanılmadı
 
 **Katman:** `vscode/theme.js` her tema tipi için bir vurgu rengi tanımlar:
+
 - açık tema `#c2410c`
 - koyu tema `#fb923c`
 - yüksek kontrast koyu `#ffa94d`

@@ -12,6 +12,7 @@ The user chose this baseline on 2026-11-05.
 **From Imprimatur's own plugin:** hooks, the MCP server, and the skills issues, study, exercise, imprimatur-stats and social-post. The issues skill already carries what was taken from mattpocock/skills (triage, to-tickets; MIT, NOTICE.md), so mattpocock-skills is not added: its 27 skills would overlap issues, study, where_we_left_off and /code-review.
 
 **Third-party items**, installed from their own source at user scope and only on a yes:
+
 - the repo's language server: an LSP plugin chosen by the repo's files
 - security-guidance
 - ponytail (DietrichGebert/ponytail)

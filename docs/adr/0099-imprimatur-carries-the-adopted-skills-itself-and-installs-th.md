@@ -12,6 +12,7 @@ Imprimatur carries the adopted skills itself and installs them automatically; wh
 The user, on 2026-11-04, while six community repos were being vetted (planning-with-files, marketingskills, Understand-Anything, archify, paperclip, claude-mem): "I want Imprimatur to adopt these directly: hold the skills inside itself and install them automatically, or feed on them somehow."
 
 What it means, refining decision 9331 (skills from a marketplace, kept in sync):
+
 - **Carry:** Imprimatur's own plugin and marketplace bundle the adopted skills (with their license and source commit). Imprimatur's setup installs them in every repo with no manual step, and an Imprimatur update brings their new versions. This keeps "from a marketplace, synced": Imprimatur is that marketplace.
 - **Feed on:** when a repo is not a skill that can be carried (an app, a service, a memory system, an incompatible license), Imprimatur takes its useful ideas into its own features instead.
 - Every adopted item is vetted first: license allows redistribution (MIT/Apache), no hook or network behaviour we have not read, no second task or memory store competing with Imprimatur's.

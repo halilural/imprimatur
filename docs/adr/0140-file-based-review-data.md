@@ -33,7 +33,7 @@ The old folder keeps `.gitignore` and `MOVED.md`. What an older release still wr
 | `docs-backup/<name>-<ms>.md` | docs sync | A design document file's text before a sync overwrote it. |
 | `archive/<YYYY-MM-DD>/` | the extension (`archive.js`) | Old lines in the same layout, gzipped; read with `zcat`. |
 
-#### Principles
+## Principles
 
 - **Persistence:** marks go away only with Accept; staging, committing or reopening has no effect. The extension watches the data folder, not git.
 - **Self-healing:** old or missing data is not rewritten, and there is no repair script. The fix happens at read time, and lasting information is kept in a separate file (`calls.jsonl`).
@@ -53,7 +53,7 @@ The old folder keeps `.gitignore` and `MOVED.md`. What an older release still wr
 - self-learning: 275 and 637;
 - investment: 551 and 158.
 
-##### Decisions settled
+### Decisions settled
 
 - 579: `hooks/baseline.mjs` writes the pre-edit copy and a history line before every Edit/Write/Bash change to a tracked file, without looking at git.
 - 605: a turn-ending line becomes a `verify` step when it carries an action phrase (test this, Reload Window, …) and a `question` step when it only asks for an answer; `verify` steps stay open until marked done or all other items are, not closed by the next event.

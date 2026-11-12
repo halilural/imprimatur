@@ -12,6 +12,7 @@ One Imprimatur version per machine: the status line runs the plugin's copy when 
 **Context.** On the work machine three builds ran at once: the plugin at 0.73.0 (hooks, MCP server), the extension at 0.75.0, and the status line from the git checkout. A schema migration shipped in the extension makes the plugin's hooks and MCP server read-only (a database newer than the code). The plugin's own version already equals the extension's: `scripts/plugin.mjs` writes `plugin.json` from `vscode/package.json`, and `test/plugin.test.mjs` checks it. What goes stale is the plugin cache, which Claude Code does not update by itself.
 
 **Decision.**
+
 - `vscode/versions.js` reads what runs on the machine, from files only (no process is started):
   - `imprimaturPlugin()`: the user-scope, enabled `imprimatur@…` entry of `~/.claude/plugins/installed_plugins.json`;
   - `extensionVersion()`: the extension's entry in VS Code's `extensions.json`;

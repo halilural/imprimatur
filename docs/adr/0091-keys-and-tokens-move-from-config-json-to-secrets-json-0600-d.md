@@ -14,6 +14,7 @@ Keys and tokens move from config.json to secrets.json (0600), denied to Claude C
 The secrets are read in every process that opens the database (hooks, the MCP server, the extension), through the private plugins. VS Code's `SecretStorage` reaches only the extension. This WSL machine has no usable OS keychain (`gnome-keyring-daemon` is installed, but there is no `secret-tool`).
 
 **Decision (the user chose option 1).**
+
 - A `secrets.json` (0600) next to `config.json` holds the secret fields, as nested sections. A section reads as both files merged, with `secrets.json` winning. In `imprimatur-private` this is `lib/settings.js`; in Imprimatur it is `vscode/secrets.js` `sectionWithSecrets`.
 - Writes put the secret fields into `secrets.json` and take them out of `config.json`.
 - `migrateSecrets(dbFile, {keys})` moves only the keys whose reader reads `secrets.json`:

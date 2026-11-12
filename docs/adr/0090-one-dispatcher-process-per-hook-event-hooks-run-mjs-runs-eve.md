@@ -10,6 +10,7 @@ record: bbe94784-a9f6-4a4a-a06c-9b6cb81905be
 One dispatcher process per hook event (hooks/run.mjs) runs every Imprimatur hook step in-process; activity stays on, written there for the tools it handles and by the async hook for the rest
 
 **Context.** Measured medians for one Bash call (2026-11-03):
+
 - PreToolUse: baseline 74 ms + process 60 ms.
 - PostToolUse: baseline 72 ms + process 63 ms + activity 56 ms (async).
 - Bare node start: 31 ms.
@@ -17,6 +18,7 @@ One dispatcher process per hook event (hooks/run.mjs) runs every Imprimatur hook
 That is five node processes per Bash call, four per Edit, and one per other tool. Claude Code runs an event's hooks in parallel, so the agent waits for about the longest one, while the CPU pays for all of them.
 
 **Decision.**
+
 - `vscode/hook-plan.js` holds the list: per event, the steps in order (baseline, waiting, mcp, process, activity), each with an anchored tool test. Both the dispatcher and the settings use it: `setup.mjs` `wanted()` and the plugin's `hooks.json` get one `run.mjs` entry per event, with a union matcher.
 - `hooks/run.mjs <exts…>` reads stdin once and runs the steps. Each step is caught on its own, so a failing step never stops the others or the agent. It merges what the steps return:
   - a block (exit 2) wins, and its stderr goes out;

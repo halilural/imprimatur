@@ -10,6 +10,7 @@ record: b36c7be0-97bb-45af-bc63-5462918502a4
 AGENTS.md through the checklist: templates for a repo with none, Fix it for splitting an existing CLAUDE.md
 
 Agent Setup's checklist has rows for the agent files (vscode/agent-files.js):
+
 - **A repo with neither file** gets AGENTS.md (the shared rules: work, records, documents) and a CLAUDE.md of one line, `@AGENTS.md`, from templates.
 - **A repo with AGENTS.md only** gets that one-line CLAUDE.md.
 - **Every repo** gets `.claude/rules/docs.md` with front matter `paths: ["docs/**"]`, holding the documentation standard (generated docs, chapters, MADR decisions, analyses, C4 flowcharts, Diátaxis `type:`).

@@ -12,6 +12,7 @@ record: 2e610c69-0ceb-4d18-ab83-4c1f174a3ef2
 **Context.** The user, on 2026-11-04, asked for "a graphical interface like ponytail's that shows Imprimatur's analytics". Ponytail's `/ponytail-gain` is an ASCII bar scoreboard with fixed benchmark figures. Imprimatur's figures are live data.
 
 **Decision.**
+
 - **Script:** `skills/imprimatur-stats/stats.mjs`, a Node ESM script. It resolves its real path through the `~/.claude/skills` link and loads `vscode/*.js` from the checkout.
 - **Input:** a repo folder, which it maps to its git root, and `--days N` (default 7).
 - **Output:** one line per measure, with a bar for now and a bar for before, scaled to the larger of the two, and ▲/▼ % or "new". Equal values show no trend.
@@ -30,6 +31,7 @@ record: 2e610c69-0ceb-4d18-ab83-4c1f174a3ef2
 **Why a skill and not a panel page.** It reuses the terminal pattern the user pointed at and needs no UI code. A panel page can come later from the same numbers.
 
 **Limits.**
+
 - "Tasks finished" uses `updated_at`, so a done task edited later counts in the later period.
 - The archive is read for days archived within three periods.
 

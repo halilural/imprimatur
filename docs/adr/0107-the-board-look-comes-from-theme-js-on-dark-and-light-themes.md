@@ -12,6 +12,7 @@ The board look comes from theme.js: on dark and light themes the panel redefines
 **Context.** The user wants the whole panel to look like the ponytail board (PDR 9348). The panel's components (`graphView.js`, `tasksView.js`) take their colours from about 25 `--vscode-*` variables and from theme.js tokens (`--surface`, `--line`, `--shadow`, `--r-lg`, `--card`). Restyling each component one by one would touch hundreds of rules.
 
 **Decision** (`vscode/theme.js`):
+
 - Under `body.vscode-dark, body.vscode-light`, the panel defines board tokens (`--b-bg`, `--b-panel`, `--b-card` gradient, `--b-line`, `--b-text`, `--b-muted` …). It points the `--vscode-*` variables it uses and its own tokens at them, so every tab follows at once.
   - Dark palette: after the board's dark palette.
   - Light palette: after the board's light palette.

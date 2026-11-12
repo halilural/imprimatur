@@ -7,18 +7,18 @@ record: 0e6407f7-039f-4abe-897e-679dd0c6bcd7
 
 # Local database and data model
 
-#### Engine and location
+## Engine and location
 
 - Node's built-in `node:sqlite` (`DatabaseSync`): no native module, one universal `.vsix`. The extension runs on VS Code's Node (Node 24); hooks and the MCP server run on the system Node (≥ 22.13). If `node:sqlite` cannot be loaded, it fails with a clear error; there is no JSON backup and no silent fallback.
 - **One file per device**, for all repos: Linux/WSL `$XDG_DATA_HOME/imprimatur/imprimatur.db` (default `~/.local/share/imprimatur/`), macOS `~/Library/Application Support/imprimatur/`, Windows `%LOCALAPPDATA%\imprimatur\`. `IMPRIMATUR_DB` overrides the path; under `node --test` a temporary file is always used and the real database is never touched.
 - It is not opened under `/mnt/<drive>/`: WAL's shared memory breaks across the WSL/Windows boundary.
 - It is not inside the repo: switching branches does not change the records, and nothing goes into git.
 
-#### Concurrency
+## Concurrency
 
 Every connection opens with `journal_mode=WAL`, `journal_size_limit=4 MB`, `synchronous=NORMAL`, `busy_timeout=5000`, `foreign_keys=ON`. The extension keeps one long connection, each hook process a short one, and the MCP server its own. Every write is a short `BEGIN IMMEDIATE` transaction: the record and its version row are written in the same transaction, and a plugin's `onChange` runs inside that transaction's savepoint. A new file's first switch to WAL is retried for 5 s. Tests cover 12 processes opening and writing a new file at the same time.
 
-#### Upkeep (#117, #121)
+## Upkeep (#117, #121)
 
 Once a day across processes (meta `maint:at`), `db.maintain()` runs `wal_checkpoint(TRUNCATE)`, `incremental_vacuum` (only when the file is already incremental), and `PRAGMA optimize`. The extension then:
 
@@ -38,7 +38,7 @@ Measured on a copy of the real file:
 
 The readers (`versionsOf`, `taskVersions`, `agentChanges`, `sectionVersions`) fill these back in. Nothing is derived from a compacted value, so the job stays lossless on every later run. The history of superseded sections is kept whole (option B, dropping it, is not taken).
 
-#### Schema (version 4, `PRAGMA user_version`)
+## Schema (version 4, `PRAGMA user_version`)
 
 The `MIGRATIONS` array is applied in order inside a single `BEGIN IMMEDIATE`; a database newer than the code knows is opened read-only.
 
@@ -51,18 +51,18 @@ The `MIGRATIONS` array is applied in order inside a single `BEGIN IMMEDIATE`; a 
 3. **Issue tracker:** `tracker_outbox` (the close/reopen queue, with try and backoff fields), `tracker_state` (the last pulled state of each issue). Device-specific.
 4. **Design documents:** `documents(repo_id, kind architecture|product, title)`, `doc_sections(doc_id, key, title, body, position, status current|superseded)`, `doc_section_records` (records that contribute to a section), `doc_versions`.
 
-#### Invariants
+## Invariants
 
 - Records and sections are **never deleted**: a record becomes `dropped`, a section becomes `superseded`; the version history stays complete (compaction keeps it readable whole) and foreign keys never dangle.
 - Every row has a random `uid`: `id` is used locally, `uid` is the stable identity outside this database.
 - When a task becomes `done`/`dropped`, the open row for that task in the epic is closed in the same transaction (see Issue tracker sync).
 - A section body is at most 40,000 characters, a title at most 300; the key is a slug (`a-z0-9-`, ≤ 64).
 
-#### Latency
+## Latency
 
 Panel queries are indexed and `LIMIT`ed: < 1 ms at 10,000 records; opening (pragmas + version check) < 5 ms; prepared statements are cached per connection. Every write produces a change stamp that can be read with `PRAGMA data_version`; the panel uses it for live updates.
 
-##### Decisions settled
+### Decisions settled
 
 - 621: Imprimatur's own database becomes the sole source of truth for tasks, questions, decisions, notes, ADRs and PDRs; no record view is generated from Markdown.
 - 622: `node:sqlite` is the engine; if it fails to load, the error is explicit, with no JSON fallback and no silent degradation.

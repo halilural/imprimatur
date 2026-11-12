@@ -12,6 +12,7 @@ Exercise mode: /exercise turns any topic into 5-9 ticked steps (purpose + done-w
 User 2026-10-24: "egzersiz mod lazım… görev/task'a bağlı olmayacak… küçük küçük adımlara bölecek, ben bitirdikçe tickleyeceğim"; "egzersiz herhangi bir egzersiz olabilir"; "önemli olan agentlar onu düzgün egzersize dönüştürecek, best practice'lere bak".
 
 Decided:
+
 - Any topic (code, concept, spoken language, reading, physical skill). Step kinds are generic: learn, example, predict, do, vary, explain, recall.
 - The skill's pipeline: clarify (1-3 questions) → short diagnostic (2-3) → "can do" goal + proof → 5-9 steps of 10-25 min, each with why (subgoal label) and done_when (something the user can show) → a checklist before saving → coach without giving the answer first (hint → narrower hint → solution only on request after trying) → closing recall without notes, weak points kept.
 - Exercises belong to the user, not a repo or task: the same list in every project; device-local, not synced (like section_reads).

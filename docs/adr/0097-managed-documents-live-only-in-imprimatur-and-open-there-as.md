@@ -12,11 +12,13 @@ Managed documents live only in Imprimatur and open there as read-only Markdown; 
 The user, on 2026-11-03: the documents Imprimatur manages need not be in the repo too. Keeping them in two places is pointless; they should live only in Imprimatur and open effectively from there.
 
 **Today:**
+
 - `imprimatur.docs.export` (on by default) writes `docs/ARCHITECTURE.md`, `PRODUCT.md` and `GLOSSARY.md` from the database on every section change; every commit today touched `docs/ARCHITECTURE.md`.
 - Agents already read documents through `doc_get`.
 - Repos also hold hand-written Markdown: dirtywork 28 files in 11 folders, groundwork 28 in 18, investment 16 in 8.
 
 **Plan:**
+
 1. A read-only virtual document per document and section, shown in VS Code's Markdown preview with Imprimatur's renderer, opened from the panel, the command palette and a quick pick of sections.
 2. Export off, then removed; the generated files are taken out of each repo in one commit.
 3. Hand-written Markdown is taken in repo by repo, from a list the user approves, then removed from the repo.

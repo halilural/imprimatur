@@ -12,6 +12,7 @@ The panel updates by line diff: the host posts changed lines against a versioned
 **Context.** Every panel update posted the whole page: 379 KB on Home and 587 KB on Edits. The page parsed it again in full. A measured typical change was 1 line (3.8 KB) on Home. On Edits it was 210 lines (118 KB), because a new row at the top shifted `data-i` on every row below it, and the hover-preview JSON was one long line.
 
 **Decision.**
+
 - Edit rows carry stable ids counted from the oldest row (`data-i = rows - 1 - i`). The hover-preview JSON is an object keyed by those ids, one row per line. A new row then changes only its own lines.
 - The host keeps the lines it last sent (`vscode/line-diff.js`). An update goes as `{type: "diff", base, ver, ops}`. Each op is `[keep, delete, insert[]]`, computed with Myers' O(ND) diff over the lines between the common head and tail.
 - The host sends the whole page as `{type: "render", html, ver}` instead when:

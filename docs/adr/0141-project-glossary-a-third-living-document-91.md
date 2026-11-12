@@ -7,6 +7,6 @@ record: 969ffcd2-898f-4c85-983e-3121171bd970
 
 # Project glossary: a third living document (#91)
 
-#### Decisions settled
+## Decisions settled
 
 - 6903: the project glossary became a third living document alongside Architecture and Product (`documents.kind = 'glossary'`), one section per term, sorted alphabetically; it is read and written through the same `doc_get`/`doc_section_upsert` MCP tools and generated to `docs/GLOSSARY.md`, and the agent is instructed to write a new or changed term there as it works.

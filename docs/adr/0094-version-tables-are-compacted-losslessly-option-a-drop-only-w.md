@@ -10,6 +10,7 @@ record: 1caa9847-a2f0-4eb7-9dc9-bec7941000fb
 Version tables are compacted losslessly (option A): drop only what another stored value says, fill it back when history is read; a full backup before the first run
 
 **Measured (2026-11-03).** The version tables hold 26.1 MB: `record_versions` 13.6 MB, `doc_versions` 12.5 MB. What can go without losing anything:
+
 - update `before` fields that an earlier stored `after` already says: 3.2 MB;
 - creates of records never changed since, whose values the record still holds: 4.8 MB from imports;
 - each live section's latest `after.body`, equal to its current body: 2.3 MB.
@@ -17,6 +18,7 @@ Version tables are compacted losslessly (option A): drop only what another store
 Lossless total: about 10.8 MB, 41%. Version history of superseded sections (8.9 MB, the 2026-10-23 import's dead copies) could only go with loss, and is under 90 days old. The user was offered A (lossless) or B (lossless plus that history), answered "devam", and A was taken; B stays open.
 
 **Decision.** `vscode/version-compact.js`:
+
 - `compactRecord`:
   - a. drops an update's `before` field when an earlier stored `after` set that same value;
   - b. replaces a record's only version, a create, with `{"@row": [keys]}` when the record still holds every created value.

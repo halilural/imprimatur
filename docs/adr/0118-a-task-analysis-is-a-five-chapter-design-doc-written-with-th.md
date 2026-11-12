@@ -12,6 +12,7 @@ A task analysis is a five-chapter design doc, written with the analysis skill; f
 Context: the rule (.claude/rules/docs.md) and ANALYSIS_CHAPTERS described a chaptered mini design doc. The code, however, made one section per `##` of each file with no chapter. MCP-written sections could also collide with file-section keys (`<file>--<heading>`).
 
 Decision:
+
 - One model: context, goals, design, alternatives, risks.
 - Agents write the analysis with a new `analysis` skill, using one section per chapter key (`doc_section_upsert {kind: analysis, key: <chapter>, chapter}`). The skill is adapted from mattpocock/skills (to-spec, grilling, domain-modeling, research; see skills/analysis/NOTICE.md).
 - Files the agent writes (plans, spikes, notes) are still read in automatically, and `ingest` now sets each section's chapter from its heading (`chapterOf`). Unmatched headings go to design.

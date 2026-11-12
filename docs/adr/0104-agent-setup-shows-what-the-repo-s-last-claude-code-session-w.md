@@ -10,6 +10,7 @@ record: 2783c782-6cb9-4803-a4e5-c3ce1f7eb280
 Agent setup shows what the repo's last Claude Code session was given, read from its transcript's attachments: loaded instruction files, each hook's runs/time/added text, MCP server instructions, tools per server (failed, needs sign-in), skills and agents listed, model, mode and session context
 
 **Context.** The PDR (9345) says Agent setup must show everything that shapes the agent's decisions. Files alone miss the biggest part: what goes into the session itself. That covers hook output (ponytail injects 3.2k chars at SessionStart, Imprimatur 2k), MCP server instructions (eight blocks in this session), tool lists (491 Datadog tools) and the model and mode. Claude Code writes all of it into the session transcript as `attachment` lines:
+
 - `instructions`
 - `hook_success` (command, `durationMs`, stdout/content)
 - `mcp_instructions_delta`
@@ -19,6 +20,7 @@ Agent setup shows what the repo's last Claude Code session was given, read from 
 - `model`, `auto_mode`, `session_context`
 
 **Decision** (`vscode/session-context.js`, called by `scanSetup` for a repo):
+
 - **Which file:** the newest `.jsonl` in `~/.claude/projects/<slug>/`, with the slug from `projectSlug(gitRootOf(root))`.
 - **Reading:** each transcript is read once and then only from where the last read stopped (offset + unfinished line). Transcripts reach 27 MB here. The first scan took 129 ms, the next 59 ms. At most 8 transcripts stay in memory. A file that shrank is read again from the start.
 - **Rows:** tool "This session". Kinds: loaded instructions, hook output, MCP instructions, tools, listings, model and mode.
@@ -29,6 +31,7 @@ Agent setup shows what the repo's last Claude Code session was given, read from 
 **Also gives #145 its first numbers:** runs and time per hook per session.
 
 **Not done.**
+
 - Settings summary (permission mode, effort, env, output style, sandbox) by scope.
 - What each plugin brings.
 - MCP server versions.

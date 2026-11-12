@@ -15,6 +15,6 @@ record: b153c0d2-fb66-41b4-9c76-bcff80cba28e
 - Writes nothing; a run takes about 0.28 s.
 - **Limits:** "tasks finished" uses `updated_at`, so a done task edited later counts in the later period; the archive is read only for days archived within the three periods compared.
 
-#### Decisions settled
+## Decisions settled
 
 - 9347: `/imprimatur-stats` is a skill whose script prints an ASCII scoreboard (now vs. the period before) from the database, the review data (archive included) and the last session's transcript, and the agent shows the script's output verbatim rather than re-summarizing it.

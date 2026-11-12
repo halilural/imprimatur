@@ -10,6 +10,7 @@ record: ab97a64d-7a5e-4118-a400-f7c8e499b2c4
 Canlı güncellemeler (#71): yerel izleyici ilk olay hemen + 50 ms, data_version yedeği 500 ms, Durable Object WebSocket, imzalı GitHub webhook
 
 Ölçüm: dosya izleyicisi 25–49 ms; eski tasarımda 300 ms bekleme, cihazlar arası 60 sn ve GitHub 5 dk yoklama vardı.
+
 - `watch.js`: leading edge + 50 ms toplama; ortak değişiklik kapısı (`PRAGMA data_version` + eklentinin kendi işlemleri) izleyici, panel görünürken 500 ms yedek yoklama ve kendi yazmalar için: bir değişiklik bir kez çizilir.
 - Worker: SQLite tabanlı `Live` Durable Object, WebSocket Hibernation, ping/pong otomatik cevap; `GET /v1/live` aynı Bearer ile; push sonrası `{t:"sync",seq,device}`.
 - `POST /v1/github`: `X-Hub-Signature-256` HMAC doğrulama, `{t:"tracker",repo}`; görülen teslimat (kimlik ya da gövde özeti, son 500) yok sayılır.

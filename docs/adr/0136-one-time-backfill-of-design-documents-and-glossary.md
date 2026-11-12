@@ -11,6 +11,6 @@ A repo's empty design documents and glossary are filled once, in the background,
 
 SessionStart checks, for every known repo (whether or not it has a `.claude/imprimatur.json`): has it already been backfilled once, does it have at least 10 records, and does at least one document stand empty or have ADR/PDR records with no linked section (the home directory is excluded). If so, a separate process starts `claude -p`: Sonnet, a $3 budget, up to 120 turns, read-only `Read`/`Glob`/`Grep` tools plus Imprimatur's MCP document tools. The agent writes sections from the existing records and the code, and links records to the sections it writes. The one-time claim keeps a repo from being backfilled twice; the superseded `docs-backfill` section (which predates the chaptered, decision-linked document structure) described the document shape before #129/#131 and no longer reflects the current rule set.
 
-#### Decisions settled
+## Decisions settled
 
 - 6928: empty design documents and the glossary are backfilled once per repo, in the background, by a budget-capped, read-only `claude -p` run triggered at SessionStart, instead of leaving them empty or requiring a manual pass.

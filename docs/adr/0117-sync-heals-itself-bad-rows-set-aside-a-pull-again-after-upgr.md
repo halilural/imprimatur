@@ -12,6 +12,7 @@ Sync heals itself: bad rows set aside, a pull-again after upgrades, self-update 
 The user wants sync to be automatic and to fix its own problems, with no commands on any machine. The second machine had no meetings: its pull cursor sat at seq 232470 while its pushes went on (one page that threw rolled back the whole batch, every time). Before that, a release without the meeting kind had dropped the kind of the 30 meeting records for good.
 
 Decisions (imprimatur-private 0d3fd41):
+
 - Each pulled change runs in its own savepoint. One that throws is rolled back alone and kept, with its error, in meta "failed". It is tried again every sync, and the cursor moves on.
 - A kind this release does not know waits in meta "unknown" with no try limit (916dd41).
 - sync_sig is a hash of REPAIR, KINDS, FIELDS, the statuses, DOC_KINDS and CHAPTERS. When it changes, the next sync sets pull_seq to 0 once; the clock skips what is already here. REPAIR=1 makes every machine do this once now. The cost is one full read (about 900k rows) per such release.
