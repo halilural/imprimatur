@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.178.0] - 2026-11-12
+
+### Added
+- `record_get` MCP tool (#136): one record by its id, whole (body, links, its task's key, and the possibly-stale mark of #211), without loading the rest of its task. `search` and `task_get` point to it when they cut bodies. Measured on this repo: reading one record of RECS (39 records) costs 2.3k characters instead of 71k with `task_get full`, one of ADR (62 records) 1.7k instead of 76k.
+
 ## [0.177.0] - 2026-11-12
 
 ### Added
