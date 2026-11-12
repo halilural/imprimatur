@@ -307,3 +307,31 @@ test("keepGoing (#194): the epic's next ready child blocks the stop; a question,
   db.upsertTask(rid, "#11", { status: "done" });
   assert.deepEqual(stop("All done.", "s3"), {}, "nothing ready");
 });
+
+test("fileContext (#137): the first edit of a file hears the records that name it, ADRs first, with a stale mark; once per session", () => {
+  const root = repo({ process: { mainGuard: false, designFirst: false } });
+  sh(root, "switch", "-q", "-c", "feat/137-x");
+  const { openDb } = req("../vscode/db.js");
+  const db = openDb({ path: path.join(root, "x.db") });
+  const r = db.repoOf(root);
+  const task = db.upsertTask(r.id, "#7", { title: "T", status: "open" });
+  const agent = { kind: "agent", id: "t" };
+  db.addRecord(task.id, { kind: "note", title: "A note about a", links: { files: ["src/a.js"] } }, agent);
+  const adr = db.addRecord(task.id, { kind: "adr", status: "done", title: "a.js stays pure", links: { files: ["src/a.js", "src/b.js"] } }, agent);
+  db.addRecord(task.id, { kind: "decision", status: "dropped", title: "Dropped one", links: { files: ["src/a.js"] } }, agent);
+  db.addRecord(task.id, { kind: "decision", status: "done", title: "Only b", links: { files: ["src/b.js"] } }, agent);
+  db.q("UPDATE records SET updated_at = 1000 WHERE id = ?").run(adr.id);
+  fs.mkdirSync(path.join(root, "src"));
+  fs.writeFileSync(path.join(root, "src/a.js"), "1");
+  sh(root, "add", ".");
+  sh(root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "change a");
+  const records = { dbOf: () => db, repoId: () => r.id, recordsOf: () => [], task: () => undefined };
+  const edit = (file, session = "S1") => check("PreToolUse", { cwd: root, session_id: session, tool_name: "Edit", tool_input: { file_path: path.join(root, file) } }, { records });
+  const first = edit("src/a.js").context?.join("\n") ?? "";
+  assert.match(first, /src\/a\.js is named by 2 records/);
+  assert.match(first, new RegExp(`adr ${adr.id} \\(#7\\): a\\.js stays pure \\[possibly stale: src/a\\.js changed since, \\w+ change a\\]; note \\d+ \\(#7\\): A note about a`));
+  assert.doesNotMatch(first, /Dropped one|Only b/);
+  assert.deepEqual(edit("src/a.js"), {}, "once per file per session");
+  assert.match(edit("src/a.js", "S2").context?.join("\n") ?? "", /named by 2 records/, "a new session hears it again");
+  assert.deepEqual(edit("src/c.js"), {}, "a file no record names adds nothing");
+});
