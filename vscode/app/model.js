@@ -114,6 +114,9 @@ function taskPage(db, repo, key, tab) {
   // #197's user-only approval): a gate is passed by its decision record, whoever wrote it.
   const approved = new Set(recs.filter((/** @type {any} */ r) => r.kind === "decision" && r.status === "done" && r.links?.gate).map((/** @type {any} */ r) => r.links.gate));
   const gates = GATES.map((g, i) => ({ ...g, done: approved.has(g.id), next: !approved.has(g.id) && GATES.slice(0, i).every((x) => approved.has(x.id)) }));
+  // A bucket of records (RECS, ADR, PDR: a key that is neither "#58" nor a Jira "PROJ-12") is no
+  // piece of work: it has no spec and no gates, and opens on its records.
+  const bucket = !/^#\d+$|^[A-Z][A-Z0-9_]*-\d+$/.test(key);
   const spec = db.taskDocFind(repo.id, key, "spec");
   const chapters = require("../db.js").CHAPTERS.spec;
   const specReading = reading(`Spec · ${key}`, spec ? db.docSections(spec.id).filter((/** @type {any} */ s) => s.status === "current")
@@ -121,7 +124,8 @@ function taskPage(db, repo, key, tab) {
     spec ? undefined : "No spec yet: the agent writes it when it starts this task and passes the gates below on its way to tickets.");
   const tickets = db.q("SELECT * FROM tasks WHERE epic_id = ? AND id <> ? ORDER BY id").all(task.id, task.id);
   const activity = db.taskVersions(task.id, { limit: 40 }).list;
-  return { task, tab: TABS.includes(/** @type {string} */ (tab)) ? tab : "spec", tabs: TABS, gates, spec: specReading, tickets, records: recs.filter((/** @type {any} */ r) => r.status !== "dropped"), activity };
+  const tabs = bucket ? TABS.filter((x) => x !== "spec") : TABS;
+  return { task, tab: tabs.includes(/** @type {string} */ (tab)) ? tab : bucket ? "records" : "spec", tabs, gates: bucket ? [] : gates, spec: specReading, tickets, records: recs.filter((/** @type {any} */ r) => r.status !== "dropped"), activity };
 }
 
 /**
