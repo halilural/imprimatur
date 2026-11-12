@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.184.0] - 2026-11-12
+
+### Added
+- Did it work? in Agent Setup (#217): for each day the agent's rule or skill files changed (CLAUDE.md, AGENTS.md, GEMINI.md, `.claude/rules`, skills, `.cursor/rules`), the 7 days before next to the days after: output tokens per turn (from Claude Code's transcripts) and asks to you per turn (turn-end asks), with the change in percent. Said to be a correlation, not proof. No model call.
+
 ## [0.183.1] - 2026-11-12
 
 ### Security

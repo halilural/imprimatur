@@ -308,6 +308,7 @@ class SetupView {
     this.installs = installChecksNow();
     this.budget = budgetRow(this.scopes.find((s) => !s.global)?.root);
     this.wasted = wastedRow(this.scopes.find((s) => !s.global)?.root);
+    this.didItWork = didItWorkRow(this.scopes.find((s) => !s.global)?.root);
     this.suggestions = this.suggestionsRow(this.scopes.find((s) => !s.global)?.root);
     const repoRoot = this.scopes.find((s) => !s.global)?.root;
     let baseline;
@@ -360,7 +361,7 @@ class SetupView {
   getChildren(node) {
     if (!node) {
       const forFile = forFileNode(this.scopes, this.activeFile);
-      return [/** @type {Node} */ (this.checklist.node), ...(this.budget ? [/** @type {Node} */ (this.budget)] : []), ...(this.wasted ? [/** @type {Node} */ (this.wasted)] : []), ...(this.suggestions ? [/** @type {Node} */ (this.suggestions)] : []), ...healthRoot(this.scopes), ...(this.audit ? [/** @type {Node} */ (this.audit)] : []), ...(forFile ? [/** @type {Node} */ (forFile)] : []), ...this.scopes.map((scope) => /** @type {Node} */ ({ type: "scope", scope }))];
+      return [/** @type {Node} */ (this.checklist.node), ...(this.budget ? [/** @type {Node} */ (this.budget)] : []), ...(this.wasted ? [/** @type {Node} */ (this.wasted)] : []), ...(this.didItWork ? [/** @type {Node} */ (this.didItWork)] : []), ...(this.suggestions ? [/** @type {Node} */ (this.suggestions)] : []), ...healthRoot(this.scopes), ...(this.audit ? [/** @type {Node} */ (this.audit)] : []), ...(forFile ? [/** @type {Node} */ (forFile)] : []), ...this.scopes.map((scope) => /** @type {Node} */ ({ type: "scope", scope }))];
     }
     if (node.type === "group") return node.children;
     if (node.type === "health") return healthChildren(this.scopes);
@@ -782,6 +783,32 @@ function wastedRow(root) {
   ];
   return { type: "group", label: "Wasted edits", description: `${w.edits} edit${w.edits === 1 ? "" : "s"} · ~${w.tokens.toLocaleString("en-US")} tokens · last ${DAYS} days${w.rewrites.length ? ` · ${w.rewrites.length} rewrite loop${w.rewrites.length === 1 ? "" : "s"}` : ""}`, icon: "trash", children,
     tooltip: `Work the agent threw away itself in the last ${DAYS} days: edits whose lines are gone because the same session replaced them, and files changed again and again in a row. Tokens are an estimate (${TOKENS_PER_LINE} per written line).` };
+}
+
+/**
+ * Did it work? (#217): per day with rule or skill changes, the week before next to the week after.
+ * @param {string | undefined} root
+ */
+function didItWorkRow(root) {
+  if (!root) return undefined;
+  let list;
+  try {
+    list = require("./did-it-work.js").didItWork(root);
+  } catch {
+    return undefined;
+  }
+  if (!list.length) return undefined;
+  const k = (/** @type {number} */ n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+  const pct = (/** @type {number | undefined} */ p) => (p === undefined ? "" : ` (${p > 0 ? "+" : ""}${p}%)`);
+  const side = (/** @type {any} */ x) => (x ? `${k(x.tokensPerTurn)} tokens and ${x.asksPerTurn} asks per turn over ${x.turns} turns` : "no turns");
+  const children = list.map((c) => ({
+    type: "leaf", label: `${c.day}: ${c.changes.length === 1 ? c.changes[0].subject : `${c.changes.length} rule changes`}`,
+    description: c.before && c.after ? `tokens/turn ${k(c.before.tokensPerTurn)} → ${k(c.after.tokensPerTurn)}${pct(c.tokens)} · asks/turn ${c.before.asksPerTurn} → ${c.after.asksPerTurn}${pct(c.asks)}` : "not enough turns on one side",
+    icon: c.asks !== undefined && c.asks < 0 ? "arrow-down" : c.asks !== undefined && c.asks > 0 ? "arrow-up" : "circle-small",
+    tooltip: `${c.changes.map((x) => `${x.hash} ${x.subject} (${x.files.join(", ")})`).join("\n")}\n\nThe 7 days before: ${side(c.before)}.\nThe days after (up to 7): ${side(c.after)}.\n\nA correlation, not proof: other things changed in the same days.`,
+  }));
+  return { type: "group", label: "Did it work?", description: `${list.length} day${list.length === 1 ? "" : "s"} with rule or skill changes`, icon: "graph-line", children,
+    tooltip: "For each day the agent's rule or skill files changed (CLAUDE.md, AGENTS.md, .claude/rules, skills, .cursor/rules), the week before next to the week after: output tokens per turn (Claude Code's transcripts) and asks to you per turn (turn-end asks). Fewer asks per turn usually means the agent needs you less." };
 }
 
 /**
