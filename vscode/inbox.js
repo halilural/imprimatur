@@ -149,8 +149,9 @@ function inboxParts(root) {
       for (const i of g.items) {
         if (i.done) continue;
         const item = { id: i.turn ? undefined : i.id, title: i.title, task: g.task?.key };
-        // A turn-end ask is a turn-end ask whatever card kind it shows as.
-        out[i.turn ? "turn" : i.kind]?.push(item);
+        // Grouped by what the user does, not by where it came from: a turn-end ask is a
+        // question or something to do, next to the records of the same kind.
+        out[i.turn ? (i.kind === "question" ? "question" : "todo") : i.kind]?.push(item);
         if (g.task?.status === "done") out.doneTasks.push(item);
       }
     }
