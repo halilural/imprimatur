@@ -53,6 +53,11 @@ const HIDDEN_FULL_MS = 60_000;
 class LauncherView {
   /** @param {() => Counts} counts @param {{inbox?: () => number, now?: () => number}} [o] inbox: the badge's count alone, cheap */
   constructor(counts, { inbox, now = Date.now } = {}) {
+    /**
+     * One object per row id: VS Code knows a row by the object getChildren gave it, so reveal (and
+     * getParent) only find a row that comes back as the same object. @type {Map<string, any>}
+     */
+    this.rows = new Map();
     this.counts = counts;
     this.inbox = inbox;
     this.clock = now;
@@ -107,8 +112,18 @@ class LauncherView {
     }
   }
 
-  /** @param {any} [row] */
+  /** The rows under a row, each the same object as last time for the same id. @param {any} [row] */
   getChildren(row) {
+    return this.children(row).map((/** @type {any} */ r) => {
+      const old = this.rows.get(r.id);
+      if (!old) return this.rows.set(r.id, r), r;
+      for (const k of Object.keys(old)) if (!(k in r)) delete old[k];
+      return Object.assign(old, r);
+    });
+  }
+
+  /** @param {any} [row] */
+  children(row) {
     // Drawn (or read) after hidden refreshes: the rows match the badge.
     if (!row && this.stale) this.catchUp();
     if (!row) return ROWS.filter((r) => !r.social || socialOn());
@@ -150,11 +165,11 @@ class LauncherView {
   /** @param {any} row */
   getTreeItem(row) {
     if (row.item) {
-      const one = new vscode.TreeItem(row.title, vscode.TreeItemCollapsibleState.None);
+      // The task's key leads the label: VS Code's find in the view matches labels only, so "#157" finds it.
+      const one = new vscode.TreeItem(row.task ? `${row.task} · ${row.title}` : row.title, vscode.TreeItemCollapsibleState.None);
       one.id = row.id;
       // Right click: hand it to Claude Code, or copy a reference to paste into a chat.
       one.contextValue = "imprimaturItem";
-      one.description = row.task;
       one.tooltip = (row.task ? `${row.task}: ${row.title}` : row.title) + (row.tip ? `\n${row.tip}` : "");
       // A task opens its page, a record its page; a turn-end ask has none, Home shows it.
       one.command = row.key
