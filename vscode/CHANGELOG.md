@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.173.1] - 2026-11-12
+
+### Fixed
+- A bucket of records (RECS, ADR, PDR and the like: a key that is not "#58" or "PROJ-12") no longer shows a spec and its gates: it opens on its records.
+
 ## [0.173.0] - 2026-11-12
 
 ### Changed

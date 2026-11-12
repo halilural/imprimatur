@@ -274,7 +274,7 @@ const STATUS = { open: "open", active: "claimed", done: "resolved", dropped: "dr
 /** A task's page: header, the spec's gates, then Spec | Tickets | Records | Activity. @param {any} p @param {(md: string) => string} render */
 function taskPageHtml(p, render) {
   const t = p.task;
-  const gates = `<div class="gates">${p.gates.map((/** @type {any} */ g, /** @type {number} */ i) =>
+  const gates = !p.gates.length ? "" : `<div class="gates">${p.gates.map((/** @type {any} */ g, /** @type {number} */ i) =>
     `<div class="gate ${g.done ? "done" : g.next ? "next" : ""}"><span>${g.done ? "✓" : i + 1}</span> ${esc(g.label)}</div>`).join("")}</div>`;
   const tabs = `<div class="pills">${p.tabs.map((/** @type {string} */ x) => `<button data-tab="${esc(x)}" data-key="${esc(t.key)}" class="${x === p.tab ? "on" : ""}">${esc(x[0].toUpperCase() + x.slice(1))}${x === "tickets" ? ` · ${p.tickets.length}` : x === "records" ? ` · ${p.records.length}` : ""}</button>`).join("")}</div>`;
   let body = "";

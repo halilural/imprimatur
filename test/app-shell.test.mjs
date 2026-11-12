@@ -135,3 +135,16 @@ test("More (#202): Exercises, Meetings and Social open in this panel; a step's b
   assert.equal(sm.reading.edit.kind, "social");
   assert.match(appHtml(sm, o), /<section id="launch"><h2>Launch on Reddit/);
 });
+
+test("task page: a bucket of records (RECS) has no spec tab and no gates; it opens on its records", () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-bucket-")));
+  const db = openDb({ path: path.join(root, "x.db") });
+  const repo = db.repoOf(root);
+  const t = db.upsertTask(repo.id, "RECS", { title: "Recommendations", status: "active" });
+  db.addRecord(t.id, { kind: "note", title: "One" }, agent);
+  const m = appModel(db, repo, root, { area: "tasks", task: "RECS" });
+  assert.deepEqual([m.page.tab, m.page.tabs, m.page.gates], ["records", ["tickets", "records", "activity"], []]);
+  assert.doesNotMatch(appHtml(m, o), /class="gates"|data-tab="spec"/);
+  db.upsertTask(repo.id, "PROJ-12", { title: "Jira", status: "open" });
+  assert.equal(appModel(db, repo, root, { area: "tasks", task: "PROJ-12" }).page.gates.length, 4);
+});
