@@ -31,10 +31,16 @@ function repoFor(root) {
 /** The extension's folder (registerApp sets it): the page loads mermaid from its dist/. @type {vscode.Uri | undefined} */
 let extensionUri;
 
+/** The page last drawn, with NONCE in place of its nonce, and the panel it went to. */
+let drawn = "";
+/** @type {vscode.WebviewPanel | undefined} */ let drawnIn;
+const NONCE = "imprimatur-nonce-placeholder";
+
 function render() {
   if (!panel) return;
   const got = repoFor(at.root);
   if (!got) {
+    drawn = "";
     panel.webview.html = "<!doctype html><body style='font-family:var(--vscode-font-family);padding:24px'>Imprimatur has no repo yet: open a folder with a git repo.</body>";
     return;
   }
@@ -46,9 +52,15 @@ function render() {
   const where = [...AREAS, ...MORE].find((a) => a.id === m.area)?.label ?? "Home";
   const doc = m.area === "docs" ? DOCS.find((/** @type {any} */ d) => d.id === m.doc)?.label : m.page?.task?.key;
   panel.title = `${where}${doc ? ` · ${doc}` : ""} · ${m.repo.name}`;
-  renders++;
-  panel.webview.html = appHtml(m, { nonce: crypto.randomBytes(16).toString("hex"), cspSource: panel.webview.cspSource, render: (md) => renderMarkdown(md),
+  const html = appHtml(m, { nonce: NONCE, cspSource: panel.webview.cspSource, render: (md) => renderMarkdown(md),
     mermaid: extensionUri && panel.webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, "dist", "mermaid.min.js")).toString() });
+  // Every database write (any session's hook) redraws: a page that reads the same is left alone,
+  // so it keeps its scroll and its diagrams are not loaded and drawn again.
+  if (panel === drawnIn && html === drawn) return;
+  drawnIn = panel;
+  drawn = html;
+  renders++;
+  panel.webview.html = html.replaceAll(NONCE, crypto.randomBytes(16).toString("hex"));
 }
 
 /**

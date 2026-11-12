@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.172.1] - 2026-11-12
+
+### Fixed
+- The panel no longer reloads on every database change (any Claude session's hook writes one): a page that reads the same is left as it is, so a document keeps its scroll and its diagrams are not drawn again.
+
 ## [0.172.0] - 2026-11-12
 
 ### Added
