@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.183.0] - 2026-11-12
+
+### Added
+- `llms.txt` at the repo's root (#216): the documents export writes an index of Imprimatur's documents in the llmstxt.org form (project, capabilities, ADRs, glossary, out of scope, docs/agents, wiki), each with a link and a one-line description, so Cursor, Codex and other agents find them. It follows the documents as they come and go; a hand-written `llms.txt` is left alone.
+
 ## [0.182.0] - 2026-11-12
 
 ### Added

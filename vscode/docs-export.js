@@ -364,6 +364,10 @@ function sideFiles(db, repo, root) {
   try {
     require("./pocock-files.js").exportPocock(db, repo, root, io(`${HEADER_START}; edit this file or the document in Imprimatur. -->`));
   } catch {}
+  // llms.txt (#216): the index other agents read, after the documents it lists.
+  try {
+    require("./llms-txt.js").writeLlms(root, repo.name ?? path.basename(root), io(`${HEADER_START}; it lists the documents Imprimatur keeps, written again when they change. -->`));
+  } catch {}
   const was = path.join(dirOf(root), FILES.glossary);
   try {
     if (was !== fileOf(root, "glossary") && inside(root, was) && generatedText(fs.readFileSync(was, "utf8"))) fs.rmSync(was);
