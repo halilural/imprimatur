@@ -326,6 +326,8 @@ class SetupView {
     let agentRows = [];
     try {
       if (repoRoot) agentRows = require("./agent-files.js").agentRows(require("./agent-files.js").agentFiles(repoRoot));
+      // Warnings the agent keeps getting, to make blocking (#218).
+      if (repoRoot) agentRows = [...agentRows, ...require("./warn-to-block.js").blockRows(repoRoot, require("./warn-to-block.js").suggestions(repoRoot))];
       // Rules repeated or contradicting across the agent files (#213).
       if (repoRoot) agentRows = [...agentRows, ...require("./rule-drift.js").driftRows(repoRoot, require("./rule-drift.js").ruleDrift(repoRoot))];
     } catch {}
@@ -1239,6 +1241,19 @@ function registerSetupView(ctx, roots, counts) {
       } else lastClick = { url, at: now };
     }),
     vscode.commands.registerCommand("imprimatur.setup.installBaseline", (arg) => installBaseline(provider, arg)),
+    // #218: a warning the agent keeps getting becomes a blocking check, after the user confirms.
+    vscode.commands.registerCommand("imprimatur.setup.blockCheck", async (/** @type {any} */ a) => {
+      if (!a?.root || !a?.name || !vscode.workspace.isTrusted) return;
+      const ok = await vscode.window.showWarningMessage(`Make Imprimatur's ${a.name} check block? The agent was warned by it ${a.count} times; blocking makes it fix the cause before going on. .claude/imprimatur.json gets process.${a.name} = "block".`, { modal: true }, "Make it block");
+      if (!ok) return;
+      try {
+        require("./warn-to-block.js").makeBlock(a.root, a.name);
+        vscode.window.showInformationMessage(`Imprimatur: ${a.name} now blocks (in .claude/imprimatur.json; new Claude Code sessions use it).`);
+      } catch (e) {
+        vscode.window.showErrorMessage(`Imprimatur: ${/** @type {Error} */ (e).message}`);
+      }
+      provider.refresh();
+    }),
     vscode.commands.registerCommand("imprimatur.setup.writeAgentFiles", async () => {
       const root = provider.scopes.find((s) => !s.global)?.root;
       if (!root || !vscode.workspace.isTrusted) return;

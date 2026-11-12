@@ -10,7 +10,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 /** @typedef {{written: number, cached: number, output: number, sessions: Set<string>}} Sum */
-/** @typedef {{size: number, offset: number, current?: string, seen: Set<string>, sums: Map<string, Sum>, days: Map<string, {turns: number, output: number}>}} FileState */
+/** @typedef {{size: number, offset: number, current?: string, seen: Set<string>, sums: Map<string, Sum>, days: Map<string, {turns: number, output: number}>, checks: Array<{name: string, at: number, session: string}>}} FileState */
 /** @type {Map<string, FileState>} */
 const cache = new Map();
 
@@ -42,14 +42,14 @@ function readNew(file, st) {
   const fd = fs.openSync(file, "r");
   try {
     const size = fs.fstatSync(fd).size;
-    if (size < st.offset) Object.assign(st, { offset: 0, current: undefined, seen: new Set(), sums: new Map(), days: new Map() }); // rewritten
+    if (size < st.offset) Object.assign(st, { offset: 0, current: undefined, seen: new Set(), sums: new Map(), days: new Map(), checks: [] }); // rewritten
     const buf = Buffer.alloc(size - st.offset);
     fs.readSync(fd, buf, 0, buf.length, st.offset);
     const text = buf.toString("utf8");
     // Only whole lines: a line still being written is read next time.
     const end = text.lastIndexOf("\n") + 1;
     for (const line of text.slice(0, end).split("\n")) {
-      if (!line.includes('"assistant"') && !line.includes('"user"')) continue;
+      if (!line.includes('"assistant"') && !line.includes('"user"') && !line.includes('"attachment"')) continue;
       let o;
       try {
         o = JSON.parse(line);
@@ -57,6 +57,12 @@ function readNew(file, st) {
         continue;
       }
       const day = String(o.timestamp ?? "").slice(0, 10);
+      // A process check's finding (#218): the hook output the agent was given, once per name per line.
+      if (o.type === "attachment") {
+        const names = new Set([...JSON.stringify(o.attachment ?? {}).matchAll(/Imprimatur \(([A-Za-z]+)\)/g)].map((m) => m[1]));
+        for (const name of names) st.checks.push({ name, at: Date.parse(o.timestamp) || 0, session: o.sessionId ?? "" });
+        continue;
+      }
       const dayOf = () => st.days.get(day) ?? (st.days.set(day, { turns: 0, output: 0 }), /** @type {any} */ (st.days.get(day)));
       // A turn (#217): the user's own prompt, not a tool result, a meta line or a compact summary.
       if (o.type === "user") {
@@ -122,6 +128,25 @@ function dailyUsage(projectDir) {
   return all;
 }
 
+/**
+ * Imprimatur's process-check findings the agent was given since a time (#218): per check, how many
+ * and in how many sessions. @param {string} projectDir @param {number} since ms
+ * @returns {Map<string, {count: number, sessions: number}>}
+ */
+function checkFindings(projectDir, since) {
+  /** @type {Map<string, {count: number, sessions: Set<string>}>} */
+  const by = new Map();
+  for (const st of statesOf(projectDir))
+    for (const c of st.checks) {
+      if (c.at < since) continue;
+      const x = by.get(c.name) ?? { count: 0, sessions: new Set() };
+      x.count++;
+      x.sessions.add(c.session);
+      by.set(c.name, x);
+    }
+  return new Map([...by].map(([k, v]) => [k, { count: v.count, sessions: v.sessions.size }]));
+}
+
 /** Every transcript's state, brought up to date (an unchanged file is not read). @param {string} projectDir @returns {FileState[]} */
 function statesOf(projectDir) {
   let names = [];
@@ -138,7 +163,7 @@ function statesOf(projectDir) {
     } catch {
       continue;
     }
-    if (!st) cache.set(file, (st = { size: -1, offset: 0, seen: new Set(), sums: new Map(), days: new Map() }));
+    if (!st) cache.set(file, (st = { size: -1, offset: 0, seen: new Set(), sums: new Map(), days: new Map(), checks: [] }));
     if (st.size !== size) {
       try {
         readNew(file, st);
@@ -152,4 +177,4 @@ function statesOf(projectDir) {
 /** The repo's transcript folder, named the way Claude Code names it (agent-setup.js projectSlug). @param {string} root */
 const projectDirOf = (root) => path.join(require("node:os").homedir(), ".claude", "projects", require("./agent-setup.js").projectSlug(root));
 
-module.exports = { ticketTokens, dailyUsage, ticketOfBranch, namedIn, projectDirOf };
+module.exports = { ticketTokens, dailyUsage, checkFindings, ticketOfBranch, namedIn, projectDirOf };
