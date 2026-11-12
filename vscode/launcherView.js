@@ -11,20 +11,19 @@ const vscode = require("vscode");
 /** @typedef {{edits: number, inbox: number, parts?: Parts, tasks?: TaskLists}} Counts */
 
 // Under Home: what its count is made of, item by item, so the number reads without
-// opening the panel. The first four add up to it; "on done tasks" is part of them,
+// opening the panel. The first three add up to it; "on done tasks" is part of them,
 // asks a finished task left behind.
 const PARTS = [
-  { key: "question", label: "Questions", icon: "comment-discussion", tooltip: "The agent is stopped on a decision" },
-  { key: "todo", label: "To-dos", icon: "checklist", tooltip: "Steps for you to do" },
+  { key: "question", label: "Questions for you", icon: "comment-discussion", tooltip: "Decisions the agent waits on: answer them in the chat" },
+  { key: "todo", label: "Your to-dos", icon: "checklist", tooltip: "Steps only you can do, from records and from the end of agent turns" },
   { key: "test", label: "Manual tests", icon: "eye", tooltip: "Things to check by eye" },
-  { key: "turn", label: "Turn-end asks", icon: "bell", tooltip: "Asks left at the end of an agent turn, not yet saved as records" },
   { key: "doneTasks", label: "On done tasks", icon: "archive", tooltip: "Of the above: asks still open on tasks already done; close or drop them" },
 ];
 
 const APP = "imprimatur.app.open";
 const ROWS = [
-  { id: "home", label: "Home", icon: "home", command: APP, args: { area: "home" }, tooltip: "What waits on you, what is in progress, what finished this week" },
-  { id: "tasks", label: "Tasks", icon: "tasklist", command: APP, args: { area: "tasks" }, tooltip: "Active first, then open, then the last done" },
+  { id: "home", label: "Home", icon: "home", command: APP, args: { area: "home" }, tooltip: "What waits on you: questions, your to-dos, manual tests" },
+  { id: "tasks", label: "Tasks", icon: "tasklist", command: APP, args: { area: "tasks" }, tooltip: "The project's work items (issues), by status: active, open, the last done" },
   { id: "docs", label: "Docs", icon: "book", command: APP, args: { area: "docs" }, tooltip: "Project, capabilities, ADRs, glossary, out of scope, wiki" },
   { id: "edits", label: "Agent changes", icon: "git-merge", command: APP, args: { area: "edits" }, tooltip: "The agent's edits waiting for your review" },
   { id: "checklist", label: "Setup checklist", icon: "checklist", command: "imprimatur.setup.focus", tooltip: "What needs doing in the agent setup: updates, upstream changes, problems, recommendations (#142)" },

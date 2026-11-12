@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.174.3] - 2026-11-12
+
+### Changed
+- Home in the side bar groups what waits on you by what you do, not by where it came from: **Questions for you**, **Your to-dos**, **Manual tests**. A turn-end ask goes under the first two; the separate "Turn-end asks" row is gone. Tasks' tooltip says they are the project's work items.
+
 ## [0.174.2] - 2026-11-12
 
 ### Security
