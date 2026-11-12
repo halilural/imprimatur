@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.177.0] - 2026-11-12
+
+### Added
+- File context for the agent (#137): before the first edit of a file in a session, the agent hears the records that name it (`links.files`), ADRs and decisions first, at most five, each marked "possibly stale" when the file changed since it was written. Once per file per session; no new hook or process (it runs in the existing PreToolUse step). Setting: `fileContext` in `.claude/imprimatur.json`'s process checks.
+
 ## [0.176.1] - 2026-11-12
 
 ### Fixed

@@ -55,6 +55,8 @@ const DEFAULTS = {
   evidence: "warn",
   // #210: the user approved and the reply asks again instead of doing it; the agent goes back once.
   reask: "block",
+  // #137: the first edit of a file in a session hears the decisions and records linked to it.
+  fileContext: "warn",
 };
 
 /** The git root at or above a directory, by its .git entry (no git process). @param {string} dir */
@@ -228,6 +230,28 @@ function once(root, session, key) {
   writeState(root, { ...state, [session]: { ...state[session], once: [...seen, key] } });
   return true;
 }
+/**
+ * The records of a repo whose links.files name a file (#137): ADRs and decisions first, then the
+ * newest; at most five, dropped ones left out.
+ * @param {any} db @param {number} repoId @param {string} rel the file, repo-relative with "/"
+ */
+function fileRecords(db, repoId, rel) {
+  const like = `%${JSON.stringify(rel).slice(1, -1).replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+  const rows = db.q(`SELECT r.id, r.uid, r.kind, r.title, r.links, r.updated_at, t.key AS task FROM records r JOIN tasks t ON t.id = r.task_id
+    WHERE t.repo_id = ? AND r.status <> 'dropped' AND r.links LIKE ? ESCAPE '\\' ORDER BY r.updated_at DESC`).all(repoId, like);
+  const rank = (/** @type {string} */ k) => (k === "adr" ? 0 : k === "decision" ? 1 : 2);
+  return rows
+    .filter((/** @type {any} */ r) => {
+      try {
+        return (JSON.parse(r.links).files ?? []).includes(rel);
+      } catch {
+        return false;
+      }
+    })
+    .sort((/** @type {any} */ a, /** @type {any} */ b) => rank(a.kind) - rank(b.kind))
+    .slice(0, 5);
+}
+
 /** @param {string} root @param {string | undefined} session @param {string} list @param {string} value */
 function remember(root, session, list, value) {
   if (!session) return;
@@ -487,6 +511,27 @@ function check(event, input, deps = {}) {
     }
   }
 
+  // #137: before the first edit of a file in a session, the records that name it (links.files): what
+  // was decided about it, and whether the file changed since (#211). Once per file per session.
+  if (event === "PreToolUse" && EDITS.test(tool) && s.fileContext.mode && (ti.file_path || ti.notebook_path)) {
+    const rel = relOf(root, input.cwd, ti.file_path ?? ti.notebook_path)?.split(path.sep).join("/");
+    if (rel && !rel.startsWith("..") && !path.isAbsolute(rel)) {
+      try {
+        const records = deps.records ?? require("./records.js");
+        const db = records.dbOf?.();
+        const id = db ? records.repoId(root) : undefined;
+        const linked = id === undefined ? [] : fileRecords(db, id, rel);
+        if (linked.length && once(root, input.session_id, `file ${rel}`)) {
+          // One git call for the file: its newest commit, against each record's last write.
+          const [hash, ct, ...subj] = (run(["log", "-1", "--format=%h%x09%ct%x09%s", "--", rel], root) ?? "").split("\t");
+          const changed = Number(ct) * 1000;
+          const line = (/** @type {any} */ r) => `${r.kind} ${r.id} (${r.task}): ${String(r.title).replace(/\s+/g, " ").slice(0, 140)}${changed > r.updated_at && changed > Number(db.meta?.(`stale-ok:${r.uid}`) ?? 0) ? ` [possibly stale: ${rel} changed since, ${hash} ${subj.join("\t").slice(0, 60)}]` : ""}`;
+          found(s.fileContext, "fileContext", `${rel} is named by ${linked.length} record${linked.length === 1 ? "" : "s"}; keep to what they decided, or change them with it: ${linked.map(line).join("; ")}.`);
+        }
+      } catch {}
+    }
+  }
+
   if (event === "PostToolUse" && EDITS.test(tool) && ti.file_path && relOf(root, input.cwd, ti.file_path) !== undefined) {
     const rel = /** @type {string} */ (relOf(root, input.cwd, ti.file_path)).split(path.sep).join("/");
     // The TOC script is the repo's code: it runs only in repos the user trusted (outside the repo).
@@ -688,4 +733,4 @@ function starterSettings({ allow, branch } = {}) {
   };
 }
 
-module.exports = { check, reply, settingsOf, starterSettings, nextReady, asksUser, repoOf, issueOfBranch, taskOfBranch, bypasses, trust, isTrusted, scriptIn, DEFAULTS, CONFIG };
+module.exports = { check, fileRecords, reply, settingsOf, starterSettings, nextReady, asksUser, repoOf, issueOfBranch, taskOfBranch, bypasses, trust, isTrusted, scriptIn, DEFAULTS, CONFIG };
