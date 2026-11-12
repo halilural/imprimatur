@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.170.0] - 2026-11-12
+
+### Changed
+- The Imprimatur panel reads better. Docs and Social show each section in full in one readable column, with "On this page" on the right. There is no second copy of the section list and no "More" fold. Tables have borders and headers, code is in the text color and wraps, and "Edit" sits beside a section's heading on hover. Tasks, Edits and Setup are one bordered list with dividers, and Edits shows its count as a badge. Home's cards have borders and two-line notes. The side menu shows its `g` shortcuts only in tooltips. Body text uses the editor's text color, and an exercise step's number stays on its checkbox line.
+
 ## [0.169.1] - 2026-11-11
 
 ### Fixed

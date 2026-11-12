@@ -31,8 +31,9 @@ test("app shell: five areas and More; Home lists the tasks in progress; a docume
   const m = appModel(db, repo, root, { area: "docs", doc: "glossary" });
   assert.equal(m.reading.sections[0].title, "WAL");
   const html = appHtml(m, o);
-  assert.match(html, /class="toc"><div class="label">Sections<\/div><a href="#wal">WAL<\/a>/);
-  assert.match(html, /<section id="wal"><h2>WAL<\/h2><div class="lead"><p>Write-ahead log\.[\s\S]*<details><summary>More<\/summary><p>More detail here\./);
+  assert.match(html, /class="onpage"><div class="label">On this page<\/div><a href="#wal">WAL<\/a>/);
+  assert.doesNotMatch(html, /class="toc"|<summary>More<\/summary>/, "one table of contents, nothing folded");
+  assert.match(html, /<section id="wal"><h2>WAL<\/h2>(<details class="edit">[\s\S]*?<\/details>)?<p>Write-ahead log\.[\s\S]*More detail here\./);
   assert.match(html, /class="onpage"/);
   assert.match(readingHtml({ title: "Empty", sections: [] }, render), /Nothing written here yet/);
   // Theme colors only: every color is a VS Code variable.
@@ -108,7 +109,7 @@ test("Edits and Setup (#199): the review queue per file, newest first; setup lin
   ];
   const html = appHtml(appModel(db, repo, root, { area: "edits", rows }), o);
   assert.match(html, /2 agent edits in 1 file wait for your review/);
-  assert.match(html, /<span class="key">2<\/span><span><b>a\.md<\/b>[\s\S]*2026-11-10 12:00 · new/);
+  assert.match(html, /<span><b>a\.md<\/b>[\s\S]*2026-11-10 12:00 · new[\s\S]*class="count" title="Edits waiting">2</);
   // Each edit under review, newest first, with its own Accept, Diff and Go (#202).
   assert.match(html, /<b>#2<\/b>[\s\S]*data-edit="accept" data-file="a\.md" data-n="2"[\s\S]*data-edit="diff"[\s\S]*data-edit="go"[\s\S]*<b>#1<\/b>/);
   assert.doesNotMatch(html, /data-file="b\.md"/);
