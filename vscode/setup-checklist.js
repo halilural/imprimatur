@@ -14,7 +14,7 @@ const { fixable, skillUpdatePrompt } = require("./fix-prompts.js");
  * @param {number} openRecommendations
  * @param {Array<{ok: boolean, label: string, why: string, fix?: any}>} [installs] the install checks (install-check.js)
  * @param {{root: string, items: any[]}} [baseline] the repo's baseline (baseline.js, #141)
- * @param {{noChapter: number}} [docs] the repo's design documents (#129): sections outside the fixed chapters
+ * @param {{noChapter: number, stale?: number}} [docs] the repo's design documents: sections outside the fixed chapters (#129), parts possibly stale (#211)
  * @param {any[]} [agentRows] the repo's agent-file rows (agent-files.js, #133)
  */
 function checklistOf(scopes, openRecommendations, installs = [], baseline, docs, agentRows = []) {
@@ -43,6 +43,11 @@ function checklistOf(scopes, openRecommendations, installs = [], baseline, docs,
     rows.push({ type: "leaf", label: `Documents: ${docs.noChapter} section${docs.noChapter === 1 ? "" : "s"} in no chapter`, description: "architecture and product follow fixed chapters",
       tooltip: "The architecture and product documents follow fixed chapters (arc42-lite and the PRODUCT shape, #129). Open them in the panel's Analysis tab: sections in no chapter are listed last, under \"No chapter yet\". Ask the agent to give each a chapter with doc_section_upsert.",
       icon: "book", command: "imprimatur.openArchitecture" });
+  // Documents whose code changed since they were written (#211): one row, the list behind it.
+  if (docs?.stale)
+    rows.push({ type: "leaf", label: `Documents: ${docs.stale} possibly stale`, description: "their code changed since they were written",
+      tooltip: "ADRs, decisions and document sections tied to files that changed in a commit after the text was written (#211). Click for the list: ask Claude to check one against the code, or mark it reviewed.",
+      icon: "history", command: "imprimatur.staleDocs" });
   const flat = (/** @type {any[]} */ items) => items.flatMap((i) => [i, ...flat(i.children ?? [])]);
   for (const s of scopes)
     for (const it of flat(s.items)) {

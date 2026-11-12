@@ -512,8 +512,8 @@ function validate(tool, a) {
 /** @param {Record<string, any>} a @param {string[]} keys */
 const pick = (a, keys) => Object.fromEntries(keys.filter((k) => a[k] !== undefined).map((k) => [k, a[k]]));
 
-/** A task's records as task_get pages them. @param {any} db @param {any} task @param {any} a */
-function taskRecords(db, task, a) {
+/** A task's records as task_get pages them, an ADR or decision with what changed in its code since (#211). @param {any} db @param {any} task @param {any} a @param {{id: number, root: string}} [repo] */
+function taskRecords(db, task, a, repo) {
   const status = a.status ?? (a.dropped ? "all" : "open");
   const all = db.recordsOf(task.id, { dropped: true });
   const matching = all.filter((r) =>
@@ -521,7 +521,8 @@ function taskRecords(db, task, a) {
   const offset = a.offset ?? 0;
   const limit = a.limit ?? 50;
   let cut = 0;
-  const records = matching.slice(offset, offset + limit).map((r) => {
+  const stale = repo && matching.some((r) => r.kind === "adr" || r.kind === "decision") ? staleByUid(db, repo) : new Map();
+  const records = matching.slice(offset, offset + limit).map((r) => (stale.has(r.uid) ? { ...r, stale: stale.get(r.uid) } : r)).map((r) => {
     if (a.full) return r;
     // #120: the fields an agent acts on, and the body's first line.
     const { uid, task_id, position, created_at, ...lean } = r;
@@ -545,6 +546,23 @@ function taskRecords(db, task, a) {
   return out;
 }
 
+/**
+ * The repo's possibly stale parts (#211) by uid: what changed in the code since each was written.
+ * Never fails a read: without git, nothing is stale.
+ * @param {any} db @param {{id: number, root: string}} repo @returns {Map<string, {files: string[], commits: number, newest: string}>}
+ */
+function staleByUid(db, repo) {
+  try {
+    const parts = require("../vscode/stale-docs.js").staleParts(db, repo, repo.root);
+    return new Map(parts.map((p) => [db.q(`SELECT uid FROM ${p.kind === "section" ? "doc_sections" : "records"} WHERE id = ?`).get(p.id)?.uid, { files: p.files.slice(0, 5), commits: p.commits.length, newest: `${p.commits[0].hash} ${p.commits[0].subject}` }]));
+  } catch {
+    return new Map();
+  }
+}
+
+/** The line that tells the agent a part may be out of date. @param {{files: string[], commits: number, newest: string}} st */
+const staleLine = (st) => `    possibly stale (#211): ${st.files.join(", ")} changed in ${st.commits} commit${st.commits === 1 ? "" : "s"} since it was written (newest ${st.newest}); check the code before relying on it, and update it if it no longer holds`;
+
 /** doc_get: the document's table of contents, with the asked bodies. @param {any} db @param {{id: number, root: string}} repo @param {any} a */
 function docGet(db, repo, a) {
   socialGate(repo, a);
@@ -556,7 +574,8 @@ function docGet(db, repo, a) {
   if (a.section !== undefined && !all.some((s) => s.key === a.section)) {
     throw new ToolError(`no section ${JSON.stringify(a.section)} in the ${a.kind} document. ${all.length ? `Sections: ${all.map((s) => s.key).join(", ")}.` : "It has no sections yet."} doc_section_upsert with this key and a title creates it.`);
   }
-  const sections = all.map(({ contributors, ...s }) => (a.full || s.key === a.section ? s : { ...s, body: undefined }));
+  const stale = all.length ? staleByUid(db, repo) : new Map();
+  const sections = all.map(({ contributors, ...s }) => ({ ...(a.full || s.key === a.section ? s : { ...s, body: undefined }), stale: stale.get(s.uid) }));
   /** @type {any} */
   const out = { document, sections: sections.map((s) => Object.fromEntries(Object.entries(s).filter(([, v]) => v !== undefined))) };
   if (!all.length) out.hint = task ? (a.kind === ANALYSIS ? `no analysis for ${task}: analyses are retired; its spec is doc_get {kind: "spec", task: "${task}"}`
@@ -646,8 +665,10 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
     }
     case "task_list":
       return { tasks: db.tasksOf(repoOf(db, a.repo).id, { status: a.status }) };
-    case "task_get":
-      return taskRecords(db, taskOf(db, repoOf(db, a.repo), a.key), a);
+    case "task_get": {
+      const repo = repoOf(db, a.repo);
+      return taskRecords(db, taskOf(db, repo, a.key), a, repo);
+    }
     case "task_upsert": {
       const rid = repoOf(db, a.repo).id;
       const fields = pick(a, ["title", "status", "summary"]);
@@ -786,6 +807,7 @@ export function digest(name, out, a = {}) {
       for (const r of out.records) {
         lines.push(recordLine(r));
         if (r.body) lines.push(a.full ? r.body.replace(/^/gm, "    ") : `    ${oneLine(r.body, 200)}`);
+        if (r.stale) lines.push(staleLine(r.stale));
       }
       const status = a.status ?? (a.dropped ? "all" : "open");
       lines.push(`${out.returned} of ${out.total} records (status ${status}${a.kind ? `, kind ${a.kind}` : ""}).${out.hint ? ` ${out.hint}.` : ""}`);
@@ -807,6 +829,7 @@ export function digest(name, out, a = {}) {
       const line = (s, i) => `${i} ${s.key} — ${s.title}${s.status !== "current" ? ` [${s.status}]` : ""}${s.source ? ` [${s.source}]` : ""} (updated ${new Date(s.updated_at).toISOString().slice(0, 10)}${s.records.length ? `; records ${s.records.join(", ")}` : ""})`;
       live.forEach((s, i) => {
         lines.push(line(s, `${i + 1}.`));
+        if (s.stale) lines.push(staleLine(s.stale));
         if (s.body != null) lines.push(s.body.replace(/^/gm, "    "));
       });
       old.forEach((s) => {

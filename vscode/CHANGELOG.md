@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.175.0] - 2026-11-12
+
+### Added
+- Possibly stale documents (#211): an ADR, a decision or a document section tied to files is flagged when one of those files changed in a commit after it was written. The panel shows a warning over its text; Agent Setup's checklist has a "Documents: N possibly stale" row whose list asks Claude to check one against the code, or marks one (or all) reviewed; and the agent sees the flag when it reads the part over MCP (`task_get`, `doc_get`). Editing the part, or marking it reviewed, clears the flag until its code changes again. Version files, changelogs, lockfiles and tests do not count. No model call.
+
 ## [0.174.3] - 2026-11-12
 
 ### Changed

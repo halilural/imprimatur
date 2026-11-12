@@ -204,10 +204,43 @@ async function toClaude(prompt) {
   }
 }
 
+/**
+ * The possibly stale documents (#211), from Agent Setup's checklist row: pick one to have Claude
+ * check it against the code, or mark it reviewed; or mark them all reviewed (a first run flags
+ * every old part whose code moved on).
+ */
+async function pickStale() {
+  const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const records = require("./records.js");
+  const db = records.dbOf();
+  const repo = root && db?.repoByRoot(root);
+  if (!repo) return;
+  const stale = require("./stale-docs.js");
+  const parts = stale.staleParts(db, repo, root);
+  if (!parts.length) return void vscode.window.showInformationMessage("Imprimatur: no document is stale.");
+  const uidOf = (/** @type {any} */ p) => db.q(`SELECT uid FROM ${p.kind === "section" ? "doc_sections" : "records"} WHERE id = ?`).get(p.id)?.uid;
+  const ALL = { label: `$(check-all) Mark all ${parts.length} reviewed`, all: true };
+  const items = parts.map((p) => ({ label: p.title, description: `${p.kind === "section" ? p.doc : p.kind}${p.task ? ` · ${p.task}` : ""} · ${p.commits.length} commit${p.commits.length === 1 ? "" : "s"}`, detail: p.files.join(", "), part: p }));
+  const got = /** @type {any} */ (await vscode.window.showQuickPick([ALL, ...items], { title: "Possibly stale documents: their code changed since they were written", matchOnDescription: true, matchOnDetail: true }));
+  if (!got) return;
+  if (got.all) {
+    const ok = await vscode.window.showWarningMessage(`Mark all ${parts.length} reviewed? They come back when their code changes again.`, { modal: true }, "Mark reviewed");
+    if (ok) for (const p of parts) stale.markReviewed(db, uidOf(p));
+    return;
+  }
+  const p = got.part;
+  const what = p.kind === "section" ? `the ${p.doc}${p.task ? ` ${p.task}` : ""} section "${p.title}"` : `${p.kind} ${p.id} (${p.task}): ${p.title}`;
+  const act = await vscode.window.showQuickPick([{ label: "$(sparkle) Ask Claude to check it against the code", ask: true }, { label: "$(check) Mark reviewed" }], { title: p.title });
+  if (!act) return;
+  if (!(/** @type {any} */ (act)).ask) return void stale.markReviewed(db, uidOf(p));
+  await toClaude(`Check whether ${what} still holds: ${p.files.join(", ")} changed in ${p.commits.length} commit(s) since it was written (newest: ${p.commits[0].hash} ${p.commits[0].subject}). Read it with the imprimatur MCP tools, read the change (git log/diff on those files), and update it with ${p.kind === "section" ? "doc_section_upsert" : "record_update"}: correct it if it no longer holds, or add one line \"Checked against <commit>: still holds.\" if it does (any edit clears the flag).`);
+}
+
 /** @param {vscode.ExtensionContext} ctx @param {() => Counts} counts @param {() => number} [inbox] the badge's count alone */
 function registerLauncher(ctx, counts, inbox) {
   ctx.subscriptions.push(
     vscode.commands.registerCommand("imprimatur.launcher.askClaude", (/** @type {any} */ row) => row?.title && toClaude(askOf(row))),
+    vscode.commands.registerCommand("imprimatur.staleDocs", () => pickStale()),
     vscode.commands.registerCommand("imprimatur.launcher.copyRef", async (/** @type {any} */ row) => {
       if (!row?.title) return;
       await vscode.env.clipboard.writeText(refOf(row));
