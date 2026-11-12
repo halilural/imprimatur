@@ -163,6 +163,8 @@ class LauncherView {
 /** How a row is named to Claude: "Imprimatur #157, record 9535: <title>". @param {any} row */
 const refOf = (row) => `Imprimatur ${[row.task ?? row.key, row.rec ? `record ${row.rec}` : ""].filter(Boolean).join(", ")}: ${row.title}`.replace(/^Imprimatur : /, "Imprimatur: ");
 
+/** @type {string | undefined} */ let refDir;
+
 /**
  * The row as a small Markdown file to @-mention: its reference, then the record's text from the
  * database. In the temp folder (a path without "#", which an @-mention cannot carry).
@@ -177,11 +179,13 @@ function refFile(row) {
     if (rec?.body) lines.push(rec.body, "");
   } catch {}
   if (row.tip) lines.push(row.tip, "");
-  const dir = path.join(require("node:os").tmpdir(), "imprimatur-refs");
-  fs.mkdirSync(dir, { recursive: true });
-  const name = [row.task ?? row.key, row.rec].filter(Boolean).join("-").replace(/[^\w-]+/g, "") || `ask-${Date.now()}`;
-  const file = path.join(dir, `${name}.md`);
-  fs.writeFileSync(file, lines.join("\n"));
+  // A private folder per run (mkdtemp: 0700, unpredictable name), each file new (wx: never
+  // through an existing file or symlink), owner-only. Kept until the run ends: the chat reads
+  // the file when the message is sent.
+  refDir ??= fs.mkdtempSync(path.join(require("node:os").tmpdir(), "imprimatur-refs-"));
+  const name = [row.task ?? row.key, row.rec].filter(Boolean).join("-").replace(/[^\w-]+/g, "") || "ask";
+  const file = path.join(refDir, `${name}-${Date.now()}.md`);
+  fs.writeFileSync(file, lines.join("\n"), { mode: 0o600, flag: "wx" });
   return file;
 }
 
