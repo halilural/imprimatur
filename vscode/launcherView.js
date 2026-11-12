@@ -121,6 +121,32 @@ class LauncherView {
     return [];
   }
 
+  /**
+   * A row's parent, so the view can open groups (reveal) before the in-tree find: ids are
+   * "home", "home.todo", "home.todo.<record>"; a group's parent is its top row, an item's its group.
+   * @param {any} row
+   */
+  getParent(row) {
+    const id = String(row?.id ?? "");
+    if (ROWS.some((r) => r.id === id)) return undefined;
+    const top = ROWS.find((r) => id.startsWith(`${r.id}.`));
+    if (!top) return undefined;
+    if (!row.item) return top;
+    return this.getChildren(top).find((/** @type {any} */ g) => id.startsWith(`${g.id}.`)) ?? top;
+  }
+
+  /**
+   * Find in the view itself (VS Code's own find, not the search box at the top of the window):
+   * Home's and Tasks' groups are opened first, since the find only sees rows that are loaded.
+   */
+  async findHere() {
+    if (!this.view) return;
+    for (const top of ROWS.filter((r) => r.id === "home" || r.id === "tasks"))
+      for (const g of this.getChildren(top)) await this.view.reveal(g, { expand: true, select: false, focus: false }).then(undefined, () => {});
+    await vscode.commands.executeCommand("imprimatur.launcher.focus");
+    await vscode.commands.executeCommand("list.find");
+  }
+
   /** @param {any} row */
   getTreeItem(row) {
     if (row.item) {
@@ -225,6 +251,7 @@ function registerLauncher(ctx, counts, inbox) {
   ctx.subscriptions.push(
     vscode.commands.registerCommand("imprimatur.launcher.askClaude", (/** @type {any} */ row) => row?.title && intoChat(askOf(row))),
     vscode.commands.registerCommand("imprimatur.staleDocs", () => pickStale()),
+    vscode.commands.registerCommand("imprimatur.launcher.find", () => provider.findHere()),
     vscode.commands.registerCommand("imprimatur.launcher.copyRef", async (/** @type {any} */ row) => {
       if (!row?.title) return;
       if (await intoChat(refOf(row))) vscode.window.setStatusBarMessage("Imprimatur: reference added to the Claude Code chat (also on the clipboard)", 4000);
