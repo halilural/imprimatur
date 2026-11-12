@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.185.0] - 2026-11-12
+
+### Added
+- A warning the agent keeps getting becomes a blocking hook (#218): Imprimatur counts its process checks' findings in Claude Code's transcripts (the hook output the agent was given). A check in warn mode that fired at least 5 times in 14 days, in at least 2 sessions, shows in Agent Setup's checklist as "Rule broken often"; a click asks to confirm and switches it to block in `.claude/imprimatur.json`, keeping its other settings. Context lines and the reminder after each new issue are never suggested. No model call.
+
 ## [0.184.0] - 2026-11-12
 
 ### Added
