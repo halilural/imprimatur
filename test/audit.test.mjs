@@ -99,3 +99,15 @@ test("audit: the model's JSON may be fenced and spread over lines", () => {
   const out = 'A: open, nobody answered\n```json\n{\n  "settled": [],\n  "asks": [{"text": "LATD-1: x", "why": "y"}],\n  "task": "LATD-1"\n}\n```';
   assert.deepEqual(parseAudit(out, []), { settled: [], asks: ["LATD-1: x"], whys: ["y"], task: "LATD-1", count: 1 });
 });
+
+test("audit: a question closes with the user's next message; something to do stays open", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-audit-q-"));
+  const log = dataPath(root, ".claude/imprimatur/waiting/s2.jsonl");
+  await audit(log, { message: "Done.\n👉 Reload the window.\n👉 Shall I close the old asks?", session: "s2" }, async () => '{"settled": []}');
+  let open = waitingItems(root).filter((i) => i.open);
+  assert.deepEqual(open.map((i) => [i.kind, i.text]).sort(), [["question", "Shall I close the old asks?"], ["verify", "Reload the window."]]);
+  // The user's reply (UserPromptSubmit writes an answer) closes the question, not the to-do.
+  fs.appendFileSync(log, JSON.stringify({ t: new Date(Date.now() + 5000).toISOString(), session: "s2", kind: "answer", answer: "yes" }) + "\n");
+  open = waitingItems(root).filter((i) => i.open);
+  assert.deepEqual(open.map((i) => i.kind), ["verify"]);
+});

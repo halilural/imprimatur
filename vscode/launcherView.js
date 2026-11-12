@@ -127,6 +127,8 @@ class LauncherView {
     if (row.item) {
       const one = new vscode.TreeItem(row.title, vscode.TreeItemCollapsibleState.None);
       one.id = row.id;
+      // Right click: hand it to Claude Code, or copy a reference to paste into a chat.
+      one.contextValue = "imprimaturItem";
       one.description = row.task;
       one.tooltip = (row.task ? `${row.task}: ${row.title}` : row.title) + (row.tip ? `\n${row.tip}` : "");
       // A task opens its page, a record its page; a turn-end ask has none, Home shows it.
@@ -158,8 +160,37 @@ class LauncherView {
   }
 }
 
+/** How a row is named to Claude: "Imprimatur #157, record 9535: <title>". @param {any} row */
+const refOf = (row) => `Imprimatur ${[row.task ?? row.key, row.rec ? `record ${row.rec}` : ""].filter(Boolean).join(", ")}: ${row.title}`.replace(/^Imprimatur : /, "Imprimatur: ");
+
+/** The prompt that asks Claude Code to handle a row. @param {any} row */
+const askOf = (row) => `Handle this: ${refOf(row)}.${row.task ?? row.key ? " Read it first with the imprimatur MCP tools (task_get), then do it." : ""}`;
+
+/**
+ * Opens a new Claude Code chat with the prompt typed in; without the Claude Code extension, the
+ * prompt goes to the clipboard. @param {string} prompt
+ */
+async function toClaude(prompt) {
+  try {
+    await vscode.commands.executeCommand("claude-vscode.editor.open", undefined, prompt);
+  } catch {
+    await vscode.env.clipboard.writeText(prompt);
+    vscode.window.showInformationMessage("Imprimatur: copied; paste it into Claude Code (the Claude Code extension did not open).");
+  }
+}
+
 /** @param {vscode.ExtensionContext} ctx @param {() => Counts} counts @param {() => number} [inbox] the badge's count alone */
 function registerLauncher(ctx, counts, inbox) {
+  ctx.subscriptions.push(
+    vscode.commands.registerCommand("imprimatur.launcher.askClaude", (/** @type {any} */ row) => row?.title && toClaude(askOf(row))),
+    vscode.commands.registerCommand("imprimatur.launcher.copyRef", async (/** @type {any} */ row) => {
+      if (!row?.title) return;
+      await vscode.env.clipboard.writeText(refOf(row));
+      // Into the open chat's input, where the user pastes it.
+      vscode.commands.executeCommand("claude-vscode.focus").then(undefined, () => {});
+      vscode.window.setStatusBarMessage("Imprimatur: reference copied; paste it into Claude Code", 4000);
+    }),
+  );
   const provider = new LauncherView(counts, { inbox });
   provider.view = vscode.window.createTreeView("imprimatur.launcher", { treeDataProvider: provider });
   // Counts skipped while hidden are caught up when it shows.
@@ -171,4 +202,4 @@ function registerLauncher(ctx, counts, inbox) {
   return provider;
 }
 
-module.exports = { registerLauncher, LauncherView, ROWS, PARTS, HIDDEN_FULL_MS };
+module.exports = { registerLauncher, LauncherView, ROWS, PARTS, HIDDEN_FULL_MS, refOf, askOf };

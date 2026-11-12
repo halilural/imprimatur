@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.173.1",
+  "version": "0.174.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -67,6 +67,18 @@
   },
   "contributes": {
     "commands": [
+      {
+        "command": "imprimatur.launcher.askClaude",
+        "title": "Ask Claude to handle this",
+        "category": "Imprimatur",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "imprimatur.launcher.copyRef",
+        "title": "Copy reference for Claude",
+        "category": "Imprimatur",
+        "icon": "$(copy)"
+      },
       {
         "command": "imprimatur.accept",
         "title": "Accept Agent Change at Cursor",
@@ -477,6 +489,14 @@
     "menus": {
       "commandPalette": [
         {
+          "command": "imprimatur.launcher.askClaude",
+          "when": "false"
+        },
+        {
+          "command": "imprimatur.launcher.copyRef",
+          "when": "false"
+        },
+        {
           "command": "imprimatur.showHistory",
           "when": "false"
         },
@@ -686,6 +706,16 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "imprimatur.launcher.askClaude",
+          "when": "view == imprimatur.launcher && viewItem == imprimaturItem",
+          "group": "1_claude@0"
+        },
+        {
+          "command": "imprimatur.launcher.copyRef",
+          "when": "view == imprimatur.launcher && viewItem == imprimaturItem",
+          "group": "1_claude@1"
+        },
         {
           "command": "imprimatur.setup.baselineOut",
           "when": "view == imprimatur.setup && viewItem == baseline",

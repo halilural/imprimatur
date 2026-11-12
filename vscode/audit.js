@@ -187,12 +187,21 @@ async function audit(log, turn = {}, ask = askModel) {
   for (const n of res.settled) tickStep(log, steps[n - 1], "audit", note, again.includes(n) ? "again" : undefined);
   if (res.asks.length) {
     fs.mkdirSync(path.dirname(log), { recursive: true });
-    const item = { t: turn.at ?? new Date().toISOString(), session: turn.session ?? path.basename(log, ".jsonl"), kind: "verify", text: res.asks.join("\n") };
+    const at = Date.parse(turn.at ?? "") || Date.now();
     // Every ask starts with the same key: that is the task, whatever the session works on.
     const leads = [...new Set(res.asks.map(leadKey))];
     const task = (leads.length === 1 && leads[0]) || res.task || hint;
-    const whys = res.whys?.some(Boolean) ? res.whys : undefined;
-    fs.appendFileSync(log, JSON.stringify({ ...item, detail: turn.message?.slice(0, 4000), prompt: turn.request, title: turn.title, task, whys }) + "\n");
+    // A question ("…?") is answered by the user's next message, so it closes then; only
+    // something to go and do stays open as a "verify" item until it is ticked. The verify
+    // row goes first: a question row closes the session's open questions, not what was just written.
+    const isQ = (/** @type {string} */ a) => /\?\s*\)?$/.test(a.trim());
+    for (const [kind, n] of /** @type {const} */ ([["verify", 0], ["question", 1]])) {
+      const idx = res.asks.map((a, i) => i).filter((i) => isQ(res.asks[i]) === (kind === "question"));
+      if (!idx.length) continue;
+      const w = idx.map((i) => res.whys?.[i] ?? "");
+      fs.appendFileSync(log, JSON.stringify({ t: new Date(at + n).toISOString(), session: turn.session ?? path.basename(log, ".jsonl"), kind, text: idx.map((i) => res.asks[i]).join("\n"),
+        detail: turn.message?.slice(0, 4000), prompt: turn.request, title: turn.title, task, whys: w.some(Boolean) ? w : undefined }) + "\n");
+    }
   }
   return res;
 }
