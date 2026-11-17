@@ -20,7 +20,7 @@ commit messages follow Conventional Commits (`feat(scope): …`, `fix: …`).
 Every push to `main` runs CI. When `vscode/package.json` has a version that has no `v<version>`
 tag yet, the release workflow publishes it. To release:
 
-1. Bump `version` in `vscode/package.json`.
+1. Bump `version` in `vscode/package.json` and the root `package.json` (and `package-lock.json`); `test/one-version.test.mjs` fails while they differ.
 2. Add a `## [x.y.z] - YYYY-MM-DD` section to `vscode/CHANGELOG.md` (the release fails without one).
 3. `npm run plugin`: the Claude Code plugin manifest carries the same version.
 4. `npm test`, then merge to `main` and push.
