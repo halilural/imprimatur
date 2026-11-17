@@ -209,3 +209,14 @@ prompt that can be asked again on its own ("Why does blocking inside `synchroniz
 because it comes back as a recall: each one is due tomorrow, and the whole exercise is recalled
 once it is done. Close with the score, the weak points, and that Imprimatur will bring them back
 (Home shows "N recalls due today"; the next `/exercise` asks them first).
+
+A weak point can be a flashcard `{front, back, deck}` that a card plugin sends to a flashcard app,
+where the user meets it months later without the exercise. So a card stands on its own:
+
+- The front names the concept and gives the setup it needs ("When grouping anagrams by an
+  `int[26]` letter count, what happens if the input has 'ğ'?"), never the exercise's own handles:
+  a problem number, a step or task key, a person or company from its scenario, "the ticket
+  platform" as if the reader knew which one.
+- A number from the exercise stays only when the front defines it.
+- The back answers and says why, with no coaching note ("give the value and the reason").
+- The deck is the roadmap's or subject's deck the user already has, not the exercise's step key.
