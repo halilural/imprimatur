@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.186.0] - 2026-11-17
+
+### Added
+- A meeting's raw transcript beside its note (#220): a new record kind, `transcript`, a child of its meeting (`parent_id`), split into parts `x1..xN` under the sync's 100,000-character value limit. `search` finds a phrase only the transcript holds and names the meeting it belongs to (`parent_id` in the hit); the MCP instructions tell every agent to read the note and the transcript for a meeting question, since a note can miss what was said. The Meetings page shows the transcript, collapsed, under the note. The records table is rebuilt once for the new kind (database version 17), as for `meeting` in #167.
+
 ## [0.185.0] - 2026-11-12
 
 ### Added

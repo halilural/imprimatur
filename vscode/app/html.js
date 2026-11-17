@@ -266,7 +266,7 @@ function meetingsHtml(list, render) {
     const mine = x.todos.filter((/** @type {any} */ k) => k.owner === "K" && k.status !== "done").length;
     return `<details class="meet"><summary><b>${x.dd} ${esc(x.mon)}</b><span><b>${esc(x.title)}</b>${x.gist ? `<br><span class="ptr">${esc(x.gist)}</span>` : ""}</span><span class="ptr" style="margin-left:auto">${x.decisions.length} decisions${mine ? ` · ${mine} yours` : ""}</span></summary>
       <div class="mbody"><div class="cols"><div><b>Decisions</b>${items(x.decisions)}</div><div><b>To-dos</b>${items(x.todos)}</div></div>
-      <p class="ptr"><a href="#" data-task="${esc(x.task.key)}">${esc(x.task.key)}</a></p>${x.body ? `<details><summary>Full note</summary>${render(String(x.body))}</details>` : ""}</div></details>`;
+      <p class="ptr"><a href="#" data-task="${esc(x.task.key)}">${esc(x.task.key)}</a></p>${x.body ? `<details><summary>Full note</summary>${render(String(x.body))}</details>` : ""}${x.transcript ? `<details><summary>Transcript</summary><div class="transcript" style="white-space:pre-wrap">${esc(x.transcript)}</div></details>` : ""}</div></details>`;
   }).join("")}`).join("");
 }
 
