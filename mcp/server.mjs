@@ -38,7 +38,8 @@ export const INSTRUCTIONS = [
   "Imprimatur holds this repo's tasks and records: the source of truth for where work stands.",
   "Call where_we_left_off first in every session.",
   "Tasks are keyed \"#58\" (a GitHub issue) or a Jira key such as \"PROJ-12\"; record_add creates a missing task.",
-  "Record kinds: todo, question (to the user), answer (parent_id = the question's id), decision, note, fixme, adr (hard to reverse, surprising, a real trade-off), test, meeting (its decisions and to-dos: parent_id = its id).",
+  // #220: a note can miss what was said, so a meeting question reads the transcript too.
+  "Record kinds: todo, question (to the user), answer (parent_id = the question's id), decision, note, fixme, adr (hard to reverse, surprising, a real trade-off), test, meeting (its decisions, to-dos and transcript parts: parent_id = its id; on meetings read note and transcript).",
   "owner: C = the agent does it, K = the user does it.",
   "👉 is the task's pointer, where work stopped: pointer_set moves it (open records only), or record_add with pointer:true.",
   "Keep the task_upsert summary a one-line \"where we are\".",
@@ -780,7 +781,8 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
       const files = a.kind ? [] : rankedSearch(db, a.text, { repoId, limit: 5, type: "file" }).map((h) => ({ path: h.rel, line: h.line, title: h.title, snippet: h.snippet }));
       const records = a.full
         ? hits
-        : hits.map((r) => ({ id: r.id, task_key: r.task_key, kind: r.kind, status: r.status, ...(r.owner && { owner: r.owner }), ...(r.pointer && { pointer: true }),
+        // #220: parent_id names the meeting a transcript hit belongs to (an answer's question too).
+        : hits.map((r) => ({ id: r.id, task_key: r.task_key, kind: r.kind, status: r.status, ...(r.owner && { owner: r.owner }), ...(r.pointer && { pointer: true }), ...(r.parent_id && { parent_id: r.parent_id }),
             // Older imports have titles of 1,000+ chars: the index cuts them like a body's first line.
             title: r.title.length > LINE_CUT ? r.title.slice(0, LINE_CUT - 1) + "…" : r.title, ...(r.snippet && !r.snippet.startsWith(r.title.slice(0, 40)) && { snippet: r.snippet.slice(0, 120) }) }));
       return { records, ...(sections.length && { sections }), ...(files.length && { files }), ...(rows.length > limit && { more: true }), ...(!a.full && hits.length && { hint: "bodies left out: record_get {id} gives one, full:true all" }) };
@@ -798,7 +800,7 @@ const oneLine = (s, n) => {
 };
 const taskLine = (t) => `${t.key}${t.title ? ` ${t.title}` : ""} [${t.status}]${t.summary ? ` — ${t.summary}` : ""}`;
 const recordLine = (r) =>
-  `[${r.id}] ${r.kind}/${r.status} ${r.owner ?? "-"} ${r.title}${r.pointer ? " 👉" : ""}${r.parent_id ? ` (answers [${r.parent_id}])` : ""}`;
+  `[${r.id}] ${r.kind}/${r.status} ${r.owner ?? "-"} ${r.title}${r.pointer ? " 👉" : ""}${r.parent_id ? ` (${r.kind === "answer" ? "answers" : "of"} [${r.parent_id}])` : ""}`;
 
 /**
  * The model-facing text of a result (#64): a short digest; structuredContent keeps the full data.

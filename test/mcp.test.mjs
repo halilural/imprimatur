@@ -292,8 +292,8 @@ test("discover and initialize carry the instructions; discover has caching hints
   assert.equal(d.ttlMs, 3_600_000);
   assert.equal(d.cacheScope, "public");
   assert.equal(typeof d.instructions, "string");
-  // Claude Code cuts server instructions at 2048 chars; leave room.
-  assert.ok(d.instructions.length <= 1800, `${d.instructions.length} chars`);
+  // Claude Code cuts server instructions at 2048 chars; leave room (1900 since #220's meeting transcripts).
+  assert.ok(d.instructions.length <= 1900, `${d.instructions.length} chars`);
   for (const w of ["where_we_left_off", "#58", "Jira", "parent_id", "C = the agent", "K = the user", "👉", "pointer_set", "pointer:true",
     "summary", "record_update", "\"done\"", "repo \"*\"", "_session"]) {
     assert.ok(d.instructions.includes(w), `instructions mention ${w}`);

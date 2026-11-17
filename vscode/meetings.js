@@ -23,6 +23,8 @@ function meetingsModel(db, root, view = {}) {
       month: d.toLocaleDateString("en-GB", { month: "long", year: "numeric" }),
       decisions: m.children.filter((/** @type {any} */ k) => k.kind === "decision"),
       todos: m.children.filter((/** @type {any} */ k) => k.kind === "todo").sort((/** @type {any} */ a, /** @type {any} */ b) => Number(b.owner === "K") - Number(a.owner === "K")),
+      // #220: the raw transcript, its parts (x1..xN, split under the sync's value limit) joined in order.
+      transcript: m.children.filter((/** @type {any} */ k) => k.kind === "transcript").map((/** @type {any} */ k) => k.body ?? "").join("\n"),
     };
   });
   return { meetings };

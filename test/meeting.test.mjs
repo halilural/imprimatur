@@ -79,3 +79,54 @@ test("an existing database gets the meeting kind; its records, versions and link
   assert.deepEqual(s.prepare("PRAGMA foreign_key_check").all(), []);
   assert.match(s.prepare("SELECT sql FROM sqlite_schema WHERE name = 'record_versions'").get().sql, /REFERENCES "?records"?\(id\)/);
 });
+
+// #220: a meeting's raw transcript is its child record; the page joins the parts, search finds it.
+test("a meeting's transcript hangs under it: joined on the page, found by search with its meeting", async () => {
+  const { callTool, INSTRUCTIONS } = await import("../mcp/server.mjs");
+  const dir = tmp();
+  const root = path.join(dir, "repo");
+  fs.mkdirSync(root);
+  (await import("node:child_process")).execFileSync("git", ["init", "-q", root]);
+  const db = openDb({ path: path.join(dir, "imprimatur.db") });
+  const repo = db.repoOf(root, { name: "repo" });
+  const t = db.upsertTask(repo.id, "MEETINGS", { title: "Toplantılar" });
+  const m = db.addRecord(t.id, { kind: "meeting", title: "Payments weekly", body: "## Özet\nKafka.", uid: "meeting:m1" }, AGENT);
+  db.addRecord(t.id, { kind: "decision", title: "Payments move to Kafka", parent_id: m.id, uid: "meeting:m1:d1" }, AGENT);
+  db.addRecord(t.id, { kind: "transcript", title: "Transcript (1/2)", body: "Ali: we go to Kafka", parent_id: m.id, uid: "meeting:m1:x1" }, AGENT);
+  db.addRecord(t.id, { kind: "transcript", title: "Transcript (2/2)", body: "Ayşe: and the zebra rollback stays", parent_id: m.id, uid: "meeting:m1:x2" }, AGENT);
+
+  const page = tv.meetingsModel(db, root, {}).meetings[0];
+  assert.equal(page.decisions.length, 1, "a transcript is no decision");
+  assert.equal(page.todos.length, 0, "nor a to-do");
+  assert.equal(page.transcript, "Ali: we go to Kafka\nAyşe: and the zebra rollback stays");
+
+  // A word only the transcript holds: the hit is the transcript, naming its meeting.
+  const out = callTool(db, "search", { text: "zebra", repo: root });
+  assert.deepEqual(out.records.map((/** @type {any} */ r) => [r.kind, r.parent_id]), [["transcript", m.id]]);
+  assert.match(INSTRUCTIONS, /on meetings read note and transcript/);
+});
+
+test("an existing database at the meeting version gets the transcript kind; its records stay", () => {
+  const file = path.join(tmp(), "imprimatur.db");
+  const old = new DatabaseSync(file);
+  old.exec("PRAGMA foreign_keys = ON");
+  const TRANSCRIPT = MIGRATIONS.length - 1;
+  for (const sql of MIGRATIONS.slice(0, TRANSCRIPT)) old.exec(sql.replaceAll(", 'transcript'", ""));
+  old.exec(`PRAGMA user_version = ${TRANSCRIPT}`);
+  const now = Date.now();
+  old.exec(`INSERT INTO repos (uid, name, root, created_at) VALUES ('r', 'repo', '/x', ${now})`);
+  old.exec(`INSERT INTO tasks (uid, repo_id, key, title, status, created_at, updated_at) VALUES ('t', 1, 'MEETINGS', 'T', 'open', ${now}, ${now})`);
+  old.exec(`INSERT INTO records (uid, task_id, kind, title, position, created_at, updated_at) VALUES ('meeting:a', 1, 'meeting', 'M', 1, ${now}, ${now})`);
+  old.exec(`INSERT INTO records (uid, task_id, kind, title, position, parent_id, created_at, updated_at) VALUES ('meeting:a:d1', 1, 'decision', 'D', 2, 1, ${now}, ${now})`);
+  assert.throws(() => old.exec(`INSERT INTO records (uid, task_id, kind, title, position, created_at, updated_at) VALUES ('x', 1, 'transcript', 'X', 3, ${now}, ${now})`), /CHECK/);
+  old.close();
+
+  const db = openDb({ path: file });
+  const x = db.addRecord(1, { kind: "transcript", title: "Transcript", body: "hi", parent_id: 1 }, AGENT);
+  assert.equal(x.kind, "transcript");
+  db.close?.();
+  const s = new DatabaseSync(file, { readOnly: true });
+  assert.equal(s.prepare("PRAGMA user_version").get().user_version, VERSION);
+  assert.equal(s.prepare("SELECT parent_id FROM records WHERE uid = 'meeting:a:d1'").get().parent_id, 1);
+  assert.deepEqual(s.prepare("PRAGMA foreign_key_check").all(), []);
+});
