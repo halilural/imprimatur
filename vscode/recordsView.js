@@ -148,10 +148,10 @@ function registerRecordCommands(ctx, log, onChange, reveal, setAllRepos) {
     // answers from the best hits, each claim citing its source.
     vscode.commands.registerCommand("imprimatur.records.search", async () => {
       if (!records.dbOf()) return;
-      const { rankedSearch, askPrompt, sourceOf } = require("./search-index.js");
+      const { rankedSearch, askPrompt, sourceOf, pickItems } = require("./search-index.js");
       const here = new Set((vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath));
       const qp = vscode.window.createQuickPick();
-      qp.placeholder = "Search records and documents, or ask a question";
+      qp.placeholder = "Search tasks (#895), records and documents, or ask a question";
       qp.matchOnDescription = true;
       qp.matchOnDetail = true;
       /** @type {NodeJS.Timeout | undefined} */ let timer;
@@ -160,16 +160,8 @@ function registerRecordCommands(ctx, log, onChange, reveal, setAllRepos) {
         const text = qp.value.trim();
         if (!db || !text) return void (qp.items = []);
         const repos = new Map(db.repos().map((/** @type {any} */ r) => [r.id, r]));
-        const hits = rankedSearch(db, text, { limit: 60 }).sort((/** @type {any} */ a, /** @type {any} */ b) => Number(here.has(repos.get(b.repo_id)?.root)) - Number(here.has(repos.get(a.repo_id)?.root)));
-        const ask = { label: `$(sparkle) Ask: ${text}`, description: "an answer from the best matches, with sources", alwaysShow: true, ask: true };
-        qp.items = [ask, ...hits.map((/** @type {any} */ h) => {
-          const repo = repos.get(h.repo_id);
-          return {
-            label: `${h.type === "record" ? "$(note)" : h.type === "file" ? "$(file)" : "$(book)"} ${h.title.slice(0, 120)}`,
-            description: `${repo?.name ?? ""} · ${sourceOf(h)}`,
-            detail: h.snippet, alwaysShow: true, hit: h, root: repo?.root,
-          };
-        })];
+        // #225: tasks too, the one the query names first; "Ask" last, so Enter opens the top hit.
+        qp.items = pickItems(rankedSearch(db, text, { limit: 60 }), text, repos, here);
       };
       qp.onDidChangeValue(() => {
         clearTimeout(timer);
@@ -186,6 +178,12 @@ function registerRecordCommands(ctx, log, onChange, reveal, setAllRepos) {
           const doc = await vscode.workspace.openTextDocument(h.file);
           const at = new vscode.Position(Math.max(0, h.line - 1), 0);
           return void vscode.window.showTextDocument(doc, { selection: new vscode.Range(at, at) });
+        }
+        if (h.type === "task") {
+          // Its page, then its row in the side bar: the tree holds this window's repo only.
+          await vscode.commands.executeCommand("imprimatur.records.reveal", { root: pick.root, task: h.key });
+          if (here.has(pick.root)) vscode.commands.executeCommand("imprimatur.launcher.revealTask", h.key);
+          return;
         }
         if (h.type === "record") vscode.commands.executeCommand("imprimatur.records.reveal", { root: pick.root, record: h.id });
         else vscode.commands.executeCommand("imprimatur.docs.reveal", { root: pick.root, kind: h.doc_kind, section: h.key });

@@ -1050,6 +1050,12 @@
         "command": "imprimatur.records.goToTask",
         "key": "ctrl+alt+t",
         "mac": "cmd+alt+t"
+      },
+      {
+        "command": "imprimatur.launcher.find",
+        "key": "ctrl+f",
+        "mac": "cmd+f",
+        "when": "focusedView == imprimatur.launcher"
       }
     ]
   }

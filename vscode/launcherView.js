@@ -162,6 +162,22 @@ class LauncherView {
     await vscode.commands.executeCommand("list.find");
   }
 
+  /**
+   * A task's row shown, selected and focused in the view, its group opened (#225): found among Tasks'
+   * groups as the object the tree holds, so reveal and getParent know it. @param {string} key @returns {Promise<boolean>}
+   */
+  async revealTask(key) {
+    if (!this.view) return false;
+    const tasks = this.getChildren().find((/** @type {any} */ r) => r.id === "tasks");
+    for (const group of tasks ? this.getChildren(tasks) : []) {
+      const row = this.getChildren(group).find((/** @type {any} */ r) => r.key === key);
+      if (!row) continue;
+      await this.view.reveal(row, { select: true, focus: true, expand: true }).then(undefined, () => {});
+      return true;
+    }
+    return false;
+  }
+
   /** @param {any} row */
   getTreeItem(row) {
     if (row.item) {
@@ -270,6 +286,7 @@ function registerLauncher(ctx, counts, inbox) {
     vscode.commands.registerCommand("imprimatur.launcher.askClaude", (/** @type {any} */ row) => row?.title && intoChat(askOf(row))),
     vscode.commands.registerCommand("imprimatur.staleDocs", () => pickStale()),
     vscode.commands.registerCommand("imprimatur.launcher.find", () => provider.findHere()),
+    vscode.commands.registerCommand("imprimatur.launcher.revealTask", (/** @type {string} */ key) => provider.revealTask(key)),
     vscode.commands.registerCommand("imprimatur.launcher.copyRef", async (/** @type {any} */ row) => {
       if (!row?.title) return;
       if (await intoChat(refOf(row))) vscode.window.setStatusBarMessage("Imprimatur: reference added to the Claude Code chat (also on the clipboard)", 4000);
