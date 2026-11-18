@@ -414,14 +414,31 @@ test("issueBody and specFirst (#223 comment): a task opened for an issue gets it
   assert.deepEqual(calls, ["issue view 30 --json body"], "a task with a body is left alone");
 
   const stop = (session = "s1") => check("Stop", { cwd: root, session_id: session, last_assistant_message: "Done." }, { records });
-  assert.match(stop().block ?? "", /specFirst.*#30 is active and has no spec.*doc_section_upsert kind "spec", task "#30"/);
-  assert.deepEqual(stop(), {}, "once per session");
+  assert.match(stop().block ?? "", /specFirst.*#30 has no spec; no task is left without one.*doc_section_upsert kind "spec", task "#30"/);
+  assert.deepEqual(check("Stop", { cwd: root, session_id: "s1", last_assistant_message: "Done.", stop_hook_active: true }, { records }), {}, "no loop within a turn");
+  assert.match(stop().block ?? "", /specFirst.*#30/, "the next turn asks again: until the spec exists");
   db.upsertSection(db.taskDocOf(rid, "#30", "spec").id, "problem", { title: "P", body: "Why." }, { kind: "agent" });
   check("PostToolUse", { cwd: root, session_id: "s2", tool_name: "mcp__imprimatur__record_add", tool_input: { task: "#30", kind: "note", title: "x" } }, { records });
   assert.deepEqual(stop("s2"), {}, "a task with a spec");
-  db.upsertTask(rid, "#31", { title: "Open one" });
-  check("PostToolUse", { cwd: root, session_id: "s3", tool_name: "mcp__imprimatur__record_add", tool_input: { task: "#31", kind: "note", title: "x" } }, { records });
-  assert.deepEqual(stop("s3"), {}, "only an active task");
+  // #227: an open task opened this turn is asked too; a done task and a bucket are not.
+  db.upsertTask(rid, "#31", { title: "Open one", issueBody: "x" });
+  check("PostToolUse", { cwd: root, session_id: "s3", tool_name: "mcp__imprimatur__task_upsert", tool_input: { key: "#31", title: "Open one" } }, { records, gh });
+  assert.match(stop("s3").block ?? "", /specFirst.*#31 has no spec/, "an open task, just opened");
+  db.upsertSection(db.taskDocOf(rid, "#31", "spec").id, "problem", { title: "P", body: "Why." }, { kind: "agent" });
+  assert.deepEqual(stop("s3"), {}, "written: no more asking");
+  db.upsertTask(rid, "#32", { title: "Finished", status: "done" });
+  db.upsertTask(rid, "RECS", { title: "Bucket" });
+  for (const [task, tool] of [["#32", "record_add"], ["RECS", "record_add"]])
+    check("PostToolUse", { cwd: root, session_id: "s4", tool_name: `mcp__imprimatur__${tool}`, tool_input: { task, kind: "note", title: "x" } }, { records });
+  assert.deepEqual(stop("s4"), {}, "a done task and a bucket are not asked");
+});
+
+test("no task without a spec (#227): the issue-created reminder and the issues skill name the spec", () => {
+  const root = repo({ process: {} });
+  const r = check("PostToolUse", { cwd: root, tool_name: "Bash", tool_input: { command: "gh issue create -t x -b y" }, tool_response: { stdout: "" } });
+  assert.match(r.context[0], /write its spec now \(doc_section_upsert kind "spec", the to-spec gates\)/);
+  const text = fs.readFileSync(new URL("../skills/issues/SKILL.md", import.meta.url), "utf8");
+  assert.match(text, /Write its spec in the same turn:\*\* no task is left without one/);
 });
 
 test("issues skill (#223): work that becomes real gets a task without being asked", () => {

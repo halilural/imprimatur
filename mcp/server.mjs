@@ -45,7 +45,7 @@ export const INSTRUCTIONS = [
   "Keep the task_upsert summary a one-line \"where we are\".",
   "Work done: record_update that record with status \"done\", the result in body.",
   "search with repo \"*\" looks in every repo.",
-  "Documents (Matt Pocock's; doc_get): project, capability (how a feature behaves now; task = its name), a task's spec (before its code; written unasked when a task without one starts, gates recorded by the agent) and map, glossary (a term per section), out-of-scope.",
+  "Documents (Matt Pocock's; doc_get): project, capability (how a feature behaves now; task = its name), a task's spec (before its code; written unasked once a task without one is created or touched, gates recorded by the agent) and map, glossary (a term per section), out-of-scope.",
   "A product choice goes in the task's spec; an adr stands alone; a new term goes in the glossary.",
   // #103: a reader follows a flow arrow by arrow.
   "Every Mermaid sequenceDiagram you write (section, spec, record): autonumber, and right under it a numbered list, item n explaining arrow n.",
@@ -226,7 +226,7 @@ const TOOLS = [
       ticket_type: { type: ["string", "null"], enum: [...TICKET_TYPES, null], description: "A wayfinder ticket's type (Pocock): research, prototype, grilling, task; null for none" },
       blocked_by: { type: "array", items: { type: "string" }, description: "The keys of the tasks this one waits on; [] for none" },
     }, ["key"]),
-    outputSchema: output({ task: TASK }),
+    outputSchema: output({ task: TASK, spec_needed: str }, ["task"]),
     idempotent: true,
   },
   {
@@ -240,7 +240,7 @@ const TOOLS = [
       ...recordFields,
       pointer: { type: "boolean", description: "Move the task's 👉 to this record (it must be open)" },
     }, ["task", "kind", "title"]),
-    outputSchema: RECORD_OUT,
+    outputSchema: output({ record: RECORD, spec_needed: str }, ["record"]),
     idempotent: false,
   },
   {
@@ -420,6 +420,18 @@ const TOOLS = [
 class ToolError extends Error {}
 
 /** The repo's id and git root. @param {any} db @param {string | undefined} repo */
+/**
+ * #227: no task without a spec. For an open or active task (not a record bucket) with no current spec section,
+ * the line that tells the agent to write it now; told on every write that creates or touches such a task.
+ * @param {any} db @param {number} rid @param {any} task
+ */
+function specNeeded(db, rid, task) {
+  if (!/^#\d+$|^[A-Z][A-Z0-9_]*-\d+$/.test(task.key) || !["open", "active"].includes(task.status)) return undefined;
+  const doc = db.taskDocFind(rid, task.key, "spec");
+  if (doc && db.docSections(doc.id).some((/** @type {any} */ s) => s.status === "current")) return undefined;
+  return `${task.key} has no spec, and no task is left without one: write it now, in this turn, with doc_section_upsert kind "spec", task "${task.key}" (the to-spec gates: stories, design, analyze), before its code.`;
+}
+
 function repoOf(db, repo) {
   const start = repo || process.env.CLAUDE_PROJECT_DIR || process.cwd();
   const root = repoRoot(path.resolve(start));
@@ -690,7 +702,9 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
       if (a.ticket_type !== undefined) fields.ticketType = a.ticket_type;
       if (a.blocked_by !== undefined) fields.blockedBy = a.blocked_by;
       if (a.epic) fields.epicId = (db.taskByKey(rid, a.epic) ?? db.upsertTask(rid, a.epic, {}, actor)).id;
-      return { task: db.upsertTask(rid, a.key, fields, actor) };
+      const task = db.upsertTask(rid, a.key, fields, actor);
+      const need = specNeeded(db, rid, task);
+      return { task, ...(need && { spec_needed: need }) };
     }
     case "record_add": {
       if (a.pointer && a.status && a.status !== "open") {
@@ -699,7 +713,9 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
       if (a.parent_id !== undefined) recordOf(db, a.parent_id, "parent_id");
       const rid = repoOf(db, a.repo).id;
       const task = db.taskByKey(rid, a.task) ?? db.upsertTask(rid, a.task, {}, actor);
-      return { record: db.addRecord(task.id, pick(a, ["kind", "title", "body", "owner", "status", "parent_id", "links", "pointer"]), actor) };
+      const record = db.addRecord(task.id, pick(a, ["kind", "title", "body", "owner", "status", "parent_id", "links", "pointer"]), actor);
+      const need = specNeeded(db, rid, task);
+      return { record, ...(need && { spec_needed: need }) };
     }
     case "record_update": {
       recordOf(db, a.id);
@@ -834,9 +850,9 @@ export function digest(name, out, a = {}) {
       return [`${out.task} · ${recordLine(r)}`, ...(r.body ? [r.body.replace(/^/gm, "    ")] : []), ...(r.links ? [`    links: ${JSON.stringify(r.links)}`] : []), ...(r.stale ? [staleLine(r.stale)] : [])].join("\n");
     }
     case "task_upsert":
-      return `Saved task ${taskLine(out.task)}`;
+      return `Saved task ${taskLine(out.task)}${out.spec_needed ? `\n${out.spec_needed}` : ""}`;
     case "record_add":
-      return `Added ${recordLine(out.record)}`;
+      return `Added ${recordLine(out.record)}${out.spec_needed ? `\n${out.spec_needed}` : ""}`;
     case "record_update":
       return `Updated ${recordLine(out.record)}`;
     case "pointer_set":

@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.188.0] - 2026-11-18
+
+### Changed
+- No task without a spec (#227): a task could be created without one and stay so. Now `task_upsert` and `record_add` answer, for an open or active task with no spec (a new one included), with a `spec_needed` line telling the agent to write it in this turn: every agent that uses Imprimatur's MCP hears it, with or without its hooks. The `specFirst` check covers open tasks too and asks at every turn end until the spec exists (it asked once per session, for active tasks only). The reminder after `gh issue create`, the `issues` skill and the repo rules say the same.
+
 ## [0.187.0] - 2026-11-18
 
 ### Added
