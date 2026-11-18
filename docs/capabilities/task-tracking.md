@@ -16,6 +16,8 @@ type: explanation
 6. [Unread: comprehension debt (#91, #92)](#unread-2)
 7. [Görev sayfasında "Analiz": görev için yazılan analiz/plan/spike dosyaları, dosya başına kart; görevsiz analizler "Bu göreve bağla" ile](#g-rev-sayfas-nda-analiz-g-rev-i-in-yaz-lan-anali)
 8. [Okumadıkların: görev listesinde "N okunmadı", görev sayfası ve Ana sayfada kart (kabul edilmemiş düzenlemeler + değişen bölümler, Okudum / Hepsini okudum), dokümanda "Okunmadı" işareti, durum satırında "N unread"](#okumad-klar-n-g-rev-listesinde-n-okunmad-g-rev-s)
+9. [Work without a task is caught](#work-without-task)
+10. [Active tasks by last activity](#last-worked-on)
 
 <a id="unread"></a>
 
@@ -191,3 +193,20 @@ STORY: Bir görevi açtığımda ajanın o görev için yazdığı analizleri (n
 <a id="okumad-klar-n-g-rev-listesinde-n-okunmad-g-rev-s"></a>
 
 ## 8. Okumadıkların: görev listesinde "N okunmadı", görev sayfası ve Ana sayfada kart (kabul edilmemiş düzenlemeler + değişen bölümler, Okudum / Hepsini okudum), dokümanda "Okunmadı" işareti, durum satırında "N unread"
+
+<a id="work-without-task"></a>
+
+## 9. Work without a task is caught
+
+In a repo with process checks and a tracker (GitHub origin or Jira):
+
+- `commitRef` (default block): a `git commit` whose message (`-m`, `-F`) names no task (`#N`, Jira key) is stopped unless the session wrote to Imprimatur or the branch names a task; the reason suggests a `Refs #N` trailer.
+- `fileWork` (default block): a turn that committed, pushed or ran a deploy pattern while the session wrote nothing to Imprimatur is asked, once, to file the work, with the commit hashes.
+- `issueBody` (on): `task_upsert` on `#N` with no stored issue body pulls it from GitHub.
+- `specFirst` (default block): a turn that wrote to an active task with no spec is asked once per session for the spec.
+
+<a id="last-worked-on"></a>
+
+## 10. Active tasks by last activity
+
+On the Tasks page and in the side bar's Tasks › Active, active tasks are sorted by last activity (the later of the task's and its newest record's update time), newest first. The first carries "Last worked on"; each active row shows its last activity as a relative time ("2 h ago"). Open and done keep their order.
