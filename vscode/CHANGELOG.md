@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.187.0] - 2026-11-18
+
+### Added
+- Work without a task is caught (#223), in repos with process checks and a tracker (a GitHub origin, or Jira set up in Imprimatur): `commitRef` stops a `git commit` whose message names no task (`#N` or a Jira key) when the session has written nothing to Imprimatur and its branch names no task, suggesting a `Refs #N` trailer; `fileWork` asks the agent once, at the end of a turn that committed, pushed or deployed (the deploy commands are the setting's `patterns`) with no Imprimatur write, to file the work, naming the commit hashes. A `task_upsert` on `#N` with no issue body now pulls the body from GitHub (`issueBody`), and a turn that wrote to an active task with no spec is asked once for it (`specFirst`). Each is a setting in `.claude/imprimatur.json`'s process checks. The `issues` skill says to open a task when a request becomes real work, without being asked.
+
+### Fixed
+- Steps in documents (#226): a ticked and an empty `- [ ]` step looked the same faded grey in a dark theme, and a step's text with inline code split into columns. The panel now draws the box (outlined when empty, filled with a ✓ when ticked) and the text wraps as one line.
+
 ## [0.186.0] - 2026-11-17
 
 ### Added
