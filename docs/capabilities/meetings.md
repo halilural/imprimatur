@@ -10,6 +10,7 @@ type: explanation
 
 1. [A meeting's note lives where its work is (#167) — target state](#meeting-records)
 2. [Meetings page: this repo only, grouped by month, real meeting names, decisions and to-dos side by side](#meetings-page-this-repo-only-grouped-by-month-re)
+3. [A meeting's transcript beside its note (#220)](#meeting-transcript)
 
 <a id="meeting-records"></a>
 
@@ -39,3 +40,15 @@ The user saw halil-workspace meetings on imprimatur's Meetings page and found th
 - The Meetings tab gets an icon (Lucide "users").
 
 Shipped in 0.133.0.
+
+<a id="meeting-transcript"></a>
+
+## 3. A meeting's transcript beside its note (#220)
+
+A meeting's raw transcript comes with its note, because a note can miss what was said.
+
+- **A `transcript` record:** a child of the meeting record (`parent_id`), uid `meeting:<id>:x<n>`; a transcript over 90,000 characters is split at line breaks into parts `x1..xN`.
+- **Written again, undone:** a rewrite replaces the parts and drops the extra ones; undo drops them with the meeting.
+- **Found:** `search` finds a phrase that only the transcript holds, with a snippet and the meeting it belongs to; the MCP instructions tell every agent that a meeting question reads the note and the transcript.
+- **Shown:** the Meetings page shows the transcript, collapsed, under the opened meeting's note.
+- **Past meetings:** their transcripts were brought in once from the desktop's database.

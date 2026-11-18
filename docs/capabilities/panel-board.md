@@ -13,6 +13,8 @@ type: explanation
 3. [Live updates](#live)
 4. [The panel as a board, with analytics (#147)](#board)
 5. [The whole Imprimatur panel becomes a board in the ponytail board style, with session cost/time/tokens recorded and analytic views; the VS Code side bar stays](#the-whole-imprimatur-panel-becomes-a-board-in-th)
+6. [Steps in rendered Markdown](#markdown-steps)
+7. [Search reaches tasks and the side bar row](#sidebar-find)
 
 <a id="ui-design"></a>
 
@@ -179,3 +181,15 @@ What the user gets:
 - **#152, analytics on each tab:** tasks, agent changes, documents, and hook cost.
 
 Not changed: the VS Code side bar (Imprimatur launcher, Agent setup).
+
+<a id="markdown-steps"></a>
+
+## 6. Steps in rendered Markdown
+
+A `- [ ]` / `- [x]` list item in a record or document shown in the panel is a step: its list item is classed `mdstep-item` (`on` when ticked), with no bullet, and its box is drawn by the panel: outlined in the text colour when empty, filled with the passed-test colour and a white ✓ when ticked, at full opacity even when read-only. The step's text wraps as ordinary text.
+
+<a id="sidebar-find"></a>
+
+## 7. Search reaches tasks and the side bar row
+
+The magnifier search (Ctrl+Alt+K) ranks tasks too (by key, an exact key first, or title words) beside records, document sections and files; "Ask" is its last row, so Enter opens the top hit. Enter on a task opens its page and, for this window's repo, reveals and selects its row in the side bar, its group opened. In the side bar, Ctrl+F / Cmd+F opens Home's and Tasks' groups before VS Code's find, so collapsed rows are found.
