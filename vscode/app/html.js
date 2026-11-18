@@ -79,6 +79,9 @@ details.newsec { margin-bottom: 14px; }
 .xcard { border: 1px solid var(--vscode-panel-border); border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; }
 .xcard h2 { display: flex; gap: 10px; align-items: center; font-size: 17px; margin: 0 0 6px; } .xcard h2 .ptr { font-weight: 400; margin-left: auto; }
 .bar { height: 4px; border-radius: 2px; background: var(--vscode-panel-border); margin: 4px 0 10px; } .bar div { height: 4px; border-radius: 2px; background: var(--vscode-progressBar-background); }
+.tag.lastworked { color: var(--vscode-foreground); border-color: var(--vscode-focusBorder); font-weight: 600; }
+.row.last { box-shadow: inset 3px 0 0 var(--vscode-focusBorder); }
+.when { font-size: 12px; color: var(--vscode-descriptionForeground); white-space: nowrap; }
 li.mdstep-item { list-style: none; }
 input.mdstep { appearance: none; -webkit-appearance: none; display: inline-grid; place-content: center; width: 16px; height: 16px; margin: 0 8px 0 -22px; vertical-align: -3px; border: 1.5px solid var(--vscode-foreground); border-radius: 3px; background: transparent; opacity: 1; cursor: pointer; }
 input.mdstep:disabled { cursor: default; opacity: 1; }
@@ -199,8 +202,8 @@ function mainHtml(m, render) {
   }
   if (m.area === "tasks" && m.page) return taskPageHtml(m.page, render);
   if (m.area === "tasks") {
-    return `<h1>Tasks</h1><p class="summary">Active first, then open, then the last done.</p>` + m.lists.map((/** @type {any} */ l) =>
-      `<h2 class="sub">${esc(l.label)} · ${l.tasks.length}</h2><div class="rows">${l.tasks.map((/** @type {any} */ t) => `<div class="row" data-task="${esc(t.key)}"><span class="key">${esc(t.key)}</span><span><b>${esc(t.title)}</b>${t.summary ? `<br><span class="ptr">${esc(t.summary)}</span>` : ""}</span></div>`).join("") || '<div class="none">Nothing</div>'}</div>`).join("");
+    return `<h1>Tasks</h1><p class="summary">Active first, the one worked on last on top; then open, then the last done.</p>` + m.lists.map((/** @type {any} */ l) =>
+      `<h2 class="sub">${esc(l.label)} · ${l.tasks.length}</h2><div class="rows">${l.tasks.map((/** @type {any} */ t) => `<div class="row${t.last ? " last" : ""}" data-task="${esc(t.key)}"><span class="key">${esc(t.key)}</span><span><b>${esc(t.title)}</b>${t.last ? ' <span class="tag lastworked">Last worked on</span>' : ""}${t.when ? ` <span class="when">${esc(t.when)}</span>` : ""}${t.summary ? `<br><span class="ptr">${esc(t.summary)}</span>` : ""}</span></div>`).join("") || '<div class="none">Nothing</div>'}</div>`).join("");
   }
   if (m.area === "home") {
     const rows = m.tasks.map((/** @type {any} */ t) => `<div class="row" data-task="${esc(t.key)}"><span class="key">${esc(t.key)}</span><span><b>${esc(t.title)}</b>${t.docs?.length ? ` <span class="tag">${t.docs.map(esc).join(" · ")}</span>` : ""}${t.pointer_title ? `<br><span class="ptr">👉 ${esc(t.pointer_title)}</span>` : ""}</span></div>`).join("");
