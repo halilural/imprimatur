@@ -23,6 +23,11 @@
 //                                       background (docs-backfill.js), with or without .claude/imprimatur.json
 //   SessionStart,       docSync         the design documents and their Markdown files synced (docs-sync.js, #73):
 //   PostToolUse edits                   adoptions, edits taken in and conflicts told to the agent
+//   PreToolUse Bash     commitRef       (#223) a git commit naming no task (#N, Jira key) in a session with no task
+//   PostToolUse Bash,   fileWork        (#223) a turn that committed, pushed or deployed while the session wrote nothing
+//   Stop                                to Imprimatur: asked once to file the work
+//   PostToolUse MCP     issueBody       (#223) task_upsert on #N with no issue body: the body pulled from GitHub
+//   Stop                specFirst       (#223) an active task the session wrote to has no spec: asked once
 
 "use strict";
 const { spawnSync } = require("node:child_process");
@@ -57,7 +62,37 @@ const DEFAULTS = {
   reask: "block",
   // #137: the first edit of a file in a session hears the decisions and records linked to it.
   fileContext: "warn",
+  // #223: work without a task, in repos with a tracker; patterns: the commands that count as a deploy.
+  commitRef: "block",
+  fileWork: {
+    mode: "block",
+    patterns: [
+      "\\b(wrangler|fly|flyctl|vercel|netlify)\\s+deploy\\b", "\\bkubectl\\s+apply\\b", "\\bhelm\\s+(upgrade|install)\\b",
+      "\\bterraform\\s+apply\\b", "\\b(npm|vsce|ovsx)\\s+publish\\b", "\\bgh\\s+release\\s+create\\b",
+    ],
+  },
+  issueBody: true,
+  specFirst: "block",
 };
+
+/** A git commit in a shell command (not commit-tree). */
+const COMMIT = /(^|[;&|(\n]|\$\()\s*(?:\w+=\S*\s+)*git\s+(?:-[cC]\s+\S+\s+)*commit(?![\w-])/;
+/** A commit whose message is on the command line or in a file: -m, -am, --message, -F, --file. */
+const MESSAGE = /\s(?:-[a-zA-Z]*[mF]|--message|--file)(?=[\s='"]|$)/;
+const PUSH = /(^|[;&|(\n]|\$\()\s*git\s+(?:-[cC]\s+\S+\s+)*push\b/;
+/** A task named in text: "#12" or a Jira key "PROJ-7". */
+const TASK_REF = /(^|[^\w&])#\d+\b|\b[A-Z][A-Z0-9]+-\d+\b/;
+
+/** Does a commit command name a task, in its text or in the file -F/--file gives? @param {string} command @param {string} cwd */
+function namesTask(command, cwd) {
+  if (TASK_REF.test(command)) return true;
+  const file = /(?:-F|--file)[=\s]+(['"]?)([^\s'"]+)\1/.exec(command)?.[2];
+  try {
+    return !!file && file !== "-" && TASK_REF.test(fs.readFileSync(path.resolve(cwd, file), "utf8"));
+  } catch {
+    return false;
+  }
+}
 
 /** The git root at or above a directory, by its .git entry (no git process). @param {string} dir */
 function repoOf(dir) {
@@ -258,6 +293,8 @@ function remember(root, session, list, value) {
   const state = readState(root);
   writeState(root, { ...state, [session]: { ...state[session], [list]: [...new Set([...(state[session]?.[list] ?? []), value])] } });
 }
+/** The session's list, kept. @param {string} root @param {string | undefined} session @param {string} list @returns {string[]} */
+const listOf = (root, session, list) => (session ? readState(root)[session]?.[list] ?? [] : []);
 /** The session's list, emptied. @param {string} root @param {string | undefined} session @param {string} list @returns {string[]} */
 function take(root, session, list) {
   if (!session) return [];
@@ -479,6 +516,23 @@ function check(event, input, deps = {}) {
     found(s.hookBypass, "hookBypass", "git hooks are not skipped (--no-verify, -n, HUSKY=0). If a hook rejects wrongly, fix the hook.");
   }
 
+  // #223: work is tracked only in repos with a tracker: a GitHub origin, or Jira set up in Imprimatur.
+  const github = () => require("./tracker.js").githubRepo(run(["remote", "get-url", "origin"], root));
+  const tracker = () => {
+    if (github()) return true;
+    try {
+      return !!require("./tracker.js").readJira(require("./db.js").dbPath()).jira;
+    } catch {
+      return false;
+    }
+  };
+  const cmd = String(ti.command ?? "");
+  // The session's task is known once it wrote to Imprimatur, or when its branch names one.
+  if (event === "PreToolUse" && tool === "Bash" && s.commitRef.mode && COMMIT.test(cmd) && MESSAGE.test(cmd)
+      && !namesTask(cmd, input.cwd ?? root) && !listOf(root, input.session_id, "wrote").length && !taskOfBranch(branch()) && tracker()) {
+    found(s.commitRef, "commitRef", "Which task is this commit for? Open one (task_upsert, or an issue with the issues skill) or name it in the message with a `Refs #N` trailer, so GitHub links the commit to its issue.");
+  }
+
   if (event === "PreToolUse" && EDITS.test(tool) && (ti.file_path || ti.notebook_path)) {
     const rel = relOf(root, input.cwd, ti.file_path ?? ti.notebook_path);
     const inside = rel !== undefined && !rel.startsWith("..") && !path.isAbsolute(rel);
@@ -562,6 +616,30 @@ function check(event, input, deps = {}) {
     if (s.issueFields.mode && n) remember(root, input.session_id, "created", n);
   }
 
+  // #223: what this turn did that should be filed (commits by hash, pushes, deploys), and what the session wrote.
+  if (event === "PostToolUse" && tool === "Bash" && s.fileWork.mode) {
+    const out = typeof input.tool_response === "string" ? input.tool_response : `${input.tool_response?.stdout ?? ""}`;
+    const hash = COMMIT.test(cmd) ? /^\[[^\]\n]*\s([0-9a-f]{7,40})\]/m.exec(out)?.[1] : undefined;
+    if (hash) remember(root, input.session_id, "work", `commit ${hash}`);
+    if (PUSH.test(cmd)) remember(root, input.session_id, "work", "a git push");
+    if ((s.fileWork.patterns ?? []).some((/** @type {string} */ p) => new RegExp(p).test(cmd))) remember(root, input.session_id, "work", `a deploy (${cmd.replace(/\s+/g, " ").slice(0, 80)})`);
+  }
+  const written = event === "PostToolUse" ? require("./config.js").imprimaturTool(tool) : undefined;
+  if (written === "task_upsert" || written === "record_add" || written === "record_update") remember(root, input.session_id, "wrote", String(ti.task ?? ti.key ?? "record"));
+  // #223: a task opened for an existing issue shows its body at once, not after the next tracker sync.
+  if (written === "task_upsert" && s.issueBody.mode && /^#\d+$/.test(ti.key ?? "")) {
+    try {
+      const records = deps.records ?? require("./records.js");
+      const db = records.dbOf?.();
+      const id = db ? records.repoId(root) : undefined;
+      const t = id === undefined ? undefined : db.taskByKey(id, ti.key);
+      if (t && !t.issue_body && github()) {
+        const body = parse(ghRun(["issue", "view", ti.key.slice(1), "--json", "body"], root))?.body;
+        if (body) db.setIssueBody(t.id, body);
+      }
+    } catch {}
+  }
+
   // GitHub sync running (#70) and none of this repo's pushes stuck: the extension closes the issue.
   const trackerOn = () => {
     try {
@@ -627,6 +705,26 @@ function check(event, input, deps = {}) {
         if (missing.length) found(s.issueFields, "issueFields", `#${n}, opened this turn, has no ${missing.join(", ")}.`, notice);
       }
     }
+    if (s.specFirst.mode) {
+      try {
+        const records = deps.records ?? require("./records.js");
+        const db = records.dbOf?.();
+        const id = db ? records.repoId(root) : undefined;
+        for (const key of id === undefined ? [] : listOf(root, input.session_id, "wrote")) {
+          if (!/^#\d+$|^[A-Z][A-Z0-9_]*-\d+$/.test(key) || db.taskByKey(id, key)?.status !== "active") continue;
+          const spec = db.taskDocFind(id, key, "spec");
+          if (spec && db.docSections(spec.id).some((/** @type {any} */ x) => x.status === "current")) continue;
+          if (once(root, input.session_id, `spec ${key}`))
+            found(s.specFirst, "specFirst", `${key} is active and has no spec. Write it now, before more code: doc_section_upsert kind "spec", task "${key}", following the to-spec gates (read ${TO_SPEC}).`);
+        }
+      } catch {}
+    }
+  }
+  // #223: the turn's work is taken at every Stop, so it is asked about once and never loops.
+  if (event === "Stop" && s.fileWork.mode) {
+    const work = take(root, input.session_id, "work");
+    if (work.length && !input.stop_hook_active && !listOf(root, input.session_id, "wrote").length && tracker())
+      found(s.fileWork, "fileWork", `this turn made ${work.join(", ")} without an Imprimatur task. Open or pick its task now (task_upsert, then record_add with what was done) and name it in later commits with a \`Refs #N\` trailer.`);
   }
   // #194: an epic in progress goes on to its next ready child instead of ending the turn; the session's
   // own counter is the safety valve (stop_hook_active would allow one continuation only).

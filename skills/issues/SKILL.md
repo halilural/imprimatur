@@ -54,6 +54,7 @@ Splitting a plan, spec or epic into tickets is `/to-tickets`; a big unclear effo
 
 ## 3. Keep it in step with the work
 
+- **Work that becomes real gets a task without being asked.** When a question or a small ask turns into real work (the first commit, push or deploy), open its task now (step 1, or `task_upsert` for an issue that exists) and name it in every commit with a `Refs #N` trailer (`Closes #N` on the last one), so GitHub links the commits. Imprimatur's `commitRef` and `fileWork` checks stop a commit or a turn that skips this.
 - **Starting:** set the task `active` and the board to In Progress.
 - **While working:** decisions, ADRs and notes go to Imprimatur records, and `pointer_set` keeps 👉 on the next step. Do not narrate progress in GitHub comments. A comment is for something a reader of the issue needs: a changed scope, a found blocker, a question.
 - **If the scope changes:** edit the issue body's brief and acceptance criteria, keep the title equal to the task's (`gh issue edit --title`), and record why.

@@ -335,3 +335,96 @@ test("fileContext (#137): the first edit of a file hears the records that name i
   assert.match(edit("src/a.js", "S2").context?.join("\n") ?? "", /named by 2 records/, "a new session hears it again");
   assert.deepEqual(edit("src/c.js"), {}, "a file no record names adds nothing");
 });
+
+// #223: work without a task. The repos here have a GitHub origin: without a tracker nothing is checked.
+const tracked = (process = {}) => {
+  const root = repo({ process: { status: false, docUpdate: false, keepGoing: false, ...process } });
+  sh(root, "remote", "add", "origin", "https://github.com/u/r.git");
+  return root;
+};
+const wrote = (root, session, task = "#12") => check("PostToolUse", { cwd: root, session_id: session, tool_name: "mcp__imprimatur__record_add", tool_input: { task, kind: "note", title: "x" } }, { records: noRecords });
+
+test("commitRef (#223): a commit naming no task is stopped; a reference, the session's task or its branch lets it pass", () => {
+  const root = tracked({ specFirst: false });
+  const pre = (command, session = "c1") => check("PreToolUse", { cwd: root, session_id: session, tool_name: "Bash", tool_input: { command } });
+  assert.match(pre('git commit -m "fix: x"').block ?? "", /commitRef.*Which task is this commit for\?.*Refs #N/);
+  assert.deepEqual(pre('git commit -m "fix: x" -m "Refs #12"'), {});
+  assert.deepEqual(pre('git add -A && git commit -am "PROJ-7 fix"'), {}, "a Jira key");
+  assert.deepEqual(pre("git commit -q -F - <<'EOF'\nfix: x\n\nCloses #226\nEOF"), {}, "a heredoc message");
+  fs.writeFileSync(path.join(root, "msg.txt"), "fix\n\nRefs #12\n");
+  fs.writeFileSync(path.join(root, "bare.txt"), "fix\n");
+  assert.deepEqual(pre("git commit -F msg.txt"), {}, "the reference in the -F file");
+  assert.match(pre("git commit --file=bare.txt").block ?? "", /commitRef/);
+  assert.deepEqual(pre("git commit --amend --no-edit"), {}, "no message given: not checked");
+  assert.deepEqual(pre("git commit-tree HEAD^{tree} -m x"), {}, "not a commit");
+  wrote(root, "c2");
+  assert.deepEqual(pre('git commit -m "fix: x"', "c2"), {}, "the session wrote to #12");
+  sh(root, "switch", "-q", "-c", "feat/12-x");
+  assert.deepEqual(pre('git commit -m "fix: x"'), {}, "the branch names the task");
+  sh(root, "switch", "-q", "main");
+  assert.deepEqual(check("PreToolUse", { cwd: tracked({ commitRef: false }), tool_name: "Bash", tool_input: { command: 'git commit -m "x"' } }), {}, "off");
+  assert.deepEqual(check("PreToolUse", { cwd: repo(), tool_name: "Bash", tool_input: { command: 'git commit -m "x"' } }), {}, "no tracker");
+});
+
+test("fileWork (#223): a turn that committed or pushed with no Imprimatur write is asked once, with the hashes", () => {
+  const root = tracked({ specFirst: false });
+  const post = (command, stdout = "", session = "w1") => check("PostToolUse", { cwd: root, session_id: session, tool_name: "Bash", tool_input: { command }, tool_response: { stdout } });
+  const stop = (session = "w1", active = false) => check("Stop", { cwd: root, session_id: session, last_assistant_message: "Done.", stop_hook_active: active }, { records: noRecords });
+  post('git commit -m "Refs #1"', "[main abc1234] Refs #1\n 1 file changed\n");
+  post("git push origin main");
+  assert.match(stop().block ?? "", /fileWork.*this turn made commit abc1234, a git push without an Imprimatur task/);
+  assert.deepEqual(stop(), {}, "once: the next stop of the turn has nothing");
+  post("ls -la");
+  assert.deepEqual(stop(), {}, "a turn without commits");
+  post('git commit -m x', "[feat/2-y def5678] x\n");
+  assert.deepEqual(stop("w1", true), {}, "not while the stop hook is already continuing");
+  assert.deepEqual(stop(), {}, "and the list was taken then: no loop");
+  post('git commit -m x', "[main 1111111] x\n", "w2");
+  wrote(root, "w2");
+  assert.deepEqual(stop("w2"), {}, "the session wrote to Imprimatur");
+
+  const own = tracked({ specFirst: false, fileWork: { patterns: ["\\bmake ship\\b"] } });
+  const ship = (command) => check("PostToolUse", { cwd: own, session_id: "d1", tool_name: "Bash", tool_input: { command }, tool_response: { stdout: "" } });
+  ship("npm publish");
+  assert.deepEqual(check("Stop", { cwd: own, session_id: "d1", last_assistant_message: "x" }, { records: noRecords }), {}, "the repo's patterns replace the defaults");
+  ship("make ship");
+  assert.match(check("Stop", { cwd: own, session_id: "d1", last_assistant_message: "x" }, { records: noRecords }).block ?? "", /a deploy \(make ship\)/);
+
+  const off = tracked({ fileWork: false, specFirst: false });
+  check("PostToolUse", { cwd: off, session_id: "o", tool_name: "Bash", tool_input: { command: "git push" }, tool_response: { stdout: "" } });
+  assert.deepEqual(check("Stop", { cwd: off, session_id: "o", last_assistant_message: "x" }, { records: noRecords }), {}, "off");
+  const bare = repo({ process: { status: false, docUpdate: false, keepGoing: false, specFirst: false } });
+  check("PostToolUse", { cwd: bare, session_id: "n", tool_name: "Bash", tool_input: { command: "git push" }, tool_response: { stdout: "" } });
+  assert.deepEqual(check("Stop", { cwd: bare, session_id: "n", last_assistant_message: "x" }, { records: noRecords }), {}, "no tracker");
+});
+
+test("issueBody and specFirst (#223 comment): a task opened for an issue gets its body; an active task with no spec is asked for one, once", () => {
+  const { openDb } = req("../vscode/db.js");
+  const db = openDb({ path: path.join(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-223-")), "x.db") });
+  const root = tracked();
+  const rid = db.repoOf(root).id;
+  const records = { repoId: () => rid, recordsOf: () => [], dbOf: () => db };
+  db.upsertTask(rid, "#30", { title: "From GitHub", status: "active" });
+  const calls = [];
+  const gh = (args) => (calls.push(args.join(" ")), JSON.stringify({ body: "Brief from GitHub" }));
+  const upsert = (key) => check("PostToolUse", { cwd: root, session_id: "s1", tool_name: "mcp__imprimatur__task_upsert", tool_input: { key, status: "active" } }, { records, gh });
+  upsert("#30");
+  assert.equal(db.taskByKey(rid, "#30").issue_body, "Brief from GitHub");
+  upsert("#30");
+  assert.deepEqual(calls, ["issue view 30 --json body"], "a task with a body is left alone");
+
+  const stop = (session = "s1") => check("Stop", { cwd: root, session_id: session, last_assistant_message: "Done." }, { records });
+  assert.match(stop().block ?? "", /specFirst.*#30 is active and has no spec.*doc_section_upsert kind "spec", task "#30"/);
+  assert.deepEqual(stop(), {}, "once per session");
+  db.upsertSection(db.taskDocOf(rid, "#30", "spec").id, "problem", { title: "P", body: "Why." }, { kind: "agent" });
+  check("PostToolUse", { cwd: root, session_id: "s2", tool_name: "mcp__imprimatur__record_add", tool_input: { task: "#30", kind: "note", title: "x" } }, { records });
+  assert.deepEqual(stop("s2"), {}, "a task with a spec");
+  db.upsertTask(rid, "#31", { title: "Open one" });
+  check("PostToolUse", { cwd: root, session_id: "s3", tool_name: "mcp__imprimatur__record_add", tool_input: { task: "#31", kind: "note", title: "x" } }, { records });
+  assert.deepEqual(stop("s3"), {}, "only an active task");
+});
+
+test("issues skill (#223): work that becomes real gets a task without being asked", () => {
+  const text = fs.readFileSync(new URL("../skills/issues/SKILL.md", import.meta.url), "utf8");
+  assert.match(text, /becomes real gets a task without being asked.*first commit, push or deploy.*Refs #N/);
+});
