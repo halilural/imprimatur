@@ -79,6 +79,11 @@ details.newsec { margin-bottom: 14px; }
 .xcard { border: 1px solid var(--vscode-panel-border); border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; }
 .xcard h2 { display: flex; gap: 10px; align-items: center; font-size: 17px; margin: 0 0 6px; } .xcard h2 .ptr { font-weight: 400; margin-left: auto; }
 .bar { height: 4px; border-radius: 2px; background: var(--vscode-panel-border); margin: 4px 0 10px; } .bar div { height: 4px; border-radius: 2px; background: var(--vscode-progressBar-background); }
+li.mdstep-item { list-style: none; }
+input.mdstep { appearance: none; -webkit-appearance: none; display: inline-grid; place-content: center; width: 16px; height: 16px; margin: 0 8px 0 -22px; vertical-align: -3px; border: 1.5px solid var(--vscode-foreground); border-radius: 3px; background: transparent; opacity: 1; cursor: pointer; }
+input.mdstep:disabled { cursor: default; opacity: 1; }
+input.mdstep:checked { background: var(--vscode-testing-iconPassed); border-color: var(--vscode-testing-iconPassed); }
+input.mdstep:checked::after { content: "✓"; color: var(--vscode-editor-background); font-size: 12px; font-weight: 800; line-height: 1; }
 .step { display: flex; gap: 10px; align-items: flex-start; padding: 6px 8px; border-radius: 6px; }
 .step:hover { background: var(--vscode-list-hoverBackground); } .step.now { box-shadow: inset 3px 0 0 var(--vscode-focusBorder); }
 .step.sub { margin-left: 28px; } .step.done .ttl, .step.skipped .ttl { text-decoration: line-through; color: var(--vscode-descriptionForeground); }

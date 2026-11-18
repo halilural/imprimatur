@@ -126,7 +126,8 @@ function stepRule(state) {
     const on = m[1] !== " ";
     first.content = first.content.slice(m[0].length);
     t[i].content = t[i].content.replace(STEP, "");
-    t[i - 2].attrJoin("class", on ? "step on" : "step");
+    // Not "step": the panel's exercise steps are flex rows, which split this item's text into columns (#226).
+    t[i - 2].attrJoin("class", on ? "mdstep-item on" : "mdstep-item");
     const box = new state.Token("html_inline", "", 0);
     box.content = `<input type="checkbox" class="mdstep" data-line="${t[i].map[0]}"${on ? " checked" : ""}${state.env?.steps ? "" : " disabled"} aria-label="Step">`;
     t[i].children.unshift(box);
@@ -144,7 +145,7 @@ function stepsOf(text) {
     const t = markdown().parse(src, {});
     for (let i = 2; i < t.length; i++) {
       const cls = t[i - 2].type === "list_item_open" ? t[i - 2].attrGet("class") ?? "" : "";
-      if (t[i].type === "inline" && t[i].map && /\bstep\b/.test(cls)) out.push({ line: t[i].map[0], done: /\bon\b/.test(cls) });
+      if (t[i].type === "inline" && t[i].map && /\bmdstep-item\b/.test(cls)) out.push({ line: t[i].map[0], done: /\bon\b/.test(cls) });
     }
   } catch {
     // no markdown-it: no steps
