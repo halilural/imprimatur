@@ -198,12 +198,7 @@ STORY: Bir görevi açtığımda ajanın o görev için yazdığı analizleri (n
 
 ## 9. Work without a task is caught
 
-In a repo with process checks and a tracker (GitHub origin or Jira):
-
-- `commitRef` (default block): a `git commit` whose message (`-m`, `-F`) names no task (`#N`, Jira key) is stopped unless the session wrote to Imprimatur or the branch names a task; the reason suggests a `Refs #N` trailer.
-- `fileWork` (default block): a turn that committed, pushed or ran a deploy pattern while the session wrote nothing to Imprimatur is asked, once, to file the work, with the commit hashes.
-- `issueBody` (on): `task_upsert` on `#N` with no stored issue body pulls it from GitHub.
-- `specFirst` (default block): a turn that wrote to an active task with no spec is asked once per session for the spec.
+`specFirst` (default block): a turn that wrote to or opened an open or active task with no spec is asked once per session for its spec (was: active tasks only). The reminder after `gh issue create` and the `issues` skill say a new task's spec is written in the same turn.
 
 <a id="last-worked-on"></a>
 
