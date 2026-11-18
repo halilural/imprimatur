@@ -27,7 +27,7 @@
 //   PostToolUse Bash,   fileWork        (#223) a turn that committed, pushed or deployed while the session wrote nothing
 //   Stop                                to Imprimatur: asked once to file the work
 //   PostToolUse MCP     issueBody       (#223) task_upsert on #N with no issue body: the body pulled from GitHub
-//   Stop                specFirst       (#223) an active task the session wrote to has no spec: asked once
+//   Stop                specFirst       (#223, #227) an open or active task the session wrote to has no spec: asked once
 
 "use strict";
 const { spawnSync } = require("node:child_process");
@@ -608,7 +608,7 @@ function check(event, input, deps = {}) {
 
   if (event === "PostToolUse" && tool === "Bash" && ISSUE_CREATE.test(ti.command ?? "")) {
     if (s.issueCreate.mode) {
-      found(s.issueCreate, "issueCreate", "new issue: link it under its epic (sub-issue + 'Part of #N'), add it to the board with Status and Sprint, set priority and milestone, and open its Imprimatur task (task_upsert, then record_add / pointer_set).");
+      found(s.issueCreate, "issueCreate", "new issue: link it under its epic (sub-issue + 'Part of #N'), add it to the board with Status and Sprint, set priority and milestone, and open its Imprimatur task (task_upsert, then record_add / pointer_set), and write its spec now (doc_section_upsert kind \"spec\", the to-spec gates).");
     }
     // Its fields are set in the next steps: checked at the turn's end (Stop).
     const out = typeof input.tool_response === "string" ? input.tool_response : `${input.tool_response?.stdout ?? ""}`;
@@ -711,11 +711,13 @@ function check(event, input, deps = {}) {
         const db = records.dbOf?.();
         const id = db ? records.repoId(root) : undefined;
         for (const key of id === undefined ? [] : listOf(root, input.session_id, "wrote")) {
-          if (!/^#\d+$|^[A-Z][A-Z0-9_]*-\d+$/.test(key) || db.taskByKey(id, key)?.status !== "active") continue;
+          // #227: open tasks too: no task is left without a spec.
+          if (!/^#\d+$|^[A-Z][A-Z0-9_]*-\d+$/.test(key) || !["open", "active"].includes(db.taskByKey(id, key)?.status)) continue;
           const spec = db.taskDocFind(id, key, "spec");
           if (spec && db.docSections(spec.id).some((/** @type {any} */ x) => x.status === "current")) continue;
-          if (once(root, input.session_id, `spec ${key}`))
-            found(s.specFirst, "specFirst", `${key} is active and has no spec. Write it now, before more code: doc_section_upsert kind "spec", task "${key}", following the to-spec gates (read ${TO_SPEC}).`);
+          // #227: asked at every turn end until the spec exists (not once: a task must not stay without one);
+          // stop_hook_active, checked above, keeps it from looping within a turn.
+          found(s.specFirst, "specFirst", `${key} has no spec; no task is left without one. Write it now, before more code: doc_section_upsert kind "spec", task "${key}", following the to-spec gates (read ${TO_SPEC}).`);
         }
       } catch {}
     }

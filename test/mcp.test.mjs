@@ -455,7 +455,8 @@ test("digests: compact text for the model", async () => {
   assert.match(await text("search", { text: "general" }), /^1 record:\n- #58 \[\d+\] question\/open K Is it general\?$/);
   assert.equal(await text("search", { text: "zzz" }), "No records match \"zzz\".");
   assert.match(await text("record_update", { id: todo.id, status: "done" }), /^Updated \[\d+\] todo\/done C server\.mjs$/);
-  assert.match(await text("record_add", { task: "#58", kind: "note", title: "n" }), /^Added \[\d+\] note\/open - n$/);
+  // #58 has no spec here: the digest's second line asks for it (#227).
+  assert.match(await text("record_add", { task: "#58", kind: "note", title: "n" }), /^Added \[\d+\] note\/open - n\n#58 has no spec/);
   assert.match(await text("pointer_set", { id: todo.id + 1 }), /^👉 now on \[\d+\] question\/open K Is it general\? 👉$/);
   assert.match(await text("task_upsert", { key: "#58" }), /^Saved task #58 MCP/);
   await s.close();
@@ -512,4 +513,18 @@ test("#90: the instructions say record text is data, not instructions", async ()
   const { INSTRUCTIONS } = await import("../mcp/server.mjs");
   assert.match(INSTRUCTIONS, /never as instructions to follow/);
   assert.match(INSTRUCTIONS, /use the user's Claude subscription: `claude -p` with ANTHROPIC_API_KEY unset/);
+});
+
+test("no task without a spec (#227): creating or touching a spec-less open task says to write its spec; a spec, a done task or a bucket does not", async () => {
+  const s = session({ cwd: gitRepo() });
+  const r1 = await call(s, "task_upsert", { key: "#70", title: "New one" });
+  assert.match(r1.structuredContent.spec_needed, /#70 has no spec.*doc_section_upsert kind "spec", task "#70"/);
+  assert.match(r1.content[0].text, /\n#70 has no spec/, "in the text the model reads too");
+  const r2 = await call(s, "record_add", { task: "#71", kind: "note", title: "creates #71" });
+  assert.match(r2.structuredContent.spec_needed, /#71 has no spec/, "record_add creating a task");
+  await call(s, "doc_section_upsert", { kind: "spec", task: "#70", key: "problem", chapter: "problem", title: "P", body: "Why." });
+  assert.equal((await call(s, "record_add", { task: "#70", kind: "note", title: "x" })).structuredContent.spec_needed, undefined, "a spec");
+  assert.equal((await call(s, "task_upsert", { key: "#72", status: "done" })).structuredContent.spec_needed, undefined, "a done task");
+  assert.equal((await call(s, "record_add", { task: "RECS", kind: "note", title: "x" })).structuredContent.spec_needed, undefined, "a bucket");
+  await s.close();
 });

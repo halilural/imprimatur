@@ -244,7 +244,7 @@ test("export: the golden file; written only when changed; superseded left out; n
 test("docUpdate (#186): an ADR stands alone; one changed after the section it feeds is told at the next tool call", () => {
   const root = gitRepo();
   fs.mkdirSync(path.join(root, ".claude"), { recursive: true });
-  fs.writeFileSync(path.join(root, ".claude", "imprimatur.json"), JSON.stringify({ process: { status: false, whereWeLeftOff: false, branchFinish: false, mainGuard: false, designFirst: false } }));
+  fs.writeFileSync(path.join(root, ".claude", "imprimatur.json"), JSON.stringify({ process: { status: false, whereWeLeftOff: false, branchFinish: false, mainGuard: false, designFirst: false, specFirst: false } }));
   const db = openDb({ path: tmpDb() });
   const repo = db.repoOf(root);
   const task = db.upsertTask(repo.id, "#72");

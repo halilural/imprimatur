@@ -45,6 +45,7 @@ Triage states, mapped onto the above, with no new labels:
 3. **Create it** with its category and priority labels. If it belongs to an epic, add "Part of #N" at the end and link it as a sub-issue.
 4. **Put it on the board.** Status Todo, or Backlog if it is not ready. Set the current sprint and milestone if there is one. If there is none, ask the user once whether to leave it out of a sprint; never make up a sprint.
 5. **Open its Imprimatur task:** `task_upsert` with key, title, epic, status and a one-line summary. Then `record_add` the first todo with `pointer: true`.
+6. **Write its spec in the same turn:** no task is left without one. `doc_section_upsert` kind `spec` with the task's key, through the to-spec gates (stories, design, analyze), each gate a `decision` record. Imprimatur's `specFirst` check asks at the turn's end for an open or active task that has none.
 
 An epic is the same, plus: its title starts with `Epic: `, it gets the `epic` label (the GitHub panel's Epics list is `label:epic`), and it gets a `pdr` record with what the user gets.
 

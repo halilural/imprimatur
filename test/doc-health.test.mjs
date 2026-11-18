@@ -22,7 +22,7 @@ function setup(proc = {}) {
   execFileSync("git", ["init", "-q"], { cwd: root });
   fs.mkdirSync(path.join(root, ".claude"), { recursive: true });
   fs.writeFileSync(path.join(root, ".claude", "imprimatur.json"), JSON.stringify({
-    process: { status: false, whereWeLeftOff: false, branchFinish: false, mainGuard: false, designFirst: false, docSync: false, ...proc },
+    process: { status: false, whereWeLeftOff: false, branchFinish: false, mainGuard: false, designFirst: false, docSync: false, specFirst: false, ...proc },
   }));
   const db = openDb({ path: path.join(tmpDir(), "imprimatur.db") });
   const repo = db.repoOf(root);
