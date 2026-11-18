@@ -7,7 +7,7 @@
 const vscode = require("vscode");
 
 /** @typedef {Record<"question" | "todo" | "test" | "turn" | "doneTasks", Array<{id?: number, title: string, task?: string}>>} Parts */
-/** @typedef {Array<{id: string, label: string, tasks: Array<{key: string, title: string, summary?: string}>}>} TaskLists */
+/** @typedef {Array<{id: string, label: string, tasks: Array<{key: string, title: string, summary?: string, when?: string, last?: boolean}>}>} TaskLists */
 /** @typedef {{edits: number, inbox: number, parts?: Parts, tasks?: TaskLists}} Counts */
 
 // Under Home: what its count is made of, item by item, so the number reads without
@@ -128,9 +128,9 @@ class LauncherView {
     if (!row && this.stale) this.catchUp();
     if (!row) return ROWS.filter((r) => !r.social || socialOn());
     if (row.id === "docs") return require("./app/model.js").DOCS.map((/** @type {any} */ d) => ({ id: `docs.${d.id}`, label: d.label, icon: /** @type {any} */ (DOC_ICONS)[d.id] ?? "file", command: APP, args: { area: "docs", doc: d.id }, leaf: true }));
-    if (row.id === "tasks") return (this.now.tasks ?? []).filter((l) => l.tasks.length).map((l) => ({ id: `tasks.${l.id}`, label: l.label, icon: TASK_ICONS[/** @type {keyof typeof TASK_ICONS} */ (l.id)], open: l.id === "active", items: l.tasks.map((t) => ({ id: t.key, title: t.title, task: t.key, key: t.key, tip: t.summary })) }));
+    if (row.id === "tasks") return (this.now.tasks ?? []).filter((l) => l.tasks.length).map((l) => ({ id: `tasks.${l.id}`, label: l.label, icon: TASK_ICONS[/** @type {keyof typeof TASK_ICONS} */ (l.id)], open: l.id === "active", items: l.tasks.map((t) => ({ id: t.key, title: t.title, task: t.key, key: t.key, tip: t.summary, when: t.when, last: t.last })) }));
     const parts = this.now.parts;
-    if (row.items) return row.items.map((/** @type {any} */ i, /** @type {number} */ k) => ({ title: i.title, task: i.task, rec: i.key ? undefined : i.id, key: i.key, tip: i.tip, item: true, id: `${row.id}.${i.id ?? `t${k}`}` }));
+    if (row.items) return row.items.map((/** @type {any} */ i, /** @type {number} */ k) => ({ title: i.title, task: i.task, rec: i.key ? undefined : i.id, key: i.key, tip: i.tip, when: i.when, last: i.last, item: true, id: `${row.id}.${i.id ?? `t${k}`}` }));
     if (!parts) return [];
     if (row.id === "home") return PARTS.filter((p) => parts[/** @type {keyof Parts} */ (p.key)].length).map((p) => ({ ...p, id: `home.${p.key}`, items: parts[/** @type {keyof Parts} */ (p.key)] }));
     return [];
@@ -171,6 +171,9 @@ class LauncherView {
       // Right click: hand it to Claude Code, or copy a reference to paste into a chat.
       one.contextValue = "imprimaturItem";
       one.tooltip = (row.task ? `${row.task}: ${row.title}` : row.title) + (row.tip ? `\n${row.tip}` : "");
+      // #224: an active task's last activity; the one worked on last is marked.
+      if (row.when) one.description = row.last ? `Last worked on · ${row.when}` : row.when;
+      if (row.last) one.iconPath = new vscode.ThemeIcon("history");
       // A task opens its page, a record its page; a turn-end ask has none, Home shows it.
       one.command = row.key
         ? { command: APP, title: "Open", arguments: [{ area: "tasks", task: row.key }] }
