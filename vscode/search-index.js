@@ -1,5 +1,5 @@
 // @ts-check
-// Ranked search over a repo's records and document sections (#189), for the Cmd+K box and MCP.
+// Ranked search over a repo's tasks (#225), records and document sections (#189), for the Cmd+K box and MCP.
 // node:sqlite has no FTS5, so the ranking is BM25 in JavaScript over an index kept in memory and
 // rebuilt when the data changes; Turkish letters fold (İ/ı/ç/ğ/ö/ş/ü match i/c/g/o/s/u), the last
 // word of the query matches as a prefix (typing), and a hit carries a snippet around the match.
@@ -24,9 +24,21 @@ function itemsOf(db, repoId) {
   const secs = db.q(`SELECT s.id, s.key, s.title, s.body, s.updated_at, d.kind AS doc_kind, d.scope, d.repo_id FROM doc_sections s JOIN documents d ON d.id = s.doc_id
                      WHERE s.status = 'current' AND ($repo IS NULL OR d.repo_id = $repo)`).all({ repo: repoId ?? null })
     .map((/** @type {any} */ s) => ({ type: "section", ...s }));
+  // #225: tasks by key or title words; a record bucket (RECS, ADR) is no task.
+  const tasks = db.q(`SELECT id, key, title, summary, status, updated_at, repo_id FROM tasks WHERE $repo IS NULL OR repo_id = $repo`).all({ repo: repoId ?? null })
+    .filter((/** @type {any} */ t) => TASK_KEY.test(t.key))
+    .map((/** @type {any} */ t) => ({ type: "task", ...t, title: t.title || t.key, body: t.summary ?? "", task_key: t.key }));
   const repos = db.q("SELECT id, root FROM repos WHERE $repo IS NULL OR id = $repo").all({ repo: repoId ?? null });
-  return [...recs, ...secs, ...repos.flatMap((/** @type {any} */ r) => filesOf(r).items)];
+  return [...tasks, ...recs, ...secs, ...repos.flatMap((/** @type {any} */ r) => filesOf(r).items)];
 }
+
+const TASK_KEY = /^#\d+$|^[A-Z][A-Z0-9_]*-\d+$/;
+/** The task key a query is, if it is one: "#895", "895" → "#895"; "proj-12" → "PROJ-12". @param {string} query */
+const keyOf = (query) => {
+  const q = String(query ?? "").trim();
+  if (/^#?\d+$/.test(q)) return `#${q.replace(/^#/, "")}`;
+  return /^[A-Za-z][A-Za-z0-9_]*-\d+$/.test(q) ? q.toUpperCase() : undefined;
+};
 
 /** Per repo root: its hand-written documents' chunks and the signature they were read at, for FILE_TTL. @type {Map<string, {at: number, sig: string, items: any[]}>} */
 const fileCache = new Map();
@@ -83,7 +95,8 @@ function chunks(text) {
 function indexOf(db, repoId) {
   const files = db.q("SELECT id, root FROM repos WHERE $repo IS NULL OR id = $repo").all({ repo: repoId ?? null }).map((/** @type {any} */ r) => filesOf(r).sig).join("#");
   const sig = JSON.stringify(db.q(`SELECT (SELECT max(updated_at) FROM records) a, (SELECT count(*) FROM records) b,
-                                          (SELECT max(updated_at) FROM doc_sections) c, (SELECT count(*) FROM doc_sections) d`).get()) + files;
+                                          (SELECT max(updated_at) FROM doc_sections) c, (SELECT count(*) FROM doc_sections) d,
+                                          (SELECT max(updated_at) FROM tasks) e, (SELECT count(*) FROM tasks) f`).get()) + files;
   const key = String(repoId ?? "*");
   let cache = caches.get(db);
   if (!cache) caches.set(db, (cache = new Map()));
@@ -94,7 +107,9 @@ function indexOf(db, repoId) {
   let total = 0;
   const docs = items.map((it) => {
     // The title counts twice: a word in it says more than one in a body.
-    const toks = [...tokens(it.title), ...tokens(it.title), ...tokens(it.body)];
+    // A task's key counts as its title ("895" finds #895).
+    const head = it.type === "task" ? `${it.key} ${it.title}` : it.title;
+    const toks = [...tokens(head), ...tokens(head), ...tokens(it.body)];
     /** @type {Map<string, number>} */ const tf = new Map();
     for (const t of toks) tf.set(t, (tf.get(t) ?? 0) + 1);
     for (const t of tf.keys()) df.set(t, (df.get(t) ?? 0) + 1);
@@ -129,6 +144,7 @@ function rankedSearch(db, query, { repoId, limit = 20, type } = {}) {
   // Each query word as the index's words it stands for: itself, and for the last one, those it starts.
   const groups = words.map((w, i) => (i === words.length - 1 && w.length >= 2 ? index.vocab.filter((/** @type {string} */ v) => v.startsWith(last)).slice(0, 50) : index.df.has(w) ? [w] : []));
   const N = index.docs.length;
+  const key = keyOf(query);
   const k1 = 1.2, b = 0.75;
   const out = [];
   for (const d of index.docs) {
@@ -147,8 +163,8 @@ function rankedSearch(db, query, { repoId, limit = 20, type } = {}) {
       if (!best) all = false;
       score += best;
     }
-    // Every word must be there: a search narrows as you type.
-    if (all && score > 0) out.push({ ...d.it, score });
+    // Every word must be there: a search narrows as you type. The task the query names is first.
+    if (all && score > 0) out.push({ ...d.it, score: score + (key && d.it.type === "task" && d.it.key === key ? 1e6 : 0) });
   }
   // Equal scores: the newer first.
   out.sort((a, b) => b.score - a.score || b.updated_at - a.updated_at);
@@ -166,6 +182,25 @@ function askPrompt(question, hits) {
 }
 
 /** Where a hit is from, one short label: "#58 decision", "capability search", "docs/jira.md:12". @param {any} h */
-const sourceOf = (h) => (h.type === "record" ? `${h.task_key} ${h.kind}` : h.type === "file" ? `${h.rel}:${h.line}` : `${h.doc_kind}${h.scope ? ` ${h.scope}` : ""}`);
+const sourceOf = (h) => (h.type === "record" ? `${h.task_key} ${h.kind}` : h.type === "task" ? `task, ${h.status}` : h.type === "file" ? `${h.rel}:${h.line}` : `${h.doc_kind}${h.scope ? ` ${h.scope}` : ""}`);
 
-module.exports = { rankedSearch, askPrompt, sourceOf, chunks, filesOf, fold, tokens, snippet };
+const ICONS = { task: "$(tasklist)", record: "$(note)", file: "$(file)", section: "$(book)" };
+/**
+ * The magnifier's rows (#225): the hits in rank order, this window's repos first, then "Ask" last, so
+ * Enter on a typed query opens the top hit and never starts a model call by accident.
+ * @param {any[]} hits @param {string} text @param {Map<number, {name?: string, root: string}>} repos @param {Set<string>} here this window's roots
+ */
+function pickItems(hits, text, repos, here) {
+  const mine = (/** @type {any} */ h) => Number(here.has(/** @type {string} */ (repos.get(h.repo_id)?.root)));
+  const rows = [...hits].sort((a, b) => mine(b) - mine(a)).map((h) => {
+    const repo = repos.get(h.repo_id);
+    return {
+      label: `${ICONS[/** @type {keyof typeof ICONS} */ (h.type)] ?? "$(book)"} ${(h.type === "task" ? `${h.key} · ${h.title}` : h.title).slice(0, 120)}`,
+      description: `${repo?.name ?? ""} · ${sourceOf(h)}`,
+      detail: h.snippet, alwaysShow: true, hit: h, root: repo?.root,
+    };
+  });
+  return [...rows, { label: `$(sparkle) Ask: ${text}`, description: "an answer from the best matches, with sources", alwaysShow: true, ask: true }];
+}
+
+module.exports = { rankedSearch, askPrompt, sourceOf, pickItems, chunks, filesOf, fold, tokens, snippet };
