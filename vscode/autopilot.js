@@ -36,9 +36,8 @@ function jobsOf(rows, { files = [], docs = [] } = {}, { drift = [], clashes = []
     if (r.command === "imprimatur.setup.blockCheck" && a?.root && a?.name) jobs.push({ kind: "block", label: r.label, root: a.root, name: a.name });
     else if (r.command === "imprimatur.setup.updatePlugin" && a?.item?.update) jobs.push({ kind: "plugin", label: r.label, update: a.item.update });
     else if (r.fix?.kind === "health") jobs.push({ kind: "health", label: r.label, problem: r.fix.problem });
-    // A skill's new text is untrusted and goes straight into the agent's context: a model's SAFE
-    // verdict on it is not enough without the user (the text could talk the review round).
-    else if (r.fix?.kind === "skill") jobs.push({ kind: "manual", label: r.label, why: "read the upstream change, then Fix it on the row takes it in" });
+    // Taken in only when the user turned it on (handlers.skill): see there why.
+    else if (r.fix?.kind === "skill") jobs.push({ kind: "skill", label: r.label, item: r.fix.item });
     else if (r.fix?.kind === "findings") {
       if (files.length) jobs.push({ kind: "findings", label: `${files.length} recommendation${files.length === 1 ? "" : "s"}`, records: files });
       if (docs.length) jobs.push({ kind: "docs", label: `${docs.length} documentation finding${docs.length === 1 ? "" : "s"}`, records: docs });
@@ -52,7 +51,8 @@ function jobsOf(rows, { files = [], docs = [] } = {}, { drift = [], clashes = []
 /**
  * What each kind of job does. ctx: dir, runId, at (the undo log's run); root (the repo);
  * run(prompt, files) → claude -p, read-only, may name the files; docsRun(prompt, recordIds) → the
- * documentation run through Imprimatur's MCP tools; exec(cmd, args) → {code, out}; dismiss(d) for a finding the agent says to drop; db, repo for stale documents.
+ * documentation run through Imprimatur's MCP tools; exec(cmd, args) → {code, out}; fetchSkill(origin,
+ * ref, dest) → files and autoSkills (the user's choice) for upstream skill updates; dismiss(d) for a finding the agent says to drop; db, repo for stale documents.
  * Each returns {ok, note, changes?} or {manual: why}.
  * @param {any} ctx
  */
@@ -94,6 +94,32 @@ function handlers(ctx) {
       let dropped = 0;
       if (res.ok) for (const d of res.dismissals) if (d.reason !== "other" && d.rec && ctx.dismiss(d)) dropped++;
       return fromFix(res, dropped ? `${dropped} dismissed with the agent's reason` : "");
+    },
+    /** @param {any} j */
+    async skill(j) {
+      // Off unless the user chose it (imprimatur.setup.autopilotSkillUpdates = "auto"): the new text is
+      // untrusted and goes into the agent's context, and the SAFE review reads that same text, so it
+      // can be talked round. The user chose the risk on 2026-11-19; backups and undo stay.
+      if (!ctx.autoSkills) return { manual: "read the upstream change, then Fix it on the row takes it in (or set imprimatur.setup.autopilotSkillUpdates to auto)" };
+      const it = j.item;
+      const to = /\.\.\.([0-9a-f]+)$/.exec(it.compare ?? "")?.[1];
+      if (!to || !prompts.skillUpdatePrompt(it)) return { manual: "not a plain GitHub source" };
+      const dest = fs.mkdtempSync(path.join(os.tmpdir(), `imprimatur-skill-${it.label}-`));
+      try {
+        const files = await ctx.fetchSkill(it.origin, to, dest);
+        const r = await ctx.run(prompts.skillUpdatePrompt(it, dest), [path.join(dest, "x")]);
+        const up = require("./upstream.js");
+        const v = up.verdictOf(r.stdout);
+        if (r.code !== 0 || !v.safe) return { ok: false, note: r.code !== 0 ? "the review run stopped" : `not taken in: ${v.reason.slice(0, 160)}` };
+        const dir = path.dirname(it.abs);
+        const touched = [...files.filter((/** @type {string} */ f) => path.basename(f) !== "SOURCE.txt"), "SOURCE.txt"].map((f) => path.join(dir, f));
+        const before = new Map(touched.map((f) => [f, fs.existsSync(f) ? fs.readFileSync(f, "utf8") : null]));
+        up.applySkillUpdate(dest, dir, files, to, up.summaryOf(r.stdout) || "SAFE verdict", (ctx.at ?? new Date().toISOString()).slice(0, 10));
+        const changes = touched.filter((f) => fs.existsSync(f) && fs.readFileSync(f, "utf8") !== before.get(f)).map((f) => engine.recordChange({ ...at, label: j.label }, f, before.get(f) ?? null));
+        return { ok: true, note: `updated to ${to.slice(0, 7)} after a SAFE review`, changes };
+      } finally {
+        fs.rmSync(dest, { recursive: true, force: true });
+      }
     },
     /** @param {any} j */
     async stale(j) {
