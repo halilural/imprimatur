@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.195.2] - 2026-11-19
+
+### Fixed
+- A broken or partial instruction review no longer closes earlier findings (security review of #235). A finding is closed only when Claude's answer ends with a findings block that parses, and only if its file was among the files reviewed.
+
 ## [0.195.1] - 2026-11-19
 
 ### Fixed
