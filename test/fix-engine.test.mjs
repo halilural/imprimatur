@@ -64,3 +64,13 @@ test("fix engine: a whole file it creates is logged, and undo removes it (#230)"
   assert.equal(undo(dir, undoLog(dir)[0]).ok, true);
   assert.equal(fs.existsSync(f), false);
 });
+
+test("fix engine: never writes through a link, the file or a folder above it (#232 security review)", async () => {
+  const repo = fs.realpathSync(tmp("fix-engine-repo-")), outside = fs.realpathSync(tmp("fix-engine-out-")), dir = tmp("fix-engine-data-");
+  fs.writeFileSync(path.join(outside, "x.md"), "one\n");
+  fs.symlinkSync(outside, path.join(repo, "linked"));
+  const f = path.join(repo, "linked", "x.md");
+  const res = await runFix({ prompt: "p", label: "x", edit: [f], whole: [f] }, { run: ran(answer([{ file: f, old: "", new: "pwned\n" }])), dir, runId: "r6" });
+  assert.equal(res.applied.length, 0);
+  assert.equal(fs.readFileSync(path.join(outside, "x.md"), "utf8"), "one\n");
+});
