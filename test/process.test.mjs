@@ -450,14 +450,17 @@ test("linkAccess (#165): a page WebFetch could not open becomes one link-access 
   const root = repo();
   sh(root, "remote", "add", "origin", "https://github.com/o/r.git");
   const calls = [];
-  const gh = (args) => (calls.push(args), args[0] === "issue" ? "https://github.com/o/r/issues/301\n" : "");
+  let next = 301;
+  const gh = (args) => (calls.push(args), args[0] === "issue" ? `https://github.com/o/r/issues/${next++}\n` : args[0] === "repo" ? "PUBLIC\n" : "");
   const fail = (url, error) => check("PostToolUseFailure", { cwd: root, session_id: `S-${Math.random()}`, tool_name: "WebFetch", tool_input: { url }, error }, { records: noRecords, gh });
   const r = fail("https://www.example.com/report", "Request failed with status code 403");
   assert.match(r.context.join("\n"), /opened #301 \(label link-access\)/);
   const create = calls.find((a) => a[0] === "issue");
   assert.deepEqual(create.slice(0, 4), ["issue", "create", "--label", "link-access"]);
   assert.match(create[5], /^Link: www\.example\.com/);
-  assert.match(create[7], /\*\*Link:\*\* https:\/\/www\.example\.com\/report/);
+  // A public repo's issue names the site only.
+  assert.match(create[7], /^\*\*Site:\*\* www\.example\.com/);
+  assert.doesNotMatch(create[7], /report/);
   // The same link again: the same issue, no new one.
   const again = fail("https://www.example.com/report", "403 Forbidden");
   assert.match(again.context.join("\n"), /#301/);
@@ -465,4 +468,12 @@ test("linkAccess (#165): a page WebFetch could not open becomes one link-access 
   // DNS and timeouts are not closed pages.
   assert.deepEqual(fail("https://down.example.com/", "getaddrinfo ENOTFOUND down.example.com"), {});
   assert.equal(calls.filter((a) => a[0] === "issue").length, 1);
+  // No query, fragment or user ever reaches the issue or the agent's line; the query-less link is the same link.
+  const secret = fail("https://user:pw@www.example.com/report?token=abc#x", "403");
+  assert.doesNotMatch(JSON.stringify(secret) + JSON.stringify(calls), /token=abc|user:pw/);
+  assert.equal(calls.filter((a) => a[0] === "issue").length, 1);
+  // At most three a session.
+  const session = { cwd: root, session_id: "S-cap", tool_name: "WebFetch", error: "403" };
+  for (const i of [1, 2, 3, 4]) check("PostToolUseFailure", { ...session, tool_input: { url: `https://site${i}.example.com/` } }, { records: noRecords, gh });
+  assert.equal(calls.filter((a) => a[0] === "issue").length, 4);
 });

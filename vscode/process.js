@@ -81,6 +81,8 @@ const DEFAULTS = {
 
 /** A WebFetch error that means the page is closed to the agent: an HTTP refusal, a bot wall, a login or JavaScript page (#165). */
 const BLOCKED = /\b(401|402|403|407|429|451)\b|forbidden|unauthori[sz]ed|captcha|cloudflare|access denied|blocked|log ?in|sign[ -]?in|enable javascript|requires javascript|paywall/i;
+/** The most link-access issues one session opens alone: a page cannot make the agent file dozens. */
+const LINK_ISSUES = 3;
 /** A network hiccup, not a closed page: no issue for it. */
 const TRANSIENT = /ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|ECONNREFUSED|socket hang up|timed? ?out/i;
 
@@ -628,9 +630,17 @@ function check(event, input, deps = {}) {
   // #165: a page the agent could not open becomes the issue the user fills, opened here: it no longer
   // waits on the agent remembering the issues skill. A network hiccup (DNS, timeout) is not a blocked page.
   if (event === "PostToolUseFailure" && tool === "WebFetch" && s.linkAccess.mode) {
-    const url = String(ti.url ?? "");
+    const raw = String(ti.url ?? "");
     const why = String(input.error ?? input.tool_response ?? "").split("\n")[0].slice(0, 200);
-    if (/^https?:\/\/[^\s]+$/.test(url) && BLOCKED.test(why) && !TRANSIENT.test(why)) {
+    /** @type {URL | undefined} */
+    let u;
+    try {
+      u = /^https?:\/\//.test(raw) ? new URL(raw) : undefined;
+    } catch {}
+    if (u && BLOCKED.test(why) && !TRANSIENT.test(why)) {
+      // Security review: no user, password, query or fragment leaves the machine (tokens live there),
+      // a public repo's issue names the site only, and a session opens at most LINK_ISSUES of them.
+      const url = `${u.origin}${u.pathname}`;
       const file = dataPath(root, "link-access.json");
       /** @type {Record<string, string>} */
       let known = {};
@@ -638,21 +648,28 @@ function check(event, input, deps = {}) {
         known = JSON.parse(fs.readFileSync(file, "utf8"));
       } catch {}
       let n = known[url];
-      if (!n && github()) {
+      const opened = listOf(root, input.session_id, "linkIssues");
+      const capped = !n && opened.length >= LINK_ISSUES;
+      if (!n && !capped && github()) {
+        const open = ghRun(["repo", "view", "--json", "visibility", "-q", ".visibility"], root)?.trim() === "PRIVATE";
         ghRun(["label", "create", "link-access", "--color", "BFD4F2", "--description", "A page the agent could not open; the user adds screenshots"], root);
         const research = listOf(root, input.session_id, "wrote").filter((k) => /^#\d+$/.test(k)).at(-1);
-        const body = [`**Link:** ${url}`, `**Why the agent could not open it:** ${why}`, ...(research ? [`**Research:** ${research}`] : []), "",
+        const body = [open ? `**Link:** ${url}` : `**Site:** ${u.host} (this repo is not private: the full link is in the agent's answer and in link-access.json in Imprimatur's data folder for this repo)`,
+          `**Why the agent could not open it:** ${why}`, ...(research ? [`**Research:** ${research}`] : []), "",
           "Open the link, then add a screenshot (drag it into a comment) or paste the page's text here. The agent reads it and goes on; close this issue when it has what it needs."].join("\n");
-        n = /\/issues\/(\d+)/.exec(ghRun(["issue", "create", "--label", "link-access", "--title", `Link: ${new URL(url).host} — the agent could not open it`, "--body", body], root) ?? "")?.[1];
+        n = /\/issues\/(\d+)/.exec(ghRun(["issue", "create", "--label", "link-access", "--title", `Link: ${u.host} — the agent could not open it`, "--body", body], root) ?? "")?.[1];
         if (n) {
           known[url] = n;
           fs.mkdirSync(path.dirname(file), { recursive: true });
           fs.writeFileSync(file, JSON.stringify(known, null, 2));
+          remember(root, input.session_id, "linkIssues", n);
         }
       }
       found(s.linkAccess, "linkAccess", n
         ? `${url} could not be opened (${why}). Imprimatur opened #${n} (label link-access): the user opens the page and adds a screenshot or its text there. Go on with other sources and say this gap in your answer; when #${n} has the user's part, read it (issues skill, "A link the agent cannot open") and use it.`
-        : `${url} could not be opened (${why}), and no issue could be opened here (no GitHub origin, or gh failed): ask the user once for a screenshot or the page's text.`);
+        : capped
+          ? `${url} could not be opened (${why}). This session already opened ${LINK_ISSUES} link-access issues, the most it opens alone: list this link in your answer and ask the user whether it needs one.`
+          : `${url} could not be opened (${why}), and no issue could be opened here (no GitHub origin, or gh failed): ask the user once for a screenshot or the page's text.`);
     }
   }
 
