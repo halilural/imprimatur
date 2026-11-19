@@ -4,6 +4,15 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.192.0] - 2026-11-19
+
+### Added
+- Epics show their tasks and progress (#234). An epic's row in Tasks and its card on Home show "N/M done" with a thin bar; a dropped task is not counted. A task under an epic is tagged "in #N". The epic's Tickets tab reads "Tickets · N/M done" and lists open tasks first.
+
+### Changed
+- The setup autopilot's drift fix writes only the open repo's copy. The other repos' copies are read as data. A hook, settings or MCP file's drift is listed under "Needs you".
+- A duplicate skill is removed only when its whole folder matches the kept copy. A copy that is a link, holds one, or resolves to where the kept copy lives is never removed.
+
 ## [0.191.0] - 2026-11-19
 
 ### Added

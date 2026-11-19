@@ -152,3 +152,24 @@ test("task page: a bucket of records (RECS) has no spec tab and no gates; it ope
   assert.deepEqual(lists.map((l) => l.tasks.map((t) => t.key)), [[], ["PROJ-12"], []]);
   assert.ok(!appModel(db, repo, root, { area: "home" }).board.active.some((t) => t.key === "RECS"));
 });
+
+test("epics (#234): an epic shows N/M done in the lists, on Home and on its page; a task names its epic", () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-234-")));
+  const db = openDb({ path: path.join(root, "x.db") });
+  const repo = db.repoOf(root);
+  const e = db.upsertTask(repo.id, "#10", { title: "Epic: autopilot", status: "active" });
+  db.upsertTask(repo.id, "#11", { title: "engine", epicId: e.id, status: "done" });
+  db.upsertTask(repo.id, "#12", { title: "run", epicId: e.id, status: "open" });
+  db.upsertTask(repo.id, "#13", { title: "gave up", epicId: e.id, status: "dropped" });
+  const lists = appModel(db, repo, root, { area: "tasks" }).lists;
+  const row = (k) => lists.flatMap((l) => l.tasks).find((t) => t.key === k);
+  assert.deepEqual(row("#10").progress, { done: 1, total: 2 });
+  assert.equal(row("#12").epic, "#10");
+  const html = appHtml(appModel(db, repo, root, { area: "tasks" }), o);
+  assert.match(html, /Epic: autopilot<\/b> <span class="tag prog">1\/2 done<\/span><span class="bar"><span style="width:50%">/);
+  assert.match(html, /<b>run<\/b> <span class="tag">in #10<\/span>/);
+  const page = appModel(db, repo, root, { area: "tasks", task: "#10", tab: "tickets" }).page;
+  assert.deepEqual(page.tickets.map((k) => k.key), ["#12", "#11", "#13"], "open first, dropped last");
+  assert.match(appHtml(appModel(db, repo, root, { area: "tasks", task: "#10", tab: "tickets" }), o), /Tickets · 1\/2 done/);
+  assert.match(appHtml(appModel(db, repo, root, {}), o), /#10<\/b> Epic: autopilot <span class="tag prog">1\/2 done/);
+});
