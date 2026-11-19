@@ -445,3 +445,24 @@ test("issues skill (#223): work that becomes real gets a task without being aske
   const text = fs.readFileSync(new URL("../skills/issues/SKILL.md", import.meta.url), "utf8");
   assert.match(text, /becomes real gets a task without being asked.*first commit, push or deploy.*Refs #N/);
 });
+
+test("linkAccess (#165): a page WebFetch could not open becomes one link-access issue; a network hiccup does not", () => {
+  const root = repo();
+  sh(root, "remote", "add", "origin", "https://github.com/o/r.git");
+  const calls = [];
+  const gh = (args) => (calls.push(args), args[0] === "issue" ? "https://github.com/o/r/issues/301\n" : "");
+  const fail = (url, error) => check("PostToolUseFailure", { cwd: root, session_id: `S-${Math.random()}`, tool_name: "WebFetch", tool_input: { url }, error }, { records: noRecords, gh });
+  const r = fail("https://www.example.com/report", "Request failed with status code 403");
+  assert.match(r.context.join("\n"), /opened #301 \(label link-access\)/);
+  const create = calls.find((a) => a[0] === "issue");
+  assert.deepEqual(create.slice(0, 4), ["issue", "create", "--label", "link-access"]);
+  assert.match(create[5], /^Link: www\.example\.com/);
+  assert.match(create[7], /\*\*Link:\*\* https:\/\/www\.example\.com\/report/);
+  // The same link again: the same issue, no new one.
+  const again = fail("https://www.example.com/report", "403 Forbidden");
+  assert.match(again.context.join("\n"), /#301/);
+  assert.equal(calls.filter((a) => a[0] === "issue").length, 1);
+  // DNS and timeouts are not closed pages.
+  assert.deepEqual(fail("https://down.example.com/", "getaddrinfo ENOTFOUND down.example.com"), {});
+  assert.equal(calls.filter((a) => a[0] === "issue").length, 1);
+});
