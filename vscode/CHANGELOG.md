@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.193.2] - 2026-11-19
+
+### Fixed
+- Drift no longer flags a file whose copies all differ, such as each repo's own `settings.json` or `AGENTS.md`. A file counts as drift only when at least two copies still match and another differs. This applies to the panel's "differs in N of M repos" and to the autopilot's report alike; on this machine it removed 9 of 13 false drift rows.
+
 ## [0.193.1] - 2026-11-19
 
 ### Fixed
