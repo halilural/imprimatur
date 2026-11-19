@@ -689,23 +689,16 @@ async function fixWithClaude(provider, node) {
       { modal: true, detail: `${files.join("\n")}${dropNote}${skippedNote}\n\n${files.length ? "The diffs are open. " : ""}Nothing has changed yet.` }, "Apply");
     out.appendLine(`[Imprimatur] ${ok === "Apply" ? "Apply chosen." : "Apply dialog closed: nothing applied."}`);
     let wrote = 0;
-    if (ok === "Apply")
-      for (const [file, c] of plan.files) {
-        // A file that changed since Claude read it is left alone; one to create must still be missing.
-        // A whole-file target (#133) is in the repo with no link on its way, and a new one is
-        // created with O_EXCL: a planted link cannot carry the write out of the repo.
-        if (fix.whole?.includes(file) && !require("./agent-files.js").safeTarget(repo, file)) continue;
-        try {
-          if (c.created) {
-            fs.mkdirSync(path.dirname(file), { recursive: true });
-            fs.writeFileSync(file, c.after, { flag: "wx" });
-          } else {
-            if (fs.readFileSync(file, "utf8") !== c.before) continue;
-            fs.writeFileSync(file, c.after);
-          }
-          wrote++;
-        } catch {}
-      }
+    // Written through the fix engine (#230): a file that changed since Claude read it is left alone,
+    // one to create must still be missing (O_EXCL), each write is backed up and can be undone. A
+    // whole-file target (#133) must be in the repo with no link on its way.
+    if (ok === "Apply") {
+      const engine = require("./fix-engine.js");
+      wrote = engine.applyPlan(plan, {
+        dir: engine.autopilotDir(), runId: `fixit-${Date.now()}`, label: fix.label,
+        canWrite: (file) => !fix.whole?.includes(file) || require("./agent-files.js").safeTarget(repo, file),
+      }).applied.length;
+    }
     fs.rmSync(shown, { recursive: true, force: true });
     let dropped = 0;
     if (ok === "Apply" && drops.length && db) {
