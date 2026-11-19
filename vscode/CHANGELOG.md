@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.197.0] - 2026-11-19
+
+### Added
+- After `/clear` or a compact, the agent picks up the task it was on (#135). The session start now names the active task worked on last, with three lines: its goal (the one-line summary), its next step (the 👉) and its phase (spec, gates, code, or a check waiting on you). A normal start or a resume is unchanged, and no extra hook process is added.
+
 ## [0.196.2] - 2026-11-19
 
 ### Fixed

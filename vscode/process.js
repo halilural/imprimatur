@@ -5,7 +5,8 @@
 // file nothing here runs. Each check is "block" (stop the tool or the turn),
 // "warn" (tell the agent, go on) or false (off); a missing key takes DEFAULTS.
 //
-//   SessionStart        whereWeLeftOff  the repo's unfinished tasks and their 👉, from the database
+//   SessionStart        whereWeLeftOff  the repo's unfinished tasks and their 👉, from the database; after /clear or
+//                                       compact also the task worked on last: goal, next step, phase (#135)
 //   PreToolUse Bash     hookBypass      git --no-verify, commit -n, HUSKY=0
 //   PreToolUse edits    mainGuard       on main, only the allowed paths are edited
 //                       designFirst     on a <type>/<n>-… branch, code before the task has a spec or an ADR
@@ -85,6 +86,28 @@ const BLOCKED = /\b(401|402|403|407|429|451)\b|forbidden|unauthori[sz]ed|captcha
 const LINK_ISSUES = 3;
 /** A network hiccup, not a closed page: no issue for it. */
 const TRANSIENT = /ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|ECONNREFUSED|socket hang up|timed? ?out/i;
+
+/**
+ * After /clear or compact (#135): the active task worked on last, as its goal (the one-line summary),
+ * its next step (the 👉) and its phase (spec, its gates, code, or a check waiting on the user).
+ * @param {any} db @param {number} repoId @returns {string | undefined}
+ */
+function resumeBlock(db, repoId) {
+  const { isBucket } = require("./app/model.js");
+  const t = db.q(`SELECT t.id, t.key, t.title, t.summary, max(t.updated_at, coalesce((SELECT max(r.updated_at) FROM records r WHERE r.task_id = t.id), 0)) AS last_at
+                  FROM tasks t WHERE t.repo_id = ? AND t.status = 'active' ORDER BY last_at DESC`).all(repoId).find((/** @type {any} */ x) => !isBucket(x.key));
+  if (!t) return undefined;
+  const recs = db.recordsOf(t.id);
+  const next = recs.find((/** @type {any} */ r) => r.pointer && r.status === "open")?.title;
+  const gates = new Set(recs.filter((/** @type {any} */ r) => r.kind === "decision" && r.status === "done" && r.links?.gate).map((/** @type {any} */ r) => r.links.gate));
+  const spec = db.taskDocFind(repoId, t.key, "spec");
+  const waiting = recs.some((/** @type {any} */ r) => r.status === "open" && r.owner === "K" && r.kind === "test");
+  const phase = !spec ? "spec: not written yet" : !gates.has("tickets") ? "spec: its gates are not all passed" : waiting ? "verify: a check waits on the user" : "code";
+  return [`Picking up after /clear or compact (Imprimatur): the task worked on last is ${t.key} ${t.title}.`,
+    `- Goal, where it stands: ${t.summary || "(no summary: task_get it)"}`,
+    `- Next: ${next ? `👉 ${next}` : "no 👉 set: task_get it and set one"}`,
+    `- Phase: ${phase}`].join("\n");
+}
 
 /** A git commit in a shell command (not commit-tree). */
 const COMMIT = /(^|[;&|(\n]|\$\()\s*(?:\w+=\S*\s+)*git\s+(?:-[cC]\s+\S+\s+)*commit(?![\w-])/;
@@ -491,6 +514,13 @@ function check(event, input, deps = {}) {
     const more = tasks.length - (lines.length - 1);
     if (more > 0) lines.push(`(${more} more open task${more === 1 ? "" : "s"}: where_we_left_off lists them all.)`);
     context.push(tasks.length ? lines.join("\n") : "No unfinished tasks in Imprimatur for this repo. Record work with the imprimatur MCP tools (task_upsert, record_add, pointer_set).");
+    // #135: after /clear or compact the agent has lost the task in hand: the one worked on last, in three lines.
+    if (id !== undefined && (input.source === "clear" || input.source === "compact")) {
+      try {
+        const block = resumeBlock(records.dbOf(), id);
+        if (block) context.push(block);
+      } catch {}
+    }
     // Design documents that need attention (#74): records no section links, conflicts with the file.
     try {
       const problem = id === undefined ? undefined : require("./docs-sync.js").health(records.dbOf(), id).problem;
