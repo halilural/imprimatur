@@ -112,6 +112,9 @@ The development process rules (formerly `.claude/hooks/*.sh` copied into every r
 
 Repo-specific rules (an em dash ban, deploy, migrations, etc.) are out of scope and stay in the repo.
 
+---
+Checked against the code (2026-11-19): still holds. `vscode/process.js`'s `DEFAULTS` still match this table exactly: `hookBypass`, `mainGuard` and `status` block; `whereWeLeftOff` on; `designFirst`, `docsToc`, `unopenedSources`, `issueCreate`, `issueFields`, `sweep`, `branchFinish` and `docUpdate` warn.
+
 <a id="testing"></a>
 
 ## 4. Test strategy
@@ -450,6 +453,9 @@ Three languages, each set in one place:
 - **Repo language** (#80): a repo's `.claude/imprimatur.json` `"lang"` sets the language of its records, design documents, code comments, commits and edit descriptions. A public repo can keep English records while the chat stays in the user's language.
 - **Hook language**: config.json `lang` (or `imprimatur.language`) sets the language of edit descriptions in repos without their own `lang`.
 
+---
+Checked against the code (2026-11-19): still holds. `vscode/config.js` still reads `replyLang` as `IMPRIMATUR_REPLY_LANG` → the plugin's reply-language option → `config.json` `replyLang`, defaulting to English; `repoLang` still reads the repo's own `.claude/imprimatur.json` `lang` ahead of the other three; `hookLang` still falls back to `IMPRIMATUR_LANG`/the plugin option/`config.json` `lang` for repos without their own.
+
 <a id="agent-toolset"></a>
 
 ## 15. The agent's toolset: seen, versioned, installed, found (#138)
@@ -493,6 +499,9 @@ Imprimatur only adds what it installs. It never edits or removes a hook, a plugi
 ### Decisions settled
 
 - 9332: Imprimatur carries the community skills it adopts itself — its own plugin and marketplace bundle them, with license and source commit, and Imprimatur's setup installs them in every repo automatically; where a tool cannot be carried this way (a different app, a second store, an incompatible license), Imprimatur takes its ideas into its own features instead of adopting it directly.
+
+---
+Checked against the code (2026-11-19): still holds. `vscode/baseline.js`'s `BASELINE` still lists exactly these five items (lsp, security-guidance, ponytail, context-mode, humanizer) with the same wording and sources; `setupView.js` still offers "Not in This Repo" on a row's menu.
 
 <a id="139-covers-everything-that-shapes-the-agent-s-de"></a>
 

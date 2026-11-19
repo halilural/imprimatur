@@ -34,3 +34,6 @@ Agent setup lists installed Claude Code plugins (from ~/.claude/plugins/installe
 
 ---
 Checked against the code (2026-11-19): still holds. `pluginItems` in `vscode/agent-setup.js` still reads `~/.claude/plugins/installed_plugins.json`, still keys the row's hash to the version string, and still flags "also installed for every repo"; `syncedSkills` still reads each account's `manifest.json` and hashes on `updatedAt`. (The "not done here" items were since shipped by 0.97.0–0.98.0: MCP server versions via `mcpVersion`, skills' SOURCE.txt via `skillOrigin`, upstream checks via #140.)
+
+---
+Re-checked (2026-11-19, after f63cf223df "drift only when copies share a version"): that commit changed `DriftScanner`/drift matching in `setupView.js`, unrelated to `pluginItems`/`syncedSkills`; the above still holds unchanged.

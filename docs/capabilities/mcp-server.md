@@ -22,29 +22,30 @@ type: explanation
 - Two protocol eras: 2026-07-28 (`server/discover`, the protocol version and `clientInfo` in `_meta` on every request; the discovery result has `ttlMs: 3,600,000`, `cacheScope: "public"`) and the old `initialize` handshake.
 - The server's `instructions` field tells once how the tools are used together ("`where_we_left_off` at the start of a session", etc.).
 
-### Tools (15) and profiles (#119)
+### Tools (16) and profiles (#119)
 
 | Group | Tool | Type | Job |
 | --- | --- | --- | --- |
 | core | `where_we_left_off` | read | Unfinished tasks, each one's 👉 and the number of open records |
 | core | `task_get` | read | A task and its records; by default open records + 👉, 50 at a time, each body's first line (160 chars) and the fields an agent acts on; `status: "all"`, `kind`, `limit/offset`, `full` |
+| core | `record_get` | read | One record by id, whole (body, links, its task's key, whether its files changed since); for a body `search`/`task_get` cut short |
 | core | `task_upsert` | write | Open/update a task (title, status, summary, epic) |
 | core | `record_add` | write | Add a record (the task is opened if missing); `pointer: true` moves the 👉 |
 | core | `record_update` | write | Change the given fields; every change is versioned |
 | core | `pointer_set` | write | Move the 👉 to an open record |
 | core | `search` | read | An index of the records whose title or body has the text: id, task, kind, status, owner, title (160 chars); 8 hits, `more`, `full` for whole records; `repo: "*"` for all repos |
 | list | `task_list` | read | Tasks, most recently updated first |
-| docs | `doc_get` | read | A document's table of contents (architecture, product, glossary, social, a task's analysis); bodies with `section` or `full` |
+| docs | `doc_get` | read | A document's table of contents (project, capability, spec, map, glossary, out-of-scope, …); bodies with `section` or `full` |
 | docs | `doc_section_upsert` | write | Write/update a section, link contributing records |
 | study | `study_material` | read | What `/study` builds its note from |
 | exercise | `exercise_save`, `exercise_get`, `exercise_review` | write/read | `/exercise` and its spaced recall |
 | audit | `setup_audit` | write | Audit the agent setup with agnix, reconcile the findings into `RECS` records; `global`, `dry_run` |
 
-A profile picks the groups: `core` (7 tools, about 1.7k tokens for the model), `standard` (core + list + docs, 10 tools, about 2.7k) and `all` (the default, 15 tools, about 4.6k). The setting is a comma list of profiles, groups and tool names, read from `IMPRIMATUR_TOOLS`, else `mcp.tools` in the repo's `.claude/imprimatur.json`, else `mcp.tools` in `config.json`. A tool left out is neither listed nor callable (`-32602`). `core` and `standard` also drop `outputSchema`: clients give the model a tool's name, description and input schema, not its output schema, so core's list is 7.1 KB instead of 13.7 KB. The default stays `all`, because Claude Code fetches a tool's definition only when it is about to call it.
+A profile picks the groups: `core` (8 tools) and `standard` (core + list + docs, 11 tools) also drop `outputSchema`: clients give the model a tool's name, description and input schema, not its output schema. `all` (the default, 16 tools) keeps it. The setting is a comma list of profiles, groups and tool names, read from `IMPRIMATUR_TOOLS`, else `mcp.tools` in the repo's `.claude/imprimatur.json`, else `mcp.tools` in `config.json`. A tool left out is neither listed nor callable (`-32602`). The default stays `all`, because Claude Code fetches a tool's definition only when it is about to call it.
 
 ### Results (#120)
 
-A result is a short text summary plus `structuredContent` (and `outputSchema` in `all`). Claude Code gives the model the `structuredContent` JSON, so its size is context. That is why `search` and `task_get` answer lean by default and give whole records only with `full: true`. Measured: a typical search is 1.75–1.8 KB for 8 hits (whole records were 17–35 KB for 20), and `task_get #1` is 6.9 KB (was 9.6 KB). A tool's own error comes back with `isError` and a message that says what to do, so the model can correct it; an unknown tool is `-32602`.
+A result is a short text summary plus `structuredContent` (and `outputSchema` in `all`). Claude Code gives the model the `structuredContent` JSON, so its size is context. That is why `search` and `task_get` answer lean by default and give whole records only with `full: true`; `record_get` exists so one whole record can be read without pulling in the rest of its task. A tool's own error comes back with `isError` and a message that says what to do, so the model can correct it; an unknown tool is `-32602`.
 
 ### Repo and identity
 
@@ -59,3 +60,6 @@ A result is a short text summary plus `structuredContent` (and `outputSchema` in
 - 632: the repo is resolved from the `repo` argument, then `CLAUDE_PROJECT_DIR`, then the server's own working folder; MCP `roots` was dropped from the spec and is not used.
 - 633: since Claude Code does not pass session identity to MCP servers, the dispatcher's mcp hook step injects `_session` into the tool input on `PreToolUse` and allows the call, because the tools touch only Imprimatur's own database.
 - 5572: tool profiles (core/standard/all) and lean results (dropping `outputSchema` for small profiles, `structuredContent` sized to need) keep both the tool list and the responses small, matching the 2026-07-28 MCP spec's discovery caching and `_meta` fields.
+
+---
+Checked against the code (2026-11-19): corrected — `record_get` (one whole record by id) is a 16th tool, now in the `core` group (`TOOL_GROUPS` in `mcp/server.mjs`: `core` has 8 tools, `standard` 11, `all` 16); the table above and the tool/profile counts were updated to match. Everything else (transport, protocol eras, `ttlMs`/`cacheScope`, repo resolution, `_session` injection, decisions) still holds as written.

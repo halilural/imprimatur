@@ -60,6 +60,10 @@ Architecture and product sections each sit in a fixed chapter (`doc_sections.cha
 - 5578: architecture/product documents live in the database as chaptered, versioned sections with contributing records, generated into `docs/*.md`; a section body is capped near 40,000 characters, set by the sync Worker's 100,000-character value limit after JSON escaping roughly doubles it.
 - 9326: the plan to keep managed documents only inside Imprimatur, with no generated or hand-written docs in the repo at all, was reversed (decision 9328): documents stay in the repo too, generated from the database and kept in sync two-way as described above.
 
+### Scope and Pocock's other documents (checked 2026-11-19)
+
+This two-way mechanism (`FILES` in `docs-export.js`) covers exactly four kinds: architecture, product, glossary, social. Once a repo's architecture and product sections are all moved to Pocock's model (#185), those two kinds keep no `current` section, so `syncKind` never writes `ARCHITECTURE.md`/`PRODUCT.md` again and removes the file once emptied (`dropEmptied`) — this repo (migrated 2026-11-10) has neither file any more. Pocock's other documents — the project page (`docs/PROJECT.md`), capabilities (`docs/capabilities/`), out-of-scope (`.out-of-scope/`), specs and maps (`.scratch/<task>/`) and ADRs (`docs/adr/`) — are not part of this two-way mechanism. `exportDocs`/`sideFiles` write them through `pocock-files.js`, `scratch-files.js` and `adr-files.js`, with a simpler per-file rule (`writeOne`/`takeSections` in `scratch-files.js`): a hand edit is read back only when the database side did not change since the file was written; when both changed, the database wins and the file's text is kept as a note — no `meta`-table conflict state, no `--take file|db`.
+
 <a id="best-practice-review"></a>
 
 ## 3. Recommendations: project best-practice review (#86, #87)
@@ -137,6 +141,9 @@ IMP-DOC-001, 002 and 005 live in the database, and `docs/*.md` is generated from
 
 The run reads record bodies written by people and other agents, so its write access is narrowed. The MCP server gets `IMPRIMATUR_RECORD_UPDATE` (the ids `fixRecordIds` returns: the decisions the prompt lists). With it set, `record_update` refuses any other record and changes only `body` and `links`, never status, title or kind. `task_upsert` is not granted. A sequenceDiagram in a task analysis is left for the user. `doc_section_upsert` stays open to every section, as in the one-time backfill.
 
+---
+Checked against the code (2026-11-19): still holds. `doc-rules.js`'s `RULES` still has exactly IMP-DOC-001, 002, 005, 006, 007, 008 (003/004 stay removed per #203); `fixDocs`/`docs-fix.js` still run `claude -p` with the document tools plus `record_update` scoped by `IMPRIMATUR_RECORD_UPDATE`, with `task_upsert` not granted.
+
 <a id="flows"></a>
 
 ## 6. Main flows
@@ -198,14 +205,19 @@ When a task is done, its GitHub issue closes (or moves to Done in Jira); an issu
 
 ### VS Code panel (the Imprimatur panel)
 
-| Tab | What it is for |
-|---|---|
-| **Home** | Progress, where each task left off, the first 5 items waiting on you, end-of-turn requests that could not be tied to a task, Audit and Scan history, all tasks; the badge on its button counts what is waiting on you |
-| **Tasks** | The task list (this repo or all repos) and the task page: 👉, and under it tabs: Waiting on you (records and that task's end-of-turn requests, with an answer box), To-dos with quick add, Decisions, Notes, Tests, Activity |
-| **Analysis** | Architecture, Product, Glossary and Task analyses: live design documents (contents, contributing records, edit, mark superseded, history) and the tasks' analysis files |
-| **Agent changes** | The Agent Change Graph: edits and the agent's other work, task lanes, explanation, the rendered diff on hover, Accept |
+Rebuilt from scratch (#190, ADR 0130): a pure model (`vscode/app/model.js`) and pure HTML (`vscode/app/html.js`) behind a thin webview glue, Linear-calm.
 
-Keyboard: j/k, Enter, x, a, /, Esc. In the sidebar, rows that open the tabs and a badge that counts what is waiting.
+| Area | What it is for |
+|---|---|
+| **Home** | Progress, where each task left off, the first items waiting on you, Audit and Scan history, all tasks |
+| **Tasks** | The task list (this repo or all repos) and a task's page: 👉, records, quick add |
+| **Docs** | Pocock's documents, read in one layout (its sections, the page, "on this page"): Project, Capabilities, ADRs, Glossary, Out of scope, and a generated Wiki |
+| **Edits** | The Agent Change Graph: edits and the agent's other work, task lanes, explanation, the rendered diff on hover, Accept |
+| **Setup** | Agent Setup: every file that affects the agent, for the repo and for home |
+
+Under **More**: Exercises, Meetings, Social.
+
+Keyboard: j/k, Enter, x, a, /, Esc; g + a nav key (h/t/d/e/s) jumps to an area.
 
 ### Editor marks and preview
 
@@ -224,7 +236,7 @@ In Claude Code's status line, for the repo and session: `Imprimatur · 3 waiting
 
 ### MCP tools
 
-`where_we_left_off`, `task_list`, `task_get`, `task_upsert`, `record_add`, `record_update`, `pointer_set`, `search`, `doc_get`, `doc_section_upsert`. In Claude Code (settings file or plugin), Cursor and Codex.
+`where_we_left_off`, `task_list`, `task_get`, `record_get`, `task_upsert`, `record_add`, `record_update`, `pointer_set`, `search`, `doc_get`, `doc_section_upsert`, `study_material`, `exercise_save`, `exercise_get`, `exercise_review`, `setup_audit` (16 tools, grouped into profiles core/standard/all — see the mcp-server capability). In Claude Code (settings file or plugin), Cursor and Codex.
 
 ### Process checks
 
@@ -232,7 +244,10 @@ Optional per repo (`.claude/imprimatur.json`): where we left off at session star
 
 ### Command line
 
-`npm run setup` (install), `npm run import` (import old Markdown records), `npm run tracker`, `node scripts/github-webhooks.mjs`, `node scripts/stale-epic-lines.mjs`.
+`npm run setup` (install), `npm run import` (import old Markdown records), `npm run docs -- sync` (docs sync CLI), `npm run migrate` (the one-time move to Pocock's model, #185), `npm run wiki`, `npm run tracker`, `node scripts/stale-epic-lines.mjs`.
+
+---
+Checked against the code (2026-11-19): corrected — the panel section described the old tabs (Home/Tasks/Analysis/Agent changes); `vscode/app/model.js`'s `AREAS` now reads Home, Tasks, Docs, Edits, Setup, with Exercises/Meetings/Social under More, so the table above was rewritten to match. The MCP tools row was missing `record_get`, `study_material`, `exercise_save`/`exercise_get`/`exercise_review` and `setup_audit`. The Command line row named `node scripts/github-webhooks.mjs`, which no longer exists in `scripts/`; replaced with the scripts that do (`npm run docs`, `npm run migrate`, `npm run wiki`).
 
 <a id="social"></a>
 
