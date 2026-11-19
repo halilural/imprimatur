@@ -312,7 +312,8 @@ const NOT_YOURS = new Set(["plugin", "synced"]);
 function reconcile(findings, records) {
   /** @type {Map<string, any>} */
   const byFp = new Map();
-  for (const r of records) if (r.links?.audit?.fp) byFp.set(r.links.audit.fp, r);
+  // Claude's instruction review (#235) keeps its own records: agnix never finds them, so never resolves them.
+  for (const r of records) if (r.links?.audit?.fp && !r.links.audit.ai) byFp.set(r.links.audit.fp, r);
   const found = new Set(findings.map((f) => f.fp));
   /** @type {ReturnType<typeof reconcile>} */
   const plan = { add: [], reopen: [], update: [], resolve: [], drop: [], dismissed: 0, open: 0, live: [] };

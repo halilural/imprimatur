@@ -12,12 +12,11 @@ type: explanation
 2. [Issue tracker sync](#tracker)
 3. [History scan and TODO.md task tracking](#history-scan-todo)
 4. [Task analyses](#task-analysis)
-5. [A task's analysis](#task-analysis-2)
-6. [Unread: comprehension debt (#91, #92)](#unread-2)
-7. [Görev sayfasında "Analiz": görev için yazılan analiz/plan/spike dosyaları, dosya başına kart; görevsiz analizler "Bu göreve bağla" ile](#g-rev-sayfas-nda-analiz-g-rev-i-in-yaz-lan-anali)
-8. [Okumadıkların: görev listesinde "N okunmadı", görev sayfası ve Ana sayfada kart (kabul edilmemiş düzenlemeler + değişen bölümler, Okudum / Hepsini okudum), dokümanda "Okunmadı" işareti, durum satırında "N unread"](#okumad-klar-n-g-rev-listesinde-n-okunmad-g-rev-s)
-9. [Work without a task is caught](#work-without-task)
-10. [Active tasks by last activity](#last-worked-on)
+5. [Unread: comprehension debt (#91, #92)](#unread-2)
+6. [Görev sayfasında "Analiz": görev için yazılan analiz/plan/spike dosyaları, dosya başına kart; görevsiz analizler "Bu göreve bağla" ile](#g-rev-sayfas-nda-analiz-g-rev-i-in-yaz-lan-anali)
+7. [Okumadıkların: görev listesinde "N okunmadı", görev sayfası ve Ana sayfada kart (kabul edilmemiş düzenlemeler + değişen bölümler, Okudum / Hepsini okudum), dokümanda "Okunmadı" işareti, durum satırında "N unread"](#okumad-klar-n-g-rev-listesinde-n-okunmad-g-rev-s)
+8. [Work without a task is caught](#work-without-task)
+9. [Active tasks by last activity](#last-worked-on)
 
 <a id="unread"></a>
 
@@ -152,26 +151,9 @@ flowchart LR
 - 7077: a task's analysis is its own document kind. `documents.scope` is the task key, not a foreign key, so a placeholder repo merge never breaks the reference. Sections carry a `source` file, and `doc_sources` hashes mean a file's text is not ingested again while it is unchanged.
 - 10556: one model, the five-chapter design doc, written with the `analysis` skill. File sections land in the chapter their heading names, and `--` keys are reserved for file sections.
 
-<a id="task-analysis-2"></a>
-
-## 5. A task's analysis
-
-STORY: I read a task's analyses, plans, spike results and research notes (wherever the agent wrote the file, including the plan it came out of plan mode with) in one place, the **Analysis** tab; the task page stays focused on to-dos.
-
-- A single **Analysis** tab in the top menu: under it **Architecture**, **Product**, **Glossary** and **Task analyses**; the tab returns to the sub-page opened last.
-- **Task analyses:** on the left the tasks that have analyses (newest on top), on the right the selected task's files; one card per file, the sections are the file's `##` headings. A file that was read on this machine opens in the editor with "open", "Go to task" takes you to the task page.
-- **Analyses without a task:** below the list; a task picker next to every file, it moves to the selected task.
-- **Task page:** an "Analysis · N files →" link in the title; at the top Where we left off and Waiting on you, below it tabs: To-dos, Decisions, Notes, Tests, Activity (the selected tab is remembered, while searching all are shown).
-- What was written in past sessions comes in once per repo in the background; by hand: **Imprimatur: Take Task Analyses from Past Sessions** or `npm run analysis` (`--dry-run`, `--no-model`).
-- To turn it off: `"analysis": false` in `.claude/imprimatur.json`; to exclude a path: `{"exclude": ["drafts/"]}`.
-
-### Decisions settled
-
-- 7078: the panel's Analysis tab shows a task's analysis/plan/spike files as one card per file, with the task page kept focused on to-dos; a file that cannot be placed in a task is listed with a one-click "link to this task" action rather than being dropped.
-
 <a id="unread-2"></a>
 
-## 6. Unread: comprehension debt (#91, #92)
+## 5. Unread: comprehension debt (#91, #92)
 
 The agent writes code and documents faster than a person can read them; Imprimatur shows how much you have not yet seen.
 
@@ -186,22 +168,22 @@ Next: a "since your last read" diff (#93), an end-of-turn briefing (#94).
 
 <a id="g-rev-sayfas-nda-analiz-g-rev-i-in-yaz-lan-anali"></a>
 
-## 7. Görev sayfasında "Analiz": görev için yazılan analiz/plan/spike dosyaları, dosya başına kart; görevsiz analizler "Bu göreve bağla" ile
+## 6. Görev sayfasında "Analiz": görev için yazılan analiz/plan/spike dosyaları, dosya başına kart; görevsiz analizler "Bu göreve bağla" ile
 
 STORY: Bir görevi açtığımda ajanın o görev için yazdığı analizleri (nereye yazmış olursa olsun, plan modundan çıktığı plan dahil) görevin sayfasında okurum; diğer makinemde de aynısı görünür. Geçmiş oturumlarda yazılanlar repo başına bir kez arka planda gelir, ya da "Imprimatur: Take Task Analyses from Past Sessions" / npm run analysis. Görevi bulunamayan dosya görev sayfasında listelenir, tek tıkla bağlanır. Kapatmak: .claude/imprimatur.json "analysis": false; yalnız bu makinede: {"sync": false}.
 
 <a id="okumad-klar-n-g-rev-listesinde-n-okunmad-g-rev-s"></a>
 
-## 8. Okumadıkların: görev listesinde "N okunmadı", görev sayfası ve Ana sayfada kart (kabul edilmemiş düzenlemeler + değişen bölümler, Okudum / Hepsini okudum), dokümanda "Okunmadı" işareti, durum satırında "N unread"
+## 7. Okumadıkların: görev listesinde "N okunmadı", görev sayfası ve Ana sayfada kart (kabul edilmemiş düzenlemeler + değişen bölümler, Okudum / Hepsini okudum), dokümanda "Okunmadı" işareti, durum satırında "N unread"
 
 <a id="work-without-task"></a>
 
-## 9. Work without a task is caught
+## 8. Work without a task is caught
 
 `specFirst` (default block): a turn that wrote to or opened an open or active task with no spec is asked once per session for its spec (was: active tasks only). The reminder after `gh issue create` and the `issues` skill say a new task's spec is written in the same turn.
 
 <a id="last-worked-on"></a>
 
-## 10. Active tasks by last activity
+## 9. Active tasks by last activity
 
 On the Tasks page and in the side bar's Tasks › Active, active tasks are sorted by last activity (the later of the task's and its newest record's update time), newest first. The first carries "Last worked on"; each active row shows its last activity as a relative time ("2 h ago"). Open and done keep their order.

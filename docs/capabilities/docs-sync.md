@@ -64,6 +64,9 @@ Architecture and product sections each sit in a fixed chapter (`doc_sections.cha
 
 This two-way mechanism (`FILES` in `docs-export.js`) covers exactly four kinds: architecture, product, glossary, social. Once a repo's architecture and product sections are all moved to Pocock's model (#185), those two kinds keep no `current` section, so `syncKind` never writes `ARCHITECTURE.md`/`PRODUCT.md` again and removes the file once emptied (`dropEmptied`) — this repo (migrated 2026-11-10) has neither file any more. Pocock's other documents — the project page (`docs/PROJECT.md`), capabilities (`docs/capabilities/`), out-of-scope (`.out-of-scope/`), specs and maps (`.scratch/<task>/`) and ADRs (`docs/adr/`) — are not part of this two-way mechanism. `exportDocs`/`sideFiles` write them through `pocock-files.js`, `scratch-files.js` and `adr-files.js`, with a simpler per-file rule (`writeOne`/`takeSections` in `scratch-files.js`): a hand edit is read back only when the database side did not change since the file was written; when both changed, the database wins and the file's text is kept as a note — no `meta`-table conflict state, no `--take file|db`.
 
+---
+Checked against the code (2026-11-19): still holds. The only file changes since the last update are `docs/adr/0102-…md`, `docs/adr/0104-…md`, `docs/capabilities/agent-setup-audit.md`, `docs/capabilities/docs-sync.md` and `docs/capabilities/mcp-server.md`, all re-exported by commit 00fa2fe328 ("capabilities and ADRs re-exported after the autopilot's second stale-docs check") — generated output of this very mechanism, not a source change. `docs-export.js`'s `FILES`/`socialOn`/`kindsOf` and the scratch/pocock/adr file writers are unchanged.
+
 <a id="best-practice-review"></a>
 
 ## 3. Recommendations: project best-practice review (#86, #87)
@@ -143,6 +146,9 @@ The run reads record bodies written by people and other agents, so its write acc
 
 ---
 Checked against the code (2026-11-19): still holds. `doc-rules.js`'s `RULES` still has exactly IMP-DOC-001, 002, 005, 006, 007, 008 (003/004 stay removed per #203); `fixDocs`/`docs-fix.js` still run `claude -p` with the document tools plus `record_update` scoped by `IMPRIMATUR_RECORD_UPDATE`, with `task_upsert` not granted.
+
+---
+Re-checked (2026-11-19, after f63cf223df and cb4827adf6): both commits touch `setupView.js`'s drift matching and an unrelated auto-skill-update setting; `RULES`, `isDocFinding`, `fixDocs` and `docs-fix.js`'s `claudeArgs`/`fixRecordIds` are unchanged. Still holds.
 
 <a id="flows"></a>
 

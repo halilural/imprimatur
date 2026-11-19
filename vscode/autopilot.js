@@ -22,12 +22,14 @@ const STALE_PER_RUN = 10;
  * across (#232): files whose copies differ between repos (absolute paths per copy), and skill
  * names that come from more than one place.
  * @param {any[]} rows @param {{files?: any[], docs?: any[]}} [findings]
- * shared (#233): rules files with the very same text in two or more repos.
- * @param {{drift?: Array<{rel: string, files: string[]}>, clashes?: Array<{name: string, from: Array<{source: string, dir: string}>}>, shared?: Array<{rel: string, files: string[]}>}} [across]
+ * shared (#233): rules files with the very same text in two or more repos. review (#235): the instruction files Claude reviews.
+ * @param {{drift?: Array<{rel: string, files: string[]}>, clashes?: Array<{name: string, from: Array<{source: string, dir: string}>}>, shared?: Array<{rel: string, files: string[]}>, review?: string[]}} [across]
  */
-function jobsOf(rows, { files = [], docs = [] } = {}, { drift = [], clashes = [], shared = [] } = {}) {
+function jobsOf(rows, { files = [], docs = [] } = {}, { drift = [], clashes = [], shared = [], review = [] } = {}) {
   /** @type {any[]} */
   const jobs = [];
+  // Claude's review of the instructions first (#235): what it finds is fixed in the same job.
+  if (review.length) jobs.push({ kind: "review", label: `Review the agent instructions (${review.length} files)`, files: review });
   for (const d of drift) if (d.files.length > 1) jobs.push({ kind: "drift", label: `Drift: ${d.rel} (${d.files.length} copies)`, rel: d.rel, files: d.files });
   for (const c of clashes) jobs.push({ kind: "clash", label: `Skill from ${c.from.length} places: ${c.name}`, name: c.name, from: c.from });
   for (const x of shared) if (x.files.length > 1 && SHARED_RULE.test(x.rel)) jobs.push({ kind: "promote", label: `Same rule in ${x.files.length} repos: ${x.rel}`, rel: x.rel, files: x.files });
@@ -193,6 +195,30 @@ function handlers(ctx) {
       return { ok: true, note: `now in ~/.claude/rules (every repo); ${j.files.length} repo copies moved to the backup`, changes };
     },
     /** @param {any} j */
+    async review(j) {
+      if (!ctx.db || !ctx.repo) return { manual: "no records for this repo" };
+      const ir = require("./instruction-review.js");
+      const r = await ctx.run(ir.reviewPrompt(ctx.root, j.files), j.files);
+      if (r.code !== 0) return { ok: false, note: `the review run stopped: ${String(r.stderr || r.code).trim().split("\n")[0]}` };
+      const day = (ctx.at ?? new Date().toISOString()).slice(0, 10);
+      const rec = ir.recordFindings(ctx.db, ctx.repo.id, ir.parseFindings(r.stdout, j.files), day);
+      const gone = rec.closed ? `, ${rec.closed} earlier finding${rec.closed === 1 ? "" : "s"} gone` : "";
+      if (!rec.open.length) return { ok: true, note: `nothing found${gone}` };
+      // Fixed in the same job, through the engine: backups, undo, target files only.
+      const targets = [...new Set(rec.open.map((/** @type {any} */ x) => x.links.audit.file))];
+      const res = await engine.runFix({ prompt: prompts.findingsPrompt(rec.open), label: j.label, edit: targets, records: rec.open }, { ...at, run: (p) => ctx.run(p, targets) });
+      const edited = new Set(res.applied.map((/** @type {any} */ a) => path.resolve(a.file)));
+      let fixed = 0, dropped = 0;
+      for (const x of rec.open)
+        if (edited.has(path.resolve(x.links.audit.file))) {
+          ctx.db.updateRecord(x.id, { status: "done", body: `${x.body ?? ""}\n\n_Fixed by the setup autopilot, ${day}._` }, ir.ACTOR);
+          fixed++;
+        }
+      if (res.ok) for (const d of res.dismissals) if (d.reason !== "other" && d.rec && ctx.db.record(d.rec.id)?.status === "open" && ctx.dismiss(d)) dropped++;
+      const left = rec.open.length - fixed - dropped;
+      return { ok: true, note: `${rec.open.length} found: ${fixed} fixed${dropped ? `, ${dropped} dismissed with Claude's reason` : ""}${left ? `, ${left} left for you under Recommendations` : ""}${gone}`, changes: res.applied };
+    },
+    /** @param {any} j */
     async manual(j) {
       return { manual: j.why || "Imprimatur does not do this alone" };
     },
@@ -295,6 +321,7 @@ function progressOf(j) {
     case "drift": return `Merging the copies of ${j.rel}`;
     case "clash": return `Removing a duplicate of the ${j.name} skill`;
     case "promote": return `Sharing ${j.rel} with every repo`;
+    case "review": return `Claude is reviewing ${j.files?.length ?? 0} instruction files`;
     default: return `Noting for you: ${j.label}`;
   }
 }

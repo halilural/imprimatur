@@ -164,3 +164,41 @@ test("autopilot: the progress says what it is doing, and how far (#231)", async 
   await runAutopilot([{ kind: "manual", label: "a" }, { kind: "manual", label: "b" }], handlers({}), { runId: "r", at: "t", onJob: (_j, p) => said.push(p) });
   assert.deepEqual(said, ["Noting for you: a (1/2)", "Noting for you: b (2/2)"]);
 });
+
+test("autopilot: Claude's instruction review finds, records and fixes in one job; agnix leaves its records alone (#235)", async () => {
+  const { openDb } = require("../vscode/db.js");
+  const ir = require("../vscode/instruction-review.js");
+  const { reconcile } = require("../vscode/setup-audit.js");
+  const root = fs.realpathSync(tmp("autopilot-review-")), dir = tmp("autopilot-data-");
+  const db = openDb({ path: path.join(root, "x.db") });
+  const repo = db.repoOf(root);
+  const rules = path.join(root, "AGENTS.md"), cursor = path.join(root, ".cursorrules");
+  fs.writeFileSync(rules, "Use npm.\nRun scripts/old.sh before a commit.\n");
+  fs.writeFileSync(cursor, "Use pnpm.\n");
+  const found = [
+    { file: rules, line: 1, kind: "cross-agent", title: "Claude is told npm, Cursor pnpm", detail: "AGENTS.md:1 vs .cursorrules:1" },
+    { file: rules, line: 2, kind: "stale", title: "scripts/old.sh does not exist", detail: "no such file" },
+    { file: "/etc/passwd", line: 1, kind: "stale", title: "outside", detail: "" },
+    { file: rules, line: 1, kind: "style", title: "not a kind", detail: "" },
+  ];
+  const answers = [
+    `ok\n\`\`\`imprimatur-findings\n${JSON.stringify(found)}\n\`\`\`\n`,
+    answer([{ file: rules, old: "Use npm.\nRun scripts/old.sh before a commit.\n", new: "Use pnpm.\n" }]),
+  ];
+  const run = async () => ({ code: 0, stdout: answers.shift(), stderr: "" });
+  const jobs = jobsOf([], {}, { review: [rules, cursor] });
+  assert.equal(jobs[0].kind, "review");
+  const report = await runAutopilot(jobs, handlers({ dir, runId: "v1", at: "2026-11-19T12:00:00Z", root, db, repo, run, dismiss: () => false }), { runId: "v1", at: "t" });
+  assert.match(report.fixed[0].note, /^2 found: 2 fixed/);
+  assert.equal(fs.readFileSync(rules, "utf8"), "Use pnpm.\n");
+  const recs = db.recordsOf(require("../vscode/recs.js").recsTask(db, repo.id).id).filter((r) => r.links?.audit?.ai);
+  assert.deepEqual(recs.map((r) => [r.links.audit.rule, r.status]), [["IMP-AI-cross-agent", "done"], ["IMP-AI-stale", "done"]]);
+  // The agnix audit never resolves them: they are not its findings.
+  db.updateRecord(recs[0].id, { status: "open" }, { kind: "user" });
+  assert.deepEqual(reconcile([], db.recordsOf(recs[0].task_id)).resolve, []);
+  // The next review that no longer reports it closes it; a finding found again is not a copy.
+  const again = ir.recordFindings(db, repo.id, ir.parseFindings(`\`\`\`imprimatur-findings\n${JSON.stringify([found[1]])}\n\`\`\``, [rules]), "2026-11-20");
+  assert.equal(again.added, 0);
+  assert.equal(again.closed, 1);
+  assert.equal(db.record(recs[0].id).status, "done");
+});

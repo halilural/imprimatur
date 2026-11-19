@@ -37,3 +37,6 @@ Checked against the code (2026-11-19): still holds. `pluginItems` in `vscode/age
 
 ---
 Re-checked (2026-11-19, after f63cf223df "drift only when copies share a version"): that commit changed `DriftScanner`/drift matching in `setupView.js`, unrelated to `pluginItems`/`syncedSkills`; the above still holds unchanged.
+
+---
+Re-checked (2026-11-19, after cb4827adf6 "automatic skill updates can be turned on only in the user's own settings"): that commit scopes an unrelated auto-skill-update setting in `setupView.js`; `pluginItems` and `syncedSkills` in `vscode/agent-setup.js` are untouched. Still holds.
