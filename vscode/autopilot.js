@@ -19,13 +19,15 @@ const STALE_PER_RUN = 10;
  * across (#232): files whose copies differ between repos (absolute paths per copy), and skill
  * names that come from more than one place.
  * @param {any[]} rows @param {{files?: any[], docs?: any[]}} [findings]
- * @param {{drift?: Array<{rel: string, files: string[]}>, clashes?: Array<{name: string, from: Array<{source: string, dir: string}>}>}} [across]
+ * shared (#233): rules files with the very same text in two or more repos.
+ * @param {{drift?: Array<{rel: string, files: string[]}>, clashes?: Array<{name: string, from: Array<{source: string, dir: string}>}>, shared?: Array<{rel: string, files: string[]}>}} [across]
  */
-function jobsOf(rows, { files = [], docs = [] } = {}, { drift = [], clashes = [] } = {}) {
+function jobsOf(rows, { files = [], docs = [] } = {}, { drift = [], clashes = [], shared = [] } = {}) {
   /** @type {any[]} */
   const jobs = [];
   for (const d of drift) if (d.files.length > 1) jobs.push({ kind: "drift", label: `Drift: ${d.rel} (${d.files.length} copies)`, rel: d.rel, files: d.files });
   for (const c of clashes) jobs.push({ kind: "clash", label: `Skill from ${c.from.length} places: ${c.name}`, name: c.name, from: c.from });
+  for (const x of shared) if (x.files.length > 1 && SHARED_RULE.test(x.rel)) jobs.push({ kind: "promote", label: `Same rule in ${x.files.length} repos: ${x.rel}`, rel: x.rel, files: x.files });
   for (const r of rows) {
     const a = r.args?.[0];
     if (r.command === "imprimatur.setup.blockCheck" && a?.root && a?.name) jobs.push({ kind: "block", label: r.label, root: a.root, name: a.name });
@@ -111,7 +113,7 @@ function handlers(ctx) {
       // Only this repo's copy is written: the other repos' copies are read as data, and only plain
       // rules prose is merged alone (#232 security review:
       // a repo cloned under the drift roots must not get its text into this repo's hooks unseen).
-      if (!PROSE.test(j.rel)) return { manual: "not a plain rules file (it can run commands or grant tools): compare the copies and keep one yourself" };
+      if (!PROSE.test(j.rel)) return { manual: "only .claude/rules files are merged alone (a repo's AGENTS.md is its own; commands, skills, hooks and settings can run or grant): compare the copies yourself" };
       // In the repo by real path; a copy reached through a link is not written (fix-engine refuses it too).
       const realRoot = fs.realpathSync(ctx.root);
       const mine = j.files.filter((/** @type {string} */ f) => !engine.throughLink(f) && !path.relative(realRoot, path.resolve(f)).startsWith(".."));
@@ -142,18 +144,42 @@ function handlers(ctx) {
       return { ok: true, note: `the repo's copy removed; the ${kept[0].source} one stays`, changes };
     },
     /** @param {any} j */
+    async promote(j) {
+      // Personal copies only: a rules file tracked in git is read by teammates too (#233).
+      if (j.files.some((/** @type {string} */ f) => ctx.tracked(f))) return { manual: "tracked in git, so teammates read it: move it to ~/.claude/rules yourself if it is yours only" };
+      if (j.files.some((/** @type {string} */ f) => engine.throughLink(f))) return { manual: "a copy is reached through a link" };
+      const text = fs.readFileSync(j.files[0], "utf8");
+      if (j.files.some((/** @type {string} */ f) => fs.readFileSync(f, "utf8") !== text)) return { manual: "the copies are not the same" };
+      const dest = path.join(ctx.home ?? os.homedir(), ".claude", "rules", path.basename(j.rel));
+      const changes = [];
+      if (fs.existsSync(dest)) {
+        if (fs.readFileSync(dest, "utf8") !== text) return { manual: `~/.claude/rules/${path.basename(j.rel)} already holds other text` };
+      } else {
+        if (engine.throughLink(dest)) return { manual: "~/.claude/rules is reached through a link" };
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.writeFileSync(dest, text, { flag: "wx" });
+        changes.push(engine.recordChange({ ...at, label: j.label }, dest, null));
+      }
+      for (const f of j.files) changes.push(engine.recordRemove({ ...at, label: j.label }, f));
+      return { ok: true, note: `now in ~/.claude/rules (every repo); ${j.files.length} repo copies moved to the backup`, changes };
+    },
+    /** @param {any} j */
     async manual(j) {
       return { manual: j.why || "Imprimatur does not do this alone" };
     },
   };
 }
 
+/** A personal rules file worth sharing (#233): one file under .claude/rules, not nested. */
+const SHARED_RULE = /^\.claude\/rules\/[^/]+\.md$/i;
+
 /**
- * The only drifted files the autopilot merges alone: plain instruction prose (rules, AGENTS.md). A
+ * The only drifted files the autopilot merges alone: plain rules prose (.claude/rules; a repo's own
+ * AGENTS.md is its own, never made like the others'). A
  * command, skill, agent or output style can hold shell lines or tool permissions, and hooks,
  * settings and MCP files run or grant: their drift is the user's (security review of #232).
  */
-const PROSE = /^(\.claude\/rules\/(?:[^/]+\/)*[^/]+\.md|(?:[^/]+\/)*AGENTS\.md)$/i;
+const PROSE = /^\.claude\/rules\/(?:[^/]+\/)*[^/]+\.md$/i;
 
 /**
  * A folder's files and their text as one string, to compare two skills whole. null when the folder

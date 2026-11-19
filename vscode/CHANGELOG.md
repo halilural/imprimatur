@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.193.0] - 2026-11-19
+
+### Added
+- The setup autopilot shares a personal rule (#233, epic #229). A `.claude/rules/<name>.md` with the very same text in two or more repos, and tracked by git in none of them, moves to `~/.claude/rules/`, where it loads in every repo. The repo copies go to the backup, and each step can be undone. A shared rules file tracked in git is listed under "Needs you", because teammates read the repo's copy.
+
+### Changed
+- Drift merging now covers `.claude/rules` files only. A repo's `AGENTS.md` is its own and is never made like the others'. Imprimatur's generated files are never merged.
+
 ## [0.192.1] - 2026-11-19
 
 ### Fixed

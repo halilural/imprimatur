@@ -95,13 +95,38 @@ test("autopilot: drift writes only this repo's copy, never a hook; a repo's dupl
   assert.equal(fs.readFileSync(fb, "utf8"), "use b\n", "another repo's copy is not written");
   assert.equal(seen.length, 1, "the hook's drift never reaches the agent");
   // Only plain rules prose is merged alone: a command or skill can hold shell lines and tool grants.
-  const cmd = jobsOf([], {}, { drift: [{ rel: ".claude/commands/deploy.md", files: [fa, fb] }, { rel: ".claude/RULES/Y.MD", files: [fa, fb] }] });
+  const cmd = jobsOf([], {}, { drift: [{ rel: ".claude/commands/deploy.md", files: [fa, fb] }, { rel: ".claude/RULES/Y.MD", files: [fa, fb] }, { rel: "AGENTS.md", files: [fa, fb] }] });
   const r2 = await runAutopilot(cmd, handlers({ dir, runId: "d2", at: "t", root: a, run }), { runId: "d2", at: "t" });
-  assert.deepEqual([r2.manual.length, r2.fixed.length + r2.failed.length], [1, 1]);
+  assert.deepEqual([r2.manual.length, r2.fixed.length + r2.failed.length], [2, 1], "a repo's AGENTS.md is its own");
   assert.equal(fs.existsSync(mine), false);
   assert.equal(fs.existsSync(partly), true, "a skill whose other files differ stays");
   assert.equal(summaryLine(report), "2 fixed · 0 not fixed · 2 need you");
   const removed = undoLog(dir).find((l) => l.removed);
   assert.equal(undo(dir, removed).ok, true);
   assert.equal(fs.readFileSync(path.join(mine, "SKILL.md"), "utf8"), "same\n");
+});
+
+test("autopilot: a personal rule in several repos moves to ~/.claude/rules; a tracked one is the user's (#233)", async () => {
+  const a = tmp("autopilot-a-"), b = tmp("autopilot-b-"), home = tmp("autopilot-home-"), dir = tmp("autopilot-data-");
+  const put = (root, rel, text) => {
+    const f = path.join(root, rel);
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(f, text);
+    return f;
+  };
+  const fa = put(a, ".claude/rules/pnpm.md", "Use pnpm.\n"), fb = put(b, ".claude/rules/pnpm.md", "Use pnpm.\n");
+  const ta = put(a, ".claude/rules/team.md", "Team rule.\n"), tb = put(b, ".claude/rules/team.md", "Team rule.\n");
+  const jobs = jobsOf([], {}, { shared: [{ rel: ".claude/rules/pnpm.md", files: [fa, fb] }, { rel: ".claude/rules/team.md", files: [ta, tb] }, { rel: ".claude/commands/x.md", files: [fa, fb] }] });
+  assert.deepEqual(jobs.map((j) => j.kind), ["promote", "promote"], "only rules files are shared");
+  const tracked = (f) => f.endsWith("team.md");
+  const report = await runAutopilot(jobs, handlers({ dir, runId: "p1", at: "t", root: a, home, tracked }), { runId: "p1", at: "t" });
+  const global = path.join(home, ".claude", "rules", "pnpm.md");
+  assert.equal(fs.readFileSync(global, "utf8"), "Use pnpm.\n");
+  assert.equal(fs.existsSync(fa) || fs.existsSync(fb), false);
+  assert.equal(fs.existsSync(ta) && fs.existsSync(tb), true, "a tracked rule stays for the team");
+  assert.equal(summaryLine(report), "1 fixed · 0 not fixed · 1 need you");
+  // Undo, newest first: the copies come back and the global file goes.
+  for (const l of undoLog(dir).reverse()) assert.equal(undo(dir, l).ok, true);
+  assert.equal(fs.existsSync(global), false);
+  assert.equal(fs.readFileSync(fa, "utf8"), "Use pnpm.\n");
 });
