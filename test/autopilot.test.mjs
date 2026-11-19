@@ -23,8 +23,7 @@ test("autopilot: checklist rows become jobs; installs and rows without a fix are
     { label: "Review the upstream change of tdd", fix: { kind: "skill", item: {} } },
   ];
   const kinds = jobsOf(rows, { files: [{ id: 1 }], docs: [{ id: 2 }] }).map((j) => j.kind);
-  // An upstream skill change is untrusted text for the agent's context: never taken in on a model's word alone.
-  assert.deepEqual(kinds, ["block", "plugin", "health", "findings", "docs", "stale", "manual", "manual"]);
+  assert.deepEqual(kinds, ["block", "plugin", "health", "findings", "docs", "stale", "manual", "skill"]);
 });
 
 test("autopilot: a run fixes what it may, logs each change for undo, and reports the rest (#231)", async () => {
@@ -134,4 +133,25 @@ test("autopilot: a personal rule in several repos moves to ~/.claude/rules; a tr
 test("autopilot: the report keeps more than an answer's first line (#231)", () => {
   const { gist } = require("../vscode/autopilot.js");
   assert.equal(gist("All ten parts checked. Summary:\n\n- 1: still holds\n- 2: corrected the table\n"), "All ten parts checked. Summary: 1: still holds 2: corrected the table");
+});
+
+test("autopilot: an upstream skill change waits for the user unless they chose auto; then it is reviewed, backed up and undoable", async () => {
+  const home = tmp("autopilot-home-"), dir = tmp("autopilot-data-");
+  const skill = path.join(home, ".claude", "skills", "sizer");
+  fs.mkdirSync(skill, { recursive: true });
+  fs.writeFileSync(path.join(skill, "SKILL.md"), "old\n");
+  fs.writeFileSync(path.join(skill, "SOURCE.txt"), "source: https://github.com/o/r (skills/sizer)\ncommit: a1d65fd\n");
+  const item = { label: "sizer", abs: path.join(skill, "SKILL.md"), origin: { repo: "o/r", path: "skills/sizer", commit: "a1d65fd" }, compare: "https://github.com/o/r/compare/a1d65fd...d60da88" };
+  const jobs = jobsOf([{ label: "Review the upstream change of sizer", fix: { kind: "skill", item } }]);
+  const fetchSkill = async (_o, _ref, dest) => (fs.writeFileSync(path.join(dest, "SKILL.md"), "new\n"), ["SKILL.md"]);
+  const run = async () => ({ code: 0, stdout: "SUMMARY: a sizing fix\nVERDICT: SAFE\n", stderr: "" });
+  const asked = await runAutopilot(jobs, handlers({ dir, runId: "s1", at: "2026-11-19T12:00:00Z", root: home, run, fetchSkill }), { runId: "s1", at: "t" });
+  assert.equal(asked.manual.length, 1);
+  assert.equal(fs.readFileSync(path.join(skill, "SKILL.md"), "utf8"), "old\n");
+  const auto = await runAutopilot(jobs, handlers({ dir, runId: "s2", at: "2026-11-19T12:00:00Z", root: home, run, fetchSkill, autoSkills: true }), { runId: "s2", at: "t" });
+  assert.equal(auto.fixed.length, 1);
+  assert.equal(fs.readFileSync(path.join(skill, "SKILL.md"), "utf8"), "new\n");
+  assert.match(fs.readFileSync(path.join(skill, "SOURCE.txt"), "utf8"), /commit: d60da88/);
+  for (const l of undoLog(dir).reverse()) assert.equal(undo(dir, l).ok, true);
+  assert.equal(fs.readFileSync(path.join(skill, "SKILL.md"), "utf8"), "old\n");
 });

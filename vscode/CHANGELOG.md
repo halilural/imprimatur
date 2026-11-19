@@ -4,6 +4,12 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.194.0] - 2026-11-19
+
+### Added
+- `imprimatur.setup.autopilotSkillUpdates` (`ask` | `auto`, default `ask`). With `auto`, the setup autopilot takes in upstream changes of hand-installed skills itself: it downloads them, has Claude review them, takes them in on a SAFE verdict, backs them up first and keeps them undoable.
+  - **Risk:** the skill's text goes straight into the agent's context and is written by someone else. The review reads that same text, so a hostile change could talk it round. The default stays `ask`.
+
 ## [0.193.2] - 2026-11-19
 
 ### Fixed
