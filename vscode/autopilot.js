@@ -11,6 +11,9 @@ const path = require("node:path");
 const engine = require("./fix-engine.js");
 const prompts = require("./fix-prompts.js");
 
+/** An agent's answer for the report: its first lines as one, so a first line like "Summary:" is not all there is. @param {string} answer */
+const gist = (answer) => answer.split("\n").map((l) => l.replace(/^[\s#>*-]+/, "").trim()).filter(Boolean).join(" ").slice(0, 400);
+
 /** At most this many stale documents per run: each costs agent turns. */
 const STALE_PER_RUN = 10;
 
@@ -99,14 +102,14 @@ function handlers(ctx) {
       if (!parts.length) return { ok: false, note: "no stale document found" };
       const ids = parts.filter((/** @type {any} */ p) => p.kind !== "section").map((/** @type {any} */ p) => p.id);
       const r = await ctx.docsRun(stalePrompt(ctx.root, parts), ids);
-      return r.ok ? { ok: true, note: `${parts.length} checked against the code${parts.length === STALE_PER_RUN ? " (the rest next run)" : ""}: ${r.answer.split("\n")[0].slice(0, 160)}` } : { ok: false, note: `the documentation run stopped: ${r.answer.slice(0, 160)}` };
+      return r.ok ? { ok: true, note: `${parts.length} checked against the code${parts.length === STALE_PER_RUN ? " (the rest next run)" : ""}: ${gist(r.answer)}` } : { ok: false, note: `the documentation run stopped: ${r.answer.slice(0, 160)}` };
     },
     /** @param {any} j */
     async docs(j) {
       if (!ctx.db || !ctx.repo) return { manual: "no records for this repo" };
       const bf = require("./docs-fix.js");
       const r = await ctx.docsRun(bf.fixPrompt(ctx.db, ctx.repo.id, ctx.root, j.records), bf.fixRecordIds(ctx.db, ctx.repo.id, j.records));
-      return r.ok ? { ok: true, note: r.answer.split("\n")[0].slice(0, 200) } : { ok: false, note: `the documentation run stopped: ${r.answer.slice(0, 160)}` };
+      return r.ok ? { ok: true, note: gist(r.answer) } : { ok: false, note: `the documentation run stopped: ${r.answer.slice(0, 160)}` };
     },
     /** @param {any} j */
     async drift(j) {
@@ -270,4 +273,4 @@ function reportMarkdown(r, git = {}) {
   return out.join("\n") + "\n";
 }
 
-module.exports = { jobsOf, handlers, runAutopilot, reportMarkdown, summaryLine, stalePrompt, driftPrompt, STALE_PER_RUN };
+module.exports = { jobsOf, handlers, runAutopilot, reportMarkdown, summaryLine, stalePrompt, driftPrompt, gist, STALE_PER_RUN };
