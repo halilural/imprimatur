@@ -31,3 +31,6 @@ Agent setup lists installed Claude Code plugins (from ~/.claude/plugins/installe
 - Checking upstream for newer versions belongs to #140.
 
 **Known effect.** The first look after this version marks every plugin and synced-skill row as "new" (about 42 here), because they were never in the seen snapshot.
+
+---
+Checked against the code (2026-11-19): still holds. `pluginItems` in `vscode/agent-setup.js` still reads `~/.claude/plugins/installed_plugins.json`, still keys the row's hash to the version string, and still flags "also installed for every repo"; `syncedSkills` still reads each account's `manifest.json` and hashes on `updatedAt`. (The "not done here" items were since shipped by 0.97.0–0.98.0: MCP server versions via `mcpVersion`, skills' SOURCE.txt via `skillOrigin`, upstream checks via #140.)

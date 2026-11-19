@@ -424,16 +424,17 @@ The tools the agent called are counted per server from `tool_use` blocks.
 
 ## 13. Agent files: AGENTS.md, CLAUDE.md and the docs rule (#133)
 
-AGENTS.md holds the rules every coding agent follows in a repo, at most 200 lines. CLAUDE.md starts with `@AGENTS.md` and keeps only what is Claude Code's own. `.claude/rules/docs.md`, scoped to `docs/**` by its `paths:` front matter, holds the documentation standard (decision 9331). `vscode/agent-files.js` reads how a repo stands and puts rows in Agent Setup's checklist:
+AGENTS.md holds the rules every coding agent follows in a repo, at most 200 lines. CLAUDE.md starts with `@AGENTS.md` and keeps only what is Claude Code's own. `vscode/agent-files.js` reads how a repo stands and puts rows in Agent Setup's checklist:
 
 | Repo has | Row | Action |
 |---|---|---|
 | neither file | Agent files: write AGENTS.md and CLAUDE.md | templates, written with `wx` (never over a file) |
 | AGENTS.md only | Agent files: write CLAUDE.md | the one-line `@AGENTS.md` |
-| no `.claude/rules/docs.md` | (the same row) | the docs-rule template |
 | a CLAUDE.md that does not import AGENTS.md | Agent files: CLAUDE.md does not import AGENTS.md | Fix it |
 
-**Fix it** for this row gives Claude the three file names, never their text (Claude reads the files and is told their text is data). Claude hands each file back whole: AGENTS.md with the shared rules, CLAUDE.md with `@AGENTS.md` and the Claude-only items, and the docs rule only if CLAUDE.md had any. `fix-edits.js` `planEdits` takes these as `whole` files: an empty old text creates the file or rewrites it as a whole. For every other fix, an edit still needs an old text found exactly once. The diffs open first, a new file against an empty one.
+Imprimatur's own rules are no longer written through a `.claude/rules/docs.md` template here (#208): they live in the generated `.claude/rules/imprimatur.md`, rewritten at each session start (`own-rules.js`). A `.claude/rules/docs.md` an older release copied Imprimatur's rules into is its own audit finding (IMP-DOC-008), not something `agent-files.js` writes or fixes; `.claude/rules/docs.md` in this repo is the repo's own hand-written documentation rule (front matter `type:`), unrelated to Imprimatur's.
+
+**Fix it** for the CLAUDE.md row gives Claude the three file names — `CLAUDE.md`, `AGENTS.md` and `.claude/rules/docs.md` — never their text (Claude reads the files and is told their text is data). Claude hands each file back whole: AGENTS.md with the shared rules, CLAUDE.md with `@AGENTS.md` and the Claude-only items, and the docs rule only if CLAUDE.md had document rules of its own to move into it. `fix-edits.js` `planEdits` takes these as `whole` files: an empty old text creates the file or rewrites it as a whole. For every other fix, an edit still needs an old text found exactly once. The diffs open first, a new file against an empty one.
 
 **Writes are kept inside the repo.** `safeTarget(root, file)` walks the path from the repo root and refuses any symbolic link on the way, the file itself included, so a planted link (`.claude/rules` pointing elsewhere, a dangling `AGENTS.md`) cannot carry a write out of the repo. A new file is opened with `wx` (O_EXCL), so an existing file or a dangling link is never written through. Apply checks its whole-file targets the same way, and writes an existing file only if it did not change since Claude read it.
 
@@ -509,6 +510,9 @@ What Agent setup must show, each item with where it comes from and, where it app
 6. **Data sources:** other memory systems in use (Nook, Notion memory, claude-mem …), and the repo content and tool results that reach the agent. They are listed as sources, not inventoried, because they carry prompt-injection risk.
 
 Already shipped toward this: installed plugins and synced skills (0.92.0, ADR 9343).
+
+---
+Update (2026-11-19): #139 is done; the "partly/not shown" marks above are stale for most items. Shipped by 0.97.0–0.98.0 (`vscode/agent-setup.js`): group 2 as a settings summary by scope (`summarize`'s settings branch: hooks, allow/deny, plugins, mode, model, effort, output style, sandbox, env names, auto-mode rules); group 3 and most of group 4 via the session transcript rows (ADR 9346, `vscode/session-context.js`: hook runs/time/added text, MCP instructions, tools per server, skills/agents listed, model, mode); the rest of group 4 via `pluginContents` (what each plugin brings) and `mcpVersion` (server versions); group 5's ignore files and git hooks via `classify`'s `.cursorignore`/husky/lefthook/commitlint entries; group 6 via `memoryStores` (listed, never read). Not verified as shown anywhere in `vscode/agent-setup.js` or `setupView.js`: Claude Code's own version, IDE context, CI gate configs, and `additionalDirectories` in settings.
 
 <a id="imprimatur-is-where-the-agent-s-toolset-is-seen-"></a>
 

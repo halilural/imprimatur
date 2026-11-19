@@ -37,3 +37,6 @@ Agent setup shows what the repo's last Claude Code session was given, read from 
 - MCP server versions.
 - Hand-copied skills' SOURCE.txt.
 - Data sources.
+
+---
+Checked against the code (2026-11-19): still holds. `scanSetup` in `vscode/agent-setup.js` still calls `sessionItems(path.join(home, ".claude", "projects", projectSlug(gitRootOf(root))), home, configuredHooks(root, home))` for a repo scan, and `setupView.js` still renders these as plain file rows (skipping `vscode.open` when the row has no `abs`). The "not done" list was shipped by 0.97.0–0.98.0 (settings summary, plugin contents, MCP versions, skill SOURCE.txt, data sources), tracked in ADR 9343's follow-up and the #139 todo.

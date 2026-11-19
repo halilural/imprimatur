@@ -122,18 +122,20 @@ The decisions are the repo's adr and pdr records. Each one is also written as a 
 |---|---|---|
 | IMP-DOC-001 | each MADR number used once, every current decision numbered; a "superseded by NNNN" names a file that exists | warning |
 | IMP-DOC-002 | a decision names an alternative to the option chosen (a body line with alternative, rejected, instead of, not chosen or considered) | info |
-| IMP-DOC-003 | a decision is linked to a section | info |
-| IMP-DOC-004 | every architecture chapter has a section; a C4 context view (`[Person]`, `[Software system]`) and a container view (`[Container: …]`) exist | warning |
-| IMP-DOC-005 | every sequenceDiagram (architecture, product, task analyses) has `autonumber` and a numbered list under it with an item per arrow | warning |
+| IMP-DOC-005 | every sequenceDiagram (the project page, a capability, a spec or a map) has `autonumber` and a numbered list under it with an item per arrow | warning |
 | IMP-DOC-006 | AGENTS.md and CLAUDE.md stay under 200 lines | warning |
+| IMP-DOC-007 | a hand-written Markdown file at the root or under docs/ lives outside Imprimatur's model (not generated, not a standard file such as README/CHANGELOG/AGENTS/CLAUDE/LICENSE, not kept on purpose via `docs.keep`) | info |
+| IMP-DOC-008 | Imprimatur's own rule lines, copied into AGENTS.md, CLAUDE.md or `.claude/rules/docs.md` by an older release, instead of staying only in `.claude/rules/imprimatur.md` | info |
 
-The decision rules (001–003) report one finding per rule. Each names up to 12 decisions, then "and N more": one finding per decision would bury the panel. 002 and 003 are info, because they describe what the records lack, not a broken setup.
+\#203 removed IMP-DOC-003 ("a decision is linked to a section") and IMP-DOC-004 (architecture chapters and C4 views): both fired on every repo once documents moved to Pocock's model, where an ADR stands alone and architecture/product sections no longer apply the same way. `decisionGaps` in `doc-rules.js` still computes a `loose` list (decisions linked to no section) but nothing reports it as a finding any more.
+
+The decision rules (001–002) report one finding per rule. Each names up to 12 decisions, then "and N more": one finding per decision would bury the panel. 002 is info, because it describes what the records lack, not a broken setup. IMP-DOC-006, 007 and 008 are file findings, one per file.
 
 ### Fix it on a documentation finding
 
-IMP-DOC-001..005 live in the database, and `docs/*.md` is generated from it, so the usual Fix it (a file diff) would be lost at the next export. On these findings Fix it (`fixDocs` in `vscode/setupView.js`) runs a background `claude -p` with docs-backfill's settings (sonnet, $3 cap, Read/Glob/Grep and Imprimatur's MCP server only) plus `record_update`. The prompt (`fixPrompt` in `vscode/docs-backfill.js`) lists the decisions 002 and 003 name (`decisionGaps` in `doc-rules.js`). The agent links decisions to sections with `doc_section_upsert`. It adds an "Alternative: …" line only when the decision's task records show the option was weighed, and never invents one. The audit then runs again, so what the agent left stays open. The bulk Fix it takes this path when every open finding is a docs one; in a mixed list it fixes the file findings, and each docs finding has its own Fix it. IMP-DOC-006 stays a file finding.
+IMP-DOC-001, 002 and 005 live in the database, and `docs/*.md` is generated from it, so the usual Fix it (a file diff) would be lost at the next export. On these three, Fix it (`fixDocs` in `vscode/setupView.js`) runs a background `claude -p` with the document tools plus `record_update` (`vscode/docs-fix.js`, kept from docs-backfill.js when the one-time backfill went, #203). The prompt (`fixPrompt` in `docs-fix.js`) lists the decisions IMP-DOC-002 names (`decisionGaps` in `doc-rules.js`) and, for IMP-DOC-005, the diagrams to fix with `doc_section_upsert`. It adds an "Alternative: …" line only when the decision's task records show the option was weighed, and never invents one. The audit then runs again, so what the agent left stays open. The bulk Fix it takes this path when every open finding is a docs one; in a mixed list it fixes the file findings, and each docs finding has its own Fix it. IMP-DOC-006, 007 and 008 stay file findings, fixed the usual way.
 
-The run reads record bodies written by people and other agents, so its write access is narrowed. The MCP server gets `IMPRIMATUR_RECORD_UPDATE` (the ids `fixRecordIds` returns, the decisions the prompt lists). With it set, `record_update` refuses any other record and changes only `body` and `links`, never status, title or kind. `task_upsert` is not granted. A sequenceDiagram in a task analysis is left for the user. `doc_section_upsert` stays open to every section, as in the one-time backfill.
+The run reads record bodies written by people and other agents, so its write access is narrowed. The MCP server gets `IMPRIMATUR_RECORD_UPDATE` (the ids `fixRecordIds` returns: the decisions the prompt lists). With it set, `record_update` refuses any other record and changes only `body` and `links`, never status, title or kind. `task_upsert` is not granted. A sequenceDiagram in a task analysis is left for the user. `doc_section_upsert` stays open to every section, as in the one-time backfill.
 
 <a id="flows"></a>
 
