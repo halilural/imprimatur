@@ -631,7 +631,7 @@ async function runAutopilotNow(provider, { auto = false } = {}) {
   let report;
   try {
     report = await vscode.window.withProgress({ location: auto ? vscode.ProgressLocation.Window : vscode.ProgressLocation.Notification, title: "Imprimatur autopilot" },
-      (p) => ap.runAutopilot(jobs, ap.handlers(ctx), { runId, at, onJob: (j) => (p.report({ message: j.label }), out.appendLine(`--- ${j.kind}: ${j.label}`)) }));
+      (p) => ap.runAutopilot(jobs, ap.handlers(ctx), { runId, at, onJob: (j, said) => (p.report({ message: said }), out.appendLine(`--- ${j.kind}: ${j.label}`)) }));
   } finally {
     provider.fixing = false;
   }

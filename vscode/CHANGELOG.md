@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.194.2] - 2026-11-19
+
+### Changed
+- The autopilot's progress notification says what it is doing and how far it is, such as "Checking 10 of 71 possibly stale documents against the code (5/7)". It used to show the checklist row's label ("Documents: 71 possibly stale"), which read like a warning.
+
 ## [0.194.1] - 2026-11-19
 
 ### Fixed

@@ -264,12 +264,12 @@ function stalePrompt(root, parts) {
 
 /**
  * Runs every job one at a time and collects the report. A job that throws is reported, the rest go on.
- * @param {any[]} jobs @param {ReturnType<typeof handlers>} h @param {{runId: string, at: string, onJob?: (j: any) => void}} o
+ * @param {any[]} jobs @param {ReturnType<typeof handlers>} h @param {{runId: string, at: string, onJob?: (j: any, progress: string) => void}} o
  */
 async function runAutopilot(jobs, h, { runId, at, onJob }) {
   const report = { runId, at, fixed: /** @type {any[]} */ ([]), failed: /** @type {any[]} */ ([]), manual: /** @type {any[]} */ ([]) };
-  for (const j of jobs) {
-    onJob?.(j);
+  for (const [i, j] of jobs.entries()) {
+    onJob?.(j, `${progressOf(j)} (${i + 1}/${jobs.length})`);
     let r;
     try {
       r = await /** @type {any} */ (h)[j.kind](j);
@@ -280,6 +280,23 @@ async function runAutopilot(jobs, h, { runId, at, onJob }) {
     else (r.ok ? report.fixed : report.failed).push({ label: j.label, note: r.note, files: (r.changes ?? []).map((/** @type {any} */ c) => c.file) });
   }
   return report;
+}
+
+/** What the progress notification says while a job runs: what is being done, not the checklist row's label. @param {any} j */
+function progressOf(j) {
+  const n = Number(/(\d+) possibly stale/.exec(j.label)?.[1]) || 0;
+  switch (j.kind) {
+    case "stale": return n ? `Checking ${Math.min(n, STALE_PER_RUN)} of ${n} possibly stale documents against the code` : "Checking stale documents against the code";
+    case "block": return `Making the ${j.name} check block`;
+    case "plugin": return `Updating ${j.update?.id ?? "a plugin"}`;
+    case "skill": return `Updating the ${j.item?.label ?? ""} skill`;
+    case "health": return `Fixing: ${j.label}`;
+    case "findings": case "docs": return `Fixing ${j.label}`;
+    case "drift": return `Merging the copies of ${j.rel}`;
+    case "clash": return `Removing a duplicate of the ${j.name} skill`;
+    case "promote": return `Sharing ${j.rel} with every repo`;
+    default: return `Noting for you: ${j.label}`;
+  }
 }
 
 /** One line for the notification. @param {Awaited<ReturnType<typeof runAutopilot>>} r */
@@ -299,4 +316,4 @@ function reportMarkdown(r, git = {}) {
   return out.join("\n") + "\n";
 }
 
-module.exports = { jobsOf, handlers, runAutopilot, reportMarkdown, summaryLine, stalePrompt, driftPrompt, gist, STALE_PER_RUN };
+module.exports = { jobsOf, handlers, progressOf, runAutopilot, reportMarkdown, summaryLine, stalePrompt, driftPrompt, gist, STALE_PER_RUN };
