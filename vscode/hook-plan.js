@@ -29,7 +29,8 @@ const PLAN = {
     { work: "waiting", tools: oneOf(["AskUserQuestion"]) },
     { work: "process", tools: (t) => ["Edit", "Write", "MultiEdit", "ExitPlanMode", "Bash"].includes(t) || recordWrite(t) },
   ],
-  PostToolUseFailure: [{ work: "baseline", tools: oneOf(["Bash"]) }],
+  // #165: a page WebFetch could not open becomes a link-access issue (process.js linkAccess).
+  PostToolUseFailure: [{ work: "baseline", tools: oneOf(["Bash"]) }, { work: "process", tools: oneOf(["WebFetch"]) }],
   PermissionRequest: [{ work: "waiting" }],
   Notification: [{ work: "waiting" }],
   UserPromptSubmit: [{ work: "waiting" }, { work: "ondemand" }],
@@ -64,7 +65,7 @@ function matcherFor(event, { plugin = false } = {}) {
   const NAMES = {
     PreToolUse: ["Edit", "Write", "Bash", "MultiEdit", "NotebookEdit", "AskUserQuestion", "mcp__imprimatur__.*"],
     PostToolUse: ["Edit", "Write", "MultiEdit", "ExitPlanMode", "Bash", "AskUserQuestion", "mcp__imprimatur__task_upsert", "mcp__imprimatur__record_add", "mcp__imprimatur__record_update"],
-    PostToolUseFailure: ["Bash"],
+    PostToolUseFailure: ["Bash", "WebFetch"],
     PermissionRequest: ["*"],
     Notification: ["agent_needs_input", "elicitation_dialog", "elicitation_url_dialog"],
   };

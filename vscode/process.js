@@ -28,6 +28,8 @@
 //   Stop                                to Imprimatur: asked once to file the work
 //   PostToolUse MCP     issueBody       (#223) task_upsert on #N with no issue body: the body pulled from GitHub
 //   Stop                specFirst       (#223, #227) an open or active task the session wrote to has no spec: asked once
+//   PostToolUseFailure  linkAccess      (#165) WebFetch could not open a page (blocked, login, JavaScript only): Imprimatur
+//   WebFetch                            opens a link-access issue for the user's screenshot, one per link, and tells the agent
 
 "use strict";
 const { spawnSync } = require("node:child_process");
@@ -73,7 +75,14 @@ const DEFAULTS = {
   },
   issueBody: true,
   specFirst: "block",
+  // #165: a page WebFetch could not open (blocked, login, JavaScript only) becomes a link-access issue.
+  linkAccess: "warn",
 };
+
+/** A WebFetch error that means the page is closed to the agent: an HTTP refusal, a bot wall, a login or JavaScript page (#165). */
+const BLOCKED = /\b(401|402|403|407|429|451)\b|forbidden|unauthori[sz]ed|captcha|cloudflare|access denied|blocked|log ?in|sign[ -]?in|enable javascript|requires javascript|paywall/i;
+/** A network hiccup, not a closed page: no issue for it. */
+const TRANSIENT = /ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|ECONNREFUSED|socket hang up|timed? ?out/i;
 
 /** A git commit in a shell command (not commit-tree). */
 const COMMIT = /(^|[;&|(\n]|\$\()\s*(?:\w+=\S*\s+)*git\s+(?:-[cC]\s+\S+\s+)*commit(?![\w-])/;
@@ -614,6 +623,37 @@ function check(event, input, deps = {}) {
     const out = typeof input.tool_response === "string" ? input.tool_response : `${input.tool_response?.stdout ?? ""}`;
     const n = /\/issues\/(\d+)/.exec(out)?.[1];
     if (s.issueFields.mode && n) remember(root, input.session_id, "created", n);
+  }
+
+  // #165: a page the agent could not open becomes the issue the user fills, opened here: it no longer
+  // waits on the agent remembering the issues skill. A network hiccup (DNS, timeout) is not a blocked page.
+  if (event === "PostToolUseFailure" && tool === "WebFetch" && s.linkAccess.mode) {
+    const url = String(ti.url ?? "");
+    const why = String(input.error ?? input.tool_response ?? "").split("\n")[0].slice(0, 200);
+    if (/^https?:\/\/[^\s]+$/.test(url) && BLOCKED.test(why) && !TRANSIENT.test(why)) {
+      const file = dataPath(root, "link-access.json");
+      /** @type {Record<string, string>} */
+      let known = {};
+      try {
+        known = JSON.parse(fs.readFileSync(file, "utf8"));
+      } catch {}
+      let n = known[url];
+      if (!n && github()) {
+        ghRun(["label", "create", "link-access", "--color", "BFD4F2", "--description", "A page the agent could not open; the user adds screenshots"], root);
+        const research = listOf(root, input.session_id, "wrote").filter((k) => /^#\d+$/.test(k)).at(-1);
+        const body = [`**Link:** ${url}`, `**Why the agent could not open it:** ${why}`, ...(research ? [`**Research:** ${research}`] : []), "",
+          "Open the link, then add a screenshot (drag it into a comment) or paste the page's text here. The agent reads it and goes on; close this issue when it has what it needs."].join("\n");
+        n = /\/issues\/(\d+)/.exec(ghRun(["issue", "create", "--label", "link-access", "--title", `Link: ${new URL(url).host} — the agent could not open it`, "--body", body], root) ?? "")?.[1];
+        if (n) {
+          known[url] = n;
+          fs.mkdirSync(path.dirname(file), { recursive: true });
+          fs.writeFileSync(file, JSON.stringify(known, null, 2));
+        }
+      }
+      found(s.linkAccess, "linkAccess", n
+        ? `${url} could not be opened (${why}). Imprimatur opened #${n} (label link-access): the user opens the page and adds a screenshot or its text there. Go on with other sources and say this gap in your answer; when #${n} has the user's part, read it (issues skill, "A link the agent cannot open") and use it.`
+        : `${url} could not be opened (${why}), and no issue could be opened here (no GitHub origin, or gh failed): ask the user once for a screenshot or the page's text.`);
+    }
   }
 
   // #223: what this turn did that should be filed (commits by hash, pushes, deploys), and what the session wrote.

@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.196.0] - 2026-11-19
+
+### Added
+- A page the agent cannot open becomes a link-access issue without the agent remembering to open it (#165). When WebFetch fails on a blocked page (401/403/429, a bot wall, a login or JavaScript-only page), Imprimatur's `linkAccess` hook opens the GitHub issue itself: label `link-access`, the link, why it failed, and the research task. It tells the agent the issue's number.
+  - One issue per link: the same link again reuses it.
+  - A network hiccup (DNS, timeout) opens nothing.
+  - Run `npm run setup` once to add WebFetch to the failure hook.
+
 ## [0.195.4] - 2026-11-19
 
 ### Fixed

@@ -30,10 +30,10 @@ test("setup: a second run changes nothing; an old path or language is updated in
   assert.deepEqual(mergeHooks(once, { root, lang: "Turkish" }).changes, []);
   const unquoted = JSON.parse(JSON.stringify(once).replaceAll('\\"', ""));
   assert.deepEqual(mergeHooks(unquoted, { root, lang: "Turkish" }).changes, []); // quotes alone are no change
-  const old = { hooks: { PostToolUseFailure: [{ matcher: "Bash", hooks: [{ type: "command", command: "node /old/imprimatur/hooks/run.mjs md mdx" }] }] } };
+  const old = { hooks: { PostToolUseFailure: [{ matcher: "Bash|WebFetch", hooks: [{ type: "command", command: "node /old/imprimatur/hooks/run.mjs md mdx" }] }] } };
   const { settings, changes } = mergeHooks(old, { root });
-  assert.ok(changes.includes("updated PostToolUseFailure [Bash] → run.mjs"), changes.join("\n"));
-  assert.equal(settings.hooks.PostToolUseFailure.filter((e) => e.matcher === "Bash").length, 1);
+  assert.ok(changes.includes("updated PostToolUseFailure [Bash|WebFetch] → run.mjs"), changes.join("\n"));
+  assert.equal(settings.hooks.PostToolUseFailure.filter((e) => e.matcher === "Bash|WebFetch").length, 1);
   assert.equal(settings.hooks.PostToolUseFailure[0].hooks[0].command, `node "${root}/hooks/run.mjs" md mdx`);
 });
 

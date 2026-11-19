@@ -63,9 +63,9 @@ test("#45: a variable's path is not a file path", async () => {
   assert.deepEqual(pathsInCommand("cp $R/todos/1/TODO.md ${R}/b.md docs/a.md", ["md"]), ["/b.md", "docs/a.md"]);
 });
 
-test("#45: setup adds the Bash failure hook", () => {
+test("#45: setup adds the Bash failure hook (and WebFetch, #165)", () => {
   const { settings, changes } = mergeHooks({}, { root: "/r" });
-  assert.ok(changes.includes("added   PostToolUseFailure [Bash] → run.mjs"));
+  assert.ok(changes.includes("added   PostToolUseFailure [Bash|WebFetch] → run.mjs"));
   assert.equal(settings.hooks.PostToolUseFailure[0].hooks[0].command, 'node "/r/hooks/run.mjs" md mdx');
 });
 

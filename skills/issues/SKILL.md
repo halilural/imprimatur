@@ -76,6 +76,8 @@ Won't do: the task goes `dropped` with the reason in a record. On GitHub the iss
 
 Research often hits a page the agent cannot read: a bot wall (403, "are you human"), a login (LinkedIn, Google Docs, Notion, a private repo), a page drawn by JavaScript, a region block. Do not guess its content and do not drop it. Each such link becomes an issue the user fills in.
 
+When WebFetch fails on such a page, Imprimatur's `linkAccess` hook has already opened the issue (one per link) and names it in its message. Then do only what the hook leaves: make it a sub-issue of the research's issue, put it on the board and add the line about what the research needs from it. Open it yourself, as below, when the page failed some other way (a browser tool, a fetch through another tool) or the hook could not open it.
+
 1. **One issue per link**, opened when the link fails, not at the end. Title `Link: <site> — <what the research needs from it>`. Label `link-access` (create it once: `gh label create link-access --color BFD4F2 --description "A page the agent could not open; the user adds screenshots"`). Make it a sub-issue of the research's issue, board Todo, the current milestone. Body:
    - the link, and why it failed (status code, login, empty page);
    - what to capture: which section, which table, how far to scroll;
