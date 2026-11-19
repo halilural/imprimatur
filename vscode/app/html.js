@@ -6,6 +6,8 @@
 "use strict";
 
 const esc = (/** @type {unknown} */ s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+/** An epic's progress and a task's epic (#234): "3/5 done" with a thin bar, and "in #229". @param {any} t */
+const epicTags = (t) => `${t.progress ? ` <span class="tag prog">${t.progress.done}/${t.progress.total} done</span><span class="bar"><span style="width:${Math.round((100 * t.progress.done) / t.progress.total)}%"></span></span>` : ""}${t.epic ? ` <span class="tag">in ${esc(t.epic)}</span>` : ""}`;
 
 const CSS = `
 :root { color-scheme: light dark; }
@@ -57,6 +59,8 @@ pre code { background: none; padding: 0; }
 .board .card .ptr { margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .board .card:hover { background: var(--vscode-list-hoverBackground); }
 .board .ptr, .rows .ptr { font-size: 13px; color: var(--vscode-descriptionForeground); }
+.bar { display: block; height: 4px; max-width: 220px; margin: 4px 0 2px; border-radius: 2px; background: var(--vscode-panel-border); overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--vscode-progressBar-background, var(--vscode-focusBorder)); }
 .board .none { color: var(--vscode-descriptionForeground); font-size: 13px; }
 h2.sub { font-size: 16px; margin: 24px 0 10px; }
 .tag { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--vscode-panel-border); color: var(--vscode-descriptionForeground); }
@@ -203,11 +207,11 @@ function mainHtml(m, render) {
   if (m.area === "tasks" && m.page) return taskPageHtml(m.page, render);
   if (m.area === "tasks") {
     return `<h1>Tasks</h1><p class="summary">Active first, the one worked on last on top; then open, then the last done.</p>` + m.lists.map((/** @type {any} */ l) =>
-      `<h2 class="sub">${esc(l.label)} · ${l.tasks.length}</h2><div class="rows">${l.tasks.map((/** @type {any} */ t) => `<div class="row${t.last ? " last" : ""}" data-task="${esc(t.key)}"><span class="key">${esc(t.key)}</span><span><b>${esc(t.title)}</b>${t.last ? ' <span class="tag lastworked">Last worked on</span>' : ""}${t.when ? ` <span class="when">${esc(t.when)}</span>` : ""}${t.summary ? `<br><span class="ptr">${esc(t.summary)}</span>` : ""}</span></div>`).join("") || '<div class="none">Nothing</div>'}</div>`).join("");
+      `<h2 class="sub">${esc(l.label)} · ${l.tasks.length}</h2><div class="rows">${l.tasks.map((/** @type {any} */ t) => `<div class="row${t.last ? " last" : ""}" data-task="${esc(t.key)}"><span class="key">${esc(t.key)}</span><span><b>${esc(t.title)}</b>${epicTags(t)}${t.last ? ' <span class="tag lastworked">Last worked on</span>' : ""}${t.when ? ` <span class="when">${esc(t.when)}</span>` : ""}${t.summary ? `<br><span class="ptr">${esc(t.summary)}</span>` : ""}</span></div>`).join("") || '<div class="none">Nothing</div>'}</div>`).join("");
   }
   if (m.area === "home") {
-    const rows = m.tasks.map((/** @type {any} */ t) => `<div class="row" data-task="${esc(t.key)}"><span class="key">${esc(t.key)}</span><span><b>${esc(t.title)}</b>${t.docs?.length ? ` <span class="tag">${t.docs.map(esc).join(" · ")}</span>` : ""}${t.pointer_title ? `<br><span class="ptr">👉 ${esc(t.pointer_title)}</span>` : ""}</span></div>`).join("");
-    const card = (/** @type {any} */ t, /** @type {string} */ note) => `<div class="card" data-task="${esc(t.key)}"><b>${esc(t.key)}</b> ${esc(t.title)}${note ? `<div class="ptr">${esc(note)}</div>` : ""}</div>`;
+    const rows = m.tasks.map((/** @type {any} */ t) => `<div class="row" data-task="${esc(t.key)}"><span class="key">${esc(t.key)}</span><span><b>${esc(t.title)}</b>${epicTags(t)}${t.docs?.length ? ` <span class="tag">${t.docs.map(esc).join(" · ")}</span>` : ""}${t.pointer_title ? `<br><span class="ptr">👉 ${esc(t.pointer_title)}</span>` : ""}</span></div>`).join("");
+    const card = (/** @type {any} */ t, /** @type {string} */ note) => `<div class="card" data-task="${esc(t.key)}"><b>${esc(t.key)}</b> ${esc(t.title)}${epicTags(t)}${note ? `<div class="ptr">${esc(note)}</div>` : ""}</div>`;
     const col = (/** @type {string} */ title, /** @type {any[]} */ list, /** @type {(t: any) => string} */ note) => `<div class="col"><div class="label">${esc(title)} · ${list.length}</div>${list.map((t) => card(t, note(t))).join("") || '<div class="none">Nothing</div>'}</div>`;
     const b = m.board;
     const board = `<div class="board">${col("Needs you", b.needs, (t) => t.asks.slice(0, 2).join(" · "))}${col("Active", b.active, (t) => t.summary ?? "")}${col("Done this week", b.done, (t) => t.summary ?? "")}</div>`;
@@ -294,7 +298,7 @@ function taskPageHtml(p, render) {
   const t = p.task;
   const gates = !p.gates.length ? "" : `<div class="gates">${p.gates.map((/** @type {any} */ g, /** @type {number} */ i) =>
     `<div class="gate ${g.done ? "done" : g.next ? "next" : ""}"><span>${g.done ? "✓" : i + 1}</span> ${esc(g.label)}</div>`).join("")}</div>`;
-  const tabs = `<div class="pills">${p.tabs.map((/** @type {string} */ x) => `<button data-tab="${esc(x)}" data-key="${esc(t.key)}" class="${x === p.tab ? "on" : ""}">${esc(x[0].toUpperCase() + x.slice(1))}${x === "tickets" ? ` · ${p.tickets.length}` : x === "records" ? ` · ${p.records.length}` : ""}</button>`).join("")}</div>`;
+  const tabs = `<div class="pills">${p.tabs.map((/** @type {string} */ x) => `<button data-tab="${esc(x)}" data-key="${esc(t.key)}" class="${x === p.tab ? "on" : ""}">${esc(x[0].toUpperCase() + x.slice(1))}${x === "tickets" ? ` · ${p.progress ? `${p.progress.done}/${p.progress.total} done` : p.tickets.length}` : x === "records" ? ` · ${p.records.length}` : ""}</button>`).join("")}</div>`;
   let body = "";
   if (p.tab === "spec") body = readingHtml(p.spec, render);
   else if (p.tab === "tickets") {

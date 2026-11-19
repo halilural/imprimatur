@@ -141,7 +141,11 @@ function taskPage(db, repo, key, tab, root = repo.root ?? "") {
   const specReading = reading(`Spec · ${key}`, spec ? db.docSections(spec.id).filter((/** @type {any} */ s) => s.status === "current")
     .map((/** @type {any} */ s) => ({ key: s.key, title: `${chapters[s.chapter] ? `${chapters[s.chapter]} · ` : ""}${s.title}${s.delta ? ` (${s.delta})` : ""}`, body: flag(`section:${s.id}`, s.body) })) : [],
     spec ? undefined : "No spec yet: the agent writes it when it starts this task and passes the gates below on its way to tickets.");
-  const tickets = db.q("SELECT * FROM tasks WHERE epic_id = ? AND id <> ? ORDER BY id").all(task.id, task.id);
+  // Open work first (#234): active, open, done, then dropped; the count leaves dropped ones out.
+  const order = { active: 0, open: 1, done: 2, dropped: 3 };
+  const tickets = db.q("SELECT * FROM tasks WHERE epic_id = ? AND id <> ? ORDER BY id").all(task.id, task.id)
+    .sort((/** @type {any} */ a, /** @type {any} */ b) => (/** @type {any} */ (order)[a.status] ?? 1) - (/** @type {any} */ (order)[b.status] ?? 1));
+  const progress = { done: tickets.filter((/** @type {any} */ k) => k.status === "done").length, total: tickets.filter((/** @type {any} */ k) => k.status !== "dropped").length };
   const activity = db.taskVersions(task.id, { limit: 40 }).list;
   const tabs = bucket ? TABS.filter((x) => x !== "spec") : TABS;
   // What the ticket cost in tokens, from the repo's transcripts (#214); never fails a page.
@@ -150,7 +154,7 @@ function taskPage(db, repo, key, tab, root = repo.root ?? "") {
     const tt = require("../ticket-tokens.js");
     tokens = bucket || !root ? undefined : tt.ticketTokens(tt.projectDirOf(root)).get(key);
   } catch {}
-  return { task, tab: tabs.includes(/** @type {string} */ (tab)) ? tab : bucket ? "records" : "spec", tabs, gates: bucket ? [] : gates, spec: specReading, tickets, records: recs.filter((/** @type {any} */ r) => r.status !== "dropped"), activity, tokens };
+  return { task, tab: tabs.includes(/** @type {string} */ (tab)) ? tab : bucket ? "records" : "spec", tabs, gates: bucket ? [] : gates, spec: specReading, tickets, progress, records: recs.filter((/** @type {any} */ r) => r.status !== "dropped"), activity, tokens };
 }
 
 /**
@@ -197,7 +201,24 @@ function boardOf(db, repoId, now = Date.now()) {
   const active = db.q("SELECT key, title, summary FROM tasks WHERE repo_id = ? AND status = 'active' ORDER BY updated_at DESC").all(repoId)
     .filter((/** @type {any} */ t) => !needs.has(t.key) && !isBucket(t.key)).slice(0, 20);
   const done = db.q("SELECT key, title, summary FROM tasks WHERE repo_id = ? AND status = 'done' AND done_at > ? ORDER BY done_at DESC LIMIT 20").all(repoId, now - 7 * 86_400_000);
-  return { active, needs: [...needs.values()], done };
+  return { active: withEpics(db, repoId, active), needs: withEpics(db, repoId, [...needs.values()]), done: withEpics(db, repoId, done) };
+}
+
+/**
+ * Epics and their tasks (#234): each row with children gets progress {done, total} (a dropped task is
+ * not counted), each row with a parent gets epic (the parent's key). Rows are changed in place.
+ * @param {any} db @param {number} repoId @param {any[]} rows rows with a key
+ */
+function withEpics(db, repoId, rows) {
+  const prog = new Map(db.q(`SELECT p.key AS key, sum(c.status = 'done') AS done, sum(c.status <> 'dropped') AS total
+    FROM tasks c JOIN tasks p ON p.id = c.epic_id WHERE p.repo_id = ? AND c.id <> p.id GROUP BY p.id`).all(repoId).map((/** @type {any} */ r) => [r.key, r]));
+  const parent = new Map(db.q(`SELECT c.key AS key, p.key AS epic FROM tasks c JOIN tasks p ON p.id = c.epic_id WHERE c.repo_id = ? AND c.id <> p.id`).all(repoId).map((/** @type {any} */ r) => [r.key, r.epic]));
+  for (const t of rows) {
+    const p = prog.get(t.key);
+    if (p?.total) t.progress = { done: p.done, total: p.total };
+    if (parent.has(t.key)) t.epic = parent.get(t.key);
+  }
+  return rows;
 }
 
 /**
@@ -221,7 +242,8 @@ function taskLists(db, repoId, now = Date.now()) {
                        FROM tasks t WHERE t.repo_id = ? AND t.status = 'active' ORDER BY last_at DESC, t.updated_at DESC`).all(repoId)
     .filter((/** @type {any} */ t) => !isBucket(t.key)).slice(0, 50)
     .map((/** @type {any} */ t, /** @type {number} */ i) => ({ ...t, when: ago(t.last_at, now), ...(i === 0 && { last: true }) }));
-  return [{ id: "active", label: "Active", tasks: active }, { id: "open", label: "Open", tasks: list("open", 80) }, { id: "done", label: "Done", tasks: list("done", 20) }];
+  return [{ id: "active", label: "Active", tasks: active }, { id: "open", label: "Open", tasks: list("open", 80) }, { id: "done", label: "Done", tasks: list("done", 20) }]
+    .map((l) => ({ ...l, tasks: withEpics(db, repoId, l.tasks) }));
 }
 
 /** How long ago, short: "just now", "5 min ago", "2 h ago", "3 d ago". @param {number} at @param {number} [now] */
@@ -268,7 +290,7 @@ function appModel(db, repo, root, at = {}) {
     return { ...base, setup: { recommendations: recs } };
   }
   if (area === "home") {
-    const tasks = db.whereWeLeftOff(repo.id).slice(0, 12);
+    const tasks = withEpics(db, repo.id, db.whereWeLeftOff(repo.id).slice(0, 12));
     // Which tasks have a spec or a map (Pocock's), so Home links them.
     const scoped = db.q("SELECT kind, scope FROM documents WHERE repo_id = ? AND kind IN ('spec', 'map')").all(repo.id);
     for (const t of tasks) t.docs = scoped.filter((/** @type {any} */ d) => d.scope === t.key).map((/** @type {any} */ d) => d.kind);
@@ -277,4 +299,4 @@ function appModel(db, repo, root, at = {}) {
   return base;
 }
 
-module.exports = { appModel, taskLists, ago, isBucket, editsQueue, taskPage, GATES, boardOf, docReading, reading, summaryOf, AREAS, MORE, DOCS };
+module.exports = { appModel, withEpics, taskLists, ago, isBucket, editsQueue, taskPage, GATES, boardOf, docReading, reading, summaryOf, AREAS, MORE, DOCS };
