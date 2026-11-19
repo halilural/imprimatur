@@ -4,6 +4,13 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.195.3] - 2026-11-19
+
+### Fixed
+- Security review of #235:
+  - **Gate on every path:** a review finding on your global instructions is never fixed by the autopilot, not even by the next day's recommendations job. It is listed under "Needs you".
+  - **One strict "inside the repo" check:** a real path, no link, no sibling folder and no other drive. It is used by every autopilot write that must stay in the repo.
+
 ## [0.195.2] - 2026-11-19
 
 ### Fixed
