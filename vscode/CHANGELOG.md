@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.195.4] - 2026-11-19
+
+### Fixed
+- The autopilot's stale-document check moves through the whole backlog. It used to take the 10 parts with the newest change, which were the same parts every run on a busy day (adr 9343 in all three reports). It now takes the 10 it checked longest ago, unchecked ones first, and notes when it checked each.
+
 ## [0.195.3] - 2026-11-19
 
 ### Fixed

@@ -237,3 +237,22 @@ test("autopilot: one strict containment check; an open review finding on a globa
   assert.equal(runs.length, 0);
   assert.equal(r.manual.length, 1);
 });
+
+test("autopilot: stale documents are checked longest-unchecked first, so every run moves through the backlog (#231)", async () => {
+  const stale = require("../vscode/stale-docs.js");
+  const parts = Array.from({ length: 12 }, (_, i) => ({ key: `u${i}`, kind: "section", id: i, title: `s${i}`, doc: "project", files: ["a.js"], commits: [{ hash: "h", at: 1, subject: "x", files: ["a.js"] }] }));
+  const orig = stale.staleParts;
+  stale.staleParts = () => parts;
+  const meta = new Map();
+  const db = { meta: (k) => meta.get(k), setMeta: (k, v) => meta.set(k, v) };
+  const sent = [];
+  const ctx = { db, repo: { id: 1 }, root: "/r", at: "2026-11-19T12:00:00Z", docsRun: async (p) => (sent.push([...p.matchAll(/section "(s\d+)"/g)].map((m) => m[1])), { ok: true, answer: "done" }) };
+  try {
+    await handlers(ctx).stale({ kind: "stale", label: "Documents: 12 possibly stale" });
+    await handlers({ ...ctx, at: "2026-11-20T12:00:00Z" }).stale({ kind: "stale", label: "Documents: 12 possibly stale" });
+  } finally {
+    stale.staleParts = orig;
+  }
+  assert.deepEqual(sent[0], ["s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9"]);
+  assert.deepEqual(sent[1].slice(0, 2), ["s10", "s11"], "the next run starts with the ones never checked");
+});

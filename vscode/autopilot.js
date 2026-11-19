@@ -30,6 +30,9 @@ function inside(root, file) {
   }
 }
 
+/** Where the autopilot notes when it last checked a stale part (database meta, by the part's uid). */
+const CHECKED = "autopilot-checked:";
+
 /** At most this many stale documents per run: each costs agent turns. */
 const STALE_PER_RUN = 10;
 
@@ -147,10 +150,15 @@ function handlers(ctx) {
     /** @param {any} j */
     async stale(j) {
       const stale = require("./stale-docs.js");
-      const parts = ctx.db && ctx.repo ? stale.staleParts(ctx.db, ctx.repo, ctx.root).slice(0, STALE_PER_RUN) : [];
+      // The ones checked longest ago (never first), so every run moves through the backlog: by newest
+      // change, the same parts the day's own commits touched came first in every run.
+      const checked = (/** @type {any} */ p) => Number(ctx.db.meta(`${CHECKED}${p.key}`) ?? 0);
+      const all = ctx.db && ctx.repo ? stale.staleParts(ctx.db, ctx.repo, ctx.root) : [];
+      const parts = all.map((p, i) => ({ p, i, at: checked(p) })).sort((a, b) => a.at - b.at || a.i - b.i).slice(0, STALE_PER_RUN).map((x) => x.p);
       if (!parts.length) return { ok: false, note: "no stale document found" };
       const ids = parts.filter((/** @type {any} */ p) => p.kind !== "section").map((/** @type {any} */ p) => p.id);
       const r = await ctx.docsRun(stalePrompt(ctx.root, parts), ids);
+      if (r.ok) for (const p of parts) ctx.db.setMeta(`${CHECKED}${p.key}`, String(Date.parse(ctx.at ?? "") || Date.now()));
       return r.ok ? { ok: true, note: `${parts.length} checked against the code${parts.length === STALE_PER_RUN ? " (the rest next run)" : ""}: ${gist(r.answer)}` } : { ok: false, note: `the documentation run stopped: ${r.answer.slice(0, 160)}` };
     },
     /** @param {any} j */
