@@ -4,6 +4,17 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.195.0] - 2026-11-19
+
+### Added
+- The setup autopilot has Claude review the agent instructions (#235). This is its first step in every run. Claude reads the repo's and your instruction files (CLAUDE.md, AGENTS.md, `.claude/rules`, Cursor and Copilot rules; Imprimatur's generated ones left out) and looks for four kinds of problem:
+  - rules that contradict in meaning, even with no shared words;
+  - instructions about files or commands that no longer exist, checked against the repo;
+  - agents told different things;
+  - instructions no agent could follow.
+
+  Each finding becomes a recommendation, and the autopilot fixes it in the same run, backed up and undoable. What it cannot fix stays under Recommendations. A finding found again is not copied, and one no longer reported is closed. The agnix audit leaves these findings alone.
+
 ## [0.194.2] - 2026-11-19
 
 ### Changed

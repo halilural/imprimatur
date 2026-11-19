@@ -112,6 +112,9 @@ The record in a task where work stopped (shown as "Where we left off"). Only an 
 
 Rules a repo turns on with `.claude/imprimatur.json`; the agent is reminded at the next tool call. Example: an ADR was added but is not linked to any document section.
 
+---
+Checked against the code (2026-11-19): still holds. `vscode/process.js` still reads the repo's process settings from `.claude/imprimatur.json` (`CONFIG = path.join(".claude", "imprimatur.json")`) and reminds the agent at the next matching tool call; this repo's own `.claude/imprimatur.json` turns on `designFirst`, `issueFields`, `docUpdate` and `branchFinish`.
+
 <a id="record"></a>
 
 **Record**:
@@ -141,6 +144,9 @@ One Claude Code session. The hooks write the session onto records and edits them
 **Social document**:
 
 A repo's living document of its social media posts (#109), one section per channel: the rules card read for it, the post, its status, results and what was learned. Off by default; a repo turns it on with `{"social": true}` in `.claude/imprimatur.json`. Kept in `docs/SOCIAL.md`. See also: rules card.
+
+---
+Checked against the code (2026-11-19): still holds. `docs-export.js`'s `socialOn` still reads `{"social": true}` from `.claude/imprimatur.json` (default off), `FILES.social` is still `"SOCIAL.md"`, and `docs/SOCIAL.md` exists in this repo (turned on). `vscode/tasksView.js` no longer exists (replaced by `vscode/app/`, #190), but the Social page and toggle now live in `vscode/app/model.js`/`extension.js` with the same behavior.
 
 <a id="superseded"></a>
 

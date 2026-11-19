@@ -43,3 +43,6 @@ Checked against the code (2026-11-19): still holds. `scanSetup` in `vscode/agent
 
 ---
 Re-checked (2026-11-19, after f63cf223df "drift only when copies share a version"): that commit changed drift matching in `setupView.js`, unrelated to `sessionItems` rendering; the above still holds unchanged.
+
+---
+Re-checked (2026-11-19, after cb4827adf6 "automatic skill updates can be turned on only in the user's own settings"): unrelated change to an auto-skill-update setting; `sessionItems`/`projectSlug(gitRootOf(...))` and the "This session" rows are untouched. Still holds.

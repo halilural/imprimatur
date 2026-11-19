@@ -580,11 +580,15 @@ async function runAutopilotNow(provider, { auto = false } = {}) {
   const shared = [...provider.drift.groups.values()].filter((g) => g.variants.length === 1 && g.total > 1)
     .map((g) => ({ rel: g.rel, files: g.variants[0].repos.map((n) => provider.drift.repos.find((r) => r.name === n)?.root).filter(Boolean).map((r) => path.join(/** @type {string} */ (r), g.rel)) }))
     .filter((x) => x.files.length && !generated(x.files[0]));
+  let review = [];
+  try {
+    review = require("./instruction-review.js").instructionFiles(root, os.homedir());
+  } catch {}
   let clashes = [];
   try {
     clashes = require("./skill-clash.js").skillClashes(root, os.homedir());
   } catch {}
-  const jobs = ap.jobsOf(provider.checklist.node.children ?? [], { files: open.filter((/** @type {any} */ r) => !isDocFinding(r)), docs: open.filter(isDocFinding) }, { drift, clashes, shared });
+  const jobs = ap.jobsOf(provider.checklist.node.children ?? [], { files: open.filter((/** @type {any} */ r) => !isDocFinding(r)), docs: open.filter(isDocFinding) }, { drift, clashes, shared, review });
   const out = (fixOutput ??= vscode.window.createOutputChannel("Imprimatur Fix it"));
   out.appendLine(`\n=== ${new Date().toLocaleString()} · Setup autopilot (in ${root}): ${jobs.length} job(s)`);
   const dirty = gitDirty(root);
