@@ -155,3 +155,12 @@ test("autopilot: an upstream skill change waits for the user unless they chose a
   for (const l of undoLog(dir).reverse()) assert.equal(undo(dir, l).ok, true);
   assert.equal(fs.readFileSync(path.join(skill, "SKILL.md"), "utf8"), "old\n");
 });
+
+test("autopilot: the progress says what it is doing, and how far (#231)", async () => {
+  const { progressOf } = require("../vscode/autopilot.js");
+  assert.equal(progressOf({ kind: "stale", label: "Documents: 71 possibly stale" }), "Checking 10 of 71 possibly stale documents against the code");
+  assert.equal(progressOf({ kind: "block", name: "designFirst" }), "Making the designFirst check block");
+  const said = [];
+  await runAutopilot([{ kind: "manual", label: "a" }, { kind: "manual", label: "b" }], handlers({}), { runId: "r", at: "t", onJob: (_j, p) => said.push(p) });
+  assert.deepEqual(said, ["Noting for you: a (1/2)", "Noting for you: b (2/2)"]);
+});
