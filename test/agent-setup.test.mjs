@@ -104,4 +104,13 @@ test("setup: rows Imprimatur put there are marked, the repo's own are not (#228)
   assert.equal(byImprimatur({ abs: "", rel: "plugin ponytail@ponytail (user)", kind: "installed plugin", label: "ponytail@ponytail" }), false);
   assert.equal(isImprimaturHook('IMPRIMATUR_LANG=Turkish node "/x/hooks/stop.mjs"'), true);
   assert.equal(isImprimaturHook("npx ponytail"), false);
+  // The last session's rows: Imprimatur's MCP server and one Imprimatur hook's output; a mixed hook row is not.
+  const row = (kind, label, abs = "", details = []) => byImprimatur({ abs, rel: `session: ${kind}: ${label}`, kind, label, details });
+  assert.equal(row("MCP instructions", "imprimatur"), true);
+  assert.equal(row("tools", "plugin_imprimatur_imprimatur"), true);
+  assert.equal(row("tools", "plugin_context-mode_context-mode"), false);
+  assert.equal(row("hook output", "SessionStart: run.mjs", "/x/imprimatur/hooks/run.mjs"), true);
+  assert.equal(row("hook output", "PreToolUse: run.mjs", "", ["Imprimatur (fileContext): x"]), true);
+  assert.equal(row("hook output", "SessionStart: context-mode: sessionstart.mjs", "/x/context-mode/hooks/sessionstart.mjs"), false);
+  assert.equal(row("hook output", "Stop: one of run.mjs, stop.mjs", "", ["Imprimatur (issueFields): x"]), false);
 });
