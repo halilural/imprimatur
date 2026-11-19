@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.195.1] - 2026-11-19
+
+### Fixed
+- The instruction review fixes only the repo's own files (security review of #235). A finding on your global instructions (`~/.claude/CLAUDE.md`, `~/.claude/rules`) waits under Recommendations, because a repo's text could talk the review into one.
+
 ## [0.195.0] - 2026-11-19
 
 ### Added
