@@ -94,6 +94,10 @@ test("autopilot: drift writes only this repo's copy, never a hook; a repo's dupl
   assert.equal(fs.readFileSync(fa, "utf8"), "use merged\n");
   assert.equal(fs.readFileSync(fb, "utf8"), "use b\n", "another repo's copy is not written");
   assert.equal(seen.length, 1, "the hook's drift never reaches the agent");
+  // Only plain rules prose is merged alone: a command or skill can hold shell lines and tool grants.
+  const cmd = jobsOf([], {}, { drift: [{ rel: ".claude/commands/deploy.md", files: [fa, fb] }, { rel: ".claude/RULES/Y.MD", files: [fa, fb] }] });
+  const r2 = await runAutopilot(cmd, handlers({ dir, runId: "d2", at: "t", root: a, run }), { runId: "d2", at: "t" });
+  assert.deepEqual([r2.manual.length, r2.fixed.length + r2.failed.length], [1, 1]);
   assert.equal(fs.existsSync(mine), false);
   assert.equal(fs.existsSync(partly), true, "a skill whose other files differ stays");
   assert.equal(summaryLine(report), "2 fixed · 0 not fixed · 2 need you");

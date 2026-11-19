@@ -20,6 +20,25 @@ const logOf = (dir) => path.join(dir, "undo.jsonl");
  */
 
 /**
+ * Whether a write to file would go through a link: the file itself, or any folder above it (the
+ * nearest existing one when the file is new). Never written through (security review of #232).
+ * @param {string} file
+ */
+function throughLink(file) {
+  const abs = path.resolve(file);
+  try {
+    if (fs.lstatSync(abs).isSymbolicLink()) return true;
+  } catch {}
+  let dir = path.dirname(abs);
+  while (!fs.existsSync(dir) && path.dirname(dir) !== dir) dir = path.dirname(dir);
+  try {
+    return fs.realpathSync(dir) !== dir;
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Writes a planned fix: each file only if it still holds the text the plan was made from (a new
  * one only if still missing), after a backup. canWrite(file) can refuse a file (a whole-file
  * target with a link on its way).
@@ -32,7 +51,7 @@ function applyPlan(plan, { dir, runId, label, at = new Date().toISOString(), can
   const backups = path.join(dir, "backups", runId);
   if (plan.files.size) fs.mkdirSync(dir, { recursive: true });
   for (const [file, c] of plan.files) {
-    if (!canWrite(file)) {
+    if (throughLink(file) || !canWrite(file)) {
       skipped.push({ file, why: "not a safe place to write" });
       continue;
     }
@@ -163,4 +182,4 @@ function undo(dir, line) {
   return { ok: true };
 }
 
-module.exports = { autopilotDir, applyPlan, runFix, recordChange, recordRemove, undoLog, undo };
+module.exports = { autopilotDir, throughLink, applyPlan, runFix, recordChange, recordRemove, undoLog, undo };

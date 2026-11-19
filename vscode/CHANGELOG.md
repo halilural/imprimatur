@@ -4,6 +4,13 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.192.1] - 2026-11-19
+
+### Fixed
+- Security review of the autopilot (#232):
+  - **No writes through links:** the fix engine never writes through a link, neither the file itself nor a folder above it. This covers Fix it and the autopilot alike.
+  - **Plain rules only:** the autopilot merges a drifted file alone only when it is plain rules prose (`.claude/rules/*.md`, `AGENTS.md`). Commands, skills, agents, output styles, hooks, settings and MCP files can run commands or grant tools; they go to "Needs you".
+
 ## [0.192.0] - 2026-11-19
 
 ### Added

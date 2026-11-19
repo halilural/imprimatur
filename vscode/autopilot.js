@@ -108,11 +108,13 @@ function handlers(ctx) {
     },
     /** @param {any} j */
     async drift(j) {
-      // Only this repo's copy is written: the other repos' copies are read as data, and a file that
-      // runs or grants (a hook, settings, MCP servers) is the user's to merge (#232 security review:
+      // Only this repo's copy is written: the other repos' copies are read as data, and only plain
+      // rules prose is merged alone (#232 security review:
       // a repo cloned under the drift roots must not get its text into this repo's hooks unseen).
-      if (RUNS.test(j.rel)) return { manual: "a hook, settings or MCP file: compare the copies and keep one yourself" };
-      const mine = j.files.filter((/** @type {string} */ f) => !path.relative(ctx.root, f).startsWith(".."));
+      if (!PROSE.test(j.rel)) return { manual: "not a plain rules file (it can run commands or grant tools): compare the copies and keep one yourself" };
+      // In the repo by real path; a copy reached through a link is not written (fix-engine refuses it too).
+      const realRoot = fs.realpathSync(ctx.root);
+      const mine = j.files.filter((/** @type {string} */ f) => !engine.throughLink(f) && !path.relative(realRoot, path.resolve(f)).startsWith(".."));
       if (!mine.length) return { manual: "this repo has no copy to write" };
       return fromFix(await engine.runFix({ prompt: driftPrompt(j.rel, j.files, mine), label: j.label, edit: mine, whole: mine }, { ...at, run: (p) => ctx.run(p, j.files) }));
     },
@@ -146,8 +148,12 @@ function handlers(ctx) {
   };
 }
 
-/** Files that run or grant: hooks, settings, MCP servers, git hooks. Their drift is never merged alone. */
-const RUNS = /(^|\/)(\.claude\/hooks\/|\.husky\/|\.githooks\/|\.git\/hooks\/)|(^|\/)(settings(\.local)?\.json|\.mcp\.json|hooks\.json)$|\.(sh|bash|zsh|mjs|cjs|js|ts|py|ps1)$/;
+/**
+ * The only drifted files the autopilot merges alone: plain instruction prose (rules, AGENTS.md). A
+ * command, skill, agent or output style can hold shell lines or tool permissions, and hooks,
+ * settings and MCP files run or grant: their drift is the user's (security review of #232).
+ */
+const PROSE = /^(\.claude\/rules\/(?:[^/]+\/)*[^/]+\.md|(?:[^/]+\/)*AGENTS\.md)$/i;
 
 /**
  * A folder's files and their text as one string, to compare two skills whole. null when the folder
