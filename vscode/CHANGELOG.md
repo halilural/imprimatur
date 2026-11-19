@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.194.1] - 2026-11-19
+
+### Fixed
+- `imprimatur.setup.autopilotSkillUpdates` is a machine setting and is read from your own settings only. A repo's `.vscode/settings.json` can no longer turn on automatic skill updates (security review).
+
 ## [0.194.0] - 2026-11-19
 
 ### Added

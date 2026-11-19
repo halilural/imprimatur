@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.194.0",
+  "version": "0.194.1",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -916,6 +916,7 @@
         },
         "imprimatur.setup.autopilotSkillUpdates": {
           "type": "string",
+          "scope": "machine",
           "enum": ["ask", "auto"],
           "default": "ask",
           "markdownDescription": "Upstream changes of skills you installed by hand. `ask`: listed under \"Needs you\" in the autopilot's report; Fix it on the row takes one in. `auto`: the autopilot takes them in after Claude's review, backed up and undoable. **Risk:** a skill's text goes straight into the agent's context and is written by someone else; the review reads that same text, so a hostile change could talk it round."

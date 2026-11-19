@@ -614,7 +614,8 @@ async function runAutopilotNow(provider, { auto = false } = {}) {
       (err, stdout, stderr) => resolve({ code: err ? (typeof err.code === "number" ? err.code : 1) : 0, out: `${stdout}${stderr}` }))),
     dismiss: (/** @type {any} */ d) => !!db && dropFinding(db, d, "through the setup autopilot"),
     home: os.homedir(),
-    autoSkills: vscode.workspace.getConfiguration("imprimatur.setup").get("autopilotSkillUpdates", "ask") === "auto",
+    // The user's own choice only: a repo's .vscode/settings.json must not turn this on (security review).
+    autoSkills: vscode.workspace.getConfiguration("imprimatur.setup").inspect("autopilotSkillUpdates")?.globalValue === "auto",
     fetchSkill: (/** @type {any} */ origin, /** @type {string} */ ref, /** @type {string} */ dest) => require("./upstream.js").fetchSkillFolder(origin, ref, dest),
     // Tracked by git in its own repo: a teammate reads it too (#233). Unknown counts as tracked.
     tracked: (/** @type {string} */ f) => {
