@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.196.1] - 2026-11-19
+
+### Fixed
+- Security review of the link-access hook (#165):
+  - **Nothing secret leaves the machine:** a link's user, password, query and fragment are never written to the issue or the agent's message.
+  - **Public repos get the site only:** an issue in a repo that is not private names the site; the full link stays in the agent's answer and in Imprimatur's data folder.
+  - **At most three a session:** a session opens at most three link-access issues alone. After that, the agent lists the link and asks.
+
 ## [0.196.0] - 2026-11-19
 
 ### Added
