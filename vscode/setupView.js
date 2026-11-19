@@ -432,7 +432,7 @@ class SetupView {
       const drift = node.scope.global ? undefined : this.drift.driftFor(item.rel, item.abs);
       // When it applies (#28), unless the summary already says it (.mdc).
       const when = item.scope && !item.summary.startsWith(item.scope.label) ? `${item.scope.label} · ` : "";
-      it.description = `${state ? `${state} · ` : ""}${when}${drift ? `${driftLabel(drift)} · ` : ""}${item.summary}`;
+      it.description = `${item.by ? `${item.by} · ` : ""}${state ? `${state} · ` : ""}${when}${drift ? `${driftLabel(drift)} · ` : ""}${item.summary}`;
       const explained = node.scope.global ? undefined : this.history.explained(node.scope.root, item.rel);
       // A committed repo file not yet explained gets its tooltip on hover (resolveTreeItem).
       // A file with problems builds its tooltip now: the problems are appended to it (markHealth).

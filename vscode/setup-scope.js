@@ -13,6 +13,7 @@
 "use strict";
 const fs = require("node:fs");
 const path = require("node:path");
+const { isImprimaturHook } = require("./agent-setup.js");
 
 /**
  * Front matter with lists: `key: value`, `key: [a, b]` and `key:` followed by
@@ -334,7 +335,7 @@ function effectTree(e, name) {
     { label: "Skills", icon: "mortar-board", children: e.skills.map((x) => leaf(x, `${g(x)}${x.how}`, "mortar-board")) },
     {
       label: "Hooks", icon: "zap",
-      children: e.hooks.map((h) => ({ type: "leaf", label: String(h.command).split(/\s+/).pop(), description: [h.event, h.scope, h.matcher && `[${h.matcher}]`, h.if && `if ${h.if}`, h.async && "async"].filter(Boolean).join(" · "), icon: "zap", abs: h.file, tooltip: h.command })),
+      children: e.hooks.map((h) => ({ type: "leaf", label: String(h.command).split(/\s+/).pop(), description: [isImprimaturHook(h.command) && "Imprimatur", h.event, h.scope, h.matcher && `[${h.matcher}]`, h.if && `if ${h.if}`, h.async && "async"].filter(Boolean).join(" · "), icon: "zap", abs: h.file, tooltip: h.command })),
     },
   ].filter((x) => x.children.length);
   const n = groups.reduce((k, x) => k + x.children.length, 0);

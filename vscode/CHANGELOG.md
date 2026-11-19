@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.189.0] - 2026-11-19
+
+### Added
+- Agent setup marks what Imprimatur put there (#228): a row Imprimatur owns starts its description with `Imprimatur ·`. That covers its generated `.claude/rules/imprimatur.md`, the skills an Imprimatur checkout links into `~/.claude/skills`, the Imprimatur plugin, and the hooks that run Imprimatur (under Effective settings and "For <file>"). A row without it is the repo's own or a third party's.
+
 ## [0.188.0] - 2026-11-18
 
 ### Changed

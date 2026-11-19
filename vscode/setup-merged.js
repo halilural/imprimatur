@@ -17,6 +17,7 @@
 "use strict";
 const fs = require("node:fs");
 const path = require("node:path");
+const { isImprimaturHook } = require("./agent-setup.js");
 
 /** Scopes, highest precedence first (the command line is per session: not read). */
 const SCOPES = ["managed", "local", "project", "user"];
@@ -231,7 +232,7 @@ function mergedTree(merged) {
     description: `${ev.handlers.length} handler${ev.handlers.length === 1 ? "" : "s"}${ev.handlers.length > 1 ? ", run in parallel" : ""}`,
     children: ev.handlers.map((h) => ({
       type: "leaf", label: shortCmd(h.command), icon: h.active ? "debug-breakpoint-log" : "circle-slash", abs: h.file,
-      description: [also(h), h.matcher && `[${h.matcher}]${h.matcherIgnored ? " ignored" : ""}`, h.if && `if ${h.if}`, h.async && "async", !h.active && `off: ${h.inactiveReason}`].filter(Boolean).join(" · "),
+      description: [isImprimaturHook(h.command) && "Imprimatur", also(h), h.matcher && `[${h.matcher}]${h.matcherIgnored ? " ignored" : ""}`, h.if && `if ${h.if}`, h.async && "async", !h.active && `off: ${h.inactiveReason}`].filter(Boolean).join(" · "),
       tooltip: `${h.type}: ${h.command}\n${h.file ?? h.scope}`,
     })),
   }));
