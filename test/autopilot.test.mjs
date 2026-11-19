@@ -68,32 +68,35 @@ test("autopilot: a failed agent run or a throwing job is reported and changes no
   assert.equal(fs.readFileSync(f, "utf8"), "{}\n");
 });
 
-test("autopilot: drifted copies get one version each; a repo's duplicate skill goes only when identical (#232)", async () => {
+test("autopilot: drift writes only this repo's copy, never a hook; a repo's duplicate skill goes only when the whole folder matches (#232)", async () => {
   const a = tmp("autopilot-a-"), b = tmp("autopilot-b-"), home = tmp("autopilot-home-"), dir = tmp("autopilot-data-");
-  const fa = path.join(a, ".claude", "hooks", "x.sh"), fb = path.join(b, ".claude", "hooks", "x.sh");
+  const fa = path.join(a, ".claude", "rules", "x.md"), fb = path.join(b, ".claude", "rules", "x.md");
   for (const f of [fa, fb]) fs.mkdirSync(path.dirname(f), { recursive: true });
-  fs.writeFileSync(fa, "echo a\n");
-  fs.writeFileSync(fb, "echo b\n");
-  const skill = (root, text) => {
-    const d = path.join(root, ".claude", "skills", "tdd");
+  fs.writeFileSync(fa, "use a\n");
+  fs.writeFileSync(fb, "use b\n");
+  const skill = (root, name, text, extra) => {
+    const d = path.join(root, ".claude", "skills", name);
     fs.mkdirSync(d, { recursive: true });
     fs.writeFileSync(path.join(d, "SKILL.md"), text);
+    if (extra) fs.writeFileSync(path.join(d, "ref.md"), extra);
     return d;
   };
-  const mine = skill(a, "same\n"), user = skill(home, "same\n");
-  const other = skill(b, "different\n");
+  const mine = skill(a, "tdd", "same\n"), user = skill(home, "tdd", "same\n");
+  const partly = skill(a, "grill", "same\n", "mine\n"), userGrill = skill(home, "grill", "same\n", "theirs\n");
   const jobs = jobsOf([], {}, {
-    drift: [{ rel: ".claude/hooks/x.sh", files: [fa, fb] }],
-    clashes: [{ name: "tdd", from: [{ source: "project", dir: mine }, { source: "user", dir: user }] }, { name: "tdd2", from: [{ source: "project", dir: other }, { source: "user", dir: user }] }],
+    drift: [{ rel: ".claude/rules/x.md", files: [fa, fb] }, { rel: ".claude/hooks/x.sh", files: [path.join(a, ".claude/hooks/x.sh"), path.join(b, ".claude/hooks/x.sh")] }],
+    clashes: [{ name: "tdd", from: [{ source: "project", dir: mine }, { source: "user", dir: user }] }, { name: "grill", from: [{ source: "project", dir: partly }, { source: "user", dir: userGrill }] }],
   });
-  assert.deepEqual(jobs.map((j) => j.kind), ["drift", "clash", "clash"]);
-  const run = async () => ({ code: 0, stdout: answer([{ file: fa, old: "", new: "echo merged\n" }, { file: fb, old: "", new: "echo merged\n" }]), stderr: "" });
+  assert.deepEqual(jobs.map((j) => j.kind), ["drift", "drift", "clash", "clash"]);
+  const seen = [];
+  const run = async (p, files) => (seen.push(files), { code: 0, stdout: answer([{ file: fa, old: "", new: "use merged\n" }, { file: fb, old: "", new: "use merged\n" }]), stderr: "" });
   const report = await runAutopilot(jobs, handlers({ dir, runId: "d1", at: "t", root: a, run }), { runId: "d1", at: "t" });
-  assert.equal(fs.readFileSync(fa, "utf8"), "echo merged\n");
-  assert.equal(fs.readFileSync(fb, "utf8"), "echo merged\n");
+  assert.equal(fs.readFileSync(fa, "utf8"), "use merged\n");
+  assert.equal(fs.readFileSync(fb, "utf8"), "use b\n", "another repo's copy is not written");
+  assert.equal(seen.length, 1, "the hook's drift never reaches the agent");
   assert.equal(fs.existsSync(mine), false);
-  assert.equal(fs.existsSync(other), true);
-  assert.equal(summaryLine(report), "2 fixed · 0 not fixed · 1 need you");
+  assert.equal(fs.existsSync(partly), true, "a skill whose other files differ stays");
+  assert.equal(summaryLine(report), "2 fixed · 0 not fixed · 2 need you");
   const removed = undoLog(dir).find((l) => l.removed);
   assert.equal(undo(dir, removed).ok, true);
   assert.equal(fs.readFileSync(path.join(mine, "SKILL.md"), "utf8"), "same\n");
