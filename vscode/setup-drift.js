@@ -63,12 +63,19 @@ function groupDrift(repos, opts = {}) {
 }
 
 /**
+ * Drift is copies that went apart from a shared version: at least two copies still match and
+ * another differs. Every copy different (each repo's own settings.json or AGENTS.md) is not drift.
+ * @param {{variants: Array<{repos: string[]}>} | undefined} group
+ */
+const isDrift = (group) => !!group && group.variants.length > 1 && group.variants[0].repos.length > 1;
+
+/**
  * One repo's view of a group: in how many of the other copies it differs.
  * @param {{total: number, variants: Array<{hash: string, repos: string[]}>} | undefined} group @param {string} hash
  * @returns {{differs: number, total: number, others: Array<{hash: string, repos: string[]}>} | undefined} undefined when every copy matches
  */
 function driftOf(group, hash) {
-  if (!group || group.variants.length < 2) return undefined;
+  if (!isDrift(group)) return undefined;
   const mine = group.variants.find((v) => v.hash === hash);
   const others = group.variants.filter((v) => v.hash !== hash);
   return { differs: group.total - (mine?.repos.length ?? 0), total: group.total, others };
@@ -201,4 +208,4 @@ class DriftScanner {
   }
 }
 
-module.exports = { DEFAULT_EXCLUDE, excluded, groupDrift, driftOf, driftLabel, driftRepos, walkAgentFiles, DriftScanner, expandHome };
+module.exports = { DEFAULT_EXCLUDE, excluded, groupDrift, isDrift, driftOf, driftLabel, driftRepos, walkAgentFiles, DriftScanner, expandHome };

@@ -572,7 +572,7 @@ async function runAutopilotNow(provider, { auto = false } = {}) {
       return false;
     }
   };
-  const drift = [...provider.drift.groups.values()].filter((g) => g.variants.length > 1 && g.variants.some((v) => v.repos.includes(here ?? "")))
+  const drift = [...provider.drift.groups.values()].filter((g) => require("./setup-drift.js").isDrift(g) && g.variants.some((v) => v.repos.includes(here ?? "")))
     .map((g) => ({ rel: g.rel, files: g.variants.flatMap((v) => v.repos).map((n) => provider.drift.repos.find((r) => r.name === n)?.root).filter(Boolean).map((r) => path.join(/** @type {string} */ (r), g.rel)) }))
     // Imprimatur rewrites its own generated files each session: never merged.
     .filter((x) => !x.files.some(generated));

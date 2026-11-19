@@ -31,6 +31,9 @@ test("drift: copies of a path are grouped by hash; one repo sees how many differ
   assert.equal(driftLabel(driftOf(hook, "h2")), "differs in 3 of 4 repos");
   assert.equal(driftOf(groups.get(".claude/settings.json"), "s1"), undefined, "all copies match");
   assert.equal(driftOf(undefined, "x"), undefined);
+  // Every copy different is each repo's own file, not drift (the first autopilot report, #232).
+  const own = groupDrift([{ name: "a", files: { "AGENTS.md": "1" } }, { name: "b", files: { "AGENTS.md": "2" } }, { name: "c", files: { "AGENTS.md": "3" } }]);
+  assert.equal(driftOf(own.get("AGENTS.md"), "1"), undefined);
   // The exclude list is a setting: with none, CLAUDE.md drifts too.
   assert.equal(groupDrift([{ name: "a", files: { "CLAUDE.md": "1" } }, { name: "b", files: { "CLAUDE.md": "2" } }], { exclude: [] }).get("CLAUDE.md").variants.length, 2);
 });
