@@ -1,4 +1,10 @@
 {
   "lang": "English",
-  "social": true
+  "social": true,
+  "process": {
+    "designFirst": "block",
+    "issueFields": "block",
+    "docUpdate": "block",
+    "branchFinish": "block"
+  }
 }
