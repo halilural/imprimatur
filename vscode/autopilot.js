@@ -201,7 +201,7 @@ function handlers(ctx) {
       const r = await ctx.run(ir.reviewPrompt(ctx.root, j.files), j.files);
       if (r.code !== 0) return { ok: false, note: `the review run stopped: ${String(r.stderr || r.code).trim().split("\n")[0]}` };
       const day = (ctx.at ?? new Date().toISOString()).slice(0, 10);
-      const rec = ir.recordFindings(ctx.db, ctx.repo.id, ir.parseFindings(r.stdout, j.files), day);
+      const rec = ir.recordFindings(ctx.db, ctx.repo.id, ir.parseFindings(r.stdout, j.files), day, { complete: ir.reviewComplete(r.stdout), files: j.files });
       const gone = rec.closed ? `, ${rec.closed} earlier finding${rec.closed === 1 ? "" : "s"} gone` : "";
       if (!rec.open.length) return { ok: true, note: `nothing found${gone}` };
       // Fixed in the same job, through the engine: backups, undo, target files only. Only the repo's

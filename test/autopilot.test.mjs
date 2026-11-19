@@ -197,7 +197,11 @@ test("autopilot: Claude's instruction review finds, records and fixes in one job
   db.updateRecord(recs[0].id, { status: "open" }, { kind: "user" });
   assert.deepEqual(reconcile([], db.recordsOf(recs[0].task_id)).resolve, []);
   // The next review that no longer reports it closes it; a finding found again is not a copy.
-  const again = ir.recordFindings(db, repo.id, ir.parseFindings(`\`\`\`imprimatur-findings\n${JSON.stringify([found[1]])}\n\`\`\``, [rules]), "2026-11-20");
+  // A broken answer closes nothing.
+  assert.equal(ir.recordFindings(db, repo.id, ir.parseFindings("no block", [rules]), "2026-11-20", { complete: ir.reviewComplete("no block"), files: [rules] }).closed, 0);
+  assert.equal(db.record(recs[0].id).status, "open");
+  const block = `\`\`\`imprimatur-findings\n${JSON.stringify([found[1]])}\n\`\`\``;
+  const again = ir.recordFindings(db, repo.id, ir.parseFindings(block, [rules]), "2026-11-20", { complete: ir.reviewComplete(block), files: [rules] });
   assert.equal(again.added, 0);
   assert.equal(again.closed, 1);
   assert.equal(db.record(recs[0].id).status, "done");

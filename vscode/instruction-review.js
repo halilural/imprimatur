@@ -65,13 +65,26 @@ function parseFindings(answer, files) {
     });
 }
 
+/** Whether the answer ends with a findings block that parses: only then may earlier findings be closed. @param {string} answer */
+function reviewComplete(answer) {
+  const m = [...String(answer).matchAll(/```imprimatur-findings\s*\n([\s\S]*?)```/g)].at(-1);
+  try {
+    return !!m && Array.isArray(JSON.parse(m[1]));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The findings as RECS records: a new one added, one found again kept (reopened if it was done,
  * left alone if the user dismissed it), an open one the review no longer reports marked done.
+ * Closing needs a review that completed (reviewComplete) and covered the record's file: a broken or
+ * partial answer never closes anything (security review of #235).
  * @param {any} db @param {number} repoId @param {ReturnType<typeof parseFindings>} found @param {string} day
+ * @param {{complete?: boolean, files?: string[]}} [o] files: the files this review read
  * @returns {{open: any[], added: number, closed: number}} open: the records of this review's findings still open
  */
-function recordFindings(db, repoId, found, day) {
+function recordFindings(db, repoId, found, day, { complete = false, files = [] } = {}) {
   const task = require("./recs.js").recsTask(db, repoId, { create: true, actor: ACTOR });
   const mine = db.recordsOf(task.id, { dropped: true }).filter((/** @type {any} */ r) => r.links?.audit?.ai);
   const byFp = new Map(mine.map((/** @type {any} */ r) => [r.links.audit.fp, r]));
@@ -92,12 +105,13 @@ function recordFindings(db, repoId, found, day) {
   }
   const now = new Set(found.map((f) => f.fp));
   let closed = 0;
+  const reviewed = new Set(files.map((f) => path.resolve(f)));
   for (const r of mine)
-    if (r.status === "open" && !now.has(r.links.audit.fp)) {
+    if (complete && r.status === "open" && !now.has(r.links.audit.fp) && reviewed.has(path.resolve(r.links.audit.file))) {
       db.updateRecord(r.id, { status: "done", body: `${r.body ?? ""}\n\n_Gone in the review of ${day}._` }, ACTOR);
       closed++;
     }
   return { open, added, closed };
 }
 
-module.exports = { instructionFiles, reviewPrompt, parseFindings, recordFindings, ACTOR, MAX };
+module.exports = { instructionFiles, reviewPrompt, parseFindings, reviewComplete, recordFindings, ACTOR, MAX };
