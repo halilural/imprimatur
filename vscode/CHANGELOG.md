@@ -4,6 +4,19 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.190.0] - 2026-11-19
+
+### Added
+- Setup autopilot (#231, epic #229): once a day (setting `imprimatur.setup.autopilot`, default `daily`) and from the rocket button on Agent setup, Imprimatur works through the checklist and recommendations itself. It does the following, and installing new third-party code is never done alone: it is listed under "Needs you".
+  - turns rules broken often into blocking checks;
+  - updates plugins behind their marketplace;
+  - fixes health problems and recommendations with a background `claude -p` run;
+  - takes in upstream skill changes after a SAFE review;
+  - checks up to 10 stale documents against the code.
+
+  Each run ends in a report: a notification, a Markdown page, and a note on the repo's AUTOPILOT task. Repo files it changed that had no change of yours are committed as `chore(setup): autopilot`.
+- Every write by the autopilot or by Fix it is backed up first (#230). **Undo an Autopilot Change** puts any one back unless the file changed since.
+
 ## [0.189.1] - 2026-11-19
 
 ### Fixed

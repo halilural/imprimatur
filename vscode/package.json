@@ -2,7 +2,7 @@
   "name": "imprimatur",
   "displayName": "Imprimatur",
   "description": "See every doc edit your AI agent makes as tracked changes until you accept it.",
-  "version": "0.189.1",
+  "version": "0.190.0",
   "publisher": "halilural",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -239,6 +239,17 @@
         "title": "Review Project Best Practices (Claude)",
         "category": "Imprimatur",
         "icon": "$(sparkle)"
+      },
+      {
+        "command": "imprimatur.setup.autopilot",
+        "title": "Run Setup Autopilot",
+        "category": "Imprimatur",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "imprimatur.setup.autopilotUndo",
+        "title": "Undo an Autopilot Change",
+        "category": "Imprimatur"
       },
       {
         "command": "imprimatur.setup.audit",
@@ -712,6 +723,11 @@
           "group": "navigation@4"
         },
         {
+          "command": "imprimatur.setup.autopilot",
+          "when": "view == imprimatur.setup",
+          "group": "navigation@5"
+        },
+        {
           "command": "imprimatur.launcher.find",
           "when": "view == imprimatur.launcher",
           "group": "navigation@1"
@@ -891,6 +907,12 @@
           },
           "default": [],
           "markdownDescription": "Glob patterns of Markdown files that also get marks in the editor when `#imprimatur.showIn#` is `preview`, e.g. `**/todos/**`."
+        },
+        "imprimatur.setup.autopilot": {
+          "type": "string",
+          "enum": ["daily", "off"],
+          "default": "daily",
+          "markdownDescription": "Setup autopilot: once a day Imprimatur fixes the Agent setup checklist and recommendations itself (each change backed up, **Undo an Autopilot Change** puts it back) and reports what it did. Installing third-party code is never done alone: it is listed in the report. Each fix is a `claude -p` run on your Claude subscription."
         },
         "imprimatur.setup.driftRoots": {
           "type": "array",

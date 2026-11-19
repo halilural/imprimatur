@@ -526,6 +526,145 @@ async function fixDocs(provider, findings, repo) {
 }
 
 /**
+ * A finding Claude says is wrong or intended, dismissed with its reason. False when it is no longer open.
+ * @param {any} db @param {{rec: any, reason: string, why: string}} d @param {string} how who applied it
+ */
+function dropFinding(db, d, how) {
+  const cur = db.record(d.rec.id);
+  const link = require("./recs.js").sourceOf(cur) === "audit" ? "audit" : "best";
+  if (!cur || cur.status !== "open" || !cur.links?.[link]) return false;
+  db.updateRecord(cur.id, { status: "dropped", links: { ...cur.links, [link]: { ...cur.links[link], reason: link === "audit" ? d.reason : d.reason === "local" ? "not-applicable" : d.reason === "plugin" ? "other" : d.reason } },
+    body: `${cur.body ?? ""}\n\n_Dismissed (${d.reason}, by Claude ${how}):_ ${d.why}` }, { kind: "user" });
+  return true;
+}
+
+/**
+ * Setup autopilot (#231): every fixable checklist row and recommendation, fixed without asking
+ * (each write backed up, undoable), then a report. auto: from the daily timer (silent unless it ran).
+ * @param {SetupView} provider @param {{auto?: boolean}} [o]
+ */
+async function runAutopilotNow(provider, { auto = false } = {}) {
+  const root = provider.scopes.find((s) => !s.global)?.root;
+  const runner = require("./fix-runner.js");
+  const bin = runner.claudeBin();
+  if (!root || !vscode.workspace.isTrusted || !bin) {
+    if (!auto) vscode.window.showWarningMessage(`Imprimatur: the autopilot cannot run here (${!root ? "no repo open" : !bin ? "no Claude Code CLI" : "the folder is not trusted"}).`);
+    return;
+  }
+  if (provider.fixing) return void (auto || vscode.window.showInformationMessage("Imprimatur: a fix is already running; the autopilot waits for it."));
+  const ap = require("./autopilot.js");
+  const engine = require("./fix-engine.js");
+  const dir = engine.autopilotDir();
+  const at = new Date().toISOString();
+  const runId = `autopilot-${at.replace(/[:.]/g, "-")}`;
+  // Claimed before it starts: another window opened on this repo skips today's run.
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(lastRunFile(root), JSON.stringify({ at, root }) + "\n");
+  const db = require("./records.js").dbOf();
+  const repo = db?.repoByRoot(root);
+  const open = provider.openFindings();
+  const jobs = ap.jobsOf(provider.checklist.node.children ?? [], { files: open.filter((/** @type {any} */ r) => !isDocFinding(r)), docs: open.filter(isDocFinding) });
+  const out = (fixOutput ??= vscode.window.createOutputChannel("Imprimatur Fix it"));
+  out.appendLine(`\n=== ${new Date().toLocaleString()} · Setup autopilot (in ${root}): ${jobs.length} job(s)`);
+  const dirty = gitDirty(root);
+  const bf = require("./docs-fix.js");
+  const bp = require("./best-practice.js");
+  const server = bf.registeredServer();
+  const { execFile } = require("node:child_process");
+  const ctx = {
+    dir, runId, at, root, db, repo,
+    /** @param {string} prompt @param {string[]} files */
+    run: (prompt, files) => runner.runClaude(bin, runner.claudeArgs(prompt, { addDirs: runner.outside(root, files) }), { cwd: root, onData: (d) => out.append(d) }),
+    /** @param {string} prompt @param {number[]} ids */
+    docsRun: async (prompt, ids) => {
+      if (!server) return { ok: false, answer: "Claude Code has no imprimatur MCP server registered" };
+      const r = await bp.run(bin, bf.claudeArgs(server, ["record_update"], { IMPRIMATUR_RECORD_UPDATE: ids.join(",") }), { cwd: root, timeout: bf.TIMEOUT_MS, env: { ...bp.childEnv(), ENABLE_TOOL_SEARCH: "false" }, input: prompt });
+      let res = /** @type {any} */ ({});
+      try {
+        res = JSON.parse(r.stdout);
+      } catch {}
+      const answer = String(res.result ?? r.stderr ?? "").trim();
+      out.appendLine(answer);
+      return { ok: r.code === 0 && !res.is_error, answer };
+    },
+    // No shell: the arguments go to the program as they are.
+    /** @param {string} cmd @param {string[]} args */
+    exec: (cmd, args) => new Promise((resolve) => execFile(cmd === "claude" ? bin : cmd, args, { cwd: root, timeout: 5 * 60_000 },
+      (err, stdout, stderr) => resolve({ code: err ? (typeof err.code === "number" ? err.code : 1) : 0, out: `${stdout}${stderr}` }))),
+    fetchSkill: (/** @type {any} */ origin, /** @type {string} */ ref, /** @type {string} */ dest) => require("./upstream.js").fetchSkillFolder(origin, ref, dest),
+    dismiss: (/** @type {any} */ d) => !!db && dropFinding(db, d, "through the setup autopilot"),
+  };
+  provider.fixing = true;
+  let report;
+  try {
+    report = await vscode.window.withProgress({ location: auto ? vscode.ProgressLocation.Window : vscode.ProgressLocation.Notification, title: "Imprimatur autopilot" },
+      (p) => ap.runAutopilot(jobs, ap.handlers(ctx), { runId, at, onJob: (j) => (p.report({ message: j.label }), out.appendLine(`--- ${j.kind}: ${j.label}`)) }));
+  } finally {
+    provider.fixing = false;
+  }
+  const git = commitAutopilot(root, report, dirty, ap.summaryLine(report));
+  const md = path.join(dir, "reports", `${runId}.md`);
+  fs.mkdirSync(path.dirname(md), { recursive: true });
+  fs.writeFileSync(md, ap.reportMarkdown(report, git));
+  try {
+    if (db && repo) {
+      const task = db.taskByKey(repo.id, "AUTOPILOT") ?? db.upsertTask(repo.id, "AUTOPILOT", { title: "Setup autopilot", status: "active" }, { kind: "hook", id: "autopilot" });
+      db.addRecord(task.id, { kind: "note", status: "done", title: `Autopilot ${at.slice(0, 10)}: ${ap.summaryLine(report)}`, body: fs.readFileSync(md, "utf8"), links: { report: md } }, { kind: "hook", id: "autopilot" });
+      db.upsertTask(repo.id, "AUTOPILOT", { summary: `Last run ${at.slice(0, 16).replace("T", " ")}: ${ap.summaryLine(report)}` }, { kind: "hook", id: "autopilot" });
+    }
+  } catch {}
+  provider.refresh();
+  if (auto && !report.fixed.length && !report.failed.length && !report.manual.length) return;
+  const pick = await vscode.window.showInformationMessage(`Imprimatur autopilot: ${ap.summaryLine(report)}.`, "Show report");
+  if (pick) vscode.commands.executeCommand("markdown.showPreview", vscode.Uri.file(md));
+}
+
+/** Where the autopilot notes its last run for a repo. @param {string} root */
+const lastRunFile = (root) => path.join(require("./fix-engine.js").autopilotDir(), `last-run-${require("./data-dir.js").keyOf(root)}.json`);
+
+/** The repo's files with uncommitted changes (absolute), before the autopilot writes. @param {string} root */
+function gitDirty(root) {
+  try {
+    const out = require("node:child_process").execFileSync("git", ["status", "--porcelain", "-z"], { cwd: root, encoding: "utf8" });
+    return new Set(out.split("\0").filter(Boolean).map((l) => path.join(root, l.slice(3))));
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * The autopilot's own commit: only repo files it changed that had no change of the user's before
+ * (#229: the user's work never goes into it). Files outside the repo (~/.claude) are not committed.
+ * @param {string} root @param {any} report @param {Set<string>} dirty @param {string} summary
+ */
+function commitAutopilot(root, report, dirty, summary) {
+  const files = [...new Set(report.fixed.flatMap((/** @type {any} */ x) => x.files))].filter((f) => !path.relative(root, f).startsWith(".."));
+  const clean = files.filter((f) => !dirty.has(f));
+  const uncommitted = files.filter((f) => dirty.has(f));
+  if (!clean.length) return { uncommitted };
+  try {
+    const { execFileSync } = require("node:child_process");
+    execFileSync("git", ["add", "--", ...clean], { cwd: root });
+    execFileSync("git", ["commit", "-m", `chore(setup): autopilot\n\n${summary}`, "--", ...clean], { cwd: root });
+    return { committed: execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).trim(), uncommitted };
+  } catch {
+    return { uncommitted: files };
+  }
+}
+
+/** Puts one autopilot or Fix it change back, picked from the undo log (newest first). */
+async function undoAutopilotChange() {
+  const engine = require("./fix-engine.js");
+  const dir = engine.autopilotDir();
+  const lines = engine.undoLog(dir).filter((l) => !l.undone).reverse();
+  if (!lines.length) return void vscode.window.showInformationMessage("Imprimatur: no autopilot or Fix it change to undo.");
+  const pick = /** @type {any} */ (await vscode.window.showQuickPick(lines.map((l) => ({ label: l.label, description: l.file.replace(os.homedir(), "~"), detail: l.at.slice(0, 16).replace("T", " "), line: l })), { title: "Undo an autopilot change" }));
+  if (!pick) return;
+  const r = engine.undo(dir, pick.line);
+  vscode.window[r.ok ? "showInformationMessage" : "showWarningMessage"](r.ok ? `Imprimatur: put back ${pick.description}.` : `Imprimatur: not undone: ${r.why}.`);
+}
+
+/**
  * Fix it (#156): after the user confirms, Claude Code's CLI runs the fix in the background
  * (`claude -p`: user settings only, no MCP, no commands, edits only the target files) under a
  * progress notification, then shows the agent's answer; its edits are tracked for review.
@@ -701,17 +840,7 @@ async function fixWithClaude(provider, node) {
     }
     fs.rmSync(shown, { recursive: true, force: true });
     let dropped = 0;
-    if (ok === "Apply" && drops.length && db) {
-      const recsMod = require("./recs.js");
-      for (const d of drops) {
-        const cur = db.record(d.rec.id);
-        const link = recsMod.sourceOf(cur) === "audit" ? "audit" : "best";
-        if (!cur || cur.status !== "open" || !cur.links?.[link]) continue;
-        db.updateRecord(cur.id, { status: "dropped", links: { ...cur.links, [link]: { ...cur.links[link], reason: link === "audit" ? d.reason : d.reason === "local" ? "not-applicable" : d.reason === "plugin" ? "other" : d.reason } },
-          body: `${cur.body ?? ""}\n\n_Dismissed (${d.reason}, by Claude through Fix it, applied by the user):_ ${d.why}` }, { kind: "user" });
-        dropped++;
-      }
-    }
+    if (ok === "Apply" && drops.length && db) for (const d of drops) if (dropFinding(db, d, "through Fix it, applied by the user")) dropped++;
     if (!wrote && !dropped) return void vscode.window.showInformationMessage(`Imprimatur: nothing applied${ok === "Apply" ? " (the files changed meanwhile)" : ""}.`);
     applied = [wrote && `applied ${wrote} change${wrote === 1 ? "" : "s"}`, dropped && `dismissed ${dropped} finding${dropped === 1 ? "" : "s"}`,
       yours.length && `${yours.length} need${yours.length === 1 ? "s" : ""} you: ${yours.map((d) => d.rec.title.slice(0, 50)).join("; ")}`].filter(Boolean).join(", ");
@@ -1198,6 +1327,19 @@ function registerSetupView(ctx, roots, counts) {
   const view = vscode.window.createTreeView("imprimatur.setup", { treeDataProvider: provider, showCollapseAll: true });
   provider.view = view;
   provider.scan();
+  // The setup autopilot (#231): checked hourly, run when this repo's last run is over a day old.
+  const autopilotTick = () => {
+    const root = provider.scopes.find((s) => !s.global)?.root;
+    if (!root || vscode.workspace.getConfiguration("imprimatur.setup").get("autopilot", "daily") !== "daily") return;
+    let last = 0;
+    try {
+      last = Date.parse(JSON.parse(fs.readFileSync(lastRunFile(root), "utf8")).at) || 0;
+    } catch {}
+    if (Date.now() - last > 86_400_000) runAutopilotNow(provider, { auto: true }).catch(() => {});
+  };
+  const firstTick = setTimeout(autopilotTick, 3 * 60_000);
+  const hourly = setInterval(autopilotTick, 60 * 60_000);
+  ctx.subscriptions.push({ dispose: () => (clearTimeout(firstTick), clearInterval(hourly)) });
   // Agent files anywhere in the window: rescan when one changes (debounced).
   /** @type {NodeJS.Timeout | undefined} */
   let timer;
@@ -1274,6 +1416,8 @@ function registerSetupView(ctx, roots, counts) {
     vscode.commands.registerCommand("imprimatur.setup.installFix", (fix) => runInstallFix(fix)),
     vscode.commands.registerCommand("imprimatur.checkSetup", () => checkSetup(provider)),
     vscode.commands.registerCommand("imprimatur.setup.fixWithClaude", (node) => fixWithClaude(provider, node ?? view.selection[0])),
+    vscode.commands.registerCommand("imprimatur.setup.autopilot", () => runAutopilotNow(provider)),
+    vscode.commands.registerCommand("imprimatur.setup.autopilotUndo", () => undoAutopilotChange()),
     vscode.commands.registerCommand("imprimatur.setup.showUpstream", (node) => {
       const url = (node ?? view.selection[0])?.item?.compare;
       if (typeof url === "string" && url.startsWith("https://github.com/")) vscode.env.openExternal(vscode.Uri.parse(url));

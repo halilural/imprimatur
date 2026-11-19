@@ -77,6 +77,26 @@ async function runFix(fix, { run, dir, runId, at, canWrite }) {
   return { ok: true, error: "", applied: done.applied, skipped: [...plan.skipped, ...done.skipped], dismissals, answer: r.stdout };
 }
 
+/**
+ * Logs a change Imprimatur made itself (a check made blocking, a reviewed skill copied in): the
+ * text before goes to the backup (null: the file was created), the file's text now is the after.
+ * @param {{dir: string, runId: string, label: string, at?: string}} o @param {string} file @param {string | null} before
+ * @returns {UndoLine}
+ */
+function recordChange({ dir, runId, label, at = new Date().toISOString() }, file, before) {
+  const backups = path.join(dir, "backups", runId);
+  fs.mkdirSync(backups, { recursive: true });
+  let backup = null;
+  if (before !== null) {
+    backup = path.join(backups, `${fs.readdirSync(backups).length + 1}-${path.basename(file)}`);
+    fs.writeFileSync(backup, before);
+  }
+  /** @type {UndoLine} */
+  const line = { run: runId, at, label, file, backup, created: before === null, after: fs.readFileSync(file, "utf8") };
+  fs.appendFileSync(logOf(dir), JSON.stringify(line) + "\n");
+  return line;
+}
+
 /** The undo log, oldest first; a line undone later is marked undone. @param {string} dir @returns {UndoLine[]} */
 function undoLog(dir) {
   let text = "";
@@ -119,4 +139,4 @@ function undo(dir, line) {
   return { ok: true };
 }
 
-module.exports = { autopilotDir, applyPlan, runFix, undoLog, undo };
+module.exports = { autopilotDir, applyPlan, runFix, recordChange, undoLog, undo };
