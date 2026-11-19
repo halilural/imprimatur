@@ -20,9 +20,11 @@ test("autopilot: checklist rows become jobs; installs and rows without a fix are
     { label: "2 open recommendations", fix: { kind: "findings" } },
     { label: "Documents: 78 possibly stale", command: "imprimatur.staleDocs" },
     { label: "Install superpowers", command: "imprimatur.setup.installBaseline", description: "a third-party plugin" },
+    { label: "Review the upstream change of tdd", fix: { kind: "skill", item: {} } },
   ];
   const kinds = jobsOf(rows, { files: [{ id: 1 }], docs: [{ id: 2 }] }).map((j) => j.kind);
-  assert.deepEqual(kinds, ["block", "plugin", "health", "findings", "docs", "stale", "manual"]);
+  // An upstream skill change is untrusted text for the agent's context: never taken in on a model's word alone.
+  assert.deepEqual(kinds, ["block", "plugin", "health", "findings", "docs", "stale", "manual", "manual"]);
 });
 
 test("autopilot: a run fixes what it may, logs each change for undo, and reports the rest (#231)", async () => {
@@ -64,4 +66,35 @@ test("autopilot: a failed agent run or a throwing job is reported and changes no
   assert.equal(report.failed.length, 2);
   assert.match(report.failed[0].note, /limit reached/);
   assert.equal(fs.readFileSync(f, "utf8"), "{}\n");
+});
+
+test("autopilot: drifted copies get one version each; a repo's duplicate skill goes only when identical (#232)", async () => {
+  const a = tmp("autopilot-a-"), b = tmp("autopilot-b-"), home = tmp("autopilot-home-"), dir = tmp("autopilot-data-");
+  const fa = path.join(a, ".claude", "hooks", "x.sh"), fb = path.join(b, ".claude", "hooks", "x.sh");
+  for (const f of [fa, fb]) fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(fa, "echo a\n");
+  fs.writeFileSync(fb, "echo b\n");
+  const skill = (root, text) => {
+    const d = path.join(root, ".claude", "skills", "tdd");
+    fs.mkdirSync(d, { recursive: true });
+    fs.writeFileSync(path.join(d, "SKILL.md"), text);
+    return d;
+  };
+  const mine = skill(a, "same\n"), user = skill(home, "same\n");
+  const other = skill(b, "different\n");
+  const jobs = jobsOf([], {}, {
+    drift: [{ rel: ".claude/hooks/x.sh", files: [fa, fb] }],
+    clashes: [{ name: "tdd", from: [{ source: "project", dir: mine }, { source: "user", dir: user }] }, { name: "tdd2", from: [{ source: "project", dir: other }, { source: "user", dir: user }] }],
+  });
+  assert.deepEqual(jobs.map((j) => j.kind), ["drift", "clash", "clash"]);
+  const run = async () => ({ code: 0, stdout: answer([{ file: fa, old: "", new: "echo merged\n" }, { file: fb, old: "", new: "echo merged\n" }]), stderr: "" });
+  const report = await runAutopilot(jobs, handlers({ dir, runId: "d1", at: "t", root: a, run }), { runId: "d1", at: "t" });
+  assert.equal(fs.readFileSync(fa, "utf8"), "echo merged\n");
+  assert.equal(fs.readFileSync(fb, "utf8"), "echo merged\n");
+  assert.equal(fs.existsSync(mine), false);
+  assert.equal(fs.existsSync(other), true);
+  assert.equal(summaryLine(report), "2 fixed · 0 not fixed · 1 need you");
+  const removed = undoLog(dir).find((l) => l.removed);
+  assert.equal(undo(dir, removed).ok, true);
+  assert.equal(fs.readFileSync(path.join(mine, "SKILL.md"), "utf8"), "same\n");
 });

@@ -563,7 +563,15 @@ async function runAutopilotNow(provider, { auto = false } = {}) {
   const db = require("./records.js").dbOf();
   const repo = db?.repoByRoot(root);
   const open = provider.openFindings();
-  const jobs = ap.jobsOf(provider.checklist.node.children ?? [], { files: open.filter((/** @type {any} */ r) => !isDocFinding(r)), docs: open.filter(isDocFinding) });
+  // Across repos (#232): files this repo shares with others whose copies differ, and skills from two places.
+  const here = provider.drift.repos.find((r) => r.root === root)?.name;
+  const drift = [...provider.drift.groups.values()].filter((g) => g.variants.length > 1 && g.variants.some((v) => v.repos.includes(here ?? "")))
+    .map((g) => ({ rel: g.rel, files: g.variants.flatMap((v) => v.repos).map((n) => provider.drift.repos.find((r) => r.name === n)?.root).filter(Boolean).map((r) => path.join(/** @type {string} */ (r), g.rel)) }));
+  let clashes = [];
+  try {
+    clashes = require("./skill-clash.js").skillClashes(root, os.homedir());
+  } catch {}
+  const jobs = ap.jobsOf(provider.checklist.node.children ?? [], { files: open.filter((/** @type {any} */ r) => !isDocFinding(r)), docs: open.filter(isDocFinding) }, { drift, clashes });
   const out = (fixOutput ??= vscode.window.createOutputChannel("Imprimatur Fix it"));
   out.appendLine(`\n=== ${new Date().toLocaleString()} · Setup autopilot (in ${root}): ${jobs.length} job(s)`);
   const dirty = gitDirty(root);
@@ -591,7 +599,6 @@ async function runAutopilotNow(provider, { auto = false } = {}) {
     /** @param {string} cmd @param {string[]} args */
     exec: (cmd, args) => new Promise((resolve) => execFile(cmd === "claude" ? bin : cmd, args, { cwd: root, timeout: 5 * 60_000 },
       (err, stdout, stderr) => resolve({ code: err ? (typeof err.code === "number" ? err.code : 1) : 0, out: `${stdout}${stderr}` }))),
-    fetchSkill: (/** @type {any} */ origin, /** @type {string} */ ref, /** @type {string} */ dest) => require("./upstream.js").fetchSkillFolder(origin, ref, dest),
     dismiss: (/** @type {any} */ d) => !!db && dropFinding(db, d, "through the setup autopilot"),
   };
   provider.fixing = true;

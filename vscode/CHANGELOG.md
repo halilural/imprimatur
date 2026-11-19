@@ -4,6 +4,17 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.191.0] - 2026-11-19
+
+### Added
+- The setup autopilot settles drift and duplicates across repos (#232):
+  - **Drifted file:** a file this repo shares with others (same path under `imprimatur.setup.driftRoots`) whose copies differ gets one version, written to every copy. If the copies differ on purpose, the agent leaves them.
+  - **Duplicate skill:** a skill in the repo's `.claude/skills` that is identical to one in `~/.claude/skills` or claude.ai's is moved to the backup. Two different skills that share a name are listed under "Needs you".
+  - Every change can be undone.
+
+### Changed
+- The autopilot no longer takes in upstream skill changes on its own: the new text is untrusted and goes into the agent's context, so a model's SAFE verdict is not enough. They are listed under "Needs you"; Fix it on the row still does it with your yes.
+
 ## [0.190.0] - 2026-11-19
 
 ### Added
