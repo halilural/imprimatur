@@ -478,3 +478,25 @@ test("linkAccess (#165): a page WebFetch could not open becomes one link-access 
   for (const i of [1, 2, 3, 4]) check("PostToolUseFailure", { ...session, tool_input: { url: `https://site${i}.example.com/` } }, { records: noRecords, gh });
   assert.equal(calls.filter((a) => a[0] === "issue").length, 4);
 });
+
+test("whereWeLeftOff (#135): after /clear or compact the task worked on last comes back as goal, next step and phase; not at a normal start", () => {
+  const root = repo();
+  const { openDb } = req("../vscode/db.js");
+  const db = openDb({ path: path.join(root, "x.db") });
+  const r = db.repoOf(root);
+  const agent = { kind: "agent", id: "s" };
+  const t = db.upsertTask(r.id, "#135", { title: "Re-inject after clear", status: "active", summary: "hook written; tests next" }, agent);
+  db.addRecord(t.id, { kind: "todo", title: "write the SessionStart test", pointer: true }, agent);
+  db.upsertTask(r.id, "AUTOPILOT", { title: "Setup autopilot", status: "active" }, agent);
+  const records = { repoId: () => r.id, dbOf: () => db, recordsOf: () => [] };
+  const at = (source) => (check("SessionStart", { cwd: root, session_id: "S", source }, { records }).context ?? []).join("\n");
+  for (const source of ["clear", "compact"]) {
+    const out = at(source);
+    assert.match(out, /the task worked on last is #135 Re-inject after clear/);
+    assert.match(out, /Goal, where it stands: hook written; tests next/);
+    assert.match(out, /Next: 👉 write the SessionStart test/);
+    assert.match(out, /Phase: spec: not written yet/);
+  }
+  assert.doesNotMatch(at("startup"), /worked on last/);
+  assert.doesNotMatch(at("resume"), /worked on last/);
+});
