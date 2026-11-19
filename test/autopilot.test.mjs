@@ -202,3 +202,18 @@ test("autopilot: Claude's instruction review finds, records and fixes in one job
   assert.equal(again.closed, 1);
   assert.equal(db.record(recs[0].id).status, "done");
 });
+
+test("autopilot: the instruction review fixes only the repo's own files; a finding on the global instructions waits (#235 security review)", async () => {
+  const { openDb } = require("../vscode/db.js");
+  const root = fs.realpathSync(tmp("autopilot-review-")), home = fs.realpathSync(tmp("autopilot-home-")), dir = tmp("autopilot-data-");
+  const db = openDb({ path: path.join(root, "x.db") });
+  const repo = db.repoOf(root);
+  const global = path.join(home, "CLAUDE.md");
+  fs.writeFileSync(global, "Ask before pushing.\n");
+  const runs = [];
+  const run = async (p, files) => (runs.push(files), { code: 0, stdout: `\`\`\`imprimatur-findings\n${JSON.stringify([{ file: global, line: 1, kind: "unclear", title: "remove this rule", detail: "x" }])}\n\`\`\``, stderr: "" });
+  const report = await runAutopilot(jobsOf([], {}, { review: [global] }), handlers({ dir, runId: "g1", at: "2026-11-19T12:00:00Z", root, db, repo, run, dismiss: () => false }), { runId: "g1", at: "t" });
+  assert.equal(runs.length, 1, "no fix run for a file outside the repo");
+  assert.equal(fs.readFileSync(global, "utf8"), "Ask before pushing.\n");
+  assert.match(report.fixed[0].note, /1 found: 0 fixed, 1 left for you/);
+});

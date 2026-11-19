@@ -204,12 +204,18 @@ function handlers(ctx) {
       const rec = ir.recordFindings(ctx.db, ctx.repo.id, ir.parseFindings(r.stdout, j.files), day);
       const gone = rec.closed ? `, ${rec.closed} earlier finding${rec.closed === 1 ? "" : "s"} gone` : "";
       if (!rec.open.length) return { ok: true, note: `nothing found${gone}` };
-      // Fixed in the same job, through the engine: backups, undo, target files only.
-      const targets = [...new Set(rec.open.map((/** @type {any} */ x) => x.links.audit.file))];
-      const res = await engine.runFix({ prompt: prompts.findingsPrompt(rec.open), label: j.label, edit: targets, records: rec.open }, { ...at, run: (p) => ctx.run(p, targets) });
+      // Fixed in the same job, through the engine: backups, undo, target files only. Only the repo's
+      // own files: a finding on the user's global instructions may come from a repo's text talking
+      // the review round, so it waits under Recommendations (security review of #235).
+      const realRoot = fs.realpathSync(ctx.root);
+      const inRepo = (/** @type {any} */ x) => !path.relative(realRoot, path.resolve(x.links.audit.file)).startsWith("..");
+      const fixable = rec.open.filter(inRepo);
+      const targets = [...new Set(fixable.map((/** @type {any} */ x) => x.links.audit.file))];
+      const res = fixable.length ? await engine.runFix({ prompt: prompts.findingsPrompt(fixable), label: j.label, edit: targets, records: fixable }, { ...at, run: (p) => ctx.run(p, targets) })
+        : { ok: true, applied: [], dismissals: [] };
       const edited = new Set(res.applied.map((/** @type {any} */ a) => path.resolve(a.file)));
       let fixed = 0, dropped = 0;
-      for (const x of rec.open)
+      for (const x of fixable)
         if (edited.has(path.resolve(x.links.audit.file))) {
           ctx.db.updateRecord(x.id, { status: "done", body: `${x.body ?? ""}\n\n_Fixed by the setup autopilot, ${day}._` }, ir.ACTOR);
           fixed++;
