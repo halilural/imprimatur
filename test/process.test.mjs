@@ -469,7 +469,8 @@ test("linkAccess (#165): a page WebFetch could not open becomes one link-access 
   assert.deepEqual(fail("https://down.example.com/", "getaddrinfo ENOTFOUND down.example.com"), {});
   assert.equal(calls.filter((a) => a[0] === "issue").length, 1);
   // No query, fragment or user ever reaches the issue or the agent's line; the query-less link is the same link.
-  const secret = fail("https://user:pw@www.example.com/report?token=abc#x", "403");
+  const secret = fail("https://user:pw@www.example.com/report?token=abc#x", "Request to https://user:pw@www.example.com/report?token=abc failed with status code 403");
+  assert.match(JSON.stringify(secret), /HTTP 403/);
   assert.doesNotMatch(JSON.stringify(secret) + JSON.stringify(calls), /token=abc|user:pw/);
   assert.equal(calls.filter((a) => a[0] === "issue").length, 1);
   // At most three a session.

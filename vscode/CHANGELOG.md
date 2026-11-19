@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.196.2] - 2026-11-19
+
+### Fixed
+- A link-access issue says why the page failed in a word ("HTTP 403", "captcha", "login"), never the error's text, which can repeat the whole link and its token (security review of #165).
+
 ## [0.196.1] - 2026-11-19
 
 ### Fixed

@@ -631,13 +631,16 @@ function check(event, input, deps = {}) {
   // waits on the agent remembering the issues skill. A network hiccup (DNS, timeout) is not a blocked page.
   if (event === "PostToolUseFailure" && tool === "WebFetch" && s.linkAccess.mode) {
     const raw = String(ti.url ?? "");
-    const why = String(input.error ?? input.tool_response ?? "").split("\n")[0].slice(0, 200);
+    const err = String(input.error ?? input.tool_response ?? "").split("\n")[0];
+    // Only the reason, never the error text: it can repeat the whole link, token and all (security review).
+    const hit = BLOCKED.exec(err)?.[0] ?? "";
+    const why = /^\d+$/.test(hit) ? `HTTP ${hit}` : hit.toLowerCase();
     /** @type {URL | undefined} */
     let u;
     try {
       u = /^https?:\/\//.test(raw) ? new URL(raw) : undefined;
     } catch {}
-    if (u && BLOCKED.test(why) && !TRANSIENT.test(why)) {
+    if (u && hit && !TRANSIENT.test(err)) {
       // Security review: no user, password, query or fragment leaves the machine (tokens live there),
       // a public repo's issue names the site only, and a session opens at most LINK_ISSUES of them.
       const url = `${u.origin}${u.pathname}`;
