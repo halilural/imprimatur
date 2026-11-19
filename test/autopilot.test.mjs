@@ -130,3 +130,8 @@ test("autopilot: a personal rule in several repos moves to ~/.claude/rules; a tr
   assert.equal(fs.existsSync(global), false);
   assert.equal(fs.readFileSync(fa, "utf8"), "Use pnpm.\n");
 });
+
+test("autopilot: the report keeps more than an answer's first line (#231)", () => {
+  const { gist } = require("../vscode/autopilot.js");
+  assert.equal(gist("All ten parts checked. Summary:\n\n- 1: still holds\n- 2: corrected the table\n"), "All ten parts checked. Summary: 1: still holds 2: corrected the table");
+});
