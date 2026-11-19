@@ -14,6 +14,22 @@ const prompts = require("./fix-prompts.js");
 /** An agent's answer for the report: its first lines as one, so a first line like "Summary:" is not all there is. @param {string} answer */
 const gist = (answer) => answer.split("\n").map((l) => l.replace(/^[\s#>*-]+/, "").trim()).filter(Boolean).join(" ").slice(0, 400);
 
+/**
+ * Whether a file is inside the repo by real path, reached through no link: the one containment check
+ * every autopilot write that must stay in the repo uses. Strict: a path on another drive or the
+ * root itself's sibling never passes.
+ * @param {string} root @param {string} file
+ */
+function inside(root, file) {
+  try {
+    if (engine.throughLink(file)) return false;
+    const rel = path.relative(fs.realpathSync(root), path.resolve(file));
+    return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+  } catch {
+    return false;
+  }
+}
+
 /** At most this many stale documents per run: each costs agent turns. */
 const STALE_PER_RUN = 10;
 
@@ -90,6 +106,11 @@ function handlers(ctx) {
     },
     /** @param {any} j */
     async findings(j) {
+      // A finding Claude's review made on a file outside the repo waits for the user: the same gate
+      // as the review job's, on every path (security review of #235).
+      const held = j.records.filter((/** @type {any} */ r) => r.links?.audit?.ai && !inside(ctx.root, r.links.audit.file));
+      j = { ...j, records: j.records.filter((/** @type {any} */ r) => !held.includes(r)) };
+      if (!j.records.length) return { manual: `${held.length} finding${held.length === 1 ? "" : "s"} on your global instructions: review ${held.length === 1 ? "it" : "them"} under Recommendations` };
       const files = [...new Set(j.records.map((/** @type {any} */ r) => r.links?.audit?.file).filter(Boolean))];
       const res = await engine.runFix({ prompt: prompts.findingsPrompt(j.records), label: j.label, edit: files, records: j.records }, { ...at, run: (p) => ctx.run(p, files) });
       // "other" is work for the user, not a false alarm: it stays open.
@@ -146,8 +167,7 @@ function handlers(ctx) {
       // a repo cloned under the drift roots must not get its text into this repo's hooks unseen).
       if (!PROSE.test(j.rel)) return { manual: "only .claude/rules files are merged alone (a repo's AGENTS.md is its own; commands, skills, hooks and settings can run or grant): compare the copies yourself" };
       // In the repo by real path; a copy reached through a link is not written (fix-engine refuses it too).
-      const realRoot = fs.realpathSync(ctx.root);
-      const mine = j.files.filter((/** @type {string} */ f) => !engine.throughLink(f) && !path.relative(realRoot, path.resolve(f)).startsWith(".."));
+      const mine = j.files.filter((/** @type {string} */ f) => inside(ctx.root, f));
       if (!mine.length) return { manual: "this repo has no copy to write" };
       return fromFix(await engine.runFix({ prompt: driftPrompt(j.rel, j.files, mine), label: j.label, edit: mine, whole: mine }, { ...at, run: (p) => ctx.run(p, j.files) }));
     },
@@ -207,9 +227,7 @@ function handlers(ctx) {
       // Fixed in the same job, through the engine: backups, undo, target files only. Only the repo's
       // own files: a finding on the user's global instructions may come from a repo's text talking
       // the review round, so it waits under Recommendations (security review of #235).
-      const realRoot = fs.realpathSync(ctx.root);
-      const inRepo = (/** @type {any} */ x) => !path.relative(realRoot, path.resolve(x.links.audit.file)).startsWith("..");
-      const fixable = rec.open.filter(inRepo);
+      const fixable = rec.open.filter((/** @type {any} */ x) => inside(ctx.root, x.links.audit.file));
       const targets = [...new Set(fixable.map((/** @type {any} */ x) => x.links.audit.file))];
       const res = fixable.length ? await engine.runFix({ prompt: prompts.findingsPrompt(fixable), label: j.label, edit: targets, records: fixable }, { ...at, run: (p) => ctx.run(p, targets) })
         : { ok: true, applied: [], dismissals: [] };
@@ -349,4 +367,4 @@ function reportMarkdown(r, git = {}) {
   return out.join("\n") + "\n";
 }
 
-module.exports = { jobsOf, handlers, progressOf, runAutopilot, reportMarkdown, summaryLine, stalePrompt, driftPrompt, gist, STALE_PER_RUN };
+module.exports = { jobsOf, handlers, progressOf, inside, runAutopilot, reportMarkdown, summaryLine, stalePrompt, driftPrompt, gist, STALE_PER_RUN };

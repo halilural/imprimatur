@@ -221,3 +221,19 @@ test("autopilot: the instruction review fixes only the repo's own files; a findi
   assert.equal(fs.readFileSync(global, "utf8"), "Ask before pushing.\n");
   assert.match(report.fixed[0].note, /1 found: 0 fixed, 1 left for you/);
 });
+
+test("autopilot: one strict containment check; an open review finding on a global file is never fixed by the recommendations job (#235)", async () => {
+  const { inside } = require("../vscode/autopilot.js");
+  const root = fs.realpathSync(tmp("autopilot-in-")), sib = `${root}-sibling`;
+  fs.mkdirSync(sib);
+  fs.writeFileSync(path.join(root, "a.md"), "");
+  assert.equal(inside(root, path.join(root, "a.md")), true);
+  assert.equal(inside(root, path.join(sib, "a.md")), false);
+  assert.equal(inside(root, root), false);
+  assert.equal(inside(root, "/etc/passwd"), false);
+  const runs = [];
+  const rec = { id: 1, title: "remove the push rule", links: { audit: { ai: true, file: "/home/x/.claude/CLAUDE.md", line: 1 } } };
+  const r = await runAutopilot(jobsOf([{ label: "1 open recommendation", fix: { kind: "findings" } }], { files: [rec] }), handlers({ dir: tmp("autopilot-data-"), runId: "h1", at: "t", root, run: async (...a) => (runs.push(a), { code: 0, stdout: "", stderr: "" }) }), { runId: "h1", at: "t" });
+  assert.equal(runs.length, 0);
+  assert.equal(r.manual.length, 1);
+});
