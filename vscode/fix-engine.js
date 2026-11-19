@@ -16,7 +16,7 @@ const logOf = (dir) => path.join(dir, "undo.jsonl");
 
 /**
  * @typedef {{prompt: string, label: string, edit: string[], whole?: string[], records?: any[]}} Fix
- * @typedef {{run: string, at: string, label: string, file: string, backup: string | null, created: boolean, after: string, undone?: boolean}} UndoLine
+ * @typedef {{run: string, at: string, label: string, file: string, backup: string | null, created: boolean, removed?: boolean, after: string, undone?: boolean}} UndoLine
  */
 
 /**
@@ -97,6 +97,23 @@ function recordChange({ dir, runId, label, at = new Date().toISOString() }, file
   return line;
 }
 
+/**
+ * Removes a file or folder by moving it into the backup (#232: a duplicate skill); undo copies it back.
+ * @param {{dir: string, runId: string, label: string, at?: string}} o @param {string} target
+ * @returns {UndoLine}
+ */
+function recordRemove({ dir, runId, label, at = new Date().toISOString() }, target) {
+  const backups = path.join(dir, "backups", runId);
+  fs.mkdirSync(backups, { recursive: true });
+  const backup = path.join(backups, `${fs.readdirSync(backups).length + 1}-${path.basename(target)}`);
+  fs.cpSync(target, backup, { recursive: true, verbatimSymlinks: true });
+  fs.rmSync(target, { recursive: true, force: true });
+  /** @type {UndoLine} */
+  const line = { run: runId, at, label, file: target, backup, created: false, removed: true, after: "" };
+  fs.appendFileSync(logOf(dir), JSON.stringify(line) + "\n");
+  return line;
+}
+
 /** The undo log, oldest first; a line undone later is marked undone. @param {string} dir @returns {UndoLine[]} */
 function undoLog(dir) {
   let text = "";
@@ -125,6 +142,13 @@ function undoLog(dir) {
  */
 function undo(dir, line) {
   if (line.undone) return { ok: false, why: "already undone" };
+  if (line.removed) {
+    if (fs.existsSync(line.file)) return { ok: false, why: "something is there again" };
+    if (!line.backup || !fs.existsSync(line.backup)) return { ok: false, why: "no backup" };
+    fs.cpSync(line.backup, line.file, { recursive: true, verbatimSymlinks: true });
+    fs.appendFileSync(logOf(dir), JSON.stringify({ undo: true, run: line.run, file: line.file, at: new Date().toISOString() }) + "\n");
+    return { ok: true };
+  }
   let now;
   try {
     now = fs.readFileSync(line.file, "utf8");
@@ -139,4 +163,4 @@ function undo(dir, line) {
   return { ok: true };
 }
 
-module.exports = { autopilotDir, applyPlan, runFix, recordChange, undoLog, undo };
+module.exports = { autopilotDir, applyPlan, runFix, recordChange, recordRemove, undoLog, undo };

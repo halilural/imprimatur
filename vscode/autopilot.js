@@ -16,17 +16,24 @@ const STALE_PER_RUN = 10;
 
 /**
  * The jobs in the checklist's rows. findings: the open recommendations, documentation ones apart.
+ * across (#232): files whose copies differ between repos (absolute paths per copy), and skill
+ * names that come from more than one place.
  * @param {any[]} rows @param {{files?: any[], docs?: any[]}} [findings]
+ * @param {{drift?: Array<{rel: string, files: string[]}>, clashes?: Array<{name: string, from: Array<{source: string, dir: string}>}>}} [across]
  */
-function jobsOf(rows, { files = [], docs = [] } = {}) {
+function jobsOf(rows, { files = [], docs = [] } = {}, { drift = [], clashes = [] } = {}) {
   /** @type {any[]} */
   const jobs = [];
+  for (const d of drift) if (d.files.length > 1) jobs.push({ kind: "drift", label: `Drift: ${d.rel} (${d.files.length} copies)`, rel: d.rel, files: d.files });
+  for (const c of clashes) jobs.push({ kind: "clash", label: `Skill from ${c.from.length} places: ${c.name}`, name: c.name, from: c.from });
   for (const r of rows) {
     const a = r.args?.[0];
     if (r.command === "imprimatur.setup.blockCheck" && a?.root && a?.name) jobs.push({ kind: "block", label: r.label, root: a.root, name: a.name });
     else if (r.command === "imprimatur.setup.updatePlugin" && a?.item?.update) jobs.push({ kind: "plugin", label: r.label, update: a.item.update });
     else if (r.fix?.kind === "health") jobs.push({ kind: "health", label: r.label, problem: r.fix.problem });
-    else if (r.fix?.kind === "skill") jobs.push({ kind: "skill", label: r.label, item: r.fix.item });
+    // A skill's new text is untrusted and goes straight into the agent's context: a model's SAFE
+    // verdict on it is not enough without the user (the text could talk the review round).
+    else if (r.fix?.kind === "skill") jobs.push({ kind: "manual", label: r.label, why: "read the upstream change, then Fix it on the row takes it in" });
     else if (r.fix?.kind === "findings") {
       if (files.length) jobs.push({ kind: "findings", label: `${files.length} recommendation${files.length === 1 ? "" : "s"}`, records: files });
       if (docs.length) jobs.push({ kind: "docs", label: `${docs.length} documentation finding${docs.length === 1 ? "" : "s"}`, records: docs });
@@ -40,8 +47,7 @@ function jobsOf(rows, { files = [], docs = [] } = {}) {
 /**
  * What each kind of job does. ctx: dir, runId, at (the undo log's run); root (the repo);
  * run(prompt, files) → claude -p, read-only, may name the files; docsRun(prompt, recordIds) → the
- * documentation run through Imprimatur's MCP tools; exec(cmd, args) → {code, out}; fetchSkill(origin,
- * ref, dest) → files; dismiss(d) for a finding the agent says to drop; db, repo for stale documents.
+ * documentation run through Imprimatur's MCP tools; exec(cmd, args) → {code, out}; dismiss(d) for a finding the agent says to drop; db, repo for stale documents.
  * Each returns {ok, note, changes?} or {manual: why}.
  * @param {any} ctx
  */
@@ -85,28 +91,6 @@ function handlers(ctx) {
       return fromFix(res, dropped ? `${dropped} dismissed with the agent's reason` : "");
     },
     /** @param {any} j */
-    async skill(j) {
-      const it = j.item;
-      const to = /\.\.\.([0-9a-f]+)$/.exec(it.compare ?? "")?.[1];
-      if (!to || !prompts.skillUpdatePrompt(it)) return { manual: "not a plain GitHub source" };
-      const dest = fs.mkdtempSync(path.join(os.tmpdir(), `imprimatur-skill-${it.label}-`));
-      try {
-        const files = await ctx.fetchSkill(it.origin, to, dest);
-        const r = await ctx.run(prompts.skillUpdatePrompt(it, dest), [path.join(dest, "x")]);
-        const up = require("./upstream.js");
-        const v = up.verdictOf(r.stdout);
-        if (r.code !== 0 || !v.safe) return { ok: false, note: r.code !== 0 ? "the review run stopped" : `not taken in: ${v.reason.slice(0, 160)}` };
-        const dir = path.dirname(it.abs);
-        const touched = [...files.filter((/** @type {string} */ f) => path.basename(f) !== "SOURCE.txt"), "SOURCE.txt"].map((f) => path.join(dir, f));
-        const before = new Map(touched.map((f) => [f, fs.existsSync(f) ? fs.readFileSync(f, "utf8") : null]));
-        up.applySkillUpdate(dest, dir, files, to, up.summaryOf(r.stdout) || "SAFE verdict", (ctx.at ?? new Date().toISOString()).slice(0, 10));
-        const changes = touched.filter((f) => fs.existsSync(f) && fs.readFileSync(f, "utf8") !== before.get(f)).map((f) => engine.recordChange({ ...at, label: j.label }, f, before.get(f) ?? null));
-        return { ok: true, note: `updated to ${to.slice(0, 7)} after a SAFE review`, changes };
-      } finally {
-        fs.rmSync(dest, { recursive: true, force: true });
-      }
-    },
-    /** @param {any} j */
     async stale(j) {
       const stale = require("./stale-docs.js");
       const parts = ctx.db && ctx.repo ? stale.staleParts(ctx.db, ctx.repo, ctx.root).slice(0, STALE_PER_RUN) : [];
@@ -123,10 +107,44 @@ function handlers(ctx) {
       return r.ok ? { ok: true, note: r.answer.split("\n")[0].slice(0, 200) } : { ok: false, note: `the documentation run stopped: ${r.answer.slice(0, 160)}` };
     },
     /** @param {any} j */
+    async drift(j) {
+      return fromFix(await engine.runFix({ prompt: driftPrompt(j.rel, j.files), label: j.label, edit: j.files, whole: j.files }, { ...at, run: (p) => ctx.run(p, j.files) }));
+    },
+    /** @param {any} j */
+    async clash(j) {
+      // Only a repo's own copy goes, and only when another place has the very same skill: two
+      // different skills that share a name are the user's to rename.
+      const text = (/** @type {string} */ d) => {
+        try {
+          return fs.readFileSync(path.join(d, "SKILL.md"), "utf8");
+        } catch {
+          return null;
+        }
+      };
+      const repoCopies = j.from.filter((/** @type {any} */ f) => f.source === "project");
+      const kept = j.from.filter((/** @type {any} */ f) => f.source !== "project");
+      if (!repoCopies.length || !kept.length) return { manual: `${j.from.map((/** @type {any} */ f) => f.source).join(" and ")} both have it: keep one` };
+      const same = repoCopies.every((/** @type {any} */ r) => text(r.dir) !== null && kept.some((/** @type {any} */ k) => text(k.dir) === text(r.dir)));
+      if (!same) return { manual: `the copies differ: two skills share the name ${j.name}; rename or remove one` };
+      const changes = repoCopies.map((/** @type {any} */ r) => engine.recordRemove({ ...at, label: j.label }, r.dir));
+      return { ok: true, note: `the repo's copy removed; the ${kept[0].source} one stays`, changes };
+    },
+    /** @param {any} j */
     async manual(j) {
       return { manual: j.why || "Imprimatur does not do this alone" };
     },
   };
+}
+
+/** A drifted file's instructions: one version for every copy, or nothing when they differ on purpose (#232). @param {string} rel @param {string[]} files */
+function driftPrompt(rel, files) {
+  return [
+    `The agent setup file ${rel} is copied into ${files.length} repos and the copies differ. Read each copy:`,
+    ...files.map((f) => `- ${f}`),
+    "Do not edit any file. Write the one version every repo should have: keep what each copy adds, and where they conflict keep the newer behaviour. Hand it back whole for every copy.",
+    "If a copy differs on purpose (that repo needs its own), change nothing and say why.",
+    'End your answer with one block, each file whole, "old" empty (an empty list when nothing should change):\n```imprimatur-edits\n[{"file": "/abs/path", "old": "", "new": "the whole file"}]\n```',
+  ].join("\n");
 }
 
 /** The documentation run's instructions for stale parts (#211's "Ask Claude to check it", for several). @param {string} root @param {any[]} parts */
@@ -178,4 +196,4 @@ function reportMarkdown(r, git = {}) {
   return out.join("\n") + "\n";
 }
 
-module.exports = { jobsOf, handlers, runAutopilot, reportMarkdown, summaryLine, stalePrompt, STALE_PER_RUN };
+module.exports = { jobsOf, handlers, runAutopilot, reportMarkdown, summaryLine, stalePrompt, driftPrompt, STALE_PER_RUN };
