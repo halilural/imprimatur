@@ -93,6 +93,8 @@ test('Neredeyiz is always open above the band, and its rows send', async ($, on)
   expect(await ui.find({ type: 'Text', text: /^Neredeyiz$/ })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: /Senden beklenen/ })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: /Bugün biten/ })).toBeTruthy()
+  // the whole step shows beside its key: no tooltip exists to reveal a cut one
+  expect(await ui.find({ type: 'Text', text: /^Send the PDFs$/ })).toBeTruthy()
   await ui.press({ key: 'w0' })
   await ui.press({ key: 'o0' })
   await ui.press({ key: 'd0' })

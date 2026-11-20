@@ -154,7 +154,14 @@ export const register: Register = on => {
       rows.length > 0 && (
         <Box key={id} flexDirection="column">
           <Text dimColor>{title}</Text>
-          {rows.map((r, i) => <Button key={`${id}${i}`} plain label={`${r.key} · ${short(r.text, 60)}`} onPress={send(ask(r))} />)}
+          {/* Buttons have no tooltip (hover only restyles) and take a plain label: the key is the button,
+              the text beside it, wrapping (maxLines is refused above the prompt), capped at 160. */}
+          {rows.map((r, i) => (
+            <Box key={`${id}r${i}`} flexDirection="row" gap={1}>
+              <Button key={`${id}${i}`} plain label={r.key} onPress={send(ask(r))} />
+              <Text>{short(r.text, 160)}</Text>
+            </Box>
+          ))}
         </Box>
       )
     const s = where.sprint
