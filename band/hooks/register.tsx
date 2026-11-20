@@ -2,8 +2,8 @@
 // the task worked on last and its 👉 step, how many tasks wait on the user, the repo's git state, and quick
 // prompts that send at a click. The prompts come from the repo's .claude/imprimatur.json "quickPrompts";
 // a repo without one gets DEFAULTS. Ponytail's own row is hidden: its commands are prompts like any other.
-// "Neredeyiz ▸" opens a section above it: what waits on the user, open work, today's done tasks and the sprint,
-// each row a button that sends its prompt; done tasks and the sprint are read only while it is open.
+// Above it, always open (user, 20.11.2026), "Neredeyiz": what waits on the user, open work, today's done tasks
+// and the sprint, each row a button that sends its prompt; refreshed with the rest after each turn.
 import type { EngineInterface, Register } from 'claude-code'
 
 export type QuickPrompt = { label: string; text: string }
@@ -79,7 +79,6 @@ export function sprintOf(milestones: any): Sprint | undefined {
 
 let prompts: QuickPrompt[] = DEFAULTS
 let info: Info = { waiting: 0 }
-let expanded = false
 let where: Where = { open: [], waiting: [], done: [] }
 
 /** An Imprimatur MCP tool's JSON answer, under the name the server has in this setup (user config, or the plugin's). */
@@ -96,7 +95,7 @@ async function imprimatur($: EngineInterface, tool: string, args: Record<string,
   return undefined
 }
 
-/** The section's slow parts (every done task, GitHub's milestones): read only while it is open. */
+/** The section's slower parts: every done task (filtered to today) and GitHub's milestones. */
 async function details($: EngineInterface): Promise<Pick<Where, 'done' | 'sprint'>> {
   const midnight = new Date(await $.clock.now().catch(() => Date.now()))
   midnight.setHours(0, 0, 0, 0)
@@ -128,17 +127,8 @@ async function refresh($: EngineInterface) {
   prompts = quickPromptsOf(await $.fs.read('.claude/imprimatur.json').catch(() => undefined))
   const wwlo = await imprimatur($, 'where_we_left_off')
   info = { ...tasksOf(wwlo), git: await gitState($) }
-  where = { ...where, ...whereOf(wwlo), ...(expanded ? await details($) : {}) }
+  where = { ...whereOf(wwlo), ...(await details($)) }
   $.ui.invalidate('ui.render')
-}
-
-async function toggle($: EngineInterface) {
-  expanded = !expanded
-  $.ui.invalidate('ui.render')
-  if (expanded) {
-    where = { ...where, ...(await details($)) }
-    $.ui.invalidate('ui.render')
-  }
 }
 
 export const register: Register = on => {
@@ -170,16 +160,14 @@ export const register: Register = on => {
     const s = where.sprint
     return (
       <Box flexDirection="column" width={e.surface === 'terminal' ? e.props.bodyColumns : undefined}>
-        {expanded && (
-          <Box flexDirection="column" gap={1}>
+        <Box flexDirection="column" gap={1}>
+          <Text bold>Neredeyiz</Text>
             {section('w', 'Senden beklenen', where.waiting, r => `${r.key}: bende bekleyen adımı göster ve birlikte yapalım`)}
             {section('o', 'Açık işler', where.open, r => `devam et: ${r.key}`)}
             {section('d', 'Bugün biten', where.done, r => `${r.key} ne getirdi, kısaca özetle`)}
             {s && <Button key="sprint" plain label={`${s.title} · ${s.closed} / ${s.total} kapandı`} onPress={send('sprint durumunu göster')} />}
-          </Box>
-        )}
+        </Box>
         <Box flexDirection="row" alignItems="center" gap={2}>
-          <Button key="where" plain label={expanded ? 'Neredeyiz ▾' : 'Neredeyiz ▸'} onPress={() => void toggle($)} />
           {info.task && <Button key="task" plain label={`👉 ${info.task.key} · ${short(info.task.step)}`} onPress={send(`devam et: ${info.task.key}`)} />}
           {info.waiting > 0 && <Text color="warning">Seni bekliyor: {info.waiting}</Text>}
           {g && (g.dirty || g.ahead

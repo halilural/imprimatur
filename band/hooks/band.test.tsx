@@ -53,7 +53,7 @@ test('the band shows the task, what waits, git and the prompts; a press sends', 
   on('process.run', (_, e: any) => (argvs.push(e.argv), {
     value: e.argv.includes('status') ? { exitCode: 0, stdout: ' M a.ts\n', stderr: '' } : { exitCode: 0, stdout: '2\n', stderr: '' },
   }))
-  on('prompt.submit', (_, e: any) => (sent.push(e.text), {}))
+  on('prompt.submit', (_, e: any) => (sent.push(e.text), { text: e.text }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('turn.complete', () => ({}))
 
@@ -70,10 +70,11 @@ test('the band shows the task, what waits, git and the prompts; a press sends', 
   }
   expect(sent.slice(0, 2)).toEqual(['neredeyiz?', 'devam et: #206'])
   // git runs no program a cloned repo's config names
-  expect(argvs.length > 0 && argvs.every(a => a.includes('core.fsmonitor=false') && a.includes('core.hooksPath=/dev/null'))).toBe(true)
+  const gits = argvs.filter(a => a[0] === 'git')
+  expect(gits.length > 0 && gits.every(a => a.includes('core.fsmonitor=false') && a.includes('core.hooksPath=/dev/null'))).toBe(true)
 })
 
-test('Neredeyiz opens above the band, its rows send, and it closes again', async ($, on) => {
+test('Neredeyiz is always open above the band, and its rows send', async ($, on) => {
   const sent: string[] = []
   const DONE = { tasks: [{ key: '#204', title: 'Symbols', done_at: Date.now() }] }
   const MS = [{ title: 'Sprint 9', state: 'open', due_on: '2026-11-27', open_issues: 11, closed_issues: 1 }]
@@ -83,15 +84,13 @@ test('Neredeyiz opens above the band, its rows send, and it closes again', async
   on('process.run', (_, e: any) => ({
     value: e.argv[0] === 'gh' ? { exitCode: 0, stdout: JSON.stringify(MS), stderr: '' } : { exitCode: 0, stdout: '', stderr: '' },
   }))
-  on('prompt.submit', (_, e: any) => (sent.push(e.text), {}))
+  on('prompt.submit', (_, e: any) => (sent.push(e.text), { text: e.text }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
 
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await new Promise(r => setTimeout(r, 0))
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: /Senden beklenen/ })).toBeFalsy()
-  await ui.press({ key: 'where' })
-  await new Promise(r => setTimeout(r, 0))
+  expect(await ui.find({ type: 'Text', text: /^Neredeyiz$/ })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: /Senden beklenen/ })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: /Bugün biten/ })).toBeTruthy()
   await ui.press({ key: 'w0' })
@@ -104,7 +103,5 @@ test('Neredeyiz opens above the band, its rows send, and it closes again', async
     '#204 ne getirdi, kısaca özetle',
     'sprint durumunu göster',
   ])
-  await ui.press({ key: 'where' })
-  expect(await ui.find({ type: 'Text', text: /Senden beklenen/ })).toBeFalsy()
   await ui.unmount()
 })
