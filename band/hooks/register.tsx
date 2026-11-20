@@ -2,6 +2,8 @@
 // the task worked on last and its 👉 step, how many tasks wait on the user, the repo's git state, and quick
 // prompts that send at a click. The prompts come from the repo's .claude/imprimatur.json "quickPrompts";
 // a repo without one gets DEFAULTS. Ponytail's own row is hidden: its commands are prompts like any other.
+// "Neredeyiz ▸" opens a section above it: what waits on the user, open work, today's done tasks and the sprint,
+// each row a button that sends its prompt; done tasks and the sprint are read only while it is open.
 import type { EngineInterface, Register } from 'claude-code'
 
 export type QuickPrompt = { label: string; text: string }
@@ -45,14 +47,46 @@ export function tasksOf(answer: any): Pick<Info, 'task' | 'waiting'> {
 
 const short = (s: string, n = 48) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
+export type Row = { key: string; text: string }
+export type Sprint = { title: string; closed: number; total: number }
+/** The "Neredeyiz" section: open work, what waits on the user, what finished today, the sprint. */
+export type Where = { open: Row[]; waiting: Row[]; done: Row[]; sprint?: Sprint }
+
+/** Open work and the user's from where_we_left_off: each task with a 👉, the user's (owner K) apart. */
+export function whereOf(answer: any): Pick<Where, 'open' | 'waiting'> {
+  const tasks: any[] = (Array.isArray(answer?.tasks) ? answer.tasks : []).filter((t: any) => typeof t?.pointer_title === 'string')
+  const row = (t: any): Row => ({ key: String(t.key), text: t.pointer_title })
+  return {
+    open: tasks.filter(t => t.pointer_owner !== 'K').slice(0, 6).map(row),
+    waiting: tasks.filter(t => t.pointer_owner === 'K').slice(0, 6).map(row),
+  }
+}
+
+/** Tasks done since `since` (ms), newest first, from task_list status done. */
+export function doneOf(answer: any, since: number): Row[] {
+  const tasks: any[] = Array.isArray(answer?.tasks) ? answer.tasks : []
+  return tasks.filter(t => Number(t?.done_at) >= since).slice(0, 5).map(t => ({ key: String(t.key), text: String(t.title ?? '') }))
+}
+
+/** The open sprint milestone due first (GitHub milestones JSON): its closed and total issue counts. */
+export function sprintOf(milestones: any): Sprint | undefined {
+  const list: any[] = Array.isArray(milestones) ? milestones : []
+  const m = list
+    .filter(x => x?.state === 'open' && /^Sprint\b/.test(String(x?.title)))
+    .sort((a, b) => String(a.due_on ?? '9').localeCompare(String(b.due_on ?? '9')))[0]
+  return m ? { title: String(m.title), closed: Number(m.closed_issues) || 0, total: (Number(m.closed_issues) || 0) + (Number(m.open_issues) || 0) } : undefined
+}
+
 let prompts: QuickPrompt[] = DEFAULTS
 let info: Info = { waiting: 0 }
+let expanded = false
+let where: Where = { open: [], waiting: [], done: [] }
 
-/** where_we_left_off, under the name the MCP server has in this setup (user config, or the plugin's). */
-async function whereWeLeftOff($: EngineInterface): Promise<any> {
+/** An Imprimatur MCP tool's JSON answer, under the name the server has in this setup (user config, or the plugin's). */
+async function imprimatur($: EngineInterface, tool: string, args: Record<string, unknown> = {}): Promise<any> {
   for (const server of ['imprimatur', 'plugin:imprimatur:imprimatur']) {
     try {
-      const r = await $.mcp.call(server, 'where_we_left_off', {})
+      const r = await $.mcp.call(server, tool, args)
       const text = r.content.find((c: any) => c.type === 'text') as { text?: string } | undefined
       if (!r.isError && text?.text) return JSON.parse(text.text)
     } catch {
@@ -60,6 +94,21 @@ async function whereWeLeftOff($: EngineInterface): Promise<any> {
     }
   }
   return undefined
+}
+
+/** The section's slow parts (every done task, GitHub's milestones): read only while it is open. */
+async function details($: EngineInterface): Promise<Pick<Where, 'done' | 'sprint'>> {
+  const midnight = new Date(await $.clock.now().catch(() => Date.now()))
+  midnight.setHours(0, 0, 0, 0)
+  const done = doneOf(await imprimatur($, 'task_list', { status: 'done' }), midnight.getTime())
+  const gh = await $.process.run(['gh', 'api', 'repos/{owner}/{repo}/milestones?state=open&per_page=50']).catch(() => undefined)
+  let sprint: Sprint | undefined
+  try {
+    sprint = gh?.exitCode === 0 ? sprintOf(JSON.parse(gh.stdout)) : undefined
+  } catch {
+    sprint = undefined
+  }
+  return { done, sprint }
 }
 
 // A cloned repo's .git/config can name programs git runs (core.fsmonitor, hooks): turned off for these reads.
@@ -77,8 +126,19 @@ async function gitState($: EngineInterface): Promise<Info['git']> {
 
 async function refresh($: EngineInterface) {
   prompts = quickPromptsOf(await $.fs.read('.claude/imprimatur.json').catch(() => undefined))
-  info = { ...tasksOf(await whereWeLeftOff($)), git: await gitState($) }
+  const wwlo = await imprimatur($, 'where_we_left_off')
+  info = { ...tasksOf(wwlo), git: await gitState($) }
+  where = { ...where, ...whereOf(wwlo), ...(expanded ? await details($) : {}) }
   $.ui.invalidate('ui.render')
+}
+
+async function toggle($: EngineInterface) {
+  expanded = !expanded
+  $.ui.invalidate('ui.render')
+  if (expanded) {
+    where = { ...where, ...(await details($)) }
+    $.ui.invalidate('ui.render')
+  }
 }
 
 export const register: Register = on => {
@@ -99,9 +159,27 @@ export const register: Register = on => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const send = (text: string) => () => void $.prompt.submit({ text }).catch(() => $.ui.toast('Imprimatur: the prompt was not sent'))
     const g = info.git
+    // One section of "Neredeyiz": a dim heading and a button per row; nothing when it has no rows.
+    const section = (id: string, title: string, rows: Row[], ask: (r: Row) => string) =>
+      rows.length > 0 && (
+        <Box key={id} flexDirection="column">
+          <Text dimColor>{title}</Text>
+          {rows.map((r, i) => <Button key={`${id}${i}`} plain label={`${r.key} · ${short(r.text, 60)}`} onPress={send(ask(r))} />)}
+        </Box>
+      )
+    const s = where.sprint
     return (
       <Box flexDirection="column" width={e.surface === 'terminal' ? e.props.bodyColumns : undefined}>
+        {expanded && (
+          <Box flexDirection="column" gap={1}>
+            {section('w', 'Senden beklenen', where.waiting, r => `${r.key}: bende bekleyen adımı göster ve birlikte yapalım`)}
+            {section('o', 'Açık işler', where.open, r => `devam et: ${r.key}`)}
+            {section('d', 'Bugün biten', where.done, r => `${r.key} ne getirdi, kısaca özetle`)}
+            {s && <Button key="sprint" plain label={`${s.title} · ${s.closed} / ${s.total} kapandı`} onPress={send('sprint durumunu göster')} />}
+          </Box>
+        )}
         <Box flexDirection="row" alignItems="center" gap={2}>
+          <Button key="where" plain label={expanded ? 'Neredeyiz ▾' : 'Neredeyiz ▸'} onPress={() => void toggle($)} />
           {info.task && <Button key="task" plain label={`👉 ${info.task.key} · ${short(info.task.step)}`} onPress={send(`devam et: ${info.task.key}`)} />}
           {info.waiting > 0 && <Text color="warning">Seni bekliyor: {info.waiting}</Text>}
           {g && (g.dirty || g.ahead
