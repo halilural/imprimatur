@@ -15,11 +15,18 @@ export const DEFAULTS: QuickPrompt[] = [
 const valid = (p: any): p is QuickPrompt =>
   typeof p?.label === 'string' && p.label.trim() !== '' && typeof p?.text === 'string' && p.text.trim() !== ''
 
+// A repo's file is not trusted text: control and bidi characters go (a label must not hide what it sends),
+// and both are capped.
+const clean = (s: string, n: number) => s.replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁦-⁩]/g, ' ').trim().slice(0, n)
+
 /** The repo's quick prompts from its .claude/imprimatur.json text, DEFAULTS when it has none. */
 export function quickPromptsOf(config: string | undefined): QuickPrompt[] {
   try {
     const list = config === undefined ? undefined : JSON.parse(config).quickPrompts
-    const mine = Array.isArray(list) ? list.filter(valid) : []
+    const mine = (Array.isArray(list) ? list.filter(valid) : [])
+      .map(p => ({ label: clean(p.label, 24), text: clean(p.text, 300) }))
+      .filter(p => p.label && p.text)
+      .slice(0, 8)
     return mine.length ? mine : DEFAULTS
   } catch {
     return DEFAULTS
@@ -55,10 +62,13 @@ async function whereWeLeftOff($: EngineInterface): Promise<any> {
   return undefined
 }
 
+// A cloned repo's .git/config can name programs git runs (core.fsmonitor, hooks): turned off for these reads.
+const GIT = ['git', '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null']
+
 async function gitState($: EngineInterface): Promise<Info['git']> {
-  const status = await $.process.run(['git', 'status', '--porcelain']).catch(() => undefined)
+  const status = await $.process.run([...GIT, 'status', '--porcelain']).catch(() => undefined)
   if (!status || status.exitCode !== 0) return undefined // not a git repo
-  const ahead = await $.process.run(['git', 'rev-list', '--count', '@{u}..HEAD']).catch(() => undefined)
+  const ahead = await $.process.run([...GIT, 'rev-list', '--count', '@{u}..HEAD']).catch(() => undefined)
   return {
     dirty: status.stdout.split('\n').filter(Boolean).length,
     ahead: ahead?.exitCode === 0 ? Number(ahead.stdout.trim()) || 0 : 0,
