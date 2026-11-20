@@ -30,6 +30,7 @@ const ROWS = [
   { id: "exercises", label: "Exercises", icon: "mortar-board", command: APP, args: { area: "exercises" }, tooltip: "Topics in small steps you tick (/exercise)" },
   { id: "meetings", label: "Meetings", icon: "organization", command: APP, args: { area: "meetings" }, tooltip: "What was decided and what you took on" },
   { id: "social", label: "Social", icon: "megaphone", command: APP, args: { area: "social" }, tooltip: "Posts written for each platform (/social-post)", social: true },
+  { id: "prompts", label: "Quick prompts", icon: "comment", tooltip: "Your prompts from .claude/imprimatur.json \"quickPrompts\": a click puts one in the Claude Code chat; you send it", prompts: true },
 ];
 const TASK_ICONS = { active: "play-circle", open: "circle-large-outline", done: "pass" };
 const DOC_ICONS = { project: "project", capabilities: "symbol-module", adrs: "law", glossary: "symbol-key", "out-of-scope": "circle-slash", wiki: "notebook" };
@@ -42,6 +43,17 @@ function socialOn() {
   } catch {
     return false;
   }
+}
+
+/**
+ * The repo's quick prompts: .claude/imprimatur.json "quickPrompts", [{label, text}]; entries
+ * without both strings are skipped. A slash command (/ponytail:ponytail full) is a prompt like any other.
+ * @returns {Array<{label: string, text: string}>}
+ */
+function quickPrompts() {
+  const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const list = root ? require("./config.js").repoConfig(root).quickPrompts : undefined;
+  return Array.isArray(list) ? list.filter((p) => typeof p?.label === "string" && p.label.trim() && typeof p?.text === "string" && p.text.trim()) : [];
 }
 
 /**
@@ -126,7 +138,8 @@ class LauncherView {
   children(row) {
     // Drawn (or read) after hidden refreshes: the rows match the badge.
     if (!row && this.stale) this.catchUp();
-    if (!row) return ROWS.filter((r) => !r.social || socialOn());
+    if (!row) return ROWS.filter((r) => (!r.social || socialOn()) && (!r.prompts || quickPrompts().length));
+    if (row.id === "prompts") return quickPrompts().map((p, k) => ({ id: `prompts.${k}`, label: p.label, icon: "comment", command: "imprimatur.launcher.prompt", args: p.text, tooltip: p.text, leaf: true }));
     if (row.id === "docs") return require("./app/model.js").DOCS.map((/** @type {any} */ d) => ({ id: `docs.${d.id}`, label: d.label, icon: /** @type {any} */ (DOC_ICONS)[d.id] ?? "file", command: APP, args: { area: "docs", doc: d.id }, leaf: true }));
     if (row.id === "tasks") return (this.now.tasks ?? []).filter((l) => l.tasks.length).map((l) => ({ id: `tasks.${l.id}`, label: l.label, icon: TASK_ICONS[/** @type {keyof typeof TASK_ICONS} */ (l.id)], open: l.id === "active", items: l.tasks.map((t) => ({ id: t.key, title: t.title, task: t.key, key: t.key, tip: t.summary, when: t.when, last: t.last })) }));
     const parts = this.now.parts;
@@ -208,13 +221,13 @@ class LauncherView {
     }
     const label = row.id === "home" && this.now.inbox ? `${row.label} (${this.now.inbox})` : row.label;
     const open = row.id === "home" && this.now.inbox > 0;
-    const it = new vscode.TreeItem(label, open ? vscode.TreeItemCollapsibleState.Expanded : row.id === "docs" || row.id === "tasks" ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
+    const it = new vscode.TreeItem(label, open ? vscode.TreeItemCollapsibleState.Expanded : row.id === "docs" || row.id === "tasks" || row.id === "prompts" ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
     it.id = row.id;
     it.iconPath = new vscode.ThemeIcon(row.icon, row.id === "home" && this.now.inbox ? new vscode.ThemeColor("charts.orange") : undefined);
     it.tooltip = row.tooltip;
     if (row.id === "edits" && this.now.edits) it.description = `${this.now.edits} under review`;
     if (row.id === "checklist") it.description = this.checklist ? `${this.checklist} to do` : "nothing to do";
-    it.command = { command: row.command, title: row.label, ...(row.args && { arguments: [row.args] }) };
+    if (row.command) it.command = { command: row.command, title: row.label, ...(row.args && { arguments: [row.args] }) };
     return it;
   }
 }
@@ -284,6 +297,7 @@ async function pickStale() {
 function registerLauncher(ctx, counts, inbox) {
   ctx.subscriptions.push(
     vscode.commands.registerCommand("imprimatur.launcher.askClaude", (/** @type {any} */ row) => row?.title && intoChat(askOf(row))),
+    vscode.commands.registerCommand("imprimatur.launcher.prompt", (/** @type {unknown} */ text) => typeof text === "string" && intoChat(text)),
     vscode.commands.registerCommand("imprimatur.staleDocs", () => pickStale()),
     vscode.commands.registerCommand("imprimatur.launcher.find", () => provider.findHere()),
     vscode.commands.registerCommand("imprimatur.launcher.revealTask", (/** @type {string} */ key) => provider.revealTask(key)),
@@ -303,4 +317,4 @@ function registerLauncher(ctx, counts, inbox) {
   return provider;
 }
 
-module.exports = { registerLauncher, LauncherView, ROWS, PARTS, HIDDEN_FULL_MS, refOf, askOf };
+module.exports = { registerLauncher, LauncherView, ROWS, PARTS, HIDDEN_FULL_MS, refOf, askOf, quickPrompts };
