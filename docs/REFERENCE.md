@@ -483,6 +483,7 @@ The MCP server ([mcp/server.mjs](../mcp/server.mjs)) gives every agent the same 
 | `where_we_left_off` | The unfinished tasks and each one's 👉 |
 | `task_list`, `task_get`, `task_upsert` | List, read, and create or update a task |
 | `record_add`, `record_update` | Add a record to a task, or change one |
+| `record_move` | Move a record, with the records under it, to another task |
 | `pointer_set` | Move a task's 👉 |
 | `search` | Search records, in this repo or every repo |
 | `doc_get`, `doc_section_upsert` | Read the design documents and glossary, write a section |

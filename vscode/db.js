@@ -1248,6 +1248,23 @@ class Db {
     });
   }
 
+  /**
+   * Moves a record and every record under it (its parent_id chain: a meeting's decisions,
+   * to-dos and transcript) to another task of the repo, each move versioned. Moved without
+   * its parent, the record loses that link: a parent is a record of the same task.
+   * @param {number} id @param {number} taskId @param {Actor} actor @returns {any[]} the moved records, the given one first
+   */
+  moveRecordTree(id, taskId, actor) {
+    return this.tx(() => {
+      // The given one first, the rest in their order (each move puts a record last).
+      const ids = /** @type {any[]} */ (this.q(`WITH RECURSIVE tree(id) AS (SELECT ? UNION SELECT r.id FROM records r JOIN tree ON r.parent_id = tree.id)
+        SELECT r.id FROM tree JOIN records r ON r.id = tree.id ORDER BY r.id != ?, r.position, r.id`).all(id, id)).map((r) => r.id);
+      const moved = ids.map((i) => this.moveRecord(i, taskId, actor));
+      if (moved[0]?.parent_id != null) moved[0] = this.updateRecord(id, { parent_id: null }, actor);
+      return moved;
+    });
+  }
+
   /** A record's parent (the question an answer answers) is another record of the same task. @param {number} taskId @param {number | null | undefined} parentId @param {number} [self] */
   checkParent(taskId, parentId, self) {
     if (parentId == null) return;

@@ -80,7 +80,7 @@ test("legacy handshake: initialize, initialized, tools/list", async () => {
   assert.equal(list.result.resultType, undefined);
   assert.equal(list.result.ttlMs, undefined, "legacy results stay as they were");
   const names = list.result.tools.map((t) => t.name);
-  assert.deepEqual(names.sort(), ["doc_get", "doc_section_upsert", "exercise_get", "exercise_review", "exercise_save", "pointer_set", "record_add", "record_get", "record_update", "search", "setup_audit", "study_material", "task_get", "task_list", "task_upsert", "where_we_left_off"]);
+  assert.deepEqual(names.sort(), ["doc_get", "doc_section_upsert", "exercise_get", "exercise_review", "exercise_save", "pointer_set", "record_add", "record_get", "record_move", "record_update", "search", "setup_audit", "study_material", "task_get", "task_list", "task_upsert", "where_we_left_off"]);
   for (const t of list.result.tools) {
     assert.equal(t.inputSchema.type, "object");
     assert.equal(typeof t.annotations.readOnlyHint, "boolean");
@@ -321,7 +321,7 @@ test("tools: title, annotations, closed input schemas that still take _session, 
   const ro = Object.fromEntries(tools.map((t) => [t.name, t.annotations.readOnlyHint]));
   assert.deepEqual(ro, {
     where_we_left_off: true, task_list: true, task_get: true, record_get: true, search: true,
-    task_upsert: false, record_add: false, record_update: false, pointer_set: false, doc_get: true, doc_section_upsert: false, setup_audit: false, study_material: true,
+    task_upsert: false, record_add: false, record_update: false, record_move: false, pointer_set: false, doc_get: true, doc_section_upsert: false, setup_audit: false, study_material: true,
     exercise_save: false, exercise_get: true, exercise_review: false,
   });
   // The hook's _session passes the closed schema.
@@ -365,6 +365,7 @@ test("every tool's structuredContent matches its outputSchema", async () => {
   await ok("record_add", { task: "#1", kind: "answer", title: "A", parent_id: q.id });
   const { record: n } = await ok("record_add", { task: "#1", kind: "note", title: "N" });
   await ok("record_update", { id: n.id, status: "done", body: "result" });
+  await ok("record_move", { id: n.id, task: "#2" });
   await ok("pointer_set", { id: q.id });
   await ok("task_list", {});
   await ok("task_get", { key: "#1" });

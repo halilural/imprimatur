@@ -8,16 +8,16 @@ import { handle, toolProfile, profileSetting, TOOL_GROUPS } from "../mcp/server.
 
 const list = (spec) => handle(null, { jsonrpc: "2.0", id: 1, method: "tools/list" }, { client: "t", profile: spec === undefined ? undefined : toolProfile(spec) }).result.tools;
 
-test("profiles: core is the 8 core tools under 12 KB, standard adds docs and the task list, all is every tool", () => {
+test("profiles: core is the 9 core tools under 12 KB, standard adds docs and the task list, all is every tool", () => {
   const core = list("core");
   assert.deepEqual(core.map((t) => t.name).sort(), [...TOOL_GROUPS.core].sort());
   assert.ok(JSON.stringify({ tools: core }).length < 12 * 1024, `core ${JSON.stringify({ tools: core }).length} bytes`);
   assert.ok(core.every((t) => !("outputSchema" in t) && t.inputSchema && t.description), "lean: no output schema");
   assert.deepEqual(list("standard").map((t) => t.name).sort(), [...TOOL_GROUPS.core, ...TOOL_GROUPS.list, ...TOOL_GROUPS.docs].sort());
   const all = list("all");
-  assert.equal(all.length, 16);
+  assert.equal(all.length, 17);
   assert.ok(all.every((t) => t.outputSchema), "all keeps the whole contract");
-  assert.equal(list(undefined).length, 16, "no profile: every tool, as before");
+  assert.equal(list(undefined).length, 17, "no profile: every tool, as before");
 });
 
 test("profiles: groups and tool names combine; unknown words are named and ignored", () => {
@@ -26,7 +26,7 @@ test("profiles: groups and tool names combine; unknown words are named and ignor
   assert.deepEqual(p.unknown, ["nonsense"]);
   assert.equal(p.lean, true);
   assert.equal(toolProfile("all,core").lean, false);
-  assert.equal(toolProfile("nonsense").names.size, 16, "nothing known: every tool");
+  assert.equal(toolProfile("nonsense").names.size, 17, "nothing known: every tool");
 });
 
 test("profiles: a tool outside the profile cannot be called", () => {
