@@ -179,7 +179,7 @@ const TOOLS = [
     name: "task_list",
     title: "List tasks",
     description: "Tasks of the repo, most recently updated first.",
-    inputSchema: input({ repo: repoArg, status: { type: "string", enum: TASK_STATUS } }),
+    inputSchema: input({ repo: repoArg, status: { type: "string", enum: TASK_STATUS }, limit: { type: "integer", minimum: 1, description: "At most this many, the most recently updated" } }),
     outputSchema: output({ tasks: { type: "array", items: TASK } }),
     readOnly: true,
   },
@@ -685,7 +685,7 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
       return { tasks, docs, ...(problem && { docs_problem: problem }) };
     }
     case "task_list":
-      return { tasks: db.tasksOf(repoOf(db, a.repo).id, { status: a.status }) };
+      return { tasks: db.tasksOf(repoOf(db, a.repo).id, { status: a.status }).slice(0, a.limit) };
     case "task_get": {
       const repo = repoOf(db, a.repo);
       return taskRecords(db, taskOf(db, repo, a.key), a, repo);
