@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { DEFAULTS, doneOf, quickPromptsOf, sprintOf, topicOf, workOf } from './register.tsx'
+import { DEFAULTS, doneOf, quickPromptsOf, rowOf, sprintOf, topicOf, workOf } from './register.tsx'
 
 const BAND = {
   plugin: 'imprimatur-band',
@@ -154,5 +154,22 @@ test('the work in hand shows while the agent works, and moves to Bitti when the 
   sent.length = 0
   await ui.press({ key: 's0' })
   expect(sent[0]).toMatch(/^az önce şunu yaptın: "gitlab plugin için task statüsü"/)
+  await ui.unmount()
+})
+
+test('a row\'s text drops the key it starts with', async () => {
+  expect(rowOf('LATD-14145', 'LATD-14145-KMS Code Refactor')).toEqual({ key: 'LATD-14145', text: 'KMS Code Refactor' })
+  expect(rowOf('LATD-12675', 'LATD-12675 - PushNotificationIT')).toEqual({ key: 'LATD-12675', text: 'PushNotificationIT' })
+  expect(rowOf('#236', 'A report')).toEqual({ key: '#236', text: 'A report' })
+  expect(rowOf('X', 'X')).toEqual({ key: 'X', text: 'X' })
+})
+
+test('a short reply is no work: it does not show under Şimdi or Bitti', async ($, on) => {
+  fake(on, { wwlo: { tasks: [] }, done: { tasks: [] }, sent: [] })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await new Promise(r => setTimeout(r, 0))
+  await $.prompt.submit({ text: 'reload ettikk' })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props, isWorking: true } })
+  expect(await ui.find({ type: 'Text', text: /^reload ettikk$/ })).toBeFalsy()
   await ui.unmount()
 })
