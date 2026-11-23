@@ -54,6 +54,14 @@ const tasksIn = (answer: any): any[] => (Array.isArray(answer?.tasks) ? answer.t
 const shown = (t: any) => t?.key !== 'AUTOPILOT' && typeof t?.title === 'string' && t.title.trim() !== ''
 const pointed = (t: any) => typeof t?.pointer_title === 'string'
 
+/** A row: the task's text without the key it starts with ("LATD-14145-KMS Code Refactor" beside its key button). */
+export function rowOf(key: any, text: any): Row {
+  const k = String(key)
+  const t = String(text ?? '')
+  const rest = t.startsWith(k) ? t.slice(k.length).replace(/^[\s\-:·–—]+/, '') : t
+  return { key: k, text: rest || t }
+}
+
 /**
  * From where_we_left_off: in progress (active, or a 👉 that is the agent's), the first open task not started
  * as the next, and the tasks whose 👉 is the user's.
@@ -64,15 +72,15 @@ export function workOf(answer: any): Pick<State, 'open' | 'next' | 'waiting'> {
   const going = tasks.filter(t => !mine.includes(t) && (t.status === 'active' || pointed(t)))
   const next = tasks.find(t => t.status === 'open' && !pointed(t))
   return {
-    open: going.slice(0, 3).map(t => ({ key: String(t.key), text: String(t.pointer_title ?? (t.summary || t.title)) })),
-    next: next && { key: String(next.key), text: String(next.title) },
-    waiting: mine.slice(0, 2).map(t => ({ key: String(t.key), text: String(t.pointer_title) })),
+    open: going.slice(0, 3).map(t => rowOf(t.key, t.pointer_title ?? (t.summary || t.title))),
+    next: next && rowOf(next.key, next.title),
+    waiting: mine.slice(0, 2).map(t => rowOf(t.key, t.pointer_title)),
   }
 }
 
 /** The latest done tasks from task_list {status: done, limit}. */
 export function doneOf(answer: any): Row[] {
-  return tasksIn(answer).filter(shown).slice(0, 2).map(t => ({ key: String(t.key), text: String(t.title) }))
+  return tasksIn(answer).filter(shown).slice(0, 2).map(t => rowOf(t.key, t.title))
 }
 
 /** The open "Sprint…" milestone due first: its closed and total issues, and whole days left (negative: past due). */
@@ -168,7 +176,9 @@ export const register: Register = on => {
   })
   on('prompt.submit', async ($, e, next) => {
     const r = await next(e)
+    // A short reply ("olur", "reload ettik") is no work to list.
     const topic = e.isMeta || e.command ? '' : topicOf(e.text)
+    if (topic.split(/\s+/).length < 4) return r
     if (topic) {
       working = topic
       $.ui.invalidate('ui.render')
@@ -191,10 +201,12 @@ export const register: Register = on => {
     // Three columns (user, 2026-11-23: small buttons, the description apart, space and a line between):
     // the section label, a fixed-width column for the short button, then the whole text, wrapping in its column.
     // nowrap: VS Code otherwise drops a long text under its button.
+    // The button column fits the longest key (LATD-14145 overflowed a fixed 9 into its text).
+    const keyWidth = Math.max(9, ...[...done, ...open, ...waiting, ...(nx ? [nx] : [])].map(r => r.key.length + 4))
     const row = (id: string, label: string, button: any, text?: any) => (
       <Box key={id} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="flex-start" paddingY={e.surface === 'terminal' ? 0 : 0.25}>
         <Box width={9} flexShrink={0}><Text dimColor>{label}</Text></Box>
-        <Box width={9} flexShrink={0}>{button}</Box>
+        <Box width={keyWidth} flexShrink={0}>{button}</Box>
         {text && <Box flexGrow={1} flexShrink={1} minWidth={0}>{text}</Box>}
       </Box>
     )
