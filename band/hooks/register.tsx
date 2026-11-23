@@ -158,35 +158,46 @@ export const register: Register = on => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const send = (text: string) => () => void $.prompt.submit({ text }).catch(() => $.ui.toast('Imprimatur: the prompt was not sent'))
     const { known, done, open, next: nx, waiting, sprint: s, context } = state
-    // A fixed label column, then the row's one Button.
-    const row = (id: string, label: string, ...body: any[]) => (
-      // nowrap: VS Code otherwise drops a long text under its button, with a blank row between
-      <Box key={id} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
+    // Three columns (user, 2026-11-23: small buttons, the description apart, space and a line between):
+    // the section label, a fixed-width column for the short button, then the text cut at the edge.
+    // nowrap: VS Code otherwise drops a long text under its button.
+    const row = (id: string, label: string, button: any, text?: any) => (
+      <Box key={id} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center" paddingY={e.surface === 'terminal' ? 0 : 0.25}>
         <Box width={9} flexShrink={0}><Text dimColor>{label}</Text></Box>
-        {body}
+        <Box width={9} flexShrink={0}>{button}</Box>
+        {text && <Box flexGrow={1} flexShrink={1} minWidth={0}>{text}</Box>}
       </Box>
     )
-    // One Button per row (user, 2026-11-23): a key button beside its text left the texts unaligned.
-    // A plain label: this build refuses a Button with Text children (probed 2026-11-23).
     const line = (id: string, label: string, r: Row, ask: string) => row(id, label,
-      <Button key={id} plain label={`${r.key} · ${short(r.text, 64)}`} onPress={send(ask)} />)
+      <Button key={id} plain label={r.key} onPress={send(ask)} />,
+      <Text wrap="truncate-end">{r.text}</Text>)
+    // A section: its rows with a little space between, a dim rule under it.
+    const rule = (id: string) => <Text key={id} dimColor wrap="truncate">{'─'.repeat(e.props.bodyColumns || 80)}</Text>
+    const section = (id: string, rows: any[]) => rows.length > 0 && (
+      <Box key={id} flexDirection="column">{rows}{rule(`${id}-rule`)}</Box>
+    )
     const past = s?.daysLeft !== undefined && s.daysLeft < 0
 
     return (
       <Box flexDirection="column" width={e.surface === 'terminal' ? e.props.bodyColumns : undefined}>
-        {done.map((r, i) => line(`d${i}`, i ? '' : 'Bitti', r, `${r.key} ne getirdi, kısaca özetle`))}
-        {open.map((r, i) => line(`o${i}`, i ? '' : 'Açık', r, `devam et: ${r.key}`))}
-        {nx && line('next', 'Sıradaki', nx, `başla: ${nx.key}`)}
-        {!nx && known && row('next', 'Sıradaki',
-          <Button key="next" plain label="açık iş yok · seç" onPress={send("açık issue'lara bak, sıradaki işi öner ve başla")} />)}
-        {waiting.map((r, i) => line(`w${i}`, i ? '' : 'Sende', r, `${r.key}: bende bekleyen adımı göster ve birlikte yapalım`))}
-        {s && past && row('sprint', 'Sprint',
-          <Button key="sprint" plain label={`${short(s.title, 30)} bitti, ${-s.daysLeft!} gün önce · planla`} onPress={send('yeni sprint planla')} />)}
-        {s && !past && row('sprint', 'Sprint',
-          <Text key="sprintt" dimColor>{`${short(s.title, 30)} · ${s.closed}/${s.total} kapandı${s.daysLeft !== undefined ? ` · ${s.daysLeft} gün kaldı` : ''}`}</Text>)}
-        {context !== undefined && context >= 70 && row('ctx', 'Bağlam',
-          <Text key="ctx" color="warning">{`%${Math.round(context)} dolu · iyi bir yerde /compact`}</Text>)}
-        {row('prompts', '', ...prompts.map((p, i) => <Button key={`p${i}`} plain label={p.label} onPress={send(p.text)} />))}
+        {section('done', done.map((r, i) => line(`d${i}`, i ? '' : 'Bitti', r, `${r.key} ne getirdi, kısaca özetle`)))}
+        {section('open', open.map((r, i) => line(`o${i}`, i ? '' : 'Açık', r, `devam et: ${r.key}`)))}
+        {section('next', nx ? [line('next', 'Sıradaki', nx, `başla: ${nx.key}`)] : known ? [row('next', 'Sıradaki',
+          <Button key="next" plain label="seç" onPress={send("açık issue'lara bak, sıradaki işi öner ve başla")} />,
+          <Text dimColor>açık iş yok</Text>)] : [])}
+        {section('wait', waiting.map((r, i) => line(`w${i}`, i ? '' : 'Sende', r, `${r.key}: bende bekleyen adımı göster ve birlikte yapalım`)))}
+        {section('sprint', [
+          s && past && row('sprint', 'Sprint',
+            <Button key="sprint" plain label="planla" onPress={send('yeni sprint planla')} />,
+            <Text color="warning" wrap="truncate-end">{`${s.title} bitti, ${-s.daysLeft!} gün önce`}</Text>),
+          s && !past && row('sprint', 'Sprint', undefined,
+            <Text dimColor wrap="truncate-end">{`${s.title} · ${s.closed}/${s.total} kapandı${s.daysLeft !== undefined ? ` · ${s.daysLeft} gün kaldı` : ''}`}</Text>),
+          context !== undefined && context >= 70 && row('ctx', 'Bağlam', undefined,
+            <Text color="warning">{`%${Math.round(context)} dolu · iyi bir yerde /compact`}</Text>),
+        ].filter(Boolean))}
+        <Box flexDirection="row" gap={1}>
+          {prompts.map((p, i) => <Button key={`p${i}`} plain label={p.label} onPress={send(p.text)} />)}
+        </Box>
       </Box>
     )
   })

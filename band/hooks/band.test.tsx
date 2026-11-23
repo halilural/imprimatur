@@ -85,9 +85,10 @@ test('the band: done, open, next, the user\'s, a past sprint, context; every key
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...BAND, surface })
     for (const t of [/^Bitti$/, /^Açık$/, /^Sıradaki$/, /%82 dolu/]) expect(await ui.find({ type: 'Text', text: t })).toBeTruthy()
-    // each row is one Button: the key and its text in one label
-    for (const l of [/^BAND · Band rebuilt$/, /^#206 · Add the band$/, /^#236 · Health-check report$/, /^Sprint 5 bitti, 14 gün önce · planla$/])
-      expect(await ui.find({ type: 'Button', text: l })).toBeTruthy()
+    // a short key button, its text apart beside it
+    for (const l of [/^BAND$/, /^#206$/, /^#236$/, /^planla$/]) expect(await ui.find({ type: 'Button', text: l })).toBeTruthy()
+    for (const t of [/^Band rebuilt$/, /^Add the band$/, /^Health-check report$/, /^Sprint 5 bitti, 14 gün önce$/])
+      expect(await ui.find({ type: 'Text', text: t })).toBeTruthy()
     expect(await ui.find({ type: 'Text', text: /Last run/ })).toBeFalsy()
     await ui.unmount()
   }
