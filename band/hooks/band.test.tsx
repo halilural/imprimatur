@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { DEFAULTS, doneOf, quickPromptsOf, sprintOf, workOf } from './register.tsx'
+import { DEFAULTS, doneOf, quickPromptsOf, sprintOf, topicOf, workOf } from './register.tsx'
 
 const BAND = {
   plugin: 'imprimatur-band',
@@ -69,7 +69,7 @@ function fake(on: any, o: { wwlo?: any; done?: any; ms?: any; percent?: number; 
   on('session.usage', () => ({ value: { startedAt: 0, context: { percent: o.percent ?? 10 } } }))
   on('prompt.submit', (_: any, e: any) => (o.sent.push(e.text), { text: e.text }))
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
-  on('turn.complete', () => ({}))
+  on('turn.complete', () => ({ text: 'done' }))
 }
 
 test('the band: done, open, next, the user\'s, a past sprint, context; every key starts its work', async ($, on) => {
@@ -127,5 +127,32 @@ test('nothing open: "seç" asks for the next work; empty rows hidden', async ($,
   for (const t of [/^Bitti$/, /^Açık$/, /^Sende$/, /^Sprint$/, /^Bağlam$/]) expect(await ui.find({ type: 'Text', text: t })).toBeFalsy()
   await ui.press({ key: 'next' })
   expect(sent).toEqual(["açık issue'lara bak, sıradaki işi öner ve başla"])
+  await ui.unmount()
+})
+
+test('a prompt\'s topic: its first line, a paste\'s tags left out, capped', async () => {
+  expect(topicOf('\n  push et her şeyi \n')).toBe('push et her şeyi')
+  expect(topicOf('<pasted_content id="x">\nimprimatur-private reposunda bir değişiklik\nmore')).toBe('imprimatur-private reposunda bir değişiklik')
+  expect(topicOf('x'.repeat(300)).length).toBe(160)
+})
+
+test('the work in hand shows while the agent works, and moves to Bitti when the turn ends', async ($, on) => {
+  const sent: string[] = []
+  fake(on, { wwlo: { tasks: [] }, done: DONE, sent })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await new Promise(r => setTimeout(r, 0))
+  await $.prompt.submit({ text: 'gitlab plugin için task statüsü\ndetaylar' })
+  let ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props, isWorking: true } })
+  expect(await ui.find({ type: 'Text', text: /^Şimdi$/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /^gitlab plugin için task statüsü$/ })).toBeTruthy()
+  await ui.unmount()
+  await ($ as any).turn.complete({ reason: 'answer', answer: 'done', durationMs: 1, isAborted: false, turnId: 't1' })
+  await new Promise(r => setTimeout(r, 0))
+  ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /^Şimdi$/ })).toBeFalsy()
+  expect(await ui.find({ type: 'Text', text: /^gitlab plugin için task statüsü$/ })).toBeTruthy()
+  sent.length = 0
+  await ui.press({ key: 's0' })
+  expect(sent[0]).toMatch(/^az önce şunu yaptın: "gitlab plugin için task statüsü"/)
   await ui.unmount()
 })

@@ -96,6 +96,20 @@ const short = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…
 
 let prompts: QuickPrompt[] = DEFAULTS
 let state: State = { known: false, done: [], open: [], waiting: [] }
+// This session's work as the prompts that asked for it (user, 2026-11-23: "show the work being done, and
+// change when the agent finishes"): work that is no Imprimatur task shows too.
+let working: string | undefined
+let finished: string[] = []
+
+/** What a prompt asks for, in one line: its first line of text, a paste's tags left out. */
+export function topicOf(text: string): string {
+  const first = String(text ?? '')
+    .replace(/<\/?pasted_content[^>]*>/g, '')
+    .split('\n')
+    .map(l => l.trim())
+    .find(Boolean) ?? ''
+  return short(first, 160)
+}
 
 /** An Imprimatur MCP tool's JSON answer, under the name the server has in this setup (user config, or the plugin's). */
 async function imprimatur($: EngineInterface, tool: string, args: Record<string, unknown> = {}): Promise<any> {
@@ -152,8 +166,19 @@ export const register: Register = on => {
     })()
     return r
   })
+  on('prompt.submit', async ($, e, next) => {
+    const r = await next(e)
+    const topic = e.isMeta || e.command ? '' : topicOf(e.text)
+    if (topic) {
+      working = topic
+      $.ui.invalidate('ui.render')
+    }
+    return r
+  })
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
+    if (working) finished = [working, ...finished.filter(t => t !== working)].slice(0, 2)
+    working = undefined
     void refresh($)
     return r
   })
@@ -185,7 +210,13 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column" width={e.surface === 'terminal' ? e.props.bodyColumns : undefined}>
-        {section('done', done.map((r, i) => line(`d${i}`, i ? '' : 'Bitti', r, `${r.key} ne getirdi, kısaca özetle`)))}
+        {working && section('now', [row('now', 'Şimdi', <Text key="nowb" color="warning">● çalışıyor</Text>, <Text>{working}</Text>)])}
+        {section('done', [
+          ...finished.map((t, i) => row(`s${i}`, i ? '' : 'Bitti',
+            <Button key={`s${i}`} plain label="özet" onPress={send(`az önce şunu yaptın: "${short(t, 80)}". Ne değişti, kısaca özetle`)} />,
+            <Text>{t}</Text>)),
+          ...done.map((r, i) => line(`d${i}`, i || finished.length ? '' : 'Bitti', r, `${r.key} ne getirdi, kısaca özetle`)),
+        ])}
         {section('open', open.map((r, i) => line(`o${i}`, i ? '' : 'Açık', r, `devam et: ${r.key}`)))}
         {section('next', nx ? [line('next', 'Sıradaki', nx, `başla: ${nx.key}`)] : known ? [row('next', 'Sıradaki',
           <Button key="next" plain label="seç" onPress={send("açık issue'lara bak, sıradaki işi öner ve başla")} />,
