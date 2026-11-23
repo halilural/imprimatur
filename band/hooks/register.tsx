@@ -160,14 +160,18 @@ export const register: Register = on => {
     const { known, done, open, next: nx, waiting, sprint: s, context } = state
     // A fixed label column, the key as the button, the text beside it cut to one line.
     const row = (id: string, label: string, ...body: any[]) => (
-      <Box key={id} flexDirection="row" gap={1} alignItems="center">
-        <Box width={9}><Text dimColor>{label}</Text></Box>
+      // nowrap: VS Code otherwise drops a long text under its button, with a blank row between
+      <Box key={id} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
+        <Box width={9} flexShrink={0}><Text dimColor>{label}</Text></Box>
         {body}
       </Box>
     )
+    // The text's Box shrinks (minWidth 0) so the Text cuts at the edge instead of pushing the row wider.
     const line = (id: string, label: string, r: Row, ask: string, color?: string) => row(id, label,
       <Button key={id} plain label={r.key} onPress={send(ask)} />,
-      <Text key={`${id}t`} wrap="truncate-end" color={color}>{short(r.text, 90)}</Text>)
+      <Box key={`${id}b`} flexGrow={1} flexShrink={1} minWidth={0}>
+        <Text wrap="truncate-end" color={color}>{short(r.text, 90)}</Text>
+      </Box>)
     const past = s?.daysLeft !== undefined && s.daysLeft < 0
 
     return (
