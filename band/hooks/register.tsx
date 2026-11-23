@@ -158,7 +158,7 @@ export const register: Register = on => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const send = (text: string) => () => void $.prompt.submit({ text }).catch(() => $.ui.toast('Imprimatur: the prompt was not sent'))
     const { known, done, open, next: nx, waiting, sprint: s, context } = state
-    // A fixed label column, the key as the button, the text beside it cut to one line.
+    // A fixed label column, then the row's one Button.
     const row = (id: string, label: string, ...body: any[]) => (
       // nowrap: VS Code otherwise drops a long text under its button, with a blank row between
       <Box key={id} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center">
@@ -166,12 +166,10 @@ export const register: Register = on => {
         {body}
       </Box>
     )
-    // The text's Box shrinks (minWidth 0) so the Text cuts at the edge instead of pushing the row wider.
-    const line = (id: string, label: string, r: Row, ask: string, color?: string) => row(id, label,
-      <Button key={id} plain label={r.key} onPress={send(ask)} />,
-      <Box key={`${id}b`} flexGrow={1} flexShrink={1} minWidth={0}>
-        <Text wrap="truncate-end" color={color}>{short(r.text, 90)}</Text>
-      </Box>)
+    // One Button per row (user, 2026-11-23): a key button beside its text left the texts unaligned.
+    // A plain label: this build refuses a Button with Text children (probed 2026-11-23).
+    const line = (id: string, label: string, r: Row, ask: string) => row(id, label,
+      <Button key={id} plain label={`${r.key} · ${short(r.text, 64)}`} onPress={send(ask)} />)
     const past = s?.daysLeft !== undefined && s.daysLeft < 0
 
     return (
@@ -180,12 +178,10 @@ export const register: Register = on => {
         {open.map((r, i) => line(`o${i}`, i ? '' : 'Açık', r, `devam et: ${r.key}`))}
         {nx && line('next', 'Sıradaki', nx, `başla: ${nx.key}`)}
         {!nx && known && row('next', 'Sıradaki',
-          <Button key="next" plain label="seç" onPress={send("açık issue'lara bak, sıradaki işi öner ve başla")} />,
-          <Text key="nextt" dimColor>açık iş yok</Text>)}
-        {waiting.map((r, i) => line(`w${i}`, i ? '' : 'Sende', r, `${r.key}: bende bekleyen adımı göster ve birlikte yapalım`, 'warning'))}
+          <Button key="next" plain label="açık iş yok · seç" onPress={send("açık issue'lara bak, sıradaki işi öner ve başla")} />)}
+        {waiting.map((r, i) => line(`w${i}`, i ? '' : 'Sende', r, `${r.key}: bende bekleyen adımı göster ve birlikte yapalım`))}
         {s && past && row('sprint', 'Sprint',
-          <Button key="sprint" plain label="planla" onPress={send('yeni sprint planla')} />,
-          <Text key="sprintt" color="warning">{`${short(s.title, 30)} bitti, ${-s.daysLeft!} gün önce`}</Text>)}
+          <Button key="sprint" plain label={`${short(s.title, 30)} bitti, ${-s.daysLeft!} gün önce · planla`} onPress={send('yeni sprint planla')} />)}
         {s && !past && row('sprint', 'Sprint',
           <Text key="sprintt" dimColor>{`${short(s.title, 30)} · ${s.closed}/${s.total} kapandı${s.daysLeft !== undefined ? ` · ${s.daysLeft} gün kaldı` : ''}`}</Text>)}
         {context !== undefined && context >= 70 && row('ctx', 'Bağlam',
