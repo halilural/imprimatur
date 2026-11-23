@@ -13,3 +13,6 @@ Five areas (g h/t/d/e/s) and More; / or ctrl/cmd+k opens Search and Ask; the wai
 
 ---
 Superseded in part (2026-11-19): decision 10918 (user, 2026-11-12) removed the top bar, left nav, g-shortcuts and doc pills described above; the panel now has no navigation of its own, and VS Code's side bar tree (`imprimatur.launcher`) holds it. The old panel is not merely "beside it until #197 and #199" any more: #199 and #197 shipped Edits and Tasks in the new panel, and the old one (graphView.js and the pages' HTML in tasksView, docsView, exerciseView) was deleted outright, not kept around (see docs/adr/0133). Still true against the code: the module split (`vscode/app/model.js` pure data, `vscode/app/html.js` pure HTML, `vscode/app/panel.js` the webview glue, re-rendered on every move), the reading layout and its 900px breakpoint (`vscode/app/html.js`), VS Code theme variables only, the strict CSP (one nonce'd script, `script-src 'nonce-...'`), and capabilities still shown as a pill per capability.
+
+---
+Checked against the code (2026-11-23): still holds. The one `vscode/launcherView.js` commit since the last check only added a "Quick prompts" row (reading `.claude/imprimatur.json` "quickPrompts") — it did not touch navigation, the module split, the 900px breakpoint, theme variables or the CSP, all still as described above.

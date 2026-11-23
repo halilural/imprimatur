@@ -10,3 +10,6 @@ record: e5d4e984-fbb4-43c9-a208-0c77702b489d
 The agent's reply language is one per-machine setting, said at every session start; English by default
 
 The user wanted the chat language held by Imprimatur instead of one agent's memory. `replyLang` comes from IMPRIMATUR_REPLY_LANG, the plugin's `reply_language` option, then config.json `replyLang` (`npm run setup -- --reply-lang X`); without one, English. SessionStart says it in every repo, with or without process settings. It is kept apart from `lang` (hook-written text) and a repo's own `lang` (records, documents, commits), since a repo can keep English records while the chat is in Turkish. This machine: replyLang Turkish.
+
+---
+Checked against the code (2026-11-23): still holds. `vscode/config.js`'s `replyLang(env, config)` still resolves `env.IMPRIMATUR_REPLY_LANG` ?? `env.CLAUDE_PLUGIN_OPTION_REPLY_LANGUAGE` ?? `config.replyLang` ?? `"English"`; `vscode/process.js` still says it at SessionStart (`say("replyLang", ...)`) independent of process settings; `scripts/setup.mjs` still exposes `--reply-lang` and writes `config.json`'s `replyLang`.

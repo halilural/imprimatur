@@ -86,7 +86,7 @@ Each finding is marked in the audit by whether Claude Code loads that file (`lin
 
 ## 3. Process checks
 
-The development process rules (formerly `.claude/hooks/*.sh` copied into every repo) run in one place, Imprimatur's global hook (`hooks/process.mjs` → `vscode/process.js`).
+The development process rules (formerly `.claude/hooks/*.sh` copied into every repo) run in one place, Imprimatur's global hook (`hooks/run.mjs` → `vscode/process.js`).
 
 ### Turning on and configuration
 
@@ -99,21 +99,32 @@ The development process rules (formerly `.claude/hooks/*.sh` copied into every r
 | Event | Check | Default | What it does |
 |---|---|---|---|
 | SessionStart | `whereWeLeftOff` | on | Unfinished tasks and their 👉 from the database (at most 4,000 characters) |
+| SessionStart | `ownRules` | warn | (#208) `.claude/rules/imprimatur.md` has no Imprimatur header: it is the user's, not rewritten |
+| SessionStart, edit | `docSync` | warn | (#73) the design documents and their Markdown files out of sync (docs-sync.js) |
 | PreToolUse Bash | `hookBypass` | block | `git --no-verify`, `commit -n`, `HUSKY=0` |
+| PreToolUse Bash | `commitRef` | block | (#223) a commit naming no task (`#N`, a Jira key) in a session with no task |
 | PreToolUse edit | `mainGuard` | block | On `main`, only allowed paths (default `^docs/`) |
-| PreToolUse edit | `designFirst` | warn | Code on a `<type>/<n>-…` branch while the task has no ADR/PDR |
+| PreToolUse edit | `designFirst` | warn | Code on a `<type>/<n>-…` branch while the task has no spec or ADR |
+| PreToolUse edit | `fileContext` | warn | The first edit of a file in the session: the decisions and records linked to it |
 | PostToolUse edit | `docsToc` | warn | When `docs/**/*.md` changes, the repo's table-of-contents script (only in a trusted repo) |
 | PostToolUse edit | `unopenedSources` | warn | A source marked "not opened" in market research |
 | PostToolUse Bash | `issueCreate`, `issueFields` | warn | After `gh issue create`: epic, board, milestone, Imprimatur task |
+| PostToolUse Bash | `fileWork` | block | (#223) the turn committed, pushed or ran a deploy-like command and the session wrote nothing to Imprimatur |
 | PostToolUse MCP | `sweep` | warn | The task is done but the issue is open (silent while issue tracker sync is running) |
-| Stop | `status` | block | The answer has no "Where are we" section |
-| SessionStart, Bash | `branchFinish` | warn | Branches that were merged but left behind |
+| PostToolUse MCP | `issueBody` | on | (#223) `task_upsert` on `#N` with no issue body: pulled from GitHub |
 | PostToolUse MCP, Stop | `docUpdate` | warn | No document section is linked to an added/changed ADR or PDR |
+| PostToolUseFailure WebFetch | `linkAccess` | warn | (#165) a page WebFetch could not open (blocked, login, JavaScript only) becomes a link-access issue |
+| Stop | `status` | block | The answer has no "Where we are" section |
+| Stop | `specFirst` | block | (#223, #227) an open or active task the session wrote to has no spec: asked once |
+| Stop | `evidence` | warn | (#209) a turn-end claim (tests pass, fixed, verified) in a turn that ran no command |
+| Stop | `reask` | block | (#210) the user approved and the reply asks again instead of doing it: the agent goes back once |
+| Stop | `keepGoing` | block | (#194) an epic in progress goes on to its next ready child instead of ending the turn; a per-session counter (10) is the valve |
+| SessionStart, Bash | `branchFinish` | warn | Branches that were merged but left behind |
 
 Repo-specific rules (an em dash ban, deploy, migrations, etc.) are out of scope and stay in the repo.
 
 ---
-Checked against the code (2026-11-19): still holds. `vscode/process.js`'s `DEFAULTS` still match this table exactly: `hookBypass`, `mainGuard` and `status` block; `whereWeLeftOff` on; `designFirst`, `docsToc`, `unopenedSources`, `issueCreate`, `issueFields`, `sweep`, `branchFinish` and `docUpdate` warn.
+Checked against the code (2026-11-23): corrected. `vscode/process.js`'s `DEFAULTS` had grown well past this table: `commitRef`, `fileWork`, `issueBody` and `specFirst` (#223), `docSync` (#73), `keepGoing` (#194), `ownRules` (#208), `evidence` and `reask` (#209, #210), `fileContext` (#137) and `linkAccess` (#165) were all live checks missing from the table. The table above lists every key in `DEFAULTS` with its real default and trigger.
 
 <a id="testing"></a>
 

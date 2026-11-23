@@ -30,3 +30,6 @@ That is five node processes per Bash call, four per Edit, and one per other tool
 **Result:** two node processes per Bash or Edit call (Pre and Post), and one async process for any other tool.
 
 **Rejected:** turning activity off by default. It would remove the Edits tab's tool-call rows, which the user sees and uses.
+
+---
+Checked against the code (2026-11-23): still holds, now covering more events. `vscode/hook-plan.js`'s `PLAN` still lists ordered steps per event (baseline, waiting, mcp, process, plus activity appended for PostToolUse/PostToolUseFailure via `ACTIVITY_EVENTS`), and has grown to also cover PermissionRequest, Notification, UserPromptSubmit and SessionStart — all still single `run.mjs` dispatcher entries in `hooks/hooks.json`. `scripts/setup.mjs`'s `wanted()` still builds its hook list from `hook-plan.js`'s `EVENTS`/`matcherFor`. `hooks/activity.mjs` (async, matcher `*`) is unchanged as the fallback writer for tools the dispatcher doesn't cover.

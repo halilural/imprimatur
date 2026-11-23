@@ -12,3 +12,6 @@ SessionStart'ta (.claude/imprimatur.json olsun olmasın, bilinen her repo için)
 Tek seferlik olması, başlamadan önce `meta "backfill:<repoId>"` alanının alınmasıyla (INSERT OR IGNORE) sağlanır. Sonuç ne olursa olsun bir daha çalışmaz; sonuç durumu, maliyet ve bölüm sayıları aynı alana yazılır. Sonraki güncellemeler docUpdate'in işi.
 
 Neden: kullanıcı belgeleri elle senkronlamak istemiyor ve bu işin bir kez yapılmasını istedi. Kod: vscode/docs-backfill.js, hooks/backfill.mjs.
+
+---
+Kodla karşılaştırıldı (2026-11-23): artık geçerli değil. #186'da ("hooks, rules, AGENTS.md and docs use Pocock's names") bu backfill tamamen kaldırıldı: `vscode/docs-backfill.js` ve `hooks/backfill.mjs` artık yok, `vscode/process.js`'te de "#186: the design-document and analysis backfills and the analysis intake are gone with Pocock's model (#179): a spec is written through the MCP document tools (/to-spec, or the agent following its gates)" yorumu var. Boş belgeler artık arka planda bir ajanla değil, görevin spec kapılarıyla (to-spec) doldurulur.

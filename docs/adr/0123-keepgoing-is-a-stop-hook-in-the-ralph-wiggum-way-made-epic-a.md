@@ -10,3 +10,6 @@ record: 2a62c5d9-e525-45e5-a4f1-0f38bc21cfc5
 keepGoing is a Stop hook in the Ralph Wiggum way, made epic-aware: the epic of the child changed last, its next child whose named blockers are done; a 👉 or a question ends the turn; a per-session counter (10) is the valve
 
 Blockers come from tasks.blocked_by and from "blocked by #N" in the task's summary, since GitHub's native blocked-by links are not in the database. Child epics are walked (#182 under #179); a part whose children are all done is offered next so it gets closed. stop_hook_active is not used as the stop: it would allow one continuation only.
+
+---
+Checked against the code (2026-11-23): still holds. `vscode/process.js`'s `DEFAULTS.keepGoing = { mode: "block", max: 10 }`; the Stop handler at `event === "Stop" && s.keepGoing?.mode && !block && !asksUser(...)` still walks the epic tree (child epics hand over to their own epic), reads blockers from `t.blocked_by` and "blocked by #N" in the summary, uses a per-session counter (`remember(root, input.session_id, "keepGoing", ...)`) capped at `max`, and does not key off `stop_hook_active`.
