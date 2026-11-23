@@ -71,7 +71,7 @@ test('the sprint due first, with days left; a past one counts days since', async
 function fake(on: any, o: { wwlo: any; status: string; ms?: any; runs?: any; percent?: number; sent: string[]; argvs?: string[][] }) {
   on('fs.read', () => ({ value: '{}' }))
   on('clock.now', () => ({ value: Date.parse('2026-11-23T12:00:00Z') }))
-  on('mcp.call', () => ({ value: { content: [{ type: 'text', text: JSON.stringify(o.wwlo) }], isError: false } }))
+  on('mcp.call', () => ({ value: o.wwlo === undefined ? { content: [], isError: true } : { content: [{ type: 'text', text: JSON.stringify(o.wwlo) }], isError: false } }))
   on('process.run', (_: any, e: any) => {
     o.argvs?.push(e.argv)
     const out = e.argv[0] === 'git' ? o.status : e.argv[1] === 'run' ? JSON.stringify(o.runs ?? []) : JSON.stringify(o.ms ?? [])
@@ -112,6 +112,18 @@ test('the band: task, waiting, repo with CI, a past sprint to plan, context; pre
   // git runs no program a cloned repo's config names
   const gits = argvs.filter(a => a[0] === 'git')
   expect(gits.length > 0 && gits.every(a => a.includes('core.fsmonitor=false') && a.includes('core.hooksPath=/dev/null'))).toBe(true)
+})
+
+test('Imprimatur not answering yet is not "no work": no task row is made up', async ($, on) => {
+  const sent: string[] = []
+  fake(on, { wwlo: undefined, sent, status: '## main...origin/main\n' })
+  on('clock.sleep', () => ({ value: undefined }))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await new Promise(r => setTimeout(r, 0))
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /açık iş yok/ })).toBeFalsy()
+  expect(await ui.find({ type: 'Text', text: /^main$/ })).toBeTruthy()
+  await ui.unmount()
 })
 
 test('nothing open, clean repo, context low: empty rows hidden, the "pick next" button shows', async ($, on) => {

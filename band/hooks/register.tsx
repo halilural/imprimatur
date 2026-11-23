@@ -11,7 +11,7 @@ export type Waiting = { count: number; first?: { key: string; step: string } }
 export type Git = { branch: string; dirty: number; ahead: number; upstream: boolean }
 export type Ci = 'ok' | 'fail' | 'running'
 export type Sprint = { title: string; closed: number; total: number; daysLeft?: number }
-export type State = { now?: Now; waiting: Waiting; git?: Git; ci?: Ci; sprint?: Sprint; context?: number }
+export type State = { now?: Now; waiting: Waiting; known?: boolean; git?: Git; ci?: Ci; sprint?: Sprint; context?: number }
 
 export const DEFAULTS: QuickPrompt[] = [
   { label: 'Durum', text: 'şu an ne durumdayız?' },
@@ -90,7 +90,7 @@ export function sprintOf(milestones: any, now: number): Sprint | undefined {
   const closed = Number(m.closed_issues) || 0
   const due = m.due_on ? Date.parse(m.due_on) : NaN
   return {
-    title: String(m.title),
+    title: String(m.title).split(' · ')[0], // "Sprint 5 · Nov 4–10 · theme": the name alone fits a row
     closed,
     total: closed + (Number(m.open_issues) || 0),
     daysLeft: Number.isNaN(due) ? undefined : Math.ceil((due - now) / 86_400_000),
@@ -140,22 +140,28 @@ async function refresh($: EngineInterface) {
     git ? json($, ['gh', 'run', 'list', '--branch', git.branch, '--limit', '1', '--json', 'status,conclusion']) : undefined,
     $.session.usage().catch(() => undefined),
   ])
+  // No answer (the MCP server still connecting) is not "no work": the last known rows stay, and none are made up.
   state = {
-    now: nowOf(wwlo),
-    waiting: waitingOf(wwlo),
+    now: wwlo ? nowOf(wwlo) : state.now,
+    waiting: wwlo ? waitingOf(wwlo) : state.waiting,
+    known: wwlo !== undefined || state.known,
     git,
     ci: ciOf(runs),
     sprint: sprintOf(milestones, now),
     context: usage?.context?.percent ?? undefined,
   }
   $.ui.invalidate('ui.render')
+  return wwlo !== undefined
 }
 
 export const register: Register = on => {
   // At the start and after each turn: MCP, git and gh are not read while drawing.
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    void refresh($)
+    // MCP servers join after the session starts: try again a few times until Imprimatur answers.
+    void (async () => {
+      for (let i = 0; i < 6 && !(await refresh($)); i++) await $.clock.sleep(5000)
+    })()
     return r
   })
   on('turn.complete', async ($, e, next) => {
@@ -168,10 +174,11 @@ export const register: Register = on => {
     if (e.props.hasSurvey) return next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
     const send = (text: string) => () => void $.prompt.submit({ text }).catch(() => $.ui.toast('Imprimatur: the prompt was not sent'))
-    const { now, waiting, git: g, ci, sprint: s, context } = state
+    const { now, waiting, known, git: g, ci, sprint: s, context } = state
+    // A fixed label column so every row's content starts at the same place; buttons only for short keys.
     const row = (id: string, label: string, ...body: any[]) => (
-      <Box key={id} flexDirection="row" gap={1}>
-        <Text dimColor>{label}</Text>
+      <Box key={id} flexDirection="row" gap={1} alignItems="center">
+        <Box width={13}><Text dimColor>{label}</Text></Box>
         {body}
       </Box>
     )
@@ -188,23 +195,27 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column" width={e.surface === 'terminal' ? e.props.bodyColumns : undefined}>
-        {row('now', now?.next ? 'Sıradaki' : 'Şimdi', now
-          ? <Button key="now" plain label={`${now.key} · ${short(now.step, 120)}`} onPress={send(`devam et: ${now.key}`)} />
-          : <Button key="now" plain label="açık iş yok · sıradakini seç" onPress={send("açık issue'lara bak, sıradaki işi öner")} />)}
-        {waiting.first && row('wait', 'Seni bekliyor',
-          <Button key="wait" plain label={`${waiting.count} · ${waiting.first.key} · ${short(waiting.first.step, 100)}`}
-            onPress={send(`${waiting.first.key}: bende bekleyen adımı göster ve birlikte yapalım`)} />)}
+        {now && row('now', now.next ? 'Sıradaki' : 'Şimdi',
+          <Button key="now" plain label={now.key} onPress={send(`devam et: ${now.key}`)} />,
+          <Text key="nowt">{short(now.step, 90)}</Text>)}
+        {!now && known && row('now', 'Şimdi',
+          <Text key="nowt" dimColor>açık iş yok</Text>,
+          <Button key="now" plain label="sıradakini seç" onPress={send("açık issue'lara bak, sıradaki işi öner")} />)}
+        {waiting.first && row('wait', `Seni bekliyor ${waiting.count}`,
+          <Button key="wait" plain label={waiting.first.key} onPress={send(`${waiting.first.key}: bende bekleyen adımı göster ve birlikte yapalım`)} />,
+          <Text key="waitt" color="warning">{short(waiting.first.step, 80)}</Text>)}
         {g && row('repo', 'Repo',
           <Text key="git" color={repoOff ? 'warning' : undefined} dimColor={!repoOff}>{repo}</Text>,
           ciText && <Text key="ci" color={ci === 'fail' ? 'error' : undefined} dimColor={ci !== 'fail'}>{ciText}</Text>)}
-        {s && row('sprint', 'Sprint', past
-          ? <Button key="sprint" plain label={`${short(s.title, 40)} bitti, ${-s.daysLeft!} gün önce · sprint planla`} onPress={send('yeni sprint planla')} />
-          : <Text key="sprint" dimColor>{`${short(s.title, 40)} · ${s.closed}/${s.total} kapandı${s.daysLeft !== undefined ? ` · ${s.daysLeft} gün kaldı` : ''}`}</Text>)}
+        {s && (past
+          ? row('sprint', 'Sprint',
+              <Text key="sprintt" color="warning">{`${short(s.title, 30)} bitti, ${-s.daysLeft!} gün önce`}</Text>,
+              <Button key="sprint" plain label="planla" onPress={send('yeni sprint planla')} />)
+          : row('sprint', 'Sprint',
+              <Text key="sprintt" dimColor>{`${short(s.title, 30)} · ${s.closed}/${s.total} kapandı${s.daysLeft !== undefined ? ` · ${s.daysLeft} gün kaldı` : ''}`}</Text>))}
         {context !== undefined && context >= 70 && row('ctx', 'Bağlam',
           <Text key="ctx" color="warning">{`%${Math.round(context)} dolu · iyi bir yerde /compact`}</Text>)}
-        <Box flexDirection="row" alignItems="center" gap={2}>
-          {prompts.map((p, i) => <Button key={`p${i}`} plain label={p.label} onPress={send(p.text)} />)}
-        </Box>
+        {row('prompts', '', ...prompts.map((p, i) => <Button key={`p${i}`} plain label={p.label} onPress={send(p.text)} />))}
       </Box>
     )
   })
