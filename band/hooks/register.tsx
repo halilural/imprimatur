@@ -1,17 +1,22 @@
 // Imprimatur's band above the Claude Code prompt, in every repo (loaded through CLAUDE_CODE_PLUGIN_DIRS).
-// It answers "where am I, what next" in at most five rows, each shown only when it has something to say
-// (spec BAND, 2026-11-23): the task in hand, what waits on the user, the repo and its CI, the sprint, and
-// the context window once it is 70% full. What Claude Code's status line shows (model, cost) is not repeated.
-// The last row is the repo's quick prompts (.claude/imprimatur.json "quickPrompts", else DEFAULTS).
+// It answers three questions, each row one click from acting on it (user, 2026-11-23): what finished
+// (Bitti), what is in progress (Açık), and what to start next (Sıradaki). Around them, only rows that ask
+// the user for something: what waits on them, a sprint that ended, a context window past 70%. Then the
+// repo's quick prompts (.claude/imprimatur.json "quickPrompts", else DEFAULTS).
 import type { EngineInterface, Register } from 'claude-code'
 
 export type QuickPrompt = { label: string; text: string }
-export type Now = { key: string; step: string; next: boolean }
-export type Waiting = { count: number; first?: { key: string; step: string } }
-export type Git = { branch: string; dirty: number; ahead: number; upstream: boolean }
-export type Ci = 'ok' | 'fail' | 'running'
+export type Row = { key: string; text: string }
 export type Sprint = { title: string; closed: number; total: number; daysLeft?: number }
-export type State = { now?: Now; waiting: Waiting; known?: boolean; git?: Git; ci?: Ci; sprint?: Sprint; context?: number }
+export type State = {
+  known: boolean // Imprimatur has answered at least once
+  done: Row[]
+  open: Row[]
+  next?: Row
+  waiting: Row[]
+  sprint?: Sprint
+  context?: number
+}
 
 export const DEFAULTS: QuickPrompt[] = [
   { label: 'Durum', text: 'şu an ne durumdayız?' },
@@ -40,44 +45,29 @@ export function quickPromptsOf(config: string | undefined): QuickPrompt[] {
 }
 
 const tasksIn = (answer: any): any[] => (Array.isArray(answer?.tasks) ? answer.tasks : [])
-const titled = (t: any) => typeof t?.title === 'string' && t.title.trim() !== ''
+// AUTOPILOT runs by itself (the setup autopilot), and a task with no title says nothing on a row.
+const shown = (t: any) => t?.key !== 'AUTOPILOT' && typeof t?.title === 'string' && t.title.trim() !== ''
+const pointed = (t: any) => typeof t?.pointer_title === 'string'
 
-/** The task in hand from where_we_left_off: a 👉 that is not the user's, else an active task, else the next open one. */
-export function nowOf(answer: any): Now | undefined {
-  const tasks = tasksIn(answer)
-  const p = tasks.find(t => typeof t?.pointer_title === 'string' && t.pointer_owner !== 'K')
-  if (p) return { key: String(p.key), step: p.pointer_title, next: false }
-  const a = tasks.find(t => t?.status === 'active' && titled(t))
-  if (a) return { key: String(a.key), step: String(a.summary || a.title), next: false }
-  const o = tasks.find(t => t?.status === 'open' && titled(t))
-  return o ? { key: String(o.key), step: String(o.title), next: true } : undefined
-}
-
-/** Tasks whose 👉 is the user's (owner K): how many, and the first. */
-export function waitingOf(answer: any): Waiting {
-  const mine = tasksIn(answer).filter(t => t?.pointer_owner === 'K' && typeof t?.pointer_title === 'string')
-  return { count: mine.length, first: mine[0] && { key: String(mine[0].key), step: mine[0].pointer_title } }
-}
-
-/** `git status --porcelain --branch`: "## main...origin/main [ahead 2]" then a line per changed file. */
-export function gitOf(stdout: string): Git | undefined {
-  const [head, ...files] = stdout.split('\n')
-  const m = /^## (?:No commits yet on )?(.+?)(?:\.\.\.(\S+))?(?: \[(.*)\])?$/.exec(head ?? '')
-  if (!m) return undefined
+/**
+ * From where_we_left_off: in progress (active, or a 👉 that is the agent's), the first open task not started
+ * as the next, and the tasks whose 👉 is the user's.
+ */
+export function workOf(answer: any): Pick<State, 'open' | 'next' | 'waiting'> {
+  const tasks = tasksIn(answer).filter(shown)
+  const mine = tasks.filter(t => pointed(t) && t.pointer_owner === 'K')
+  const going = tasks.filter(t => !mine.includes(t) && (t.status === 'active' || pointed(t)))
+  const next = tasks.find(t => t.status === 'open' && !pointed(t))
   return {
-    branch: m[1],
-    dirty: files.filter(Boolean).length,
-    ahead: Number(/ahead (\d+)/.exec(m[3] ?? '')?.[1] ?? 0),
-    upstream: m[2] !== undefined,
+    open: going.slice(0, 3).map(t => ({ key: String(t.key), text: String(t.pointer_title ?? (t.summary || t.title)) })),
+    next: next && { key: String(next.key), text: String(next.title) },
+    waiting: mine.slice(0, 2).map(t => ({ key: String(t.key), text: String(t.pointer_title) })),
   }
 }
 
-/** The newest run of `gh run list --json status,conclusion`: green, red or still going. */
-export function ciOf(runs: any): Ci | undefined {
-  const r = Array.isArray(runs) ? runs[0] : undefined
-  if (!r) return undefined
-  if (r.status !== 'completed') return 'running'
-  return ['success', 'skipped', 'neutral'].includes(r.conclusion) ? 'ok' : 'fail'
+/** The latest done tasks from task_list {status: done, limit}. */
+export function doneOf(answer: any): Row[] {
+  return tasksIn(answer).filter(shown).slice(0, 2).map(t => ({ key: String(t.key), text: String(t.title) }))
 }
 
 /** The open "Sprint…" milestone due first: its closed and total issues, and whole days left (negative: past due). */
@@ -100,13 +90,13 @@ export function sprintOf(milestones: any, now: number): Sprint | undefined {
 const short = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
 let prompts: QuickPrompt[] = DEFAULTS
-let state: State = { waiting: { count: 0 } }
+let state: State = { known: false, done: [], open: [], waiting: [] }
 
 /** An Imprimatur MCP tool's JSON answer, under the name the server has in this setup (user config, or the plugin's). */
-async function imprimatur($: EngineInterface, tool: string): Promise<any> {
+async function imprimatur($: EngineInterface, tool: string, args: Record<string, unknown> = {}): Promise<any> {
   for (const server of ['imprimatur', 'plugin:imprimatur:imprimatur']) {
     try {
-      const r = await $.mcp.call(server, tool, {})
+      const r = await $.mcp.call(server, tool, args)
       const text = r.content.find((c: any) => c.type === 'text') as { text?: string } | undefined
       if (!r.isError && text?.text) return JSON.parse(text.text)
     } catch {
@@ -116,38 +106,32 @@ async function imprimatur($: EngineInterface, tool: string): Promise<any> {
   return undefined
 }
 
-// A cloned repo's .git/config can name programs git runs (core.fsmonitor, hooks): turned off for these reads.
-const GIT = ['git', '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null']
-
-/** A command's stdout as JSON, undefined when it fails or is not JSON. */
-async function json($: EngineInterface, argv: string[]): Promise<any> {
+/** GitHub's open milestones through gh, undefined outside a GitHub repo. */
+async function ghMilestones($: EngineInterface): Promise<any> {
   try {
-    const r = await $.process.run(argv)
+    const r = await $.process.run(['gh', 'api', 'repos/{owner}/{repo}/milestones?state=open&per_page=50'])
     return r.exitCode === 0 ? JSON.parse(r.stdout) : undefined
   } catch {
     return undefined
   }
 }
 
-async function refresh($: EngineInterface) {
+/** Reads everything the band shows; false while Imprimatur has not answered (its server joins after the start). */
+async function refresh($: EngineInterface): Promise<boolean> {
   prompts = quickPromptsOf(await $.fs.read('.claude/imprimatur.json').catch(() => undefined))
   const now = await $.clock.now().catch(() => Date.now())
-  const status = await $.process.run([...GIT, 'status', '--porcelain', '--branch']).catch(() => undefined)
-  const git = status?.exitCode === 0 ? gitOf(status.stdout) : undefined
-  const [wwlo, milestones, runs, usage] = await Promise.all([
+  const [wwlo, done, ms, usage] = await Promise.all([
     imprimatur($, 'where_we_left_off'),
-    git ? json($, ['gh', 'api', 'repos/{owner}/{repo}/milestones?state=open&per_page=50']) : undefined,
-    git ? json($, ['gh', 'run', 'list', '--branch', git.branch, '--limit', '1', '--json', 'status,conclusion']) : undefined,
+    imprimatur($, 'task_list', { status: 'done', limit: 4 }),
+    ghMilestones($),
     $.session.usage().catch(() => undefined),
   ])
-  // No answer (the MCP server still connecting) is not "no work": the last known rows stay, and none are made up.
+  // No answer is not "no work": the last known rows stay, and none are made up.
   state = {
-    now: wwlo ? nowOf(wwlo) : state.now,
-    waiting: wwlo ? waitingOf(wwlo) : state.waiting,
-    known: wwlo !== undefined || state.known,
-    git,
-    ci: ciOf(runs),
-    sprint: sprintOf(milestones, now),
+    ...state,
+    ...(wwlo && { known: true, ...workOf(wwlo) }),
+    ...(done && { done: doneOf(done) }),
+    sprint: sprintOf(ms, now),
     context: usage?.context?.percent ?? undefined,
   }
   $.ui.invalidate('ui.render')
@@ -155,10 +139,9 @@ async function refresh($: EngineInterface) {
 }
 
 export const register: Register = on => {
-  // At the start and after each turn: MCP, git and gh are not read while drawing.
+  // At the start and after each turn: MCP and gh are not read while drawing.
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    // MCP servers join after the session starts: try again a few times until Imprimatur answers.
     void (async () => {
       for (let i = 0; i < 6 && !(await refresh($)); i++) await $.clock.sleep(5000)
     })()
@@ -174,45 +157,33 @@ export const register: Register = on => {
     if (e.props.hasSurvey) return next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
     const send = (text: string) => () => void $.prompt.submit({ text }).catch(() => $.ui.toast('Imprimatur: the prompt was not sent'))
-    const { now, waiting, known, git: g, ci, sprint: s, context } = state
-    // A fixed label column so every row's content starts at the same place; buttons only for short keys.
+    const { known, done, open, next: nx, waiting, sprint: s, context } = state
+    // A fixed label column, the key as the button, the text beside it cut to one line.
     const row = (id: string, label: string, ...body: any[]) => (
       <Box key={id} flexDirection="row" gap={1} alignItems="center">
-        <Box width={13}><Text dimColor>{label}</Text></Box>
+        <Box width={9}><Text dimColor>{label}</Text></Box>
         {body}
       </Box>
     )
-
-    const repoOff = !!g && (g.dirty > 0 || g.ahead > 0 || !g.upstream)
-    const repo = g && [
-      g.branch,
-      g.dirty > 0 && `${g.dirty} değişiklik`,
-      g.ahead > 0 && `${g.ahead} commit push'lanmadı`,
-      !g.upstream && 'uzakta yok',
-    ].filter(Boolean).join(' · ')
-    const ciText = ci === 'ok' ? 'CI ✓' : ci === 'fail' ? 'CI ✗' : ci === 'running' ? 'CI …' : undefined
+    const line = (id: string, label: string, r: Row, ask: string, color?: string) => row(id, label,
+      <Button key={id} plain label={r.key} onPress={send(ask)} />,
+      <Text key={`${id}t`} wrap="truncate-end" color={color}>{short(r.text, 90)}</Text>)
     const past = s?.daysLeft !== undefined && s.daysLeft < 0
 
     return (
       <Box flexDirection="column" width={e.surface === 'terminal' ? e.props.bodyColumns : undefined}>
-        {now && row('now', now.next ? 'Sıradaki' : 'Şimdi',
-          <Button key="now" plain label={now.key} onPress={send(`devam et: ${now.key}`)} />,
-          <Text key="nowt">{short(now.step, 90)}</Text>)}
-        {!now && known && row('now', 'Şimdi',
-          <Text key="nowt" dimColor>açık iş yok</Text>,
-          <Button key="now" plain label="sıradakini seç" onPress={send("açık issue'lara bak, sıradaki işi öner")} />)}
-        {waiting.first && row('wait', `Seni bekliyor ${waiting.count}`,
-          <Button key="wait" plain label={waiting.first.key} onPress={send(`${waiting.first.key}: bende bekleyen adımı göster ve birlikte yapalım`)} />,
-          <Text key="waitt" color="warning">{short(waiting.first.step, 80)}</Text>)}
-        {g && row('repo', 'Repo',
-          <Text key="git" color={repoOff ? 'warning' : undefined} dimColor={!repoOff}>{repo}</Text>,
-          ciText && <Text key="ci" color={ci === 'fail' ? 'error' : undefined} dimColor={ci !== 'fail'}>{ciText}</Text>)}
-        {s && (past
-          ? row('sprint', 'Sprint',
-              <Text key="sprintt" color="warning">{`${short(s.title, 30)} bitti, ${-s.daysLeft!} gün önce`}</Text>,
-              <Button key="sprint" plain label="planla" onPress={send('yeni sprint planla')} />)
-          : row('sprint', 'Sprint',
-              <Text key="sprintt" dimColor>{`${short(s.title, 30)} · ${s.closed}/${s.total} kapandı${s.daysLeft !== undefined ? ` · ${s.daysLeft} gün kaldı` : ''}`}</Text>))}
+        {done.map((r, i) => line(`d${i}`, i ? '' : 'Bitti', r, `${r.key} ne getirdi, kısaca özetle`))}
+        {open.map((r, i) => line(`o${i}`, i ? '' : 'Açık', r, `devam et: ${r.key}`))}
+        {nx && line('next', 'Sıradaki', nx, `başla: ${nx.key}`)}
+        {!nx && known && row('next', 'Sıradaki',
+          <Button key="next" plain label="seç" onPress={send("açık issue'lara bak, sıradaki işi öner ve başla")} />,
+          <Text key="nextt" dimColor>açık iş yok</Text>)}
+        {waiting.map((r, i) => line(`w${i}`, i ? '' : 'Sende', r, `${r.key}: bende bekleyen adımı göster ve birlikte yapalım`, 'warning'))}
+        {s && past && row('sprint', 'Sprint',
+          <Button key="sprint" plain label="planla" onPress={send('yeni sprint planla')} />,
+          <Text key="sprintt" color="warning">{`${short(s.title, 30)} bitti, ${-s.daysLeft!} gün önce`}</Text>)}
+        {s && !past && row('sprint', 'Sprint',
+          <Text key="sprintt" dimColor>{`${short(s.title, 30)} · ${s.closed}/${s.total} kapandı${s.daysLeft !== undefined ? ` · ${s.daysLeft} gün kaldı` : ''}`}</Text>)}
         {context !== undefined && context >= 70 && row('ctx', 'Bağlam',
           <Text key="ctx" color="warning">{`%${Math.round(context)} dolu · iyi bir yerde /compact`}</Text>)}
         {row('prompts', '', ...prompts.map((p, i) => <Button key={`p${i}`} plain label={p.label} onPress={send(p.text)} />))}
