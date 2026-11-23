@@ -315,6 +315,23 @@ export function mergeStatusLine(settings, { root }) {
 }
 
 /**
+ * The band above the Claude Code prompt (band/) in env.CLAUDE_CODE_PLUGIN_DIRS, beside any other
+ * folders listed there; an older checkout's band is swapped for this one. Without it only the
+ * machine where it was set by hand drew the band (work machine, 2026-11-23). Pure.
+ * @param {any} settings @param {{root: string, sep?: string}} opts
+ * @returns {{settings: any, change: string | undefined}}
+ */
+export function mergeBand(settings, { root, sep = path.delimiter }) {
+  const out = structuredClone(settings ?? {});
+  const band = path.join(root, "band");
+  const dirs = String(out.env?.CLAUDE_CODE_PLUGIN_DIRS ?? "").split(sep).filter(Boolean);
+  if (dirs.includes(band)) return { settings: out, change: undefined };
+  const others = dirs.filter((d) => !/[\\/]imprimatur[\\/]band$/i.test(d));
+  out.env = { ...(out.env ?? {}), CLAUDE_CODE_PLUGIN_DIRS: [...others, band].join(sep) };
+  return { settings: out, change: `${others.length < dirs.length ? "updated" : "added  "} env.CLAUDE_CODE_PLUGIN_DIRS → ${band}` };
+}
+
+/**
  * VS Code settings with one imprimatur setting set. Pure: returns a copy and the change.
  * @param {any} settings @param {string} key @param {string} value @param {string} fallback shown when unset
  */
@@ -647,7 +664,8 @@ function main() {
   const fromPlugin = opts.plugin || pluginEnabled(plugins);
   updatePlugin(root, plugins, opts.dry);
   const hooked = opts.plugin ? removeOurHooks(before) : fromPlugin ? { settings: before, changes: [] } : mergeHooks(before, { root, lang: opts.lang, exts: opts.exts });
-  const status = mergeStatusLine(hooked.settings, { root });
+  const banded = mergeBand(hooked.settings, { root });
+  const status = mergeStatusLine(banded.settings, { root });
   // The rule names the server Claude Code runs: the plugin's or ours (#113).
   const { ALLOW, mergeAllow } = require("../vscode/mcp-allow.js");
   const allowed = opts.allow ? mergeAllow(status.settings, fromPlugin ? ALLOW.plugin : ALLOW.settings) : { settings: status.settings, change: undefined };
@@ -656,7 +674,7 @@ function main() {
   const { dbPath } = require("../vscode/db.js");
   const denied = sec.mergeDeny(allowed.settings, sec.denyRules(dbPath()));
   const settings = denied.settings;
-  const changes = [...hooked.changes, ...(status.change ? [status.change] : []), ...(allowed.change ? [allowed.change] : []), ...(denied.change ? [denied.change] : [])];
+  const changes = [...hooked.changes, ...(banded.change ? [banded.change] : []), ...(status.change ? [status.change] : []), ...(allowed.change ? [allowed.change] : []), ...(denied.change ? [denied.change] : [])];
 
   console.log(`Settings in ${file}${fromPlugin ? ` (the ${PLUGIN_ID} plugin brings them)` : ""}:`);
   console.log(changes.length ? changes.map((c) => `  ${c}`).join("\n") : "  all in place");

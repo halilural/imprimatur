@@ -3,9 +3,20 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { mergeHooks, mergeShowIn, mergeLanguage, mergeStatusLine, installedFrom } from "../scripts/setup.mjs";
+import { mergeBand, mergeHooks, mergeShowIn, mergeLanguage, mergeStatusLine, installedFrom } from "../scripts/setup.mjs";
 
 const root = "/home/u/projects/imprimatur";
+
+test("setup: the band joins CLAUDE_CODE_PLUGIN_DIRS beside other folders, once; an old checkout's is swapped", () => {
+  const band = path.join(root, "band");
+  const added = mergeBand({ env: { FOO: "1" } }, { root, sep: ":" });
+  assert.deepEqual(added.settings.env, { FOO: "1", CLAUDE_CODE_PLUGIN_DIRS: band });
+  assert.match(added.change, /^added/);
+  assert.deepEqual(mergeBand(added.settings, { root, sep: ":" }), { settings: added.settings, change: undefined });
+  const kept = mergeBand({ env: { CLAUDE_CODE_PLUGIN_DIRS: "/x/mine:/old/imprimatur/band" } }, { root, sep: ":" });
+  assert.equal(kept.settings.env.CLAUDE_CODE_PLUGIN_DIRS, `/x/mine:${band}`);
+  assert.match(kept.change, /^updated/);
+});
 
 test("setup: adds every hook to empty settings, keeps other hooks (#118: one dispatcher per event)", () => {
   const before = { model: "x", hooks: { SessionStart: [{ hooks: [{ type: "command", command: "heal.mjs" }] }] } };
