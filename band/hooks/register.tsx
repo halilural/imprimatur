@@ -159,10 +159,10 @@ export const register: Register = on => {
     const send = (text: string) => () => void $.prompt.submit({ text }).catch(() => $.ui.toast('Imprimatur: the prompt was not sent'))
     const { known, done, open, next: nx, waiting, sprint: s, context } = state
     // Three columns (user, 2026-11-23: small buttons, the description apart, space and a line between):
-    // the section label, a fixed-width column for the short button, then the text cut at the edge.
+    // the section label, a fixed-width column for the short button, then the whole text, wrapping in its column.
     // nowrap: VS Code otherwise drops a long text under its button.
     const row = (id: string, label: string, button: any, text?: any) => (
-      <Box key={id} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="center" paddingY={e.surface === 'terminal' ? 0 : 0.25}>
+      <Box key={id} flexDirection="row" flexWrap="nowrap" gap={1} alignItems="flex-start" paddingY={e.surface === 'terminal' ? 0 : 0.25}>
         <Box width={9} flexShrink={0}><Text dimColor>{label}</Text></Box>
         <Box width={9} flexShrink={0}>{button}</Box>
         {text && <Box flexGrow={1} flexShrink={1} minWidth={0}>{text}</Box>}
@@ -170,7 +170,7 @@ export const register: Register = on => {
     )
     const line = (id: string, label: string, r: Row, ask: string) => row(id, label,
       <Button key={id} plain label={r.key} onPress={send(ask)} />,
-      <Text wrap="truncate-end">{r.text}</Text>)
+      <Text>{r.text}</Text>)
     // A section: its rows with a little space between, a dim rule under it.
     const rule = (id: string) => <Text key={id} dimColor wrap="truncate">{'─'.repeat(e.props.bodyColumns || 80)}</Text>
     const section = (id: string, rows: any[]) => rows.length > 0 && (
@@ -189,9 +189,9 @@ export const register: Register = on => {
         {section('sprint', [
           s && past && row('sprint', 'Sprint',
             <Button key="sprint" plain label="planla" onPress={send('yeni sprint planla')} />,
-            <Text color="warning" wrap="truncate-end">{`${s.title} bitti, ${-s.daysLeft!} gün önce`}</Text>),
+            <Text color="warning">{`${s.title} bitti, ${-s.daysLeft!} gün önce`}</Text>),
           s && !past && row('sprint', 'Sprint', undefined,
-            <Text dimColor wrap="truncate-end">{`${s.title} · ${s.closed}/${s.total} kapandı${s.daysLeft !== undefined ? ` · ${s.daysLeft} gün kaldı` : ''}`}</Text>),
+            <Text dimColor>{`${s.title} · ${s.closed}/${s.total} kapandı${s.daysLeft !== undefined ? ` · ${s.daysLeft} gün kaldı` : ''}`}</Text>),
           context !== undefined && context >= 70 && row('ctx', 'Bağlam', undefined,
             <Text color="warning">{`%${Math.round(context)} dolu · iyi bir yerde /compact`}</Text>),
         ].filter(Boolean))}
