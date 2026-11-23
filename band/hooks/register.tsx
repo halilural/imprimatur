@@ -18,8 +18,13 @@ export type State = {
   context?: number
 }
 
+// The user's five most sent prompts across their sessions (counted 2026-11-23): devam ~70, olur ~40,
+// ne durumdayız ~11, tekrar bak 10, push.
 export const DEFAULTS: QuickPrompt[] = [
+  { label: 'Devam', text: 'devam et' },
+  { label: 'Olur', text: 'olur, yap' },
   { label: 'Durum', text: 'şu an ne durumdayız?' },
+  { label: 'Tekrar bak', text: 'tekrar bak' },
   { label: 'Push', text: 'push et her şeyi' },
 ]
 
