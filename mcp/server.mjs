@@ -43,7 +43,7 @@ export const INSTRUCTIONS = [
   "owner: C = the agent does it, K = the user does it.",
   "👉 is the task's pointer, where work stopped: pointer_set moves it (open records only), or record_add with pointer:true.",
   "Keep the task_upsert summary a one-line \"where we are\".",
-  "Work done: record_update that record with status \"done\", the result in body.",
+  "Work done: record_update that record with status \"done\", the result in body. Wrong task: record_move.",
   "search with repo \"*\" looks in every repo.",
   "Documents (Matt Pocock's; doc_get): project, capability (how a feature behaves now; task = its name), a task's spec (before its code; written unasked once a task without one is created or touched, gates recorded by the agent) and map, glossary (a term per section), out-of-scope.",
   "A product choice goes in the task's spec; an adr stands alone; a new term goes in the glossary.",
@@ -249,6 +249,14 @@ const TOOLS = [
     description: "Changes a record (e.g. status done with the result in body). Only the given fields change; every change is versioned.",
     inputSchema: input({ id: int, kind: { type: "string", enum: KINDS }, ...recordFields, position: { type: "number" } }, ["id"]),
     outputSchema: RECORD_OUT,
+    idempotent: true,
+  },
+  {
+    name: "record_move",
+    title: "Move a record to another task",
+    description: "Moves a record and every record under it (a meeting's decisions, to-dos and transcript; an answer under its question) to another task of the same repo, created if missing. Each move is versioned and synced. A record moved without its parent loses that parent link. For a record that landed on the wrong task.",
+    inputSchema: input({ id: int, task: { type: "string", description: "The task's key, e.g. \"#58\" or \"PROJ-12\"" } }, ["id", "task"]),
+    outputSchema: output({ records: { type: "array", items: RECORD } }),
     idempotent: true,
   },
   {
@@ -725,6 +733,12 @@ export function callTool(db, name, a, ctx = { client: "unknown" }) {
       if (a.parent_id !== undefined) recordOf(db, a.parent_id, "parent_id");
       return { record: db.updateRecord(a.id, pick(a, only !== undefined ? ["body", "links"] : ["kind", "title", "body", "owner", "status", "parent_id", "links", "position"]), actor) };
     }
+    case "record_move": {
+      const rec = recordOf(db, a.id);
+      const rid = db.taskById(rec.task_id).repo_id;
+      const task = db.taskByKey(rid, a.task) ?? db.upsertTask(rid, a.task, {}, actor);
+      return { records: db.moveRecordTree(a.id, task.id, actor) };
+    }
     case "pointer_set": {
       const rec = recordOf(db, a.id);
       if (rec.status !== "open") {
@@ -855,6 +869,8 @@ export function digest(name, out, a = {}) {
       return `Added ${recordLine(out.record)}${out.spec_needed ? `\n${out.spec_needed}` : ""}`;
     case "record_update":
       return `Updated ${recordLine(out.record)}`;
+    case "record_move":
+      return `Moved ${out.records.length === 1 ? "" : `${out.records.length} records: `}${recordLine(out.records[0])}${out.records.length > 1 ? " and the records under it" : ""}`;
     case "pointer_set":
       return `👉 now on ${recordLine(out.record)}`;
     case "doc_get": {
@@ -969,7 +985,7 @@ function studyDigest(out) {
  * structuredContent does reach the model, hence lean results, #120).
  */
 export const TOOL_GROUPS = {
-  core: ["where_we_left_off", "task_get", "record_get", "task_upsert", "record_add", "record_update", "search", "pointer_set"],
+  core: ["where_we_left_off", "task_get", "record_get", "task_upsert", "record_add", "record_update", "record_move", "search", "pointer_set"],
   list: ["task_list"],
   docs: ["doc_get", "doc_section_upsert"],
   study: ["study_material"],

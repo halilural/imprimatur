@@ -145,7 +145,7 @@ To make the list shorter, pick a profile:
 
 | Profile | Tools | What the model reads |
 | --- | --- | --- |
-| `core` | 7: where_we_left_off, task_get, task_upsert, record_add, record_update, search, pointer_set | ~1.7k tokens |
+| `core` | 9: where_we_left_off, task_get, record_get, task_upsert, record_add, record_update, record_move, search, pointer_set | ~1.7k tokens |
 | `standard` | 10: core plus task_list, doc_get, doc_section_upsert | ~2.7k tokens |
 | `all` (default) | 15: also study_material, the exercise tools, setup_audit | ~4.6k tokens |
 
