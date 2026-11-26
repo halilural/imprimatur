@@ -206,7 +206,7 @@ function mainHtml(m, render) {
   }
   if (m.area === "tasks" && m.page) return taskPageHtml(m.page, render);
   if (m.area === "tasks") {
-    return `<h1>Tasks</h1><p class="summary">Active first, the one worked on last on top; then open, then the last done.</p>` + m.lists.map((/** @type {any} */ l) =>
+    return `<h1>Tasks</h1><p class="summary">Active first, then open, then the last done; in each, epics on top by priority, then the one worked on last.</p>` + m.lists.map((/** @type {any} */ l) =>
       `<h2 class="sub">${esc(l.label)} · ${l.tasks.length}</h2><div class="rows">${l.tasks.map((/** @type {any} */ t) => `<div class="row${t.last ? " last" : ""}" data-task="${esc(t.key)}"><span class="key">${esc(t.key)}</span><span><b>${esc(t.title)}</b>${epicTags(t)}${t.last ? ' <span class="tag lastworked">Last worked on</span>' : ""}${t.when ? ` <span class="when">${esc(t.when)}</span>` : ""}${t.summary ? `<br><span class="ptr">${esc(t.summary)}</span>` : ""}</span></div>`).join("") || '<div class="none">Nothing</div>'}</div>`).join("");
   }
   if (m.area === "home") {

@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.198.0] - 2026-11-26
+
+### Changed
+- Tasks (the panel page and the side bar): in Active, Open and Done, epics come first, ordered by their GitHub issue's priority label (urgent, high, medium, low, then none); the other tasks keep their order. The tracker sync now pulls each issue's `priority:*` label (database version 19).
+
 ## [0.197.0] - 2026-11-19
 
 ### Added
