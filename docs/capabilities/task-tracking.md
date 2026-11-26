@@ -17,6 +17,7 @@ type: explanation
 7. [Okumadıkların: görev listesinde "N okunmadı", görev sayfası ve Ana sayfada kart (kabul edilmemiş düzenlemeler + değişen bölümler, Okudum / Hepsini okudum), dokümanda "Okunmadı" işareti, durum satırında "N unread"](#okumad-klar-n-g-rev-listesinde-n-okunmad-g-rev-s)
 8. [Work without a task is caught](#work-without-task)
 9. [Active tasks by last activity](#last-worked-on)
+10. [Epics first, by priority](#epics-first)
 
 <a id="unread"></a>
 
@@ -187,3 +188,17 @@ STORY: Bir görevi açtığımda ajanın o görev için yazdığı analizleri (n
 ## 9. Active tasks by last activity
 
 On the Tasks page and in the side bar's Tasks › Active, active tasks are sorted by last activity (the later of the task's and its newest record's update time), newest first. The first carries "Last worked on"; each active row shows its last activity as a relative time ("2 h ago"). Open and done keep their order.
+
+<a id="epics-first"></a>
+
+## 10. Epics first, by priority
+
+**Story:** as the user, in Tasks (panel page and side bar) I see epics first so the big pieces of work are on top, the most urgent first.
+
+**Design:** an epic is a task with tasks under it (`epic_id`, the same rows that get progress). The tracker sync pulls each GitHub issue's `priority:urgent|high|medium|low` label into `tasks.priority` (migration 18), kept like the issue body (no task edit, no version). In each list (Active, Open, Done) epics come first, urgent → high → medium → low → none; the other rows keep their order (stable sort). The "Last worked on" mark stays on the task worked on last.
+
+**Analyze:** an epic with no child tasks in Imprimatur is not lifted (the GitHub `epic` label is not pulled). Jira priority is not pulled.
+
+**Tickets:** one, this task.
+
+**Tests:** `test/last-worked-on.test.mjs` (order), `test/tracker.test.mjs` (label pull and clear).

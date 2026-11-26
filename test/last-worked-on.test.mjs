@@ -80,8 +80,8 @@ test("Tasks page: the marker on the first active row only, a relative time on ea
   record("B", now - 2 * H);
   const html = appHtml(appModel(db, repo, root, { area: "tasks" }), { nonce: "n", cspSource: "x", render: (s) => s });
   assert.equal(html.match(/Last worked on/g)?.length, 1);
-  assert.match(html, /data-task="#2"><span class="key">#2<\/span><span><b>B<\/b> <span class="tag lastworked">Last worked on<\/span> <span class="when">2 h ago<\/span>/);
-  assert.match(html, /data-task="#3"><span class="key">#3<\/span><span><b>C<\/b> <span class="when">9 h ago<\/span>/);
+  assert.match(html, /data-task="#2" data-find="[^"]*"><span class="key">#2<\/span><span><b>B<\/b> <span class="tag lastworked">Last worked on<\/span> <span class="when">2 h ago<\/span>/);
+  assert.match(html, /data-task="#3" data-find="[^"]*"><span class="key">#3<\/span><span><b>C<\/b> <span class="when">9 h ago<\/span>/);
 });
 
 test("side bar: Tasks › Active in the same order, the first described as Last worked on", () => {
@@ -110,4 +110,16 @@ test("Tasks lists: epics on top by priority label (none last), the other rows ke
   epic("#21", "low", "#31");
   const open = taskLists(db, repo.id)[1].tasks.map((t) => t.key);
   assert.deepEqual(open, ["#22", "#21", "#20", "#11", "#10"]);
+});
+
+test("Tasks page: a search box, each row searchable by number, title and summary, the tasks the lists leave out under a hidden Other tasks", () => {
+  const { root, db, repo } = seed();
+  const old = db.upsertTask(repo.id, "#40", { title: "Old Thing", status: "dropped", summary: "Gave up" });
+  assert.ok(old);
+  const m = appModel(db, repo, root, { area: "tasks" });
+  assert.deepEqual(m.others.map((t) => t.key), ["#40"]);
+  const html = appHtml(m, { nonce: "n", cspSource: "x", render: (s) => s });
+  assert.match(html, /<input type="search" class="find"[^>]*aria-label="Search tasks">/);
+  assert.match(html, /data-task="#1" data-find="#1 a "/);
+  assert.match(html, /<section class="tlist" hidden><h2 class="sub">Other tasks · <span class="n">1<\/span><\/h2><div class="rows"><div class="row" data-task="#40" data-find="#40 old thing gave up">/);
 });
