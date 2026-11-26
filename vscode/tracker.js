@@ -159,7 +159,7 @@ function statusFor(status, state) {
 /**
  * Applies one repo's issue states: only state changes since the last pull; the first pull
  * records them. @param {any} db @param {any} repo @param {string} provider
- * @param {Array<{key: string, state: "open" | "done" | "dropped", title?: string, body?: string}>} issues
+ * @param {Array<{key: string, state: "open" | "done" | "dropped", title?: string, body?: string, priority?: string | null}>} issues
  * @param {{dryRun?: boolean, log: (line: string) => void, now: number, create?: {left: number, skipped: number}, label: (key: string) => string}} o
  */
 function applyStates(db, repo, provider, issues, { dryRun, log, now, create, label }) {
@@ -181,6 +181,7 @@ function applyStates(db, repo, provider, issues, { dryRun, log, now, create, lab
           else {
             db.upsertTask(repo.id, issue.key, { title: issue.title ?? "", status: "open" }, actor);
             if (issue.body !== undefined) db.setIssueBody(db.taskByKey(repo.id, issue.key).id, issue.body);
+            if (issue.priority) db.setIssuePriority(db.taskByKey(repo.id, issue.key).id, issue.priority);
           }
           out.created++;
         } else {
@@ -192,6 +193,7 @@ function applyStates(db, repo, provider, issues, { dryRun, log, now, create, lab
     }
     // The description is the issue's own (#162): kept as GitHub has it, whatever the state.
     if (!dryRun && issue.body !== undefined && issue.body !== (task.issue_body ?? null)) db.setIssueBody(task.id, issue.body);
+    if (!dryRun && issue.priority !== undefined && issue.priority !== (task.priority ?? null)) db.setIssuePriority(task.id, issue.priority);
     // A push of this task still waits: what is here wins; its state is looked at again later.
     if (db.trackerPending(task.id)) continue;
     const prev = seen.get(issue.key);
@@ -218,11 +220,12 @@ function applyStates(db, repo, provider, issues, { dryRun, log, now, create, lab
  * @param {{gh: (args: string[]) => Promise<string>, dryRun?: boolean, log: (line: string) => void, now: number, create?: {left: number, skipped: number}}} o
  */
 async function pullGithub(db, repo, slug, o) {
-  const list = JSON.parse(await o.gh(["issue", "list", "-R", slug, "--state", "all", "--limit", "500", "--json", "number,title,state,stateReason,updatedAt,milestone,body"]));
+  const list = JSON.parse(await o.gh(["issue", "list", "-R", slug, "--state", "all", "--limit", "500", "--json", "number,title,state,stateReason,updatedAt,milestone,body,labels"]));
   const issues = list.map((/** @type {any} */ i) => ({
     key: `#${i.number}`,
     title: i.title,
     body: typeof i.body === "string" ? i.body : undefined,
+    priority: (i.labels ?? []).map((/** @type {any} */ l) => /^priority:(urgent|high|medium|low)$/.exec(l.name)?.[1]).find(Boolean) ?? null,
     state: /** @type {"open" | "done" | "dropped"} */ (i.state === "CLOSED" ? (i.stateReason === "NOT_PLANNED" ? "dropped" : "done") : "open"),
   }));
   return applyStates(db, repo, "github", issues, { ...o, label: (k) => `${slug}${k}` });

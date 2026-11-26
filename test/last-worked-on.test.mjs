@@ -96,3 +96,18 @@ test("side bar: Tasks › Active in the same order, the first described as Last 
   assert.deepEqual(rows.map((r) => r.description), ["Last worked on · 30 min ago", "7 h ago", "8 h ago"]);
   assert.equal(rows[0].iconPath?.id, "history");
 });
+
+test("Tasks lists: epics on top by priority label (none last), the other rows keep their order", () => {
+  const { db, repo } = seed();
+  const epic = (key, priority, child) => {
+    const e = db.upsertTask(repo.id, key, { title: key, status: "open" });
+    if (priority) db.setIssuePriority(e.id, priority);
+    db.upsertTask(repo.id, child, { title: child, status: "done", epicId: e.id });
+  };
+  // Created urgent, none, low: newest first would be #21, #20, #22.
+  epic("#22", "urgent", "#32");
+  epic("#20", null, "#30");
+  epic("#21", "low", "#31");
+  const open = taskLists(db, repo.id)[1].tasks.map((t) => t.key);
+  assert.deepEqual(open, ["#22", "#21", "#20", "#11", "#10"]);
+});

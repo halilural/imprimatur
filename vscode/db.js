@@ -573,6 +573,8 @@ const MIGRATIONS = [
   `,
   // #220: the transcript kind, a meeting's raw transcript under its note.
   REBUILD_RECORDS,
+  // The issue's priority label (urgent, high, medium, low), pulled by the tracker sync: epics sort by it.
+  `ALTER TABLE tasks ADD COLUMN priority TEXT;`,
 ];
 const VERSION = MIGRATIONS.length;
 
@@ -1131,6 +1133,11 @@ class Db {
    */
   setIssueBody(taskId, body) {
     this.q("UPDATE tasks SET issue_body = ? WHERE id = ?").run(body, taskId);
+  }
+
+  /** The issue's priority label as the tracker last pulled it; like the body, no task edit. @param {number} taskId @param {string | null} priority */
+  setIssuePriority(taskId, priority) {
+    this.q("UPDATE tasks SET priority = ? WHERE id = ?").run(priority, taskId);
   }
 
   /** @param {number} repoId @param {string} key @param {string} provider @param {string} state @param {number} at */

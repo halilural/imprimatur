@@ -234,17 +234,25 @@ const isBucket = (key) => !/^#\d+$|^[A-Z][A-Z0-9_]*-\d+$/.test(key);
  * @param {any} db @param {number} repoId
  */
 function taskLists(db, repoId, now = Date.now()) {
-  const list = (/** @type {string} */ status, /** @type {number} */ n) => db.q(`SELECT key, title, summary, status FROM tasks WHERE repo_id = ? AND status = ? ORDER BY updated_at DESC`).all(repoId, status)
+  const list = (/** @type {string} */ status, /** @type {number} */ n) => db.q(`SELECT key, title, summary, status, priority FROM tasks WHERE repo_id = ? AND status = ? ORDER BY updated_at DESC`).all(repoId, status)
     .filter((/** @type {any} */ t) => !isBucket(t.key)).slice(0, n);
   // #224: Active by last activity (the later of the task's and its newest record's update), newest first; ties keep the
   // old order. The first is the one worked on last.
-  const active = db.q(`SELECT t.key, t.title, t.summary, t.status, max(t.updated_at, coalesce((SELECT max(r.updated_at) FROM records r WHERE r.task_id = t.id), 0)) AS last_at
+  const active = db.q(`SELECT t.key, t.title, t.summary, t.status, t.priority, max(t.updated_at, coalesce((SELECT max(r.updated_at) FROM records r WHERE r.task_id = t.id), 0)) AS last_at
                        FROM tasks t WHERE t.repo_id = ? AND t.status = 'active' ORDER BY last_at DESC, t.updated_at DESC`).all(repoId)
     .filter((/** @type {any} */ t) => !isBucket(t.key)).slice(0, 50)
     .map((/** @type {any} */ t, /** @type {number} */ i) => ({ ...t, when: ago(t.last_at, now), ...(i === 0 && { last: true }) }));
   return [{ id: "active", label: "Active", tasks: active }, { id: "open", label: "Open", tasks: list("open", 80) }, { id: "done", label: "Done", tasks: list("done", 20) }]
-    .map((l) => ({ ...l, tasks: withEpics(db, repoId, l.tasks) }));
+    .map((l) => ({ ...l, tasks: epicsFirst(withEpics(db, repoId, l.tasks)) }));
 }
+
+const PRIORITY = { urgent: 0, high: 1, medium: 2, low: 3 };
+/**
+ * Epics (rows with tasks under them) on top, by their issue's priority label, none last; ties and
+ * the other rows keep their order (sort is stable). @param {any[]} rows
+ */
+const epicsFirst = (rows) => rows.sort((a, b) => rank(a) - rank(b));
+const rank = (/** @type {any} */ t) => (t.progress ? /** @type {any} */ (PRIORITY)[t.priority] ?? 4 : 5);
 
 /** How long ago, short: "just now", "5 min ago", "2 h ago", "3 d ago". @param {number} at @param {number} [now] */
 function ago(at, now = Date.now()) {

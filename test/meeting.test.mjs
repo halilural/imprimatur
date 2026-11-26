@@ -110,7 +110,7 @@ test("an existing database at the meeting version gets the transcript kind; its 
   const file = path.join(tmp(), "imprimatur.db");
   const old = new DatabaseSync(file);
   old.exec("PRAGMA foreign_keys = ON");
-  const TRANSCRIPT = MIGRATIONS.length - 1;
+  const TRANSCRIPT = MIGRATIONS.findLastIndex((m) => m.includes("'transcript'"));
   for (const sql of MIGRATIONS.slice(0, TRANSCRIPT)) old.exec(sql.replaceAll(", 'transcript'", ""));
   old.exec(`PRAGMA user_version = ${TRANSCRIPT}`);
   const now = Date.now();
