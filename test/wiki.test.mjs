@@ -60,3 +60,14 @@ test("wiki: a page per capability and the front page listing them; not asked aga
   assert.equal(asked.length, 3, "the capability changed: its page is written again, the intro is not");
   assert.match(wiki("README.md"), /Imprimatur keeps what your coding assistant does in view\./, "the intro is kept");
 });
+
+test("wiki: a capability whose name is no plain slug gets no page (no file outside docs/wiki)", async () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "imprimatur-188-")));
+  const db = openDb({ path: path.join(root, "x.db") });
+  const repo = db.repoOf(root);
+  db.upsertSection(db.taskDocOf(repo.id, "../escape", "capability").id, "a", { title: "A", body: "text" }, user);
+  const asked = [];
+  await buildWiki(db, repo, root, { header, generatedText, inside: (f) => inside(root, f), ask: async (p) => (asked.push(p), PAGE) });
+  assert.equal(asked.length, 0);
+  assert.equal(fs.existsSync(path.join(root, "docs", "escape.md")), false);
+});

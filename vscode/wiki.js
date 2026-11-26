@@ -36,7 +36,8 @@ function pagesOf(db, repo) {
   const mission = current(db.docFind(repo.id, "project")).filter((s) => s.chapter === "mission" || s.key === "limits");
   const caps = db.q("SELECT * FROM documents WHERE repo_id = ? AND kind = 'capability' ORDER BY scope").all(repo.id)
     .map((/** @type {any} */ d) => ({ name: String(d.scope), source: text(current(d)) }))
-    .filter((/** @type {any} */ c) => c.source.trim());
+    // The name becomes a file name: only a plain slug, so a synced or imported name cannot write outside docs/wiki.
+    .filter((/** @type {any} */ c) => c.source.trim() && /^[a-z0-9][a-z0-9-]*$/.test(c.name));
   return {
     intro: { source: text(mission), terms: termsIn(text(mission)) },
     features: caps.map((/** @type {any} */ c) => ({ ...c, terms: termsIn(c.source) })),
