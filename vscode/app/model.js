@@ -282,7 +282,12 @@ function appModel(db, repo, root, at = {}) {
   if (area === "tasks") {
     const page = at.task ? taskPage(db, repo, at.task, at.tab, root) : undefined;
     if (page) return { ...base, page };
-    return { ...base, lists: taskLists(db, repo.id) };
+    const lists = taskLists(db, repo.id);
+    // The tasks the lists leave out (older done, dropped, past the caps): found only by the page's search.
+    const shown = new Set(lists.flatMap((l) => l.tasks.map((/** @type {any} */ t) => t.key)));
+    const others = db.q("SELECT key, title, summary, status FROM tasks WHERE repo_id = ? ORDER BY updated_at DESC").all(repo.id)
+      .filter((/** @type {any} */ t) => !shown.has(t.key) && !isBucket(t.key));
+    return { ...base, lists, others };
   }
   if (area === "edits") return { ...base, edits: editsQueue(root, at.rows) };
   // Exercises belong to no repo; meetings are this repo's meeting records; social is a document.

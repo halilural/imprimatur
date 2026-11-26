@@ -628,6 +628,33 @@ const exportSoon = require("./docs-export.js").debounce(() => {
   }
 }, 2000);
 
+/**
+ * The wiki (#188): in every open repo whose documents sync, docs/wiki/ is written again 5 min after the
+ * database's last change and once after the window opens, so it fills itself and an old wiki is
+ * replaced without a step. The model is asked only for the pages whose inputs changed; one run at a time.
+ */
+let wikiRunning = false;
+const wikiSoon = require("./docs-export.js").debounce(async () => {
+  const db = records.dbOf();
+  if (!db || wikiRunning) return;
+  wikiRunning = true;
+  const { syncOn, generatedText, inside } = require("./docs-export.js");
+  const { buildWiki, HEADER } = require("./wiki.js");
+  try {
+    for (const root of roots) {
+      if (!vscode.workspace.getConfiguration("imprimatur", vscode.Uri.file(root)).get("docs.export", true) || !syncOn(root)) continue;
+      try {
+        const out = await buildWiki(db, db.repoOf(root), root, { header: HEADER, generatedText, inside: (/** @type {string} */ f) => inside(root, f) });
+        if (out.length) log.info(`wiki: ${root}: ${out.length} page(s) written or removed`);
+      } catch (e) {
+        log.warn(`wiki: ${root}: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+  } finally {
+    wikiRunning = false;
+  }
+}, 5 * 60_000);
+
 /** @param {vscode.ExtensionContext} ctx */
 function activate(ctx) {
   log = vscode.window.createOutputChannel("Imprimatur", { log: true });
@@ -915,6 +942,7 @@ function activate(ctx) {
         appPanel.refreshApp();
         updateGraphButton();
         exportSoon();
+        wikiSoon();
         try {
           activatePlugins();
         } catch {}
@@ -953,6 +981,7 @@ function activate(ctx) {
     }
     // Documents and files out of step since the last window (edited, pulled, hand-written): synced once.
     exportSoon();
+    wikiSoon();
   } catch (e) {
     log.error(`records: ${e instanceof Error ? e.message : e}`);
   }
@@ -1082,4 +1111,4 @@ function activate(ctx) {
   };
 }
 
-module.exports = { activate, deactivate: () => exportSoon.cancel() };
+module.exports = { activate, deactivate: () => (exportSoon.cancel(), wikiSoon.cancel()) };

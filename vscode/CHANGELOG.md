@@ -4,6 +4,14 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.199.0] - 2026-11-26
+
+### Added
+- Tasks page: a search box (#239). It filters the rows as you type, by number, title or summary; every word must match. Tasks the lists leave out (older done, dropped) show under "Other tasks" only while you search. `/` focuses it, Esc clears it, and the text stays when the page redraws.
+
+### Changed
+- The wiki is written for a product owner (#238): a front page saying what the product is, who it is for and which pages there are, then one short page per feature (capability), each in plain words with its own contents list. The extension builds it by itself in every repo whose documents sync, 5 minutes after the last change and once after the window opens; the old per-module pages are replaced on the first run. The model is asked only for pages whose inputs changed.
+
 ## [0.198.0] - 2026-11-26
 
 ### Changed

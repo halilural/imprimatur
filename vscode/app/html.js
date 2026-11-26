@@ -51,6 +51,9 @@ pre code { background: none; padding: 0; }
 .rows .row:hover, .rows > details > summary:hover { background: var(--vscode-list-hoverBackground); }
 .rows .key { flex: none; min-width: 52px; font-family: var(--vscode-editor-font-family); font-size: 13px; line-height: 22px; color: var(--vscode-descriptionForeground); }
 .rows .none, .rows .empty { padding: 12px 14px; border: 0; }
+[hidden] { display: none !important; }
+.find { width: 100%; box-sizing: border-box; margin: 4px 0 8px; padding: 8px 12px; font: inherit; font-size: 14px; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); border-radius: 6px; } .find:focus { outline: 1px solid var(--vscode-focusBorder); }
+.nomatch { color: var(--vscode-descriptionForeground); }
 .rows .ptr { color: var(--vscode-descriptionForeground); }
 .board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 26px; }
 .board .col { border-radius: 8px; padding: 10px; min-height: 80px; background: var(--vscode-sideBar-background, var(--vscode-editorWidget-background)); }
@@ -134,8 +137,35 @@ document.addEventListener("submit", (e) => {
 // / or ctrl/cmd+k opens Search and Ask; the areas are picked in the side bar's Imprimatur view.
 document.addEventListener("keydown", (e) => {
   if (e.target.closest("input,textarea")) return;
+  const find = document.querySelector("input.find");
+  if (find && e.key === "/") { e.preventDefault(); return find.focus(); }
   if (e.key === "/" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k")) { e.preventDefault(); send({ type: "cmd", command: "imprimatur.records.search" }); }
 });
+// The Tasks page's search: every word must be in a row's number, title or summary; a list with no
+// match hides, "Other tasks" shows only while searching. Kept across the page's redraws.
+const findBox = document.querySelector("input.find");
+const filterTasks = () => {
+  const words = findBox.value.toLowerCase().split(/\s+/).filter(Boolean);
+  let any = false;
+  for (const sec of document.querySelectorAll("section.tlist")) {
+    const rows = [...sec.querySelectorAll(".row[data-find]")];
+    let n = 0;
+    for (const r of rows) { const ok = words.every((w) => r.dataset.find.includes(w)); r.hidden = !ok; if (ok) n++; }
+    const others = sec.querySelector("h2")?.textContent.startsWith("Other tasks");
+    sec.hidden = words.length ? n === 0 : !!others;
+    const c = sec.querySelector(".n"); if (c) c.textContent = words.length ? n : rows.length;
+    const none = sec.querySelector(".none"); if (none) none.hidden = words.length > 0;
+    any ||= n > 0;
+  }
+  document.querySelector(".nomatch").hidden = !words.length || any;
+  vscode.setState({ ...(vscode.getState() ?? {}), find: findBox.value });
+};
+if (findBox) {
+  findBox.value = vscode.getState()?.find ?? "";
+  findBox.addEventListener("input", filterTasks);
+  findBox.addEventListener("keydown", (e) => { if (e.key === "Escape") { findBox.value = ""; filterTasks(); } });
+  if (findBox.value) { filterTasks(); findBox.focus(); }
+}
 // A mermaid block (markdown.js leaves its source in .mermaid-src) is drawn with the
 // extension's mermaid, loaded only when the page has one; one that fails keeps its source
 // under the error.
@@ -206,8 +236,12 @@ function mainHtml(m, render) {
   }
   if (m.area === "tasks" && m.page) return taskPageHtml(m.page, render);
   if (m.area === "tasks") {
-    return `<h1>Tasks</h1><p class="summary">Active first, then open, then the last done; in each, epics on top by priority, then the one worked on last.</p>` + m.lists.map((/** @type {any} */ l) =>
-      `<h2 class="sub">${esc(l.label)} · ${l.tasks.length}</h2><div class="rows">${l.tasks.map((/** @type {any} */ t) => `<div class="row${t.last ? " last" : ""}" data-task="${esc(t.key)}"><span class="key">${esc(t.key)}</span><span><b>${esc(t.title)}</b>${epicTags(t)}${t.last ? ' <span class="tag lastworked">Last worked on</span>' : ""}${t.when ? ` <span class="when">${esc(t.when)}</span>` : ""}${t.summary ? `<br><span class="ptr">${esc(t.summary)}</span>` : ""}</span></div>`).join("") || '<div class="none">Nothing</div>'}</div>`).join("");
+    // The search box filters the rows as you type (key, title, summary); "Other tasks", hidden until then, holds the rest.
+    const find = (/** @type {any} */ t) => esc(`${t.key} ${t.title} ${t.summary ?? ""}`.toLowerCase());
+    const list = (/** @type {any} */ l) => `<section class="tlist"${l.id === "others" ? " hidden" : ""}><h2 class="sub">${esc(l.label)} · <span class="n">${l.tasks.length}</span></h2><div class="rows">${l.tasks.map((/** @type {any} */ t) => `<div class="row${t.last ? " last" : ""}" data-task="${esc(t.key)}" data-find="${find(t)}"><span class="key">${esc(t.key)}</span><span><b>${esc(t.title)}</b>${epicTags(t)}${l.id === "others" ? ` <span class="tag">${esc(t.status)}</span>` : ""}${t.last ? ' <span class="tag lastworked">Last worked on</span>' : ""}${t.when ? ` <span class="when">${esc(t.when)}</span>` : ""}${t.summary ? `<br><span class="ptr">${esc(t.summary)}</span>` : ""}</span></div>`).join("") || '<div class="none">Nothing</div>'}</div></section>`;
+    return `<h1>Tasks</h1><p class="summary">Active first, then open, then the last done; in each, epics on top by priority, then the one worked on last.</p>`
+      + `<input type="search" class="find" placeholder="Search tasks by number, title or summary" aria-label="Search tasks"><p class="nomatch" hidden>No task matches.</p>`
+      + [...m.lists, { id: "others", label: "Other tasks", tasks: m.others ?? [] }].map(list).join("");
   }
   if (m.area === "home") {
     const rows = m.tasks.map((/** @type {any} */ t) => `<div class="row" data-task="${esc(t.key)}"><span class="key">${esc(t.key)}</span><span><b>${esc(t.title)}</b>${epicTags(t)}${t.docs?.length ? ` <span class="tag">${t.docs.map(esc).join(" · ")}</span>` : ""}${t.pointer_title ? `<br><span class="ptr">👉 ${esc(t.pointer_title)}</span>` : ""}</span></div>`).join("");

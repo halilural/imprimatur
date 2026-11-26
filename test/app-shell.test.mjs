@@ -75,7 +75,7 @@ test("task page (#197): the gates in order with the next one to approve; spec, t
   m = appModel(db, repo, root, { area: "tasks", task: "#5", tab: "tickets" });
   assert.match(appHtml(m, o), /Which index\?<\/b><br><span class="ptr">claimed · research/);
   assert.match(appHtml(appModel(db, repo, root, { area: "tasks", task: "#5", tab: "activity" }), o), /create · decision · Approved/);
-  assert.match(appHtml(appModel(db, repo, root, { area: "tasks" }), o), /Active · 2/);
+  assert.match(appHtml(appModel(db, repo, root, { area: "tasks" }), o), /Active · <span class="n">2<\/span>/);
 });
 
 test("docs editing (#198): database documents get Edit and New section; ADRs and the wiki do not", () => {

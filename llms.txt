@@ -173,4 +173,4 @@ These documents are kept by Imprimatur from its database; read them before chang
 
 ## Wiki
 
-- [imprimatur wiki](docs/wiki/README.md): Generated from the code's own comments, the ADRs and the glossary; written again when those change. Edit the sources, not these pages.
+- [Imprimatur, in plain words](docs/wiki/README.md): Imprimatur keeps you in control when an AI coding agent works in your documents. Instead of trusting the agent's changes blindly or hunting through chat hist…
