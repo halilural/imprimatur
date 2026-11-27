@@ -220,3 +220,31 @@ where the user meets it months later without the exercise. So a card stands on i
 - A number from the exercise stays only when the front defines it.
 - The back answers and says why, with no coaching note ("give the value and the reason").
 - The deck is the roadmap's or subject's deck the user already has, not the exercise's step key.
+
+### Cards from interview recordings
+
+The same card rules hold when the user asks for a deck from their recorded interviews (the meeting
+notes and transcripts), plus what the user corrected the first time:
+
+- Only real interviews: an onboarding call, a project or staffing talk with the user's own
+  employer, a therapy session are not interviews, even if a template says so. Ask when unsure.
+- One list, independent of companies: the front is the generic question ("Why do you want to
+  change jobs?"), with no company, client or interviewer name and no "Asked at" line. A question
+  asked in several interviews is one card; merge the answers on its back.
+- Leave out: HR logistics (notice period, salary or rate, hybrid/office, start date, vacation,
+  contract, communication channel), personal yes/no background questions (years of experience,
+  "do you have Azure / Java 25 experience", where are you from, team size), and every question the
+  user asked.
+- The notes are a model's summary and can attach a question to the wrong person ("what do you do
+  at the interviewer's company" when the interviewer asked about the user's own employer): check a
+  surprising question against the transcript. After building the list from the notes, scan the
+  transcripts for interviewer questions the notes dropped.
+- The back holds the user's answer, then "Örnek cevap:" with a short answer the user can say, in
+  the interview's language (English for English interviews), built only from facts in the
+  recordings; a placeholder in brackets where it must be tailored per company. Where the answer was
+  weak, one "Not:" line says what to study.
+- Group the cards by subject (behavioural, Java core, Spring, database, distributed systems, system
+  design, code review…) and tag each with its subject.
+- Show the list as a Markdown file before or right after import, so the user can review it.
+- Changing cards: a deck nobody has reviewed yet can be deleted and re-imported; once it has
+  reviews, change cards in place (a new front needs a new dedupe key) so the review history stays.
