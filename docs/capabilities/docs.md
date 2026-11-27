@@ -9,6 +9,7 @@ type: explanation
 ## Contents
 
 1. [Documents are flagged as possibly stale when their code changes](#possibly-stale)
+2. [The wiki, for a product owner, built by itself](#wiki-for-product-owner)
 
 <a id="possibly-stale"></a>
 
@@ -17,3 +18,15 @@ type: explanation
 An ADR, a decision or a current document section tied to files (a record's `links.files`; a section's contributing records and the repo paths in backticks in its body, not a top-level folder) is possibly stale when one of those files changed in a commit after the part was last written or last marked reviewed. Version files, changelogs, lockfiles and tests tie nothing. `vscode/stale-docs.js` (`staleParts`, `markReviewed`) computes it from one `git log` per HEAD, with no model call.
 
 It shows in three places: a warning over the part's text on the panel's document and task pages; one Agent Setup checklist row, "Documents: N possibly stale", whose list asks Claude to check one against the code or marks one (or all) reviewed; and over MCP, where `task_get` and `doc_get` give the part a `stale` field and a line telling the agent to check the code. Editing the part clears the flag; so does marking it reviewed, until its code changes again.
+
+<a id="wiki-for-product-owner"></a>
+
+## 2. The wiki, for a product owner, built by itself
+
+**Story:** a product owner (not technical) reads the wiki to understand what the product does; many small pages, never one big document.
+
+**Design:** docs/wiki is a front page (what the product is, who it is for, Contents, Pages) and one page per capability whose name is a plain slug. Each page: a plain title, a short lead, a Contents list, What it does for you, How it works, Good to know, Words used here, a link back. Written by the model (`claude -p`, sonnet) from the project's mission and limits, the capability's current sections and the glossary terms they use, under fixed plain-language rules. A page is asked again only when its prompt changes (hash in meta). The extension runs it in every repo whose documents sync, 5 min after the last database change and once after the window opens; old generated pages (the per-module wiki) are removed, hand-written ones stay.
+
+**Analyze:** model cost is one call per changed page; a repo with ~10 capabilities costs ~11 calls the first time. Pages are repo files, so other repos see them as uncommitted changes.
+
+**Tests:** test/wiki.test.mjs.
