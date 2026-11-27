@@ -4,6 +4,11 @@ All notable changes to the Imprimatur extension. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are 0.x while the
 extension is in early development.
 
+## [0.199.2] - 2026-11-27
+
+### Changed
+- The exercise skill says how to build a flashcard deck from recorded interviews: only real interviews, one company-independent list with each question once, no HR logistics, personal yes/no or the user's own questions, notes checked against the transcript, a short model answer in the interview's language, cards grouped by subject, and cards changed in place once the deck has reviews.
+
 ## [0.199.1] - 2026-11-26
 
 ### Fixed
