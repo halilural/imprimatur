@@ -18,6 +18,7 @@ type: explanation
 8. [Work without a task is caught](#work-without-task)
 9. [Active tasks by last activity](#last-worked-on)
 10. [Epics first, by priority](#epics-first)
+11. [A search box on the Tasks page](#tasks-search)
 
 <a id="unread"></a>
 
@@ -202,3 +203,15 @@ On the Tasks page and in the side bar's Tasks › Active, active tasks are sorte
 **Tickets:** one, this task.
 
 **Tests:** `test/last-worked-on.test.mjs` (order), `test/tracker.test.mjs` (label pull and clear).
+
+<a id="tasks-search"></a>
+
+## 11. A search box on the Tasks page
+
+**Story:** the user finds a task on the Tasks page by typing part of its number, title or summary.
+
+**Design:** a search input above the lists; every typed word must appear in a row's number, title or summary (client-side, as you type). Lists with no match hide and their counts show the matches. Tasks the lists leave out (older done, dropped, past the caps) are rendered under a hidden "Other tasks" that shows only while searching. `/` focuses the box, Esc clears it; the text is kept in the webview state across redraws.
+
+**Analyze:** all tasks of the repo are rendered into the page once (a few hundred rows); no server round trip.
+
+**Tests:** test/last-worked-on.test.mjs, test/app-shell.test.mjs.
